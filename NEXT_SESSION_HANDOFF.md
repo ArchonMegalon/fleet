@@ -1,3 +1,33 @@
+## 2026-04-03: hardened Fleet milestone-2 readiness to fail-closed on weak/missing workflow-family execution receipts
+
+- Trigger:
+  - frontier milestone-2 depends on executable desktop workflow parity evidence that is family-grounded (SR4/SR6 + legacy mental model continuity), not only top-level gate status.
+  - Fleet readiness accepted `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` status alone and could hide weak/failing/missing family execution receipts that still indicate parity drift.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - parse workflow execution gate evidence lists for receipt drift:
+      - `workflow_family_missing_receipts`
+      - `workflow_family_failing_receipts`
+      - `workflow_execution_missing_receipts`
+      - `workflow_execution_failing_receipts`
+      - `workflow_execution_weak_receipts`
+    - mark desktop-client coverage non-ready when any unresolved workflow-family/workflow-execution receipt drift is present even if gate status is `pass`.
+    - publish explicit count fields and unresolved receipt list into readiness evidence so drift is operator-visible.
+  - added/updated regression coverage in `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - verifies explicit executable-receipt path happy-case exposes zero unresolved workflow receipt counts.
+    - verifies pass-status workflow execution gate with weak receipts fails readiness with explicit reason and surfaced unresolved receipt list.
+  - rematerialized readiness artifacts:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k "workflow_execution or executable_receipt_paths" -q` -> PASS (`2 passed`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (artifact regenerated).
+  - `jq` probe confirms workflow execution drift counters are now explicit in readiness evidence and currently zero on local receipts.
+- Current trusted state:
+  - milestone-2 readiness now fails honest when workflow-family execution parity drifts into weak/failing/missing receipts, even if the top-level workflow gate status remains pass.
+  - operator evidence now includes concrete unresolved receipt counts/list to target the exact parity-family regressions.
+
 ## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
 
 - Trigger:

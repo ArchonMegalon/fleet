@@ -302,6 +302,23 @@ def windows_exit_gate_passed(payload: Dict[str, Any]) -> bool:
     return bool(checks.get("embedded_payload_marker_present")) and bool(checks.get("embedded_sample_marker_present"))
 
 
+def _as_string_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, List[str]]:
+    evidence = payload.get("evidence") if isinstance(payload.get("evidence"), dict) else {}
+    return {
+        "workflow_family_missing_receipts": _as_string_list(evidence.get("workflow_family_missing_receipts")),
+        "workflow_family_failing_receipts": _as_string_list(evidence.get("workflow_family_failing_receipts")),
+        "workflow_execution_missing_receipts": _as_string_list(evidence.get("workflow_execution_missing_receipts")),
+        "workflow_execution_failing_receipts": _as_string_list(evidence.get("workflow_execution_failing_receipts")),
+        "workflow_execution_weak_receipts": _as_string_list(evidence.get("workflow_execution_weak_receipts")),
+    }
+
+
 def _coverage_entry(
     *,
     positives: int,
@@ -440,10 +457,35 @@ def build_flagship_product_readiness_payload(
         expected_contract="chummer6-ui.desktop_workflow_execution_gate",
         accepted_statuses=("passed", "pass", "ready"),
     ):
-        desktop_positives += 1
+        workflow_execution_receipt_gaps = workflow_execution_gate_receipt_gaps(ui_workflow_execution_gate)
+        unresolved_workflow_execution_receipts = sorted(
+            {
+                *workflow_execution_receipt_gaps["workflow_family_missing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_family_failing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_execution_missing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_execution_failing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_execution_weak_receipts"],
+            }
+        )
+        if unresolved_workflow_execution_receipts:
+            desktop_reasons.append(
+                "Executable desktop workflow execution gate reports unresolved family/execution receipt drift (missing/failing/weak)."
+            )
+        else:
+            desktop_positives += 1
     else:
         desktop_reasons.append(
             "Executable desktop workflow execution gate proof is missing or not passed. Catalog parity without click-through receipts does not pass."
+        )
+        workflow_execution_receipt_gaps = workflow_execution_gate_receipt_gaps(ui_workflow_execution_gate)
+        unresolved_workflow_execution_receipts = sorted(
+            {
+                *workflow_execution_receipt_gaps["workflow_family_missing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_family_failing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_execution_missing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_execution_failing_receipts"],
+                *workflow_execution_receipt_gaps["workflow_execution_weak_receipts"],
+            }
         )
     if proof_passed(
         ui_visual_familiarity_exit_gate,
@@ -567,6 +609,13 @@ def build_flagship_product_readiness_payload(
             "ui_windows_exit_gate_sample_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_sample_marker_present")),
             "ui_workflow_execution_gate_status": str(ui_workflow_execution_gate.get("status") or "").strip(),
             "ui_workflow_execution_gate_path": str(ui_workflow_execution_gate_path),
+            "ui_workflow_execution_gate_family_missing_receipt_count": len(workflow_execution_receipt_gaps["workflow_family_missing_receipts"]),
+            "ui_workflow_execution_gate_family_failing_receipt_count": len(workflow_execution_receipt_gaps["workflow_family_failing_receipts"]),
+            "ui_workflow_execution_gate_execution_missing_receipt_count": len(workflow_execution_receipt_gaps["workflow_execution_missing_receipts"]),
+            "ui_workflow_execution_gate_execution_failing_receipt_count": len(workflow_execution_receipt_gaps["workflow_execution_failing_receipts"]),
+            "ui_workflow_execution_gate_execution_weak_receipt_count": len(workflow_execution_receipt_gaps["workflow_execution_weak_receipts"]),
+            "ui_workflow_execution_gate_unresolved_receipt_count": len(unresolved_workflow_execution_receipts),
+            "ui_workflow_execution_gate_unresolved_receipts": unresolved_workflow_execution_receipts,
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
             "ui_visual_familiarity_exit_gate_path": str(ui_visual_familiarity_exit_gate_path),
             "ui_workflow_parity_status": str(ui_workflow_parity_proof.get("status") or "").strip(),
