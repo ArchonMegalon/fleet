@@ -1,3 +1,27 @@
+## 2026-04-03: roster movement and GM event-control packets now keep label-first roster signals when change kinds are sparse
+
+- Trigger:
+  - frontier milestone-5 requires roster movement and GM event-control operations to remain one governed lane even when upstream change packets are label-first and `Kind` is empty.
+  - `BuildRosterMovementPrepPacket(...)` previously filtered `workspace.ChangePackets` by `IsRosterMovementSignalKind(packet.Kind)` only, which could drop roster movement packets when signal identity lived in label/summary text.
+  - `BuildEventControlPrepPacket(...)` relied on `IsEventControlSignal(...)` that did not include roster packet label/summary fallback classification, so event-control evidence could miss roster movement continuity under sparse-kind ingestion windows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - roster movement packet selection now uses `IsRosterMovementSignal(...)` fallback classification across `Kind`, `Label`, and `Summary`.
+    - added `IsRosterMovementSignal(...)` helper for governed roster movement identity detection from sparse change packets.
+    - event-control packet signal classification now includes the same roster movement fallback path so GM event/season controls ingest label-first roster movement signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `RosterMovementPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse`
+    - `EventControlPacketFallsBackToRosterSignalLabelsWhenSignalKindsAreSparse`
+    - fixture `BuildWorkspaceWithRosterSparseSignalKindsAndLabelsOnly` proves sparse-kind roster labels stay visible in both roster-movement and event-control packets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterMovementPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~EventControlPacketFallsBackToRosterSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~RosterMovementPacketIncludesKindFallbackWhenSignalsAreSparse|FullyQualifiedName~EventControlPacketFallsBackToSignalLabelsWhenEventSignalKindsAreSparse" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`88 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement packets no longer require hydrated change `Kind` values to preserve roster movement evidence.
+  - GM event-control packets now keep roster movement continuity cues under sparse-kind ingestion windows on the same account-audit campaign lane.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: milestone-2 gate publication is now concurrency-safe across b14 and downstream materializers
 
 - Trigger:
