@@ -1,3 +1,25 @@
+## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes invalid prep-asset status payloads and normalizes accepted status values
+
+- Trigger:
+  - frontier milestone 5 requires prep-library and GM-ops offline reconcile to stay on a governed audit backbone.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` previously accepted any non-empty `status`, allowing malformed/unexpected state labels to enter local prep truth from offline payloads.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added `AllowedPortableAssetStatuses` guardrail (`draft`, `ready`, `in-progress`, `completed`, `approval-required`, `revealed`).
+    - added fail-closed `HasValidPortableAssetStatus(...)`; invalid or blank statuses now produce `invalid-asset-status` and `skipped-invalid` conflicts.
+    - reconcile now canonicalizes accepted status casing/hyphenation through `NormalizePortableAssetStatus(...)` before persisting.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded invalid enum test to cover invalid and blank status payloads.
+    - added `ReconcilePortableAssets_NormalizesKnownStatuses_ToCanonicalValues`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`232` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - offline GM prep reconcile now rejects invalid status payloads and stores accepted statuses in canonical form, reducing drift and malformed-state ingress on the governed prep lane.
+  - milestone-4/5 campaign workspace + GM ops verification lane remains green after this additional fail-close hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 offline GM prep reconcile now fail-closes inconsistent reveal metadata before importing governed ops truth
 
 - Trigger:
