@@ -24,6 +24,39 @@
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
+## 2026-04-03: windows desktop exit gate now enforces startup-smoke receipt integrity and fails honest when proof is missing
+
+- Trigger:
+  - frontier milestone-3 requires packaged-binary per-head proof that cannot lie when startup-smoke proof is missing or stale.
+  - windows sub-gate could pass without validating startup-smoke receipt presence/checkpoint/digest/tuple freshness for promoted installer bytes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added startup-smoke receipt discovery across canonical roots, plus explicit override path (`CHUMMER_WINDOWS_STARTUP_SMOKE_RECEIPT_PATH`).
+    - added fail-closed Windows startup-smoke checks for:
+      - receipt existence and passing status,
+      - `readyCheckpoint=pre_ui_event_loop`,
+      - `artifactDigest` alignment to promoted installer bytes,
+      - tuple integrity (`headId=avalonia`, `platform=windows`, `arch=x64`),
+      - bounded receipt freshness (`CHUMMER_WINDOWS_STARTUP_SMOKE_MAX_AGE_SECONDS` with desktop fallback).
+  - updated compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - new guardrail method `Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes`.
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes|FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`2 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-windows-desktop-exit-gate.sh` -> FAIL closed (`Windows startup smoke receipt is missing for promoted installer bytes.`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) now including Windows fail-honest gate miss alongside existing macOS receipt gaps.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (readiness rematerialized from latest executable gate truth).
+- Current trusted state:
+  - windows packaged proof can no longer report pass without a valid promoted startup-smoke receipt, keeping packaged/head proof aligned with executable startup reality.
+  - remaining blocker stays external: missing promoted startup-smoke receipts for windows and macOS tuples.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: release-manifest publication now fail-closes when promoted installer startup-smoke proof is missing
 
 - Trigger:

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T16:39:21Z",
+  "generated_at": "2026-04-03T16:46:34Z",
   "status": "fail",
   "summary": {
     "ready_count": 6,
@@ -40,7 +40,8 @@
       "status": "warning",
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
-        "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts."
+        "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
+        "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -49,7 +50,7 @@
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
         "ui_linux_exit_gate_status": "passed",
-        "ui_windows_exit_gate_status": "passed",
+        "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
         "ui_windows_exit_gate_sample_marker_present": true,
         "ui_workflow_execution_gate_status": "pass",
@@ -171,7 +172,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T16:37:50Z",
+        "supervisor_updated_at": "2026-04-03T16:43:36Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
