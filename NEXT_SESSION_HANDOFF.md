@@ -1,3 +1,30 @@
+## 2026-04-03: roster movement fallback now requires explicit `roster` + inflected return tokens so `roster returnable` continuity wording cannot leak into roster/event-control packets
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return continuity prose to stay separate from governed roster movement and GM event-control packet lanes.
+  - roster movement fallback treated `return*` as a broad prefix when paired with `roster`, so continuity text like `roster returnable checklist` could activate `roster_movement_packet` and cascade into `event_control_packet`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced `RosterReturnWordPrefixes` with explicit inflected `RosterReturnWordTokens`:
+      - `return`, `returns`, `returned`, `returning`
+    - updated `ContainsRosterMovementToken(...)` to require explicit token matching for roster return semantics.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `RosterMovementPacketDoesNotActivateFromRosterReturnableMentionsWithoutReturnMovementIdentity`
+      - `EventControlPacketDoesNotActivateFromRosterReturnableMentionsWithoutReturnMovementIdentity`
+    - added fixture:
+      - `BuildWorkspaceWithRosterReturnableMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `5b84af0f` — `run-services: require explicit roster return tokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterReturnable" --nologo -v minimal` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`154 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity-only `roster returnable` wording no longer activates roster movement or GM event-control packet synthesis.
+  - explicit roster return semantics (`roster` paired with `return|returns|returned|returning`) remain recognized for governed movement identity.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: roster movement fallback now uses explicit movement word tokens so `crew assignable` continuity wording cannot leak into roster/event-control packets
 
 - Trigger:
