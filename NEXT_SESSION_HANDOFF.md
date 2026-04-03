@@ -27,6 +27,10 @@
 - Current trusted state:
   - milestone-2 legacy-familiar proof now fails closed when advancement/karma workflow evidence is missing, instead of relying on implicit dense-builder coverage.
   - desktop familiarity/workflow parity remains green; remaining desktop warning is still milestone-3 executable proof.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: event-control packet now falls back to relationship-change signals when consequence receipts lag
 
