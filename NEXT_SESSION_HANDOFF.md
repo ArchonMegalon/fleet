@@ -42,6 +42,33 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: milestone-2 shipping-locale trust-surface coverage expanded across home/install/support chrome while preserving explicit fallback guardrails
+
+- Trigger:
+  - milestone-2 localization gate was green after runner hardening but still showed large non-English trust-surface fallback debt:
+    - `de-de` 358 fallback-backed keys,
+    - `fr-fr` / `ja-jp` / `pt-br` / `zh-cn` 366 fallback-backed keys each.
+  - frontier required continued workbench-localization materialization instead of stopping at gate-runner health.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopLocalizationCatalog.cs`:
+    - added explicit non-English localized strings (de-de/fr-fr/ja-jp/pt-br/zh-cn) for shared flagship trust surfaces in:
+      - desktop home sections and primary follow-through buttons,
+      - install-link title/heading/claim label and primary actions,
+      - support heading/sections/refresh action.
+    - intentionally preserved fallback-seed domains used by B15 explicit-fallback smoke checks (`desktop.install_link.summary`, `desktop.update.heading`, `desktop.support_case.heading`, `desktop.report.heading`, `desktop.crash.heading`).
+  - rematerialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - receipt delta (`UI_LOCALIZATION_RELEASE_GATE.generated.json`) now reports:
+    - `de-de` override count `25 -> 49`, untranslated trust-surface keys `358 -> 334`,
+    - `fr-fr`/`ja-jp`/`pt-br`/`zh-cn` override count `17 -> 41`, untranslated trust-surface keys `366 -> 342`.
+- Current trusted state:
+  - milestone-2 localization trust surfaces advanced with concrete shipped strings in high-traffic desktop home/install/support lanes.
+  - translation backlog remains material and still needs additional source-quality locale coverage beyond this slice.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 localization gate runner is now deterministic and no longer false-fails on missing runtimeconfig due to nested login-shell cwd drift
 
 - Trigger:
