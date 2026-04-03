@@ -1,3 +1,22 @@
+## 2026-04-03: campaign-return packets now preserve recap-signal kind identity in evidence under sparse diary recap payloads
+
+- Trigger:
+  - frontier milestone-4 requires diary/contact/heat return packets to stay one governed lane even when recap shelf projections are kind-only before recap text hydration.
+  - `BuildCampaignReturnPrepPacket(...)` consumed recap summaries but could omit recap-signal identity when recap `summary` and `label` were empty.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return evidence now includes recap `label` plus `DescribeSignalLabel(...)` kind fallback for diary recap signals.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketIncludesRecapKindFallbackWhenRecapSignalsAreSparse`
+    - fixture proves `session_recap` remains present in campaign-return evidence when recap labels/summaries are sparse.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`59 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet evidence now preserves governed recap-signal identity alongside return-change and consequence identity under sparse payload timing.
+  - diary/contact/heat return-loop evidence remains queryable without local shadow recap notes.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: continuity packets now preserve recap-signal kind identity in evidence under sparse recap payloads
 
 - Trigger:
