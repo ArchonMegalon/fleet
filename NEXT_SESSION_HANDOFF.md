@@ -1,3 +1,32 @@
+## 2026-04-03: hardened aggregate executable gate to require Linux startup-smoke artifact digest/checkpoint/freshness integrity
+
+- Trigger:
+  - frontier milestone-3 requires per-head packaged-binary proof that cannot lie.
+  - aggregate executable gate still trusted Linux startup-smoke pass status without requiring startup-smoke digest/checkpoint/time integrity against promoted release-channel artifacts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_AGE_SECONDS` fail-closed receipt age bound for Linux startup-smoke proof.
+    - Linux gate now verifies startup-smoke receipt timestamp validity, `readyCheckpoint=pre_ui_event_loop`, and receipt `artifactDigest` alignment to promoted release-channel artifact bytes.
+    - Linux gate now validates promoted Linux tuple metadata (`platform`, `rid`) against receipt head metadata.
+    - added explicit reason/evidence paths for missing Linux rid metadata in release-channel artifacts.
+  - extended compliance guardrails in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` to pin Linux startup-smoke integrity semantics in source.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`.
+  - rematerialized Fleet readiness mirrors:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with explicit Linux digest mismatch plus existing macOS missing startup-smoke/head receipts.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (readiness rematerialized from updated executable gate receipt).
+- Current trusted state:
+  - aggregate milestone-3 proof now fails honest when Linux startup-smoke receipts are not proving the promoted installer bytes.
+  - local evidence now reveals an additional real blocker: Linux startup-smoke receipt digest (`sha256:be7075...`) does not match promoted Linux installer digest (`sha256:6b0a63...`), so Linux proof is currently tied to a non-promoted build artifact.
+  - macOS promoted tuples still remain blocked by missing/non-passing startup-smoke receipts.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: hardened desktop executable gate to validate Windows promoted-tuple and artifact-byte integrity
 
 - Trigger:
