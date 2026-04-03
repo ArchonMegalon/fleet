@@ -1,3 +1,38 @@
+## 2026-04-03: recap-shelf publication classifier now uses token semantics so substring-only kinds cannot leak into campaign/aftermath categories or creator-shelf support
+
+- Trigger:
+  - frontier milestones 4/5 require diary, aftermath, and campaign continuity publication lanes to remain governed by explicit signal identity rather than substring collisions in `kind` values.
+  - recap-shelf classifier and creator-shelf support logic still used raw substring checks (`campaign`, `recap`, `runboard`, `after`, etc.), so kinds like `recapitalization_signal` or `afterburner_campaigner_runboardwalk` could be misclassified as governed recap families.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced recap-shelf `kind` substring checks with shared token-based publication-kind helpers:
+      - `IsCampaignRecapPublicationKind(...)`
+      - `IsPrimerPublicationKind(...)`
+      - `IsRunboardOrModulePublicationKind(...)`
+      - `IsDossierPublicationKind(...)`
+      - `IsReplayPublicationKind(...)`
+      - `IsAftermathRecapPublicationKind(...)`
+      - `IsDowntimePublicationKind(...)`
+    - applied these helpers across:
+      - `BoundedRecapShelfCategory(...)`
+      - `SupportsCreatorShelfProjection(...)`
+      - recap-shelf audience/ownership/publication-state/publication-summary/next-safe-action description paths.
+    - preserved canonical recognition for `campaign_recap_bundle`, `after_action` token-pair identity, and existing dossier/runboard/replay lanes.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `BoundedRecapShelfCategoryDoesNotActivateFromRecapitalizationKindWithoutRecapIdentity`
+      - `SupportsCreatorShelfProjectionDoesNotActivateFromAfterburnerCampaignerRunboardwalkWithoutTokenIdentity`
+    - added guardrail retention test:
+      - `BoundedRecapShelfCategoryKeepsCampaignRecapBundleClassification`
+    - added private-method reflection helpers for recap-shelf category/support invocation and fixture helper `BuildPublicationSafeProjection(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`141 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - recap-shelf campaign/aftermath categorization and creator-shelf support no longer accept substring-only `kind` collisions as governed publication identity.
+  - canonical campaign recap bundles and explicit after-action token-pair semantics remain classified correctly.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: after-action fallback now requires explicit `after` + `action` word-token identity so `after_actionable` wording cannot leak into campaign-return or aftermath packets
 
 - Trigger:
