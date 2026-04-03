@@ -1,3 +1,24 @@
+## 2026-04-03: opposition classifier now uses word-boundary tokening so `nonthreatening` continuity wording cannot leak into GM event-control or opposition packets
+
+- Trigger:
+  - frontier milestones 4/5 require campaign continuity wording to remain distinct from GM opposition/event-control operations lanes.
+  - opposition fallback still matched raw substrings (`threat`, `hostile`, etc.), so continuity wording like `nonthreatening ... review` could activate `event_control_packet` and `opposition_packet` without real opposition semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - introduced `OppositionWordTokens` and moved opposition identity detection in `ContainsOppositionToken(...)` to tokenized matching via `ContainsAnyWordToken(...)`.
+    - updated `IsOppositionSignalKind(...)` fallback to tokenized matching instead of raw substring checks.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `EventControlPacketDoesNotActivateFromNonThreateningMentionsWithoutOppositionIdentity`
+    - `OppositionPacketDoesNotActivateFromNonThreateningMentionsWithoutOppositionIdentity`
+    - fixture: `BuildWorkspaceWithNonThreateningMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`118 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 GM event-control/opposition packet synthesis no longer promotes continuity-only `nonthreatening` wording into opposition operations truth.
+  - explicit opposition semantics (`opposition`, `threat`, `hostile`, `adversary`) remain recognized when present as real tokens.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: relationship tokening now uses word boundaries so `contactless` continuity text cannot leak into GM event-control packet activation
 
 - Trigger:
