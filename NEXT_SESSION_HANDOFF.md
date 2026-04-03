@@ -54,6 +54,29 @@
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: wired desktop matrix coverage for promoted macOS heads/rids and hardened workflow compliance drift checks
+
+- Trigger:
+  - frontier milestone-1/milestone-3 still failed on missing macOS startup-smoke proof for promoted tuples:
+    - `avalonia osx-arm64`
+    - `avalonia osx-x64`
+    - `blazor-desktop osx-arm64`
+  - desktop workflow matrix coverage was missing `avalonia osx-arm64` and all `blazor-desktop` macOS runs, preventing CI from emitting those receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/.github/workflows/desktop-downloads-matrix.yml`:
+    - added `avalonia osx-arm64` build/startup-smoke lane on `macos-latest`.
+    - moved `avalonia osx-x64` to `macos-13` (Intel) for native x64 startup-smoke coverage.
+    - added `blazor-desktop osx-arm64` build/startup-smoke lane on `macos-latest`.
+    - made HTTP deploy mode require `CHUMMER_PORTAL_DOWNLOADS_VERIFY_URL` and always run live promoted-manifest verification.
+  - updated `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - pinned the three promoted macOS tuples in workflow compliance checks.
+    - replaced stale string assertions to match current manifest/verify script architecture (`materialize_public_release_channel.py`, `generate-public-promotion-evidence.py`, and wrapper verifier behavior).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_download_matrix_includes_avalonia_and_blazor_desktop_artifacts" --nologo` -> PASS (`1 passed`).
+- Current trusted state:
+  - CI workflow now has explicit startup-smoke lanes for the promoted macOS proof tuples required by milestone-3 closure.
+  - executable-gate closure still depends on fresh passing macOS startup-smoke receipts from GitHub Actions runs; this slice unblocks receipt production but does not fabricate local proof.
+
 ## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
 
 - Trigger:
