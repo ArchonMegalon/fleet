@@ -1,3 +1,22 @@
+## 2026-04-03: campaign-return recap classifier now uses word-boundary tokening so `backlog` continuity notes cannot leak through `log` substring fallback
+
+- Trigger:
+  - frontier milestone 4 requires diary/contact/heat return-loop packet synthesis to stay governed and avoid false-positive recap activation from unrelated continuity/admin wording.
+  - campaign-return recap fallback still used raw `log` substring checks, so labels/summaries like `campaign backlog review` could satisfy recap token fallback through embedded `log`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `CampaignReturnRecapWordTokens` and moved recap token checks in `ContainsCampaignReturnRecapToken(...)` and `IsCampaignReturnRecapSignal(...)` to tokenized matching (`ContainsAnyWordToken(...)`), while preserving explicit `after action`/`after_action` variants.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketDoesNotActivateFromBacklogMentionsWithoutRecapIdentity`
+    - fixture: `BuildWorkspaceWithBacklogMentionsOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`119 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packet synthesis no longer promotes backlog/status wording via embedded `log` substrings.
+  - explicit recap/diary/downtime/career/log tokens and after-action variants remain classified when present as real tokens.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: opposition classifier now uses word-boundary tokening so `nonthreatening` continuity wording cannot leak into GM event-control or opposition packets
 
 - Trigger:
