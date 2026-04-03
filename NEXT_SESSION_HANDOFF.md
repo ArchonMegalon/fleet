@@ -49,7 +49,8 @@
   - milestone-4 return packets now retain relationship receipt narrative during sparse consequence projection windows.
   - milestone-5 event-control packets now retain consequence receipt narrative on the same governed GM evidence lane.
 - Push status:
-  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: campaign-return and event-control packets now accept relationship pressure/window/status change variants without explicit update/change verbs
 
