@@ -86,6 +86,28 @@
 - Push status:
   - pending in this environment (push remains credential-dependent).
 
+## 2026-04-03: travel-prefetch packet now honors carry-forward travel signals and preserves recency integrity
+
+- Trigger:
+  - frontier milestones 4/5 require campaign-return and GM packet families to stay on one governed lane, including travel-prefetch cues carried through next-session handoff text.
+  - `travel_prefetch_packet` only activated from receipts/change packets, while `event_control_packet` already accepted split-token travel-prefetch carry-forward cues; this left packet-family behavior inconsistent and could hide real prefetch intent until receipt ingestion.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildTravelPrefetchOpsPacket(...)` now evaluates carry-forward travel-prefetch signals.
+    - carry-forward travel-prefetch cues now participate in packet activation, evidence lines, search terms, signal count, and `UpdatedAtUtc` computation.
+    - added `IsTravelPrefetchCarryForwardSignal(...)` using combined carry-forward text plus evidence-line token checks to support split-token cues (`travel` + `prefetch`) without broad false-positive widening.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `TravelPrefetchPacketActivatesFromCarryForwardSplitTokensWhenReceiptsLag`.
+    - added `TravelPrefetchPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotATravelPrefetchSignal`.
+    - added fixture `BuildWorkspaceWithTravelPrefetchSignalAndUnrelatedCarryForwardTimestampSkew`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`217 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - travel-prefetch packet family now matches event-control carry-forward semantics for split-token travel-prefetch cues, so governed prefetch intent remains visible before receipt hydration.
+  - travel-prefetch packet recency remains resistant to unrelated carry-forward timestamp skew.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 campaign workspace trust-surface localization landed across shipping locales; fallback debt reduced by 11 keys per locale
 
 - Trigger:
