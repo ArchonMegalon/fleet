@@ -29,6 +29,28 @@
 - Push status:
   - not attempted in this slice (environment remains without GitHub credentials).
 
+## 2026-04-03: campaign-return and event-control packets now carry relationship consequence receipt summaries into governed evidence
+
+- Trigger:
+  - frontier milestones 4 and 5 require return-loop and GM event-control packets to stay on the same account/audit truth lane, including consequence receipt evidence.
+  - campaign-return and event-control packet evidence used consequence summaries/evidence lines but could miss receipt summaries when consequence text was sparse.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildCampaignReturnPrepPacket(...)` now folds `CampaignConsequenceReceipt.Summary` into packet evidence.
+    - `BuildEventControlPrepPacket(...)` now folds `CampaignConsequenceReceipt.Summary` into packet evidence.
+    - both packet search-term projections now also ingest consequence receipt source kinds.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignReturnPacketIncludesRelationshipConsequenceReceiptEvidenceWhenConsequenceSummariesAreSparse`
+    - `EventControlPacketIncludesRelationshipConsequenceReceiptEvidenceWhenConsequenceSummariesAreSparse`
+    - fixtures prove both packets remain audit-meaningful from receipt summaries even when consequence summary/evidence fields are empty.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`32 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return packets now retain relationship receipt narrative during sparse consequence projection windows.
+  - milestone-5 event-control packets now retain consequence receipt narrative on the same governed GM evidence lane.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: campaign-return and event-control packets now accept relationship pressure/window/status change variants without explicit update/change verbs
 
 - Trigger:
