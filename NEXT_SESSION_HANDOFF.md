@@ -1,3 +1,43 @@
+## 2026-04-03: validated remaining desktop platform blockers directly (windows/macOS channel media + macOS startup smoke)
+
+- Trigger:
+  - after executable-gate diagnostics and registry resync, the gate still failed; blocker attribution needed direct per-platform proof.
+- Landed:
+  - executed per-platform gate probes against currently available artifacts (including `/docker/chummer5a/Docker/Downloads/files` installers) to confirm residual blockers are external publication/smoke coverage, not hidden script regression.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_WINDOWS_INSTALLER_PATH=/docker/chummer5a/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe bash scripts/materialize-windows-desktop-exit-gate.sh; echo EXIT:$?` -> `Release channel does not publish an Avalonia Windows installer artifact.` (`EXIT:1`).
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_MACOS_INSTALLER_PATH=/docker/chummer5a/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh; echo EXIT:$?` -> missing macOS release-channel medium + missing macOS startup-smoke receipt (`EXIT:1`).
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_MACOS_INSTALLER_PATH=/docker/chummer5a/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 bash scripts/materialize-macos-desktop-exit-gate.sh; echo EXIT:$?` -> same blocker class (`EXIT:1`).
+- Current trusted state:
+  - milestone-1/3 desktop executable closure is now blocked on canonical release-channel publication of Windows/macOS install media and fresh macOS startup-smoke receipts for promoted heads, not on local gate-script ambiguity.
+
+## 2026-04-03: fixed the new 12-win Fleet loop so open-wave focus, shard slices, and ETA are honest
+
+- Trigger:
+  - the new `NEXT_12_BIGGEST_WINS` wave was active, but live Fleet status still inherited stale desktop-only focus from the prior recovery wave.
+  - open milestones were not truly shard-distributed in live status; every shard reported the same `[1,2,3,4,5]` frontier.
+  - open-wave ETA could still inherit unrealistically cheap accepted durations from older non-loop history.
+- Landed:
+  - updated `/docker/fleet/scripts/chummer_design_supervisor.py` so live refresh:
+    - binds `effective_args.state_root` to the shard being refreshed
+    - stops inheriting stale `focus_profiles` / `focus_owners` / `focus_texts` when the loop is back on open milestones
+    - deterministically fair-shares the open-milestone frontier across configured shards
+    - idles cleanly when a shard has no local open-wave slice instead of launching garbage work
+    - restricts empirical open-milestone ETA history to accepted runs that actually overlap the current open-milestone wave
+  - added regressions in `/docker/fleet/tests/test_chummer_design_supervisor.py` for:
+    - stale focus removal on open-wave refresh
+    - three-shard open-wave fair sharing in `derive_context(...)`
+    - three-shard open-wave fair sharing in live shard summaries
+    - empty-slice loop idling
+    - wave-local open-milestone ETA filtering
+- Verification:
+  - `pytest -q /docker/fleet/tests/test_chummer_design_supervisor.py` -> pass (`133 passed`)
+  - `python3 -m py_compile /docker/fleet/scripts/chummer_design_supervisor.py /docker/fleet/tests/test_chummer_design_supervisor.py` -> pass
+- Current trusted state:
+  - the new 12-win loop no longer silently carries over desktop-only focus from the old wave.
+  - aggregate Fleet status shows the active first-wave frontier, while shard summaries show shard-local slices instead of cloning the same frontier onto every shard.
+  - open-wave ETA no longer reuses closed-wave accepted durations when no real current-wave burn history exists yet.
+
 ## 2026-04-03: hardened desktop executable gate with local promoted-artifact byte truth so stale registry rows fail closed
 
 - Trigger:
