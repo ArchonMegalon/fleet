@@ -1,3 +1,63 @@
+## 2026-04-03: milestone-5 roster packet now fail-closes unrelated carry-forward search-term leakage while preserving carry-forward roster activation
+
+- Trigger:
+  - frontier milestones 4/5 require return-loop and GM operations packet families to stay one governed lane without pull-through from unrelated operator carry-forward notes.
+  - `BuildRosterMovementPrepPacket(...)` already gated carry-forward activation/evidence/updated-at, but still fed `next_session_carry_forward` text into `SearchTerms` unconditionally, which let unrelated carry-forward text pollute roster packet discovery.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - roster packet search-term projection now includes carry-forward label/summary/return/action/evidence only when `carryForwardRosterSignal` is true.
+    - unrelated carry-forward text no longer enters roster packet search terms when roster activation is driven by real roster packets/objectives/consequences.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression `RosterMovementPacketSearchTermsIgnoreUnrelatedCarryForwardTextWhenCarryForwardIsNotARosterSignal`.
+    - regression locks absence of unrelated carry-forward tokens (`operator`, `queue`, `publication`) while retaining governed roster searchability.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterMovementPacketSearchTermsIgnoreUnrelatedCarryForwardTextWhenCarryForwardIsNotARosterSignal|FullyQualifiedName~RosterMovementPacketUpdatedAtIgnoresUnrelatedCarryForwardTimestampWhenCarryForwardIsNotARosterSignal|FullyQualifiedName~RosterMovementPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`221` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - roster packet searchability now matches the existing fail-closed carry-forward posture used for roster packet activation and recency.
+  - carry-forward roster evidence paths remain active and covered when carry-forward actually carries roster signal.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
+## 2026-04-04: no-step-back parity wave promoted into canon and Fleet runtime steering reset to registry-driven execution
+
+- Trigger:
+  - the active flagship wave needed to stop treating legacy and adjacent client parity as migration folklore.
+  - Fleet runtime was still pinned to `CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT=desktop,client,workbench,build lab,rules,rule-environment,explain,sr4,sr5,sr6`, which kept the live loop biased toward the older desktop-only slice even after the registry grew the parity milestones.
+- Landed:
+  - added canonical no-step-back parity docs in both mirrors:
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
+  - expanded `/docker/fleet/.codex-design/product/NEXT_12_BIGGEST_WINS_REGISTRY.yaml` and the canonical mirror to carry milestones `13` through `18` for:
+    - sourcebook/reference parity
+    - settings/custom-data/XML successor lane
+    - dice/initiative/roster/operator parity
+    - sheet/export/viewer/exchange parity
+    - Chummer4/5a/Hero Lab/Genesis/CommLink import-oracle closure
+    - SR6 supplement/designer/house-rule/storage successor lane
+  - updated top-level canon entry points and blocker/risk docs in both mirrors:
+    - `README.md`
+    - `START_HERE.md`
+    - `ROADMAP.md`
+    - `NEXT_12_BIGGEST_WINS_GUIDE.md`
+    - `GROUP_BLOCKERS.md`
+    - `CAMPAIGN_OS_GAP_AND_CHANGE_GUIDE.md`
+  - cleared the live desktop-only focus override in `/docker/fleet/runtime.env` and documented the leave-blank default in `/docker/fleet/runtime.env.example`.
+  - restarted `fleet-design-supervisor` and `fleet-design-overwatch` so the running loop reloaded the broadened registry.
+- Verification:
+  - `python3 - <<'PY' ... yaml.safe_load(...)` across both mirror/canonical `NEXT_12_BIGGEST_WINS_REGISTRY.yaml`, `FLAGSHIP_RELEASE_ACCEPTANCE.yaml`, and `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml` -> PASS.
+  - `python3 /docker/fleet/scripts/chummer_design_supervisor.py status --json` -> PASS.
+  - live supervisor now reports `open_milestone_ids: [1,2,3,13,14,15,16,17,18,4,5,6,7,8,9,10,11,12]` and fresh loop PIDs started at `2026-04-04 00:48 CEST`.
+- Current trusted state:
+  - Fleet is running the expanded 18-milestone flagship/no-step-back wave instead of the older 12-only registry.
+  - shard owner groups remain in place, so early frontier work is still concentrated on milestones `1`, `2`, `3`, `4`, and `5` until their dependencies release the new parity tranche.
+  - active red blockers are now explicit canon:
+    - `BLK-008` no-step-back parity not yet closed
+    - `BLK-009` flagship localization proof below release bar
+    - `BLK-010` campaign-OS lived-system proof still lags the architectural center
+
 ## 2026-04-03: public release verifier now fail-closes desktop tuple-coverage row metadata drift (not just tuple ids)
 
 - Trigger:
