@@ -28,6 +28,28 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-03: milestone-5 GM ops offline reconcile now fail-closes prep assets with missing required core fields
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) relies on offline prep packet reconcile as a governed truth lane.
+  - `GmOpsBoardService.ReconcilePortableAssets(...)` only rejected missing `assetId`; blank `campaignId`, `title`, or `body` still imported, which allowed malformed prep assets to land in GM ops packet/search surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added required-field guardrail `HasRequiredPortableAssetFields(...)` for portable assets.
+    - reconcile now fail-closes assets when `campaignId`, `title`, or `body` are blank/whitespace.
+    - malformed assets now increment `SkippedCount` and emit `OfflineSyncConflict` with reason `invalid-asset-required-fields` and resolution `skipped-invalid`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ReconcilePortableAssets_SkipsAssets_WhenRequiredAssetFieldsAreMissing`.
+    - added local helper `BuildPortableAsset(...)` for bounded malformed/valid fixture assembly.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`224` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - frontier milestone-5 offline GM prep reconcile now rejects malformed core prep payloads before they can pollute governed ops-board/prep-library truth.
+  - campaign workspace + GM ops smoke and targeted service tests remain green after this hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-5 ops-board offline reconcile now fail-closes malformed governed project references
 
 - Trigger:
@@ -48,6 +70,28 @@
 - Current trusted state:
   - milestone-5 prep-library/ops offline reconcile now rejects malformed governed packet provenance without crashing and preserves fully-formed governed references.
   - frontier-4/5 campaign workspace + GM ops smoke lane remains green after this hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-03: linux desktop exit gate now defaults startup-smoke channel identity from release-channel truth (override-safe)
+
+- Trigger:
+  - frontier milestone-2-adjacent desktop trust work still carried linux startup-smoke receipts stamped with local helper channel defaults when no explicit channel override was set.
+  - this made linux gate behavior drift-prone versus registry-owned release-channel identity and weakened deterministic tuple-channel alignment expectations in the executable gate lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added release-channel-derived default resolution (`channelId`/`channel`) via inline python loader.
+    - changed linux gate `CHANNEL` default from hard-coded `local-hard-gate` to:
+      - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_CHANNEL` override (unchanged priority),
+      - else parsed release-channel id,
+      - else `local-hard-gate` fallback.
+    - preserved explicit override behavior for controlled local/debug runs.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests).
+- Current trusted state:
+  - linux gate default channel wiring is now release-truth-first and deterministic when no explicit local override is provided.
+  - known open blocker remains: currently promoted linux installer shelf bytes still emit `startup_smoke.primary.receipt.channelId=local-hard-gate` in published gate receipts, so executable-gate channel mismatch findings persist until promoted installer tuple bytes + release-channel evidence are rotated in lockstep.
 - Push status:
   - pending in this environment (credential-dependent).
 
