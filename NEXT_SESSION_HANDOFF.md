@@ -26,28 +26,30 @@
 - Push status:
   - not attempted in this slice.
 
-## 2026-04-03: roster, aftermath, prep-launch, and travel-prefetch packets now preserve governed signal labels when summaries are sparse
+## 2026-04-03: continuity, roster, aftermath, prep-launch, and travel-prefetch packets now preserve governed signal labels when summaries are sparse
 
 - Trigger:
   - frontier milestones 4 and 5 require campaign-return and GM prep-library packets to stay audit-meaningful from one governed campaign lane during sparse packet projection windows.
-  - after hardening opposition/return/event-control, roster/aftermath/prep-launch/travel-prefetch packet evidence still leaned on summaries and could go thin when valid signals were label-only.
+  - after hardening opposition/return/event-control, continuity/roster/aftermath/prep-launch/travel-prefetch packet evidence still leaned on summaries and could go thin when valid signals were label-only.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildContinuityPrepPacket(...)` now folds carry-forward and continuity change labels into evidence synthesis.
     - `BuildRosterMovementPrepPacket(...)` now folds roster change labels, objective titles, and carry-forward labels into evidence synthesis.
     - `BuildAftermathPrepPacket(...)` now folds aftermath package titles plus recap/change labels into evidence synthesis.
     - `BuildPrepLaunchOpsPacket(...)` now folds prep-launch packet titles and change labels into evidence synthesis.
     - `BuildTravelPrefetchOpsPacket(...)` now folds travel-prefetch change labels into evidence synthesis.
   - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `ContinuityPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
     - `AftermathPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
     - `TravelPrefetchPacketIncludesSignalLabelsWhenSignalSummariesAreSparse`
     - `RosterMovementPacketIncludesChangeAndCarryForwardLabelsWhenSummariesAreSparse`
     - `PrepLaunchPacketIncludesSignalLabelsWhenLaunchSummariesAreSparse`
     - fixtures prove label-only governed signals continue to produce audit-readable packet evidence for milestone-4/5 prep lanes.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`43 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`44 passed` on `net10.0` and `net10.0-windows`).
 - Current trusted state:
-  - campaign return and GM prep-library packet families now consistently preserve signal identity from labels/titles when summary projection is sparse.
-  - milestone-4/5 governed campaign continuity is less brittle across roster, aftermath, launch, and travel packet ingestion timing skew.
+  - campaign continuity and GM prep-library packet families now consistently preserve signal identity from labels/titles when summary projection is sparse.
+  - milestone-4/5 governed campaign continuity is less brittle across continuity, roster, aftermath, launch, and travel packet ingestion timing skew.
 - Push status:
   - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
 
