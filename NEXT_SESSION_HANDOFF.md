@@ -48,7 +48,8 @@
   - milestone-4 return-loop continuity now survives relationship change streams that encode pressure/lane/window/status semantics without explicit `update/change` verbs.
   - milestone-5 event-control continuity remains queryable on the same governed GM lane during relationship-change-first timing windows.
 - Push status:
-  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-03: event-control packet summary count now includes relationship consequence receipts
 
