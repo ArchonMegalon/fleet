@@ -1,3 +1,67 @@
+## 2026-04-03: campaign-return detection now recognizes explicit inflected return tokens so `campaign returning session loop` signals stay on the governed return lane
+
+- Trigger:
+  - frontier milestone 4 requires diary/contact/heat return-loop packet synthesis to stay audit-readable when upstream change packets are label-first and `Kind` is sparse.
+  - return-lane fallback only matched the exact token `return`, so explicit inflected return cues (for example `campaign returning session loop`) could be dropped as false negatives even when session-loop context was present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded `ReturnWordTokens` to explicit inflected forms:
+      - `return`, `returns`, `returned`, `returning`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regression:
+      - `CampaignReturnPacketActivatesFromCampaignReturningSessionLoopMentions`
+    - added fixture:
+      - `BuildWorkspaceWithCampaignReturningSessionLoopMentionsOnly`
+  - committed in `chummer.run-services`:
+    - `90b01321` — `run-services: accept inflected return-lane tokens`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketActivatesFromCampaignReturningSessionLoopMentions" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDoesNotActivateFromCampaignerReturnableWindowshadeMentionsWithoutReturnIdentity" --nologo -v minimal` -> PASS (`1 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`165 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign-return packets now recognize explicit `returns/returned/returning` return-lane wording when paired with session/campaign loop context.
+  - existing false-positive guardrails remain intact for substring collisions like `campaigner returnable windowshade`.
+- Push status:
+  - `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+
+
+## 2026-04-03: Linux packaged tuple coverage now includes Blazor desktop with fresh installer/startup-smoke proof, narrowing milestone-1/3 blockers to Windows/macOS tuples only
+
+- Trigger:
+  - frontier milestones 1 and 3 were fail-closed on missing promoted desktop installer tuples, with active release truth carrying only `avalonia/linux-x64` and therefore missing both required non-Linux platforms plus the `blazor-desktop/linux` tuple.
+- Landed:
+  - executed Linux Blazor packaged gate in `/docker/chummercomplete/chummer6-ui`:
+    - `CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 bash scripts/materialize-linux-desktop-exit-gate.sh`
+    - produced passing receipt: `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json`.
+  - promoted generated Linux Blazor installer and smoke evidence into UI downloads shelf:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-linux-x64-installer.deb`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-blazor-desktop-linux-x64.receipt.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/install-verification-blazor-desktop-linux-x64.json`
+  - rematerialized UI release/public evidence from promoted artifacts:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/release-evidence/public-promotion.json`
+  - rematerialized hub-registry release-channel truth from the same shelf and smoke evidence:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - rematerialized executable/readiness proof:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && RELEASE_CHANNEL=docker RELEASE_VERSION=unpublished bash scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --channel docker --version run-20260403-111033 --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json --proof /docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json` -> PASS (`artifact_count=2`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json && python3 scripts/verify_public_release_channel.py .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL closed (`exit 43`) with narrowed tuple blockers only: `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=7, warning=0, missing=1`).
+- Current trusted state:
+  - release-channel/public-shelf truth now promotes both required Linux desktop heads (`avalonia` + `blazor-desktop`) with fresh installer startup-smoke receipts.
+  - executable-gate fail-closed reasons no longer include `blazor-desktop:linux`; remaining milestone-1/3 gap is strictly missing promoted Windows/macOS installer smoke tuples.
+  - Fleet readiness mirror is refreshed to the narrowed blocker set.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: relationship mutation fallback now requires explicit pressure/escalation/decline tokens so `contact escalator` wording cannot leak into campaign-return or event-control packets
 
 - Trigger:

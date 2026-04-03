@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-03T20:54:55Z",
+  "generated_at": "2026-04-03T21:01:52Z",
   "status": "fail",
   "summary": {
     "ready_count": 7,
@@ -43,12 +43,10 @@
         "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
         "Executable gate blocker: Release channel does not publish desktop install media for required platform 'windows'.",
         "Executable gate blocker: Release channel does not publish desktop install media for required platform 'macos'.",
-        "Executable gate blocker: Release channel is missing promoted desktop install media for flagship-required head(s): blazor-desktop.",
-        "Executable gate blocker: Release channel is missing required desktop platform/head installer tuple pair(s): blazor-desktop:linux, avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos.",
+        "Executable gate blocker: Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos.",
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
         "Release channel does not publish any promoted Windows installer media.",
-        "Release channel is missing promoted installer tuple proof for required desktop head(s): blazor-desktop.",
-        "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:linux, blazor-desktop:macos, blazor-desktop:windows."
+        "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:macos, blazor-desktop:windows."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -56,23 +54,22 @@
         "ui_local_release_status": "passed",
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "ui_executable_exit_gate_reason_count": 4,
+        "ui_executable_exit_gate_reason_count": 3,
         "ui_executable_exit_gate_reasons": [
           "Release channel does not publish desktop install media for required platform 'windows'.",
           "Release channel does not publish desktop install media for required platform 'macos'.",
-          "Release channel is missing promoted desktop install media for flagship-required head(s): blazor-desktop.",
-          "Release channel is missing required desktop platform/head installer tuple pair(s): blazor-desktop:linux, avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos."
+          "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos."
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 300,
-          "desktop workflow execution gate proof_age_seconds": 301,
-          "desktop visual familiarity gate proof_age_seconds": 0
+          "flagship UI release gate proof_age_seconds": 689,
+          "desktop workflow execution gate proof_age_seconds": 40,
+          "desktop visual familiarity gate proof_age_seconds": 40
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-03T20:54:51.679580Z",
-        "ui_executable_gate_age_seconds": 3,
+        "ui_executable_gate_generated_at": "2026-04-03T21:01:19.769032Z",
+        "ui_executable_gate_age_seconds": 32,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": true,
@@ -118,32 +115,33 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-03T20:51:01Z",
-        "release_channel_age_seconds": 234,
+        "release_channel_generated_at": "2026-04-03T21:01:15Z",
+        "release_channel_age_seconds": 37,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
         "release_channel_heads": [
-          "avalonia"
+          "avalonia",
+          "blazor-desktop"
         ],
         "release_channel_has_linux_public_installer": true,
         "release_channel_has_windows_public_installer": false,
         "release_channel_has_macos_public_installer": false,
         "release_channel_linux_promoted_tuples": [
-          "avalonia:linux-x64"
+          "avalonia:linux-x64",
+          "blazor-desktop:linux-x64"
         ],
         "release_channel_windows_promoted_tuples": [],
         "release_channel_macos_promoted_tuples": [],
         "release_channel_promoted_tuple_heads": [
-          "avalonia"
+          "avalonia",
+          "blazor-desktop"
         ],
         "ui_executable_gate_required_promoted_heads": [
           "avalonia",
           "blazor-desktop"
         ],
-        "release_channel_missing_required_head_tuples": [
-          "blazor-desktop"
-        ],
+        "release_channel_missing_required_head_tuples": [],
         "release_channel_required_tuple_platforms": [
           "linux",
           "macos",
@@ -155,7 +153,8 @@
         ],
         "release_channel_promoted_platform_heads": {
           "linux": [
-            "avalonia"
+            "avalonia",
+            "blazor-desktop"
           ],
           "macos": [],
           "windows": []
@@ -163,21 +162,18 @@
         "release_channel_missing_required_platform_head_pairs": [
           "avalonia:macos",
           "avalonia:windows",
-          "blazor-desktop:linux",
           "blazor-desktop:macos",
           "blazor-desktop:windows"
         ],
         "release_channel_missing_required_platform_head_pairs_derived": [
           "avalonia:macos",
           "avalonia:windows",
-          "blazor-desktop:linux",
           "blazor-desktop:macos",
           "blazor-desktop:windows"
         ],
         "release_channel_tuple_coverage_reported_missing_required_platform_head_pairs": [
           "avalonia:macos",
           "avalonia:windows",
-          "blazor-desktop:linux",
           "blazor-desktop:macos",
           "blazor-desktop:windows"
         ],
@@ -201,10 +197,11 @@
         "release_channel_windows_channel_mismatch_keys": [],
         "release_channel_macos_channel_mismatch_keys": [],
         "ui_executable_gate_linux_statuses": {
-          "avalonia:linux-x64": "pass"
+          "avalonia:linux-x64": "pass",
+          "blazor-desktop:linux-x64": "pass"
         },
-        "ui_executable_gate_linux_tuple_count": 1,
-        "ui_executable_gate_linux_passing_tuple_count": 1,
+        "ui_executable_gate_linux_tuple_count": 2,
+        "ui_executable_gate_linux_passing_tuple_count": 2,
         "ui_executable_gate_linux_missing_or_failing_keys": [],
         "ui_executable_gate_windows_statuses": {},
         "ui_executable_gate_windows_tuple_count": 0,
@@ -305,7 +302,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-03T20:50:49Z",
+        "supervisor_updated_at": "2026-04-03T21:00:14Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -336,7 +333,7 @@
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-2/state.json",
-    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260403T180137Z_8h/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
     "ui_linux_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
@@ -347,8 +344,8 @@
     "sr4_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr6_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr4_sr6_frontier_receipt": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
-    "hub_local_release_proof": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-    "mobile_local_release_proof": "/docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    "hub_local_release_proof": "/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+    "mobile_local_release_proof": "/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
     "release_channel": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
     "releases_json": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
   }
