@@ -1,3 +1,26 @@
+## 2026-04-03: refreshed flagship readiness so milestone-2 desktop familiarity proof is evaluated from current parity receipts
+
+- Trigger:
+  - active frontier prioritizes milestone-2 (`Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models`).
+  - Fleet flagship readiness was carrying stale desktop familiarity diagnostics even though current UI parity and visual familiarity receipts were passing.
+- Landed:
+  - reran readiness materialization in `/docker/fleet` using canonical paths:
+    - `python3 scripts/materialize_flagship_product_readiness.py`
+  - refreshed both published and mirrored readiness artifacts:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `jq` checks confirm desktop familiarity and workflow parity proof is now read as passing:
+    - `coverage_details.desktop_client.evidence.ui_visual_familiarity_exit_gate_status` -> `pass`
+    - `coverage_details.desktop_client.evidence.ui_workflow_execution_gate_status` -> `pass`
+    - `coverage_details.desktop_client.evidence.sr4_sr6_frontier_receipt_status` -> `pass`
+  - desktop-client warning reasons are narrowed to the true remaining blocker only:
+    - `Executable desktop exit gate proof is missing or not passed...`
+- Current trusted state:
+  - milestone-2 familiarity/parity evidence is now reflected accurately in Fleet readiness outputs.
+  - remaining desktop warning is correctly isolated to milestone-3 executable proof (macOS startup-smoke and packaged executable closure), not milestone-2 familiarity drift.
+
+
 ## 2026-04-03: hardened public-promotion startup-smoke evidence so stale/invalid receipts cannot report pass
 
 - Trigger:
