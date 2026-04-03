@@ -854,6 +854,27 @@ def build_flagship_product_readiness_payload(
                 f"Release channel receipt is stale ({release_channel_age_seconds}s old; max {RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS}s)."
             )
     executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
+    executable_gate_trusted_local_roots = _as_string_list(executable_gate_evidence.get("trusted_local_roots"))
+    executable_gate_hub_registry_root = str(executable_gate_evidence.get("hub_registry_root") or "").strip()
+    executable_gate_hub_registry_release_channel_path = str(
+        executable_gate_evidence.get("hub_registry_release_channel_path") or ""
+    ).strip()
+    executable_gate_hub_registry_root_trusted = bool(
+        executable_gate_evidence.get("hub_registry_root_trusted_for_startup_smoke_proof")
+    )
+    executable_gate_has_expanded_trusted_local_roots = len(set(executable_gate_trusted_local_roots)) > 1
+    if executable_gate_has_expanded_trusted_local_roots and not executable_gate_hub_registry_root_trusted:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate reports expanded trusted startup-smoke roots without canonical hub-registry release-channel binding."
+        )
+    if executable_gate_hub_registry_root_trusted and (
+        not executable_gate_hub_registry_root or not executable_gate_hub_registry_release_channel_path
+    ):
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate marks hub-registry startup-smoke trust as active but omits canonical hub root/channel evidence."
+        )
     stale_windows_gate_receipts_without_promoted_tuples = _normalized_stale_receipt_inventory(
         executable_gate_evidence.get("stale_windows_gate_receipts_without_promoted_tuples")
     )
@@ -1539,6 +1560,15 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_visual_missing_or_failing_head_proofs": missing_visual_passing_head_proofs,
             "ui_executable_gate_workflow_missing_or_failing_head_proofs": missing_workflow_passing_head_proofs,
             "ui_executable_gate_unpromoted_desktop_shelf_installers": unpromoted_desktop_shelf_installers,
+            "ui_executable_gate_trusted_local_roots": executable_gate_trusted_local_roots,
+            "ui_executable_gate_has_expanded_trusted_local_roots": executable_gate_has_expanded_trusted_local_roots,
+            "ui_executable_gate_hub_registry_root": executable_gate_hub_registry_root,
+            "ui_executable_gate_hub_registry_release_channel_path": (
+                executable_gate_hub_registry_release_channel_path
+            ),
+            "ui_executable_gate_hub_registry_root_trusted_for_startup_smoke_proof": (
+                executable_gate_hub_registry_root_trusted
+            ),
             "ui_executable_gate_stale_windows_gate_receipts_without_promoted_tuples": (
                 stale_windows_gate_receipts_without_promoted_tuples
             ),

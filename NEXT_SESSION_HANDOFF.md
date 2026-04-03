@@ -1,3 +1,33 @@
+## 2026-04-03: Fleet readiness now fail-closes expanded executable-gate trusted roots unless hub trust binding is explicit
+
+- Trigger:
+  - after executable-gate hardening in `chummer6-ui`, Fleet readiness still did not enforce or project the new `hub_registry_root_trusted_for_startup_smoke_proof` trust-binding semantics.
+  - this left a control-plane gap where expanded startup-smoke trusted root evidence could be accepted without an explicit canonical hub-binding check at Fleet layer.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - ingests executable-gate trust-scope evidence:
+      - `trusted_local_roots`
+      - `hub_registry_root`
+      - `hub_registry_release_channel_path`
+      - `hub_registry_root_trusted_for_startup_smoke_proof`
+    - fail-closes desktop readiness when executable-gate evidence expands trusted roots but does not mark canonical hub trust binding active.
+    - fail-closes when executable-gate marks hub trust active but omits canonical hub root/channel evidence strings.
+    - projects trust-scope evidence fields into desktop coverage details for operator diagnostics.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added `test_materialize_flagship_product_readiness_fail_closes_unbound_executable_gate_trusted_roots`.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+  - `pytest` execution remains unavailable in this environment (`No module named pytest`), so the new regression test is syntax-validated but not runtime-executed here.
+- Current trusted state:
+  - Fleet control-plane now enforces the same canonical hub-binding trust model for expanded startup-smoke roots that UI executable-gate emits.
+  - milestone-1/3 blockers remain the same external tuple publication and startup-smoke evidence gaps (Windows/macOS promoted tuple coverage + fresh host-run startup-smoke receipts).
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: milestone-3 executable gate now fail-closes unbound hub-root trust overrides for startup-smoke receipt scope
 
 - Trigger:
