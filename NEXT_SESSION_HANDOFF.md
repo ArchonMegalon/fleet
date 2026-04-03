@@ -1,3 +1,25 @@
+## 2026-04-03: prep-launch and travel-prefetch packet fallback now classifies split label/summary tokens under sparse kinds
+
+- Trigger:
+  - frontier milestone-5 GM prep and travel ops packet continuity still had a sparse-kind edge case when signal identity was split across fields (for example `prep` in label and `launch` in summary, or `travel` in label and `prefetch` in summary).
+  - fallback helpers required both tokens in the same field, so split-token sparse signals could be dropped.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsPrepLaunchSignal(...)` and `IsTravelPrefetchSignal(...)` now classify split-token identity across combined label+summary text, in addition to existing single-field checks.
+    - added combined-field helper overloads for prep-launch and travel-prefetch fallback token detection.
+  - added regression coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLaunchPacketFallsBackToSplitSignalTokensWhenSignalKindsAreSparse`
+    - `TravelPrefetchPacketFallsBackToSplitSignalTokensWhenSignalKindsAreSparse`
+    - fixtures `BuildWorkspaceWithPrepLaunchSparseSignalKindsAndSplitTokens` and `BuildWorkspaceWithTravelPrefetchSparseSignalKindsAndSplitTokens`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelPrefetchPacketFallsBackToSplitSignalTokensWhenSignalKindsAreSparse|FullyQualifiedName~PrepLaunchPacketFallsBackToSplitSignalTokensWhenSignalKindsAreSparse|FullyQualifiedName~TravelPrefetchPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~PrepLaunchPacketFallsBackToSignalLabelsWhenSignalKindsAreSparse|FullyQualifiedName~TravelPrefetchPacketKeepsKindFallbackWhenReceiptEvidenceIsVerbose|FullyQualifiedName~PrepLaunchPacketKeepsKindFallbackWhenLaunchEvidenceIsVerbose" --nologo -v minimal` -> PASS (`6 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`94 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep-launch and travel-prefetch packet synthesis preserves sparse-kind identity even when governing tokens are split between label and summary fields.
+  - GM prep library and travel staging packets remain resilient to partial signal hydration without creating local shadow interpretation.
+- Push status:
+  - pending in this slice (push is still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: prep-launch and travel-prefetch packets now keep label-first signals when change kinds are sparse
 
 - Trigger:
