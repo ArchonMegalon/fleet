@@ -1,3 +1,26 @@
+## 2026-04-03: milestone-5 ops-board offline reconcile now fail-closes malformed governed project references
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) needs reusable prep-library and offline sync lanes to stay on governed packet truth without admitting partial/malformed governed-project payloads.
+  - `GmOpsBoardService.NormalizeGovernedProject(...)` trimmed required fields unconditionally, so null/blank governed-project fields from offline payloads could throw or persist ambiguous provenance instead of failing closed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `NormalizeGovernedProject(...)` now normalizes and validates all required governed-project fields (`ProjectKind`, `ProjectId`, `Title`, `RulesetId`, `LinkTarget`, `TrustTier`) before constructing references.
+    - malformed governed-project payloads now fail-close to `null` instead of throwing or retaining partial provenance.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/Chummer.Tests.csproj`:
+    - added explicit test references needed for AI ops/offline contracts (`Chummer.Run.AI`, `Chummer.Play.Contracts`).
+  - added `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - `ReconcilePortableAssets_DropsGovernedProject_WhenRequiredFieldsAreMissing`.
+    - `ReconcilePortableAssets_NormalizesGovernedProject_WhenFieldsAreComplete`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`223` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 prep-library/ops offline reconcile now rejects malformed governed packet provenance without crashing and preserves fully-formed governed references.
+  - frontier-4/5 campaign workspace + GM ops smoke lane remains green after this hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-03: run-services smoke lane reclosed with frontier-4/5 prep-search hardening and release-manifest fail-close alignment
 
 - Trigger:
