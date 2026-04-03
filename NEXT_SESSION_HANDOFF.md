@@ -28,6 +28,27 @@
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-03: added governed prep-launch and travel-prefetch packet synthesis to campaign prep library
+
+- Trigger:
+  - frontier milestone-5 requires GM/operator actions to stay first-class on the same account/audit backbone as campaign prep truth.
+  - prep library packet synthesis projected scene/opposition/continuity/return/roster/event/aftermath/travel lanes, but ignored governed `PrepLaunches` and `TravelPrefetches` receipt families already carried on campaign workspace truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `prep_launch_packet` synthesis from governed prep-launch receipts (`PrepLaunches`) with launch/audit/search semantics.
+    - added `travel_prefetch_packet` synthesis from staged travel-prefetch receipts (`TravelPrefetches`) with device/offline/boundary evidence semantics.
+    - wired both packet builders into `BuildPrepPackets(...)` so GM/operator actions appear as reusable governed prep-library packets.
+  - added unit coverage in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `PrepLibraryIncludesPrepLaunchPacketWhenGovernedPrepLaunchReceiptsExist`
+    - `PrepLibraryIncludesTravelPrefetchPacketWhenPrefetchReceiptsExist`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo` -> PASS (`8 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - prep library now treats governed prep launches and staged travel-prefetch actions as explicit packet lanes instead of leaving those operator receipts only as side fields.
+  - milestone-5 backbone alignment is stronger because GM operations and campaign prep discovery share one governed packet surface.
+- Push status:
+  - pending in this slice (local commit landed; push still expected to fail in this environment without GitHub credentials).
+
 ## 2026-04-03: added unified diary/contacts/heat return-loop packet to campaign prep library
 
 - Trigger:
