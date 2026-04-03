@@ -1,3 +1,52 @@
+## 2026-04-03: aligned Fleet active-wave truth to NEXT_12 and hardened frontier-id parsing to prevent stale handoff drift
+
+- Trigger:
+  - supervisor/frontier evidence was still vulnerable to stale handoff number noise and could report `frontier_ids: [1, 2, 3, 4, 6]` instead of the active requested frontier.
+  - progress projection still carried legacy active-wave assumptions in test expectations.
+- Landed:
+  - hardened handoff frontier parsing in:
+    - `/docker/fleet/scripts/chummer_design_supervisor.py`
+    - `_parse_frontier_ids_from_handoff` now prefers explicit frontier markers and stops falling back to arbitrary first-lines number scraping.
+  - added parser regression coverage in:
+    - `/docker/fleet/tests/test_chummer_design_supervisor.py`
+    - explicit-frontier precedence test and non-frontier number-noise rejection test.
+  - aligned public-progress active-wave expectations with the canon recommended wave (`Next 12 Biggest Wins`) in:
+    - `/docker/fleet/tests/test_materialize_public_progress_report.py`
+    - `/docker/fleet/tests/test_public_progress_report.py`
+  - regenerated public progress artifacts:
+    - `/docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json`
+    - `/docker/chummercomplete/chummer-design/products/chummer/PROGRESS_HISTORY.generated.json`
+    - `/docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.html`
+    - `/docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT_POSTER.svg`
+    - fleet preview/mirror outputs under `/docker/fleet/.codex-studio/published/` and `/docker/chummercomplete/chummer6-hub/.codex-design/product/`
+- Current active frontier from design plus handoff:
+  - `1` Gold install, update, and recovery lane across macOS, Windows, and Linux
+  - `3` Packaged-binary desktop exit tests and per-head proof that cannot lie
+  - `4` Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop
+  - `5` GM operations, opposition packets, roster movement, prep library, and event controls
+  - `2` Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models
+- Frontier milestone ids to prioritize first: 1, 3, 4, 5, 2
+- Verification:
+  - `python3 -m pytest -q /docker/fleet/tests/test_chummer_design_supervisor.py -k "frontier_ids_from_handoff or derive_context_prefers_handoff_frontier_ids"` -> pass (`3 passed`)
+  - `python3 -m pytest -q /docker/fleet/tests/test_public_progress_report.py /docker/fleet/tests/test_materialize_public_progress_report.py` -> pass (`9 passed`)
+  - `python3 /docker/fleet/scripts/materialize_public_progress_report.py --repo-root /docker/fleet --as-of 2026-04-03` -> pass
+
+## 2026-04-03: shard-1 follow-up sync for canonical progress bundle and preview manifest
+
+- Trigger:
+  - after the active-wave resolver fix, the default progress materializer had not yet been re-run from canonical defaults, so canonical bundle/mirror writes and preview compile-manifest receipts were stale.
+- Landed:
+  - re-ran canonical materialization:
+    - `cd /docker/fleet && python3 scripts/materialize_public_progress_report.py`
+  - refreshed Fleet preview generated artifacts and manifest:
+    - `/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json`
+    - `/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m unittest tests.test_public_progress_report` -> pass
+- Current trusted state:
+  - Fleet preview progress bundle/manifest are synchronized after canonical-default materialization and still agree with `Next 12 Biggest Wins` active-wave truth.
+
 ## 2026-04-03: fixed installer ticket leak, hardened Avalonia parity proof, and activated the new 12-win Fleet wave with honest shard state
 
 - Trigger:

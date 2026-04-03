@@ -1,9 +1,9 @@
 {
   "contract_name": "fleet.public_progress_report",
   "contract_version": "2026-03-23",
-  "generated_at": "2026-04-03T15:28:45Z",
+  "generated_at": "2026-04-03T15:29:59Z",
   "as_of": "2026-03-23",
-  "history_snapshot_count": 8,
+  "history_snapshot_count": 9,
   "brand": "Chummer6",
   "active_wave": "Next 12 Biggest Wins",
   "active_wave_status": "active",
@@ -627,7 +627,7 @@
       "ETA is a momentum-based planning band, not a delivery promise.",
       "Weekly public progress history is now available; ETA uses recorded velocity where enough snapshots exist and falls back to the short-horizon momentum proxy elsewhere."
     ],
-    "history_snapshot_count": 8
+    "history_snapshot_count": 9
   },
   "closing": {
     "headline": "The project no longer looks like a concept sketch.",
