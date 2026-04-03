@@ -1,3 +1,36 @@
+## 2026-04-03: expanded milestone-2 visual familiarity proof to include explicit advancement dialog screenshot evidence
+
+- Trigger:
+  - milestone-2 requires advancement familiarity to be visible, not only implied by runtime assertions.
+  - visual familiarity gate required 12 screenshots and had no dedicated advancement visual checkpoint.
+- Landed:
+  - patched advancement screenshot capture in both UI repos:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`
+    - added `13-advancement-dialog-light.png` captured from `initiationgrades` -> `Add Initiation / Submersion` dialog.
+  - updated flagship gate screenshot contract in both repos:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`
+    - required screenshot corpus now enforces 13 images including advancement dialog.
+  - updated visual familiarity exit gate contract in both repos:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`
+    - required screenshot list and dialog-size enforcement now include `13-advancement-dialog-light.png`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - receipt probes:
+    - `UI_FLAGSHIP_RELEASE_GATE.generated.json` -> `expectedScreenshots` length `13`, contains `13-advancement-dialog-light.png`.
+    - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` -> `required_screenshots` length `13`, contains `13-advancement-dialog-light.png`, `status=pass`.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (desktop warning remains executable gate only).
+- Current trusted state:
+  - milestone-2 visual familiarity now fails closed without explicit advancement dialog imagery.
+  - desktop familiarity/workflow parity remains green; executable packaged-proof closure is still the remaining desktop blocker.
+- Push status:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-03: campaign-return packet now falls back to diary-signal variants when recap and consequence families lag
 
 - Trigger:
