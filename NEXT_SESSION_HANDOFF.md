@@ -1,3 +1,29 @@
+## 2026-04-03: milestone-5 opposition/event-control carry-forward parsing now fail-closes generic threat-model notes while preserving governed opposition activation
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires governed prep packets to activate from true campaign-opposition cues, not unrelated carry-forward notes.
+  - `BuildOppositionPrepPacket(...)` and event-control carry-forward parsing treated any bare `threat` token in carry-forward text as opposition signal, which could activate opposition/event-control packets from generic threat-model/governance notes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added context-aware carry-forward opposition detection via `IsOppositionCarryForwardSignal(...)` and `IsOppositionCarryForwardTextSignal(...)`.
+    - added explicit opposition-identity and threat-context token sets so carry-forward text now requires campaign-opposition context (`opposition|hostile|adversary` directly, or `threat` plus opposition context such as `window/lane/control/board/scene/run/objective/checkpoint/response`).
+    - switched opposition packet carry-forward activation to the new helper.
+    - switched event-control carry-forward opposition parsing to the same context-aware helper for both primary fields and evidence lines.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added regressions:
+      - `OppositionPacketDoesNotActivateFromUnrelatedCarryForwardThreatModelNotesOnly`
+      - `EventControlPacketDoesNotActivateFromUnrelatedCarryForwardThreatModelNotesOnly`
+    - added fixture:
+      - `BuildWorkspaceWithThreatModelCarryForwardOnly`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketDoesNotActivateFromUnrelatedCarryForwardThreatModelNotesOnly|FullyQualifiedName~EventControlPacketDoesNotActivateFromUnrelatedCarryForwardThreatModelNotesOnly|FullyQualifiedName~OppositionPacketActivatesFromCarryForwardOppositionSignalsWhenOtherFamiliesLag|FullyQualifiedName~OppositionPacketActivatesFromCarryForwardOppositionEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`4 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`205 passed` on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition/event-control carry-forward activation now resists generic “threat model” text noise and only activates from opposition-context signals.
+  - existing governed opposition activation paths (direct carry-forward opposition signals and evidence-line-only opposition cues) remain covered and passing.
+- Push status:
+  - pending in this environment (push remains credential-dependent).
+
 ## 2026-04-03: milestone-2 workbench/home localization expanded across workspace-strip, install summaries, follow-through actions, and trust labels; fallback debt reduced by 32 keys per locale
 
 - Trigger:
