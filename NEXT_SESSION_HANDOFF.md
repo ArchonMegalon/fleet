@@ -12,10 +12,14 @@
     - added `PrepLibraryIncludesCampaignMemoryPacketWhenWorkspaceMemoryExists`.
     - added `CampaignMemoryPacketDoesNotActivateFromCarryForwardWindowSignalsWithoutMemoryContext`.
     - added bounded fixture helper `BuildWorkspaceWithCampaignMemorySignals`.
+  - patched `/docker/chummercomplete/chummer.run-services/tests/RunServicesSmoke/Program.cs`:
+    - smoke now fail-closes if server-plane prep library omits `campaign_memory_packet`.
+    - smoke now verifies prep-library `memory` query returns the governed campaign-memory packet.
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryIncludesCampaignMemoryPacketWhenWorkspaceMemoryExists|FullyQualifiedName~CampaignMemoryPacketDoesNotActivateFromCarryForwardWindowSignalsWithoutMemoryContext" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`227` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RunServicesSmoke|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`223` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - prep-library synthesis now exposes campaign memory as a reusable governed packet lane instead of leaving long-lived memory only on workspace detail projections.
   - campaign-memory activation is fail-closed for non-memory carry-forward text; it does not light up from generic return-window phrasing.
