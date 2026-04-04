@@ -449,6 +449,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     external_requests: List[Dict[str, Any]] = []
+    external_request_tuple_counts: Dict[str, int] = {}
     for item in external_proof_rows:
         if not isinstance(item, dict):
             continue
@@ -475,6 +476,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         ]
         if not tuple_id:
             continue
+        external_request_tuple_counts[tuple_id] = external_request_tuple_counts.get(tuple_id, 0) + 1
         external_requests.append(
             {
                 "tuple_id": tuple_id,
@@ -519,6 +521,20 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 ],
             }
         )
+    deduped_external_requests_by_tuple: Dict[str, Dict[str, Any]] = {}
+    for row in external_requests:
+        tuple_id = _normalize_text(row.get("tuple_id"))
+        if tuple_id:
+            deduped_external_requests_by_tuple[tuple_id] = row
+    deduped_external_requests = [
+        deduped_external_requests_by_tuple[key]
+        for key in sorted(deduped_external_requests_by_tuple.keys())
+    ]
+    for row in deduped_external_requests:
+        tuple_id = _normalize_text(row.get("tuple_id"))
+        row["tuple_entry_count"] = external_request_tuple_counts.get(tuple_id, 0)
+        row["tuple_unique"] = external_request_tuple_counts.get(tuple_id, 0) <= 1
+
     return {
         "channel_id": channel_id,
         "status": _normalize_text(release_channel.get("status")).lower(),
@@ -534,7 +550,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         ).lower(),
         "fix_availability_summary": _normalize_text(release_channel.get("fixAvailabilitySummary") or release_channel.get("fix_availability_summary")),
         "promoted_tuples": rows,
-        "external_proof_requests": external_requests,
+        "external_proof_requests": deduped_external_requests,
     }
 
 
@@ -805,6 +821,8 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "external_proof_request": {
                 "tuple_id": _normalize_text(external_proof_request.get("tuple_id")),
                 "channel_id": _normalize_text(external_proof_request.get("channel_id")),
+                "tuple_entry_count": int(external_proof_request.get("tuple_entry_count") or 0),
+                "tuple_unique": bool(external_proof_request.get("tuple_unique")),
                 "required_host": _normalize_text(external_proof_request.get("required_host")),
                 "required_proofs": [
                     _normalize_text(token)
@@ -875,6 +893,8 @@ def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
     ]
     return {
         "channel_id": _normalize_text(row.get("channel_id")).lower(),
+        "tuple_entry_count": int(row.get("tuple_entry_count") or 0),
+        "tuple_unique": bool(row.get("tuple_unique")),
         "required_host": _normalize_platform(row.get("required_host")),
         "required_proofs": sorted(set(required_proofs)),
         "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
@@ -909,6 +929,124 @@ def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Di
     }
 
 
+def _external_proof_operator_packet(
+    row: Dict[str, Any],
+    *,
+    release_channel_index: Dict[str, Any],
+) -> Dict[str, Any]:
+    tuple_id = _normalize_text(row.get("tuple_id")).lower()
+    channel_id = _normalize_text(row.get("channel_id")).lower()
+    required_host = _normalize_platform(row.get("required_host"))
+    tuple_parts = [token.strip().lower() for token in tuple_id.split(":") if str(token).strip()]
+    head_id = tuple_parts[0] if len(tuple_parts) >= 1 else ""
+    rid = tuple_parts[1] if len(tuple_parts) >= 2 else ""
+    platform = tuple_parts[2] if len(tuple_parts) >= 3 else required_host
+    expected_artifact_id = _normalize_text(row.get("expected_artifact_id"))
+    expected_installer_file_name = _normalize_text(row.get("expected_installer_file_name"))
+    expected_public_install_route = _normalize_text(row.get("expected_public_install_route"))
+    expected_startup_smoke_receipt_path = _normalize_text(row.get("expected_startup_smoke_receipt_path"))
+    required_proofs = [
+        _normalize_text(token)
+        for token in (row.get("required_proofs") or [])
+        if _normalize_text(token)
+    ]
+    proof_capture_commands = [
+        _normalize_text(token)
+        for token in (row.get("proof_capture_commands") or [])
+        if _normalize_text(token)
+    ]
+    packet_seed = f"external-proof|{channel_id}|{tuple_id}"
+    packet_id = f"support_packet_{hashlib.sha1(packet_seed.encode('utf-8')).hexdigest()[:12]}"
+    host_label = required_host or platform or "required"
+    return {
+        "packet_id": packet_id,
+        "packet_kind": "external_proof_request",
+        "support_case_backed": False,
+        "kind": "external_proof_request",
+        "status": "awaiting_evidence",
+        "target_repo": "chummer6-ui",
+        "design_impact_suspected": False,
+        "primary_lane": "ops",
+        "change_class": "type_b",
+        "reason": (
+            "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke "
+            f"evidence from a {host_label} host."
+        ),
+        "exit_condition": (
+            "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, "
+            "then regenerate release-channel truth."
+        ),
+        "affected_canon_files": [],
+        "title": f"Capture desktop tuple proof for {tuple_id or expected_artifact_id or host_label}",
+        "summary": (
+            f"Missing promoted installer/startup-smoke proof for {tuple_id or expected_artifact_id or host_label}."
+        ),
+        "release_channel": channel_id,
+        "head_id": head_id,
+        "platform": platform,
+        "arch": "",
+        "installation_id": "",
+        "installed_version": "",
+        "fixed_version": "",
+        "fixed_channel": "",
+        "install_truth_state": "tuple_not_on_promoted_shelf",
+        "install_diagnosis": {
+            "registry_channel_id": _normalize_text(release_channel_index.get("channel_id")),
+            "registry_release_channel_status": _normalize_text(release_channel_index.get("status")),
+            "registry_release_version": _normalize_text(release_channel_index.get("version")),
+            "registry_rollout_state": _normalize_text(release_channel_index.get("rollout_state")),
+            "registry_supportability_state": _normalize_text(release_channel_index.get("supportability_state")),
+            "registry_release_proof_status": _normalize_text(release_channel_index.get("release_proof_status")),
+            "case_channel_matches_registry": bool(
+                channel_id
+                and _normalize_text(release_channel_index.get("channel_id"))
+                and channel_id == _normalize_text(release_channel_index.get("channel_id")).lower()
+            ),
+            "promoted_tuple_id": "",
+            "promoted_artifact_id": "",
+            "tuple_present_on_promoted_shelf": False,
+            "case_tuple_id": tuple_id,
+            "external_proof_required": True,
+            "external_proof_request": {
+                "tuple_id": tuple_id,
+                "channel_id": channel_id,
+                "tuple_entry_count": int(row.get("tuple_entry_count") or 0),
+                "tuple_unique": bool(row.get("tuple_unique")),
+                "required_host": required_host,
+                "required_proofs": required_proofs,
+                "expected_artifact_id": expected_artifact_id,
+                "expected_installer_file_name": expected_installer_file_name,
+                "expected_public_install_route": expected_public_install_route,
+                "expected_startup_smoke_receipt_path": expected_startup_smoke_receipt_path,
+                "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                    row.get("startup_smoke_receipt_contract")
+                ),
+                "proof_capture_commands": proof_capture_commands,
+            },
+            "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
+            "case_installed_version": "",
+            "case_version_matches_registry_release": False,
+            "case_fixed_version_matches_registry_release": False,
+        },
+        "fix_confirmation": {
+            "state": "no_fix_recorded",
+            "reporter_verification_state": "",
+            "installed_version": "",
+            "fixed_version": "",
+            "fixed_channel": "",
+            "update_required": False,
+        },
+        "recovery_path": {
+            "action_id": "open_downloads",
+            "href": "/downloads",
+            "reason": (
+                "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the "
+                "required host receipts land."
+            ),
+        },
+    }
+
+
 def _closure_waiting_on_release_truth(packet: Dict[str, Any]) -> bool:
     status = _normalize_text(packet.get("status")).lower()
     if status in {"accepted", "fixed"}:
@@ -933,20 +1071,33 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         "fixed",
         "released_to_reporter_channel",
     }
-    packets = [
+    case_packets = [
         packet
         for item in raw_items
         if isinstance(item, dict)
         for packet in [_decision_for_case(dict(item), release_channel_index=release_channel_index)]
         if packet["status"] in open_statuses
     ]
+    unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
+    packet_external_tuple_ids = {
+        _normalize_text((packet.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
+        for packet in case_packets
+        if bool((packet.get("install_diagnosis") or {}).get("external_proof_required"))
+    }
+    operator_packets = [
+        _external_proof_operator_packet(dict(row), release_channel_index=release_channel_index)
+        for row in (release_channel_index.get("external_proof_requests") or [])
+        if isinstance(row, dict)
+        and _normalize_text(row.get("tuple_id"))
+        and _normalize_text(row.get("tuple_id")) not in packet_external_tuple_ids
+    ]
+    packets = case_packets + operator_packets
     open_packets = packets
     open_items = [
         dict(item)
         for item in raw_items
         if isinstance(item, dict) and _normalize_text(item.get("status")).lower() in open_statuses
     ]
-    unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
 
     return {
         "contract_name": "fleet.support_case_packets",
@@ -956,13 +1107,17 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "source_kind": _source_kind(source_label),
             "reported_count": int(source_payload.get("count") or len(raw_items)),
             "materialized_count": len(packets),
+            "case_materialized_count": len(case_packets),
+            "operator_packet_count": len(operator_packets),
         },
         "summary": {
-            "open_case_count": len(open_packets),
-            "design_impact_count": sum(1 for item in open_packets if item["design_impact_suspected"]),
+            "open_case_count": len(case_packets),
+            "open_packet_count": len(open_packets),
+            "operator_packet_count": len(operator_packets),
+            "design_impact_count": sum(1 for item in case_packets if item["design_impact_suspected"]),
             "owner_repo_counts": _counter_map(
-                _normalize_text(item.get("candidateOwnerRepo") or item.get("candidate_owner_repo"), "chummer6-hub")
-                for item in open_items
+                _normalize_text(item.get("target_repo") or item.get("candidateOwnerRepo") or item.get("candidate_owner_repo"), "chummer6-hub")
+                for item in open_packets
             ),
             "lane_counts": _counter_map(item["primary_lane"] for item in open_packets),
             "status_counts": _counter_map(item["status"] for item in open_packets),
@@ -985,16 +1140,16 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
                 and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
             ),
             "external_proof_required_case_count": sum(
-                1 for item in open_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+                1 for item in case_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
             "external_proof_required_host_counts": _counter_map(
                 _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("required_host"))
-                for item in open_packets
+                for item in case_packets
                 if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
             "external_proof_required_tuple_counts": _counter_map(
                 _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
-                for item in open_packets
+                for item in case_packets
                 if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
             "unresolved_external_proof_request_count": int(unresolved_external_proof["count"]),
@@ -1004,6 +1159,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "unresolved_external_proof_request_tuples": list(unresolved_external_proof["tuples"]),
             "unresolved_external_proof_request_specs": dict(unresolved_external_proof["specs"]),
         },
+        "unresolved_external_proof": dict(unresolved_external_proof),
         "packets": packets,
     }
 

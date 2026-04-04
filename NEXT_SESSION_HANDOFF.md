@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-1/3 support external-proof backlog now dedupes duplicate tuple requests and exposes tuple-uniqueness contract in packet summaries
+
+- Trigger:
+  - W1 milestones `1` and `3` require release-channel external-proof backlog projection to stay canonical in support/operator packets, without duplicate tuple rows creating inflated or ambiguous queue truth.
+  - `materialize_support_case_packets` projected `desktopTupleCoverage.externalProofRequests` rows directly, so duplicate tuple rows could emit duplicate operator packets and hide tuple-level ambiguity.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - release-channel external-proof rows now dedupe by canonical `tuple_id`.
+    - external-proof rows now carry tuple uniqueness metadata (`tuple_entry_count`, `tuple_unique`) for support summary specs and packet diagnosis payloads.
+    - `external_proof_required_*` summary counters now scope to support-case-backed packets only, not synthetic operator packets.
+  - patched `/docker/fleet/tests/test_materialize_support_case_packets.py`:
+    - updated strict external-proof projection assertions for new tuple uniqueness fields.
+    - added `test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuples`.
+  - refreshed completion-review frontier mirrors:
+    - `/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+    - `/docker/fleet/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py -k "projects_external_proof_requests_for_missing_tuple or reports_release_channel_external_proof_backlog_without_open_cases or dedupes_duplicate_external_proof_tuples or enriches_install_truth_from_release_channel"` -> PASS (`4 passed`, `7 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "release_channel_external_proof" && python3 -m pytest -q tests/test_materialize_support_case_packets.py -k "external_proof"` -> PASS (`5 passed`, `25 deselected`; `4 passed`, `7 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized; active blocker remains external Windows/macOS host proof capture).
+
 ## 2026-04-04: milestone-1/3 release-channel external-proof lane now fail-closes duplicate tuple rows that could mask contradictory host-proof requirements
 
 - Trigger:
