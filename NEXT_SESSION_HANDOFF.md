@@ -28,6 +28,32 @@
   - `chummer.run-services`: commit landed locally (`6aa4b4ee`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `fleet`: pending (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes duplicate and unexpected acceptance-gate ids in registry verification
+
+- Trigger:
+  - frontier milestone 2 remains blocked by `BLK-009`, and registry localization verification only required presence of named acceptance gates.
+  - this left a fail-open seam where `releaseProof.uiLocalizationReleaseGate.acceptanceGates` could still carry duplicate or unsupported gate ids while passing release-channel verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate.acceptanceGates` to be a list.
+    - verifier now rejects duplicate acceptance-gate ids.
+    - verifier now rejects unexpected acceptance-gate ids outside the canonical required gate set.
+    - verifier now reports missing required acceptance-gate ids as one explicit fail-close list.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that duplicates an acceptance gate and asserts verifier failure.
+    - added negative regression that injects unsupported acceptance gate id and asserts verifier failure.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel localization contract now explicitly requires an exact acceptance-gate set with no missing, duplicate, or unexpected gate ids.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes duplicate/unsupported acceptance-gate negative checks).
+- Current trusted state:
+  - registry-owned localization proof now fail-closes acceptance-gate cardinality and vocabulary drift, so shelf truth cannot silently pass with malformed localization acceptance posture.
+  - milestone-2 `BLK-009` remains globally open pending real cross-surface locale-completion proof, but localization gate-shape honesty is tighter.
+- Push status:
+  - `chummer-hub-registry`: pending in this environment (commit/push not yet attempted for this slice).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes finding-array/count drift in registry verification
 
 - Trigger:
