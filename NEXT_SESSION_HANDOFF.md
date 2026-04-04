@@ -1,3 +1,32 @@
+## 2026-04-04: follow-up on milestone-2 legacy workflow baseline hardening in chummer6-hub parity checklist generator (commit and push status)
+
+- Commits landed:
+  - `chummer6-hub`: `3e595ade` (`fix(milestone-2): tighten required legacy workflow baseline families`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-2 parity checklist now fail-closes missing legacy high-friction workflow families (armor/weapons/mods/drugs/lifestyles/magic-matrix depth)
+
+- Trigger:
+  - milestone-2 baseline fail-close in `scripts/generate-parity-checklist.sh` covered core tabs/actions/controls, but it still allowed parity-oracle drift across several high-friction legacy families explicitly called out by the familiarity bridge (armor and weapon lanes, mod stacks, drugs/consumables, lifestyle continuity, and deeper magic/matrix workflow anchors).
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - expanded required milestone-2 tab baseline to include `tab-adept`, `tab-armor`, and `tab-lifestyle`.
+    - expanded required milestone-2 workspace action baseline to include:
+      - `aiprograms`, `armormods`, `armors`, `drugs`, `lifestyles`, `metamagics`, `initiationgrades`, `vehiclemods`, `weapons`, `weaponaccessories`, `spirits`.
+    - expanded required milestone-2 desktop control baseline to include:
+      - `combat_add_armor`, `combat_add_weapon`, `contact_remove`, `create_entry`, `edit_entry`, `delete_entry`, `gear_mount`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityChecklistMilestone2BaselineTests.cs`:
+    - script-lock assertions now require the new milestone-2 baseline markers so generator regressions fail-close.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs/actions/desktop-controls` coverage still `17/17`, `47/47`, `29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistMilestone2BaselineTests" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation probes emit expected `parity audit failed: ...` lines; final `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 parity generation now rejects parity-oracle baselines that drop legacy high-friction workflow families while still passing same-count token coverage, tightening flagship familiarity proof beyond shell-only checks.
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes `postmortem` / `post mortem` aftermath vocabulary across prep-query canonicalization and service matching
 
 - Trigger:
@@ -19,7 +48,8 @@
 - Current trusted state:
   - milestone-4 continuity prep search now treats postmortem/post-mortem vocabulary as first-class aftermath/recap language in the same governed query lane as debrief/afteraction.
 - Push status:
-  - pending in this environment (push remains blocked without GitHub HTTPS credentials).
+  - `chummer.run-services` commit: `f7501dab` (`fix(w3): normalize postmortem continuity prep query aliases`).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes compact `crewswap` and `rosterswap` across prep search, GM ops triage, and live audit/browser proof
 
