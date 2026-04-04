@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for `releaseProof.proofRoutes` query/fragment and dot-segment traversal
+
+- Trigger:
+  - milestone-2 parity audit already rejected query/fragment route segments and dot-segment traversal in `releaseProof.proofRoutes`, but Hub verify entrypoint mutations only proved `%` and `\\` malformed route cases.
+  - this left two route-grammar fail-close branches unproven in Hub’s own end-to-end verify harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.proofRoutes=["/home/access#recap"]` and asserted `audit-ui-parity.sh` fails.
+    - added mutation `releaseProof.proofRoutes=["/home/./access"]` and asserted `audit-ui-parity.sh` fails.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended verify-entrypoint marker assertions for query/fragment and dot-segment fail-close mutation coverage.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for `proofRoutes` query/fragment and dot-segment mutations, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now proves all currently enforced release-proof route grammar fail-close modes in its mutation phase (`query/fragment`, `%`, `\\`, and dot-segment traversal), reducing drift risk between parity enforcement and verify harness coverage.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 prep query canon now fail-closes compact `leagueoperations` and `communityoperations` aliases across GM prep search and live API/UI journeys
 
 - Trigger:
