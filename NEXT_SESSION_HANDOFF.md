@@ -29,6 +29,12 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,blocked_by_external_constraints_only,local_blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state=blocked`, `blocked_by_external_constraints_only=true`, `local_blocking_reasons=[]`).
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer-presentation` -> PASS.
+- Commits landed:
+  - `chummer6-ui`: `ed06d47f` (`chore(w1-1-3): refresh desktop exit-gate receipts to external-only blockers`).
+  - `fleet`: `35e46c4` (`chore(w1-1-3): refresh journey and completion frontier proof after ui gate rerun`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - promoted installer artifact + startup-smoke receipt capture is still missing on native macOS and Windows hosts for required tuples:
     - `avalonia:osx-arm64:macos`
