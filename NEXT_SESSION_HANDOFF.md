@@ -1,3 +1,21 @@
+## 2026-04-04: milestone-5 gm operations lane now fail-closes compact and split game-master packet shorthand into event-control unresolved domain routing
+
+- Trigger:
+  - W3 milestone `5` requires GM operations and event controls to stay on one governed lane even when unresolved payloads use compact packet shorthand from audit and prep-query surfaces.
+  - `ResolveGmOpsDomain(...)` already handled `gm*` compact forms but did not explicitly match `gamemaster*` compact/split packet phrasing, creating a potential domain-priority seam for unresolved-item sorting.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded event-control signal detection with compact and split `gamemaster` and `game master` forms (`ops/operation/control/ctl/ctrl` families) so unresolved packet payloads classify as `event_control`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatGameMasterPacketShorthandAsEventControlDomain` to fail-close unresolved-item prioritization for `gamemasteropspacket` and split `game master control packet` payloads.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGameMasterPacketShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGmOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatSplitGmOpsShorthandAsEventControlDomain" -v minimal` -> PASS (`3 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries" -v minimal` -> PASS (`2 passed` on both target frameworks).
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-5 roster movement continuity lane now canonicalizes compact singular `rostertransfer` and `rosterhandoff` query forms
 
 - Trigger:
@@ -42120,3 +42138,37 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
     - `avalonia:win-x64:windows`
     - `blazor-desktop:win-x64:windows`
   - until those Windows/macOS host proofs exist and are promoted into `chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`, `install_claim_restore_continue` remains blocked and completion is untrusted.
+## 2026-04-04: milestone-1/3 proof lane now self-heals stale core contract feed during Linux desktop gate materialization, restoring external-only blocker truth
+
+- Trigger:
+  - active W1 milestone `1` + `3` proof lane regressed when Linux desktop gate unit-tests started failing on stale cached `Chummer.Engine.Contracts` `0.0.0-local` payloads.
+  - that local package drift cascaded into false local blockers in packaged-binary executable gate receipts, violating fail-honest proof expectations.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/with-package-plane.sh`:
+    - in compatibility-tree mode, now bootstraps core contracts local feed via `/docker/chummercomplete/chummer-core-engine/scripts/ai/bootstrap-contracts-feed.sh`.
+    - adds restore source injection for the bootstrapped feed (`RestoreAdditionalProjectSources`) so cross-repo consumers resolve refreshed `0.0.0-local` payloads deterministically.
+  - reran and refreshed W1 proof receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+  - regenerated fleet proof mirrors:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Desktop.Runtime.Tests/Chummer.Desktop.Runtime.Tests.csproj -c Release -f net10.0 --logger "trx;LogFileName=/tmp/chummer-runtime-tests.trx" --results-directory /tmp/chummer-runtime-tests` -> PASS (`14 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS (`linux desktop exit gate passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> EXPECTED FAIL (`exit 43`) with only external Windows/macOS native-host tuple blockers.
+  - `jq '{status,blocked_by_external_constraints_only,local_blocking_findings_count,external_blocking_findings_count}' /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` -> PASS (`blocked_by_external_constraints_only=true`, `local_blocking_findings_count=0`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS.
+  - `jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,blocked_by_external_constraints_only,local_blocking_reasons}' /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`blocked_by_external_constraints_only=true`, `local_blocking_reasons=[]`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer-presentation` -> PASS (`linux_desktop_exit_gate_audit.status=pass`; remaining frontier blockers are external tuple proof requests).
+- Commits landed:
+  - `chummer6-ui`: `830c6fd7` (`fix(w1-1-3): bootstrap core contracts feed for desktop gate proofs`).
+- Exact blocker:
+  - missing native-host promoted installer artifact + startup-smoke receipts for required release-channel tuples:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+  - this Linux host cannot capture required macOS/Windows startup-smoke proofs.
