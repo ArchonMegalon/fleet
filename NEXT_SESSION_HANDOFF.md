@@ -106,6 +106,44 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignSpineService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 SR4/SR6/Chummer5a workflow parity and frontier receipts now fail-close on release-channel identity
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar workflow execution proof to stay bound to the promoted release channel rather than accepting channel-agnostic parity receipts.
+  - `chummer5a-desktop-workflow-parity-check.sh`, `sr4-desktop-workflow-parity-check.sh`, `sr6-desktop-workflow-parity-check.sh`, and `sr4-sr6-desktop-parity-frontier-receipt.sh` emitted passing receipts without `channelId` identity, and the desktop workflow execution gate only validated status/freshness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/chummer5a-desktop-workflow-parity-check.sh`:
+    - resolves canonical release-channel receipt path (hub-registry preferred, repo-local fallback).
+    - fail-closes missing/unreadable release-channel receipt, missing `channelId`/`channel`, and missing/invalid `generatedAt`.
+    - emits receipt `channelId` plus release-channel evidence fields (`releaseChannelPath`, `releaseChannelExists`, `releaseChannelChannelId`, `releaseChannelGeneratedAt`).
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/sr4-desktop-workflow-parity-check.sh`:
+    - same release-channel resolution/fail-close contract.
+    - emits receipt `channelId` and release-channel evidence markers.
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/sr6-desktop-workflow-parity-check.sh`:
+    - same release-channel resolution/fail-close contract.
+    - fail-closes when SR4 parity receipt `channelId` is missing or mismatched against release channel.
+    - emits receipt `channelId` and release-channel evidence markers.
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh`:
+    - same release-channel resolution/fail-close contract.
+    - fail-closes when SR4 or SR6 parity receipt `channelId` is missing or mismatched against release channel.
+    - emits frontier receipt `channelId` and release-channel evidence markers.
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - now captures the four upstream parity/frontier payloads and validates receipt `channelId`/`channel` identity against release-channel `channelId`.
+    - emits `workflow_parity_receipt_channel_ids` evidence and fail-closes missing/mismatched channel identity.
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts` to lock workflow-gate channel-binding markers.
+    - added `Desktop_workflow_parity_scripts_bind_receipts_to_release_channel_identity` to lock release-channel binding markers across Chummer5a/SR4/SR6/frontier parity scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && bash -n scripts/ai/milestones/chummer5a-desktop-workflow-parity-check.sh && bash -n scripts/ai/milestones/sr4-desktop-workflow-parity-check.sh && bash -n scripts/ai/milestones/sr6-desktop-workflow-parity-check.sh && bash -n scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/chummer5a-desktop-workflow-parity-check.sh && bash scripts/ai/milestones/sr4-desktop-workflow-parity-check.sh && bash scripts/ai/milestones/sr6-desktop-workflow-parity-check.sh && bash scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts|FullyQualifiedName~Desktop_workflow_parity_scripts_bind_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+- Current trusted state:
+  - milestone-2 Chummer5a/SR4/SR6 workflow parity receipts and SR4/SR6 frontier closeout receipts are now channel-bound to canonical release truth instead of status-only pass posture.
+  - desktop workflow execution gate now fail-closes upstream parity/frontier receipt channel drift, preventing cross-channel false-green workflow proof.
+- Push status:
+  - `chummer6-ui` (`chummer-presentation` repo): local changes pending commit/push in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace-state conflict and rule cues now prioritize highest-severity blockers
 
 - Trigger:
