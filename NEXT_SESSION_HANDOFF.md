@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing flagship acceptance-gate families beyond minimal locale-smoke markers
+
+- Trigger:
+  - active frontier milestone 2 remains blocked by `BLK-009` (flagship localization proof below release bar), and registry release-channel verification still accepted localization acceptance-gate payloads that omitted flagship quality gates outside the minimal locale-smoke family.
+  - this left a promotion-honesty seam where pseudo-localization, top-surface overflow coverage, and non-English generated-artifact smoke could drift while shelf verification still passed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - expanded required localization acceptance gates for `releaseProof.uiLocalizationReleaseGate` to include:
+      - `pseudo_localization`
+      - `top_surface_overflow_checks`
+      - `non_english_generated_artifact_smoke`
+    - existing required gates (`missing_key_fail_fast`, locale-smoke families) remain enforced.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture localization payload now carries the full flagship acceptance-gate family.
+    - added negative verification proving fail-close when `non_english_generated_artifact_smoke` is removed.
+    - updated canonical assertions to lock the expanded acceptance-gate contract.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel contract now explicitly lists the full required acceptance-gate family for localization proof quality.
+  - committed in `chummer-hub-registry`:
+    - `c5757cb` — `Harden release-channel localization gate coverage checks`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes positive and negative checks for the expanded localization acceptance-gate contract).
+- Current trusted state:
+  - registry-owned release-channel localization verification now fail-closes when flagship acceptance-gate families are incomplete, reducing the remaining `BLK-009` honesty seam for desktop shelf promotion.
+  - `BLK-009` remains globally open, but this registry lane now requires stronger localization quality evidence before release-channel truth can pass.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 registry release-channel truth now fail-closes localization source-quality drift beyond untranslated-count checks
 
 - Trigger:
