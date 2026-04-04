@@ -1,3 +1,28 @@
+## 2026-04-04: follow-up on milestone-2 workflow gate generatedAt drift rematerialization (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `17a4233f` (`chore(milestone-2): rematerialize desktop workflow execution gate receipt`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-2 hub parity lane recovered after rematerializing stale desktop workflow execution gate timestamp
+
+- Trigger:
+  - `chummer6-hub` verify failed in the milestone-2 parity lane because top-level `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` `generated_at` drifted from nested `SR4_DESKTOP_WORKFLOW_PARITY.generated.json` `generatedAt`.
+- Landed:
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` via:
+    - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+  - refreshed workflow-receipt timestamp and nested receipt metadata alignment used by hub parity audit.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (baseline parity audit passes; subsequent `parity audit failed: ...` lines are expected negative mutation probes inside verify script-lock coverage; final `run-services in-process smoke passed`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 hub parity verification is green again with synchronized top-level/nested workflow receipt timestamps.
+  - owner-focus repos (`chummer6-hub`, `chummer6-hub-registry`, `chummer6-mobile`) currently verify clean in this workspace after this rematerialization.
+
 ## 2026-04-04: follow-up on milestone-2 hub parity verify temp-workdir isolation + workflow gate timestamp drift recovery (commit and push status)
 
 - Commits landed:
