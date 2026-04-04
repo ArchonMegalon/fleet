@@ -131,6 +131,28 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-3 flagship visual materialization no longer self-waits on its own release-gate lock
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary visual proof that cannot lie and must stay operational in routine verify runs.
+  - `b14-flagship-ui-release-gate.sh` acquired `b14-flagship-ui-release-gate.lock` and then invoked `materialize-desktop-visual-familiarity-exit-gate.sh` before releasing that lock.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` waits on the same lock by default, causing a self-inflicted wait window (up to the configured `300s`) inside normal milestone verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - visual familiarity materialization now executes with `CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1` when called from the lock-owning b14 script.
+    - this preserves external concurrent-run lock safety while removing the internal self-wait stall.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs` to assert the skip-lock-wait env wiring remains present.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1 passed`).
+- Current trusted state:
+  - milestone-3 flagship gate execution no longer burns a lock self-wait interval before visual familiarity proof materialization.
+  - concurrent external lock behavior is still fail-safe, but in-script lock recursion now bypasses wait deterministically.
+- Push status:
+  - `chummer6-ui`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 opposition-packet prep retrieval now fail-closes canonical opposition queries (`oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, `threat`) across API and workspace route journeys
 
 - Trigger:
