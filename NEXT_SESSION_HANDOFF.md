@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.uiLocalizationReleaseGate.generatedAt` timestamps
+
+- Trigger:
+  - frontier milestone `2` parity audit already enforced ISO timestamp grammar on nested `releaseProof.uiLocalizationReleaseGate.generatedAt/generated_at`.
+  - Hub verify mutation coverage executed missing/stale/future/alias-conflict localization timestamp branches, but did not explicitly execute invalid-format timestamp rejection.
+  - this left one nested localization proof grammar branch unproven in the end-to-end verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.uiLocalizationReleaseGate.generatedAt="not-an-iso-timestamp"` and asserted parity-audit fail-close before continuing smoke.
+  - no additional test-file marker patch was required in this slice because `VerificationEntryPointTests` already locked the invalid-format localization mutation string.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now includes explicit invalid-format nested localization timestamp fail-close, then completes smoke).
+- Current trusted state:
+  - Hub verify now proves nested localization release-proof timestamp grammar fail-close for invalid-format, missing, stale, alias-drift, and excessive-future-skew branches.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journeys now fail-close compact plural organizer-control aliases (`leaguecontrols`, `communitycontrols`) across prep-library API and signed-in workspace prep search
 
 - Trigger:
