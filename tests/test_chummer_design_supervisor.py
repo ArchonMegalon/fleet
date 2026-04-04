@@ -3378,6 +3378,58 @@ def test_design_completion_audit_fails_when_desktop_executable_exit_gate_is_stal
         assert "stale" in str(audit["desktop_executable_exit_gate_audit"]["reason"]).lower()
 
 
+def test_desktop_executable_exit_gate_audit_rejects_external_only_contract_with_local_findings() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "fail",
+                "blockedByExternalConstraintsOnly": True,
+                "localBlockingFindings": ["local drift"],
+                "localBlockingFindingsCount": 1,
+                "externalBlockingFindings": ["external host required"],
+                "externalBlockingFindingsCount": 1,
+                "blockingFindings": ["local drift", "external host required"],
+                "blockingFindingsCount": 2,
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "external-only block conflicts with local blocking findings" in str(audit["reason"])
+
+
+def test_desktop_executable_exit_gate_audit_rejects_passing_payload_with_blocking_findings() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "pass",
+                "blockedByExternalConstraintsOnly": False,
+                "externalBlockingFindings": ["missing windows host proof"],
+                "externalBlockingFindingsCount": 1,
+                "blockingFindings": ["missing windows host proof"],
+                "blockingFindingsCount": 1,
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "cannot be pass while blocking findings are present" in str(audit["reason"])
+
+
 def test_design_completion_audit_rejects_release_proof_warning() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

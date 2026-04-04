@@ -9260,7 +9260,72 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
         audit["reason"] = f"desktop executable exit gate proof is stale ({audit['age_seconds']}s old)"
         return audit
     audit["proof_status"] = str(payload.get("status") or "").strip()
-    if str(audit["proof_status"]).lower() not in {"pass", "passed", "ready"}:
+    raw_blocked_external_only = payload.get("blockedByExternalConstraintsOnly")
+    if raw_blocked_external_only is None:
+        raw_blocked_external_only = payload.get("blocked_by_external_constraints_only")
+    blocked_external_only = str(raw_blocked_external_only or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    external_findings_raw = payload.get("externalBlockingFindings")
+    if external_findings_raw is None:
+        external_findings_raw = payload.get("external_blocking_findings")
+    external_findings = [str(item).strip() for item in (external_findings_raw or []) if str(item).strip()]
+
+    local_findings_raw = payload.get("localBlockingFindings")
+    if local_findings_raw is None:
+        local_findings_raw = payload.get("local_blocking_findings")
+    local_findings = [str(item).strip() for item in (local_findings_raw or []) if str(item).strip()]
+
+    blocking_findings_raw = payload.get("blockingFindings")
+    if blocking_findings_raw is None:
+        blocking_findings_raw = payload.get("blocking_findings")
+    blocking_findings = [str(item).strip() for item in (blocking_findings_raw or []) if str(item).strip()]
+
+    external_count = _coerce_int(
+        payload.get("externalBlockingFindingsCount", payload.get("external_blocking_findings_count"))
+    )
+    local_count = _coerce_int(payload.get("localBlockingFindingsCount", payload.get("local_blocking_findings_count")))
+    blocking_count = _coerce_int(payload.get("blockingFindingsCount", payload.get("blocking_findings_count")))
+
+    audit["blocked_by_external_constraints_only"] = blocked_external_only
+    audit["external_blocking_findings_count"] = external_count
+    audit["local_blocking_findings_count"] = local_count
+    audit["blocking_findings_count"] = blocking_count
+
+    proof_is_ready = str(audit["proof_status"]).lower() in {"pass", "passed", "ready"}
+    if proof_is_ready:
+        if blocked_external_only:
+            audit["status"] = "fail"
+            audit["reason"] = "desktop executable exit gate proof cannot be pass while marked external-only blocked"
+            return audit
+        if local_findings or external_findings or blocking_findings or local_count > 0 or external_count > 0 or blocking_count > 0:
+            audit["status"] = "fail"
+            audit["reason"] = "desktop executable exit gate proof cannot be pass while blocking findings are present"
+            return audit
+        return audit
+
+    if blocked_external_only:
+        if local_findings or local_count > 0:
+            audit["status"] = "fail"
+            audit["reason"] = "desktop executable exit gate external-only block conflicts with local blocking findings"
+            return audit
+        if not external_findings and external_count <= 0:
+            audit["status"] = "fail"
+            audit["reason"] = "desktop executable exit gate external-only block is missing external blocking findings"
+            return audit
+    if blocking_findings and blocking_count > 0 and blocking_count != len(blocking_findings):
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate blocking findings count does not match finding rows"
+        return audit
+    if local_findings and local_count > 0 and local_count != len(local_findings):
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate local blocking findings count does not match finding rows"
+        return audit
+    if external_findings and external_count > 0 and external_count != len(external_findings):
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate external blocking findings count does not match finding rows"
+        return audit
+
+    if not proof_is_ready:
         audit["status"] = "fail"
         audit["reason"] = str(payload.get("reason") or "desktop executable exit gate proof did not pass")
         return audit

@@ -21,6 +21,26 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 completion-review audit now fail-closes contradictory desktop executable gate external-only payloads
+
+- Trigger:
+  - W1 milestones `1` and `3` require packaged-binary proof receipts that cannot lie when install/update/recovery remains blocked by host-only tuple capture.
+  - Fleet completion-review executable-gate audit accepted `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` on `status` + freshness only, leaving a contract seam where contradictory payloads (for example `blockedByExternalConstraintsOnly=true` with local blockers, or `status=pass` with blocking findings) could slip through.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_desktop_executable_exit_gate_audit(...)` now projects and validates `blockedByExternalConstraintsOnly` plus blocking/local/external finding counts.
+    - fail-closed contradictions:
+      - `status=pass` while any blocking findings/counts are present.
+      - `blockedByExternalConstraintsOnly=true` while local blockers are present.
+      - `blockedByExternalConstraintsOnly=true` without external blockers.
+      - declared blocking/local/external counts that disagree with finding rows.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_desktop_executable_exit_gate_audit_rejects_external_only_contract_with_local_findings`.
+    - added `test_desktop_executable_exit_gate_audit_rejects_passing_payload_with_blocking_findings`.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit_rejects_external_only_contract_with_local_findings or desktop_executable_exit_gate_audit_rejects_passing_payload_with_blocking_findings or design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale or exit_gate_audits_preserve_configured_symlink_paths"` -> PASS (`4 passed`, `176 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "design_completion_audit_passes_with_ready_release_proof or design_completion_audit_rejects_release_proof_warning or design_completion_audit_accepts_lagging_weekly_pulse_journey_warning_when_live_proof_is_ready or design_completion_audit_keeps_weekly_pulse_fail_when_release_health_is_not_green"` -> PASS (`4 passed`, `176 deselected`).
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes compact plural `aftermathsreturn*` query forms across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
