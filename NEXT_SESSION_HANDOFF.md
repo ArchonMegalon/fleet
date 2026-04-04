@@ -73,6 +73,26 @@
 - Exact blocker:
   - missing GitHub HTTPS credentials in this environment; `pytest` is also unavailable.
 
+## 2026-04-04: milestone-7 build-surface compare lane now grounds on explicit clear rule-environment diff posture (not only changed diffs)
+
+- Trigger:
+  - frontier milestone `7` requires creation/compare/advancement/crew-fit to behave like one grounded Build Lab surface.
+  - `ResolveBuildLabSurfaceCoverage(...)` claimed compare grounding worked via compare cards or rule-environment diff posture, but implementation only grounded compare when `RuleEnvironmentDiff.Changed == true`.
+  - this left clear, explicit rule-environment diffs (`status: clear`) incorrectly counted as compare-pending even with an attached campaign workspace.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - compare-lane grounding now uses explicit diff posture (`status != pending`) instead of only `Changed`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineBuildLabSurfaceCompareLaneGroundsWhenRuleEnvironmentDiffIsClear` to fail-close compare-lane grounding when dossier/workspace fingerprints match and workspace is attached.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildCreatorPublicationsComparisonSummaryCarriesBuildLabParityAndPortabilityReceipts|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsComparisonSummaryFallsBackToRuleEnvironmentDiffEvidenceWithoutBuildLabHandoff|FullyQualifiedName~CampaignSpineBuildLabSurfaceCompareLaneGroundsWhenRuleEnvironmentDiffIsClear" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`3 passed` on `net10.0` and `3 passed` on `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `b6b2713d` (`fix(w4-7): ground compare lane on clear rule-diff posture`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `chummer6-hub` push.
+
 ## 2026-04-04: milestone-8 creator publication comparisons now carry explicit rule-environment before/after diff receipts
 
 - Trigger:
