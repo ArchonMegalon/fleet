@@ -19,9 +19,10 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer6-hub` / `chummer.run-services`: `8281cb9e` (`feat(w4): expose structured build-handoff rule diff cues`).
-  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+  - `fleet`: `206f375` (`docs: refresh handoff for w4 structured rule diff slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
 
@@ -76,6 +77,30 @@
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - none for the landed slice; push remains blocked in this environment by missing GitHub credential material.
+
+## 2026-04-04: milestone-1/3 registry verify lane now fail-closes future-dated startup-smoke receipts for promoted installer tuples
+
+- Trigger:
+  - frontier milestones `1` and `3` require desktop release receipts to fail honest when proof timestamps drift, not only when smoke receipts are missing/stale or tuple metadata mismatches.
+  - `verify_public_release_channel.py` clamped negative startup-smoke receipt age to zero, so a promoted tuple could carry an arbitrarily future-dated `recordedAtUtc` and still pass.
+  - `scripts/ai/verify.sh` mutation coverage did not include the future-skew branch, leaving the guard unproven.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added startup-smoke future-skew limit parsing via `CHUMMER_VERIFY_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS` / `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS` (default `300s`).
+    - `verify_local_startup_smoke_receipts(...)` now fails when a promoted tuple receipt timestamp is ahead of now beyond allowed skew with explicit fail-close marker.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added startup-smoke future timestamp fixture (`startup_smoke_future_recorded_at`) and mutation assertion for the new fail-close marker.
+    - added explicit startup-smoke `channelId` mismatch mutation assertion for promoted tuple receipts.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `bash -n /docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation markers, including future-skew receipt rejection).
+- Commits landed:
+  - `chummer-hub-registry`: `95d2bd5` (`test(w1): fail-close startup smoke future-skew receipts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `b41b66e..95d2bd5`).
+- Exact blocker:
+  - none for this slice.
 
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now fail-closes governed export-lane eviction when carry-forward projections are long
 
