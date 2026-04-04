@@ -128,6 +128,41 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="report_cluster_release_notify") | {state,signals,fleet_gate:.fleet_gate.require_support_install_truth_contract}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`fleet_gate: true`, violation count `0` on current packets).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_packet_install_truth_contract or update_required_cases_are_not_proven_routed_to_downloads or report_cluster_release_notify_requires_support_install_truth_contract"` -> FAIL (`No module named pytest`).
 
+## 2026-04-04: milestone-10 support packets now carry registry release-channel + release-proof status in install diagnosis, and journey contract checks require them
+
+- Trigger:
+  - milestone `10` requires support to prove exact install-specific build/channel/fix/recovery truth, but support packet install diagnosis did not project registry channel status or release-proof status.
+  - the newly added install-truth contract check could therefore not fail-close on missing channel/proof posture fields per packet.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - release-channel index now carries:
+      - `status`
+      - `release_proof_status` (from `releaseProof.status` when present)
+    - packet `install_diagnosis` now includes:
+      - `registry_release_channel_status`
+      - `registry_release_proof_status`
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` checks now also fail-close on missing:
+      - `install_diagnosis.registry_release_channel_status`
+      - `install_diagnosis.registry_release_proof_status`
+  - patched regression coverage:
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - tests now pin the release-channel/proof install-diagnosis fields and the higher contract-violation count in the malformed-packet fixture.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py scripts/materialize_support_case_packets.py tests/test_materialize_journey_gates.py tests/test_materialize_support_case_packets.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py tests/test_materialize_journey_gates.py -k "install_truth_contract or enriches_install_truth_from_release_channel or marks_update_required"` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `fleet`: `46eaeae` (`feat(w5-10): carry release-channel proof status in support install diagnosis`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: handoff append commit + fleet push status for milestone-10 support install-truth contract gate
 
 - Commits landed:
