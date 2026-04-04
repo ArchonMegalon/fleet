@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-5 event-control packet synthesis now deduplicates identical change-signal versions to prevent inflated ops receipt counts
+
+- Trigger:
+  - frontier milestone 5 requires GM event/season controls to read as one governed lane, but repeated identical change-signal rows could inflate `event-control receipt(s)` counts in synthesized prep packets.
+  - `CampaignWorkspaceServerPlaneService.BuildEventControlPrepPacket(...)` counted repeated identical `WorkspaceChangePacketProjection` rows separately, so payload duplication could overstate event-control activity without adding new truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `DeduplicateIdenticalChangePacketVersions(...)` + `BuildChangePacketDedupeKey(...)`.
+    - event-control packet assembly now deduplicates identical change-signal versions (`packetId/kind/label/summary/updatedAtUtc`) before `Take(4)` and event-count synthesis.
+    - keeps distinct signals and other event-control sources (consequences, roster transfers, prep launches, travel prefetch, objective/scene/carry-forward signals) unchanged.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketDeduplicatesIdenticalSignalVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketDeduplicatesIdenticalSignalVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`238` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 event-control packet summaries no longer over-count repeated identical change-signal rows; packet counts and evidence now reflect unique version truth.
+  - milestone-4/5 campaign workspace + GM ops verify/smoke lane remains green after the additional dedupe hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 offline GM prep reconcile now deduplicates identical same-version payload rows to prevent false stale-remote conflicts
 
 - Trigger:
