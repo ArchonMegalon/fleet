@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes unexpected per-locale domain keys in nested `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage`, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic flagship release-proof receipts, but `scripts/audit-ui-parity.sh` only validated per-locale domain statuses for required domains and did not reject extra per-locale domain keys.
+  - this left a fail-open seam where non-canonical domain keys could ride inside `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage.<locale>` without parity-audit failure.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - each shipping-locale `localeDomainCoverage` map now fail-closes missing required domains.
+    - each shipping-locale `localeDomainCoverage` map now fail-closes unexpected non-canonical domain keys.
+    - added fail-close markers:
+      - `release-channel nested receipt releaseProof.uiLocalizationReleaseGate.localeDomainCoverage locale is missing required domains`
+      - `release-channel nested receipt releaseProof.uiLocalizationReleaseGate.localeDomainCoverage locale has unexpected domains`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active mutation probe that injects `bonus_noncanonical_domain` under `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage.de-de` and requires parity-audit fail-close.
+    - added fail-close verifier marker:
+      - `verify gate failed: parity audit should reject unexpected releaseProof.uiLocalizationReleaseGate.localeDomainCoverage locale domain keys.`
+  - added script-lock tests:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityAuditLocalizationLocaleDomainCoverageTests.cs`
+    - pins the new audit fail-close marker and verify mutation marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityAuditLocalizationLocaleDomainCoverageTests|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation for unexpected per-locale `localeDomainCoverage` domain keys).
+- Commits landed:
+  - `chummer6-hub`: `a785fcfd` (`fix(w1): fail-close unexpected locale-domain coverage keys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `a785fcfd` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock plural `postmortems` / `post-mortems`, `postsessions` / `post-sessions`, and `postruns` / `post-runs` recap shorthand across API/workspace and browser journey proofs
 
 - Trigger:
