@@ -1,3 +1,34 @@
+## 2026-04-04: follow-up on milestone-2 localization acceptance-gate ordering canonicalization in hub-registry (commit and push status)
+
+- Commits landed:
+  - `chummer-hub-registry`: `ad894ce` (`fix(milestone-2): canonicalize localization acceptance gate ordering`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry -> fleet/hub-registry`, `429ff37..ad894ce`).
+- Exact blocker:
+  - none for this repo/branch in this slice.
+
+## 2026-04-04: milestone-2 hub-registry release-channel materializer and verifier now fail-close non-canonical localization acceptance-gate ordering
+
+- Trigger:
+  - run-services parity audit now fail-closes localization `acceptanceGates` order drift, but hub-registry materializer/verifier still accepted set-equivalent reorderings.
+  - that allowed cross-repo drift where registry-generated release proof could pass local registry checks yet fail downstream milestone-2 parity enforcement.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical `REQUIRED_LOCALIZATION_ACCEPTANCE_GATES` sequence.
+    - `normalize_ui_localization_release_gate_payload(...)` now fails when `acceptance_gates` order deviates from canonical sequence.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added fail-close check requiring nested `releaseProof.uiLocalizationReleaseGate.acceptanceGates` ordering to match canonical sequence.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer negative mutation for reordered `acceptance_gates` in localization fixture.
+    - added verifier negative mutation for reordered nested `acceptanceGates` in generated release-channel fixture.
+    - strengthened canonical fixture assertion to require exact `acceptanceGates` sequence instead of set-equivalent sorted comparison.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected mutation-failure probes include new ordering checks; script exits `0`).
+- Current trusted state:
+  - hub-registry materialization and verification now enforce the same canonical localization acceptance-gate ordering semantics as downstream milestone-2 parity audit.
+  - release-channel localization proof ordering can no longer drift between registry and run-services verification planes.
+
 ## 2026-04-04: follow-up on milestone-2 localization acceptance-gate ordering fail-close slice (commit and push status)
 
 - Commits landed:
