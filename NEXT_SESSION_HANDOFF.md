@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-2 registry verifier now active-mutation fail-closes nested localization-gate alias drift across shipping, gates, domain, locale-domain, and backlog lists
+
+- Trigger:
+  - frontier milestone `2` needs deterministic flagship release-proof contracts so localization gate payload aliases cannot drift silently.
+  - `scripts/verify_public_release_channel.py` already enforced alias agreement for nested `releaseProof.uiLocalizationReleaseGate` fields, but `scripts/ai/verify.sh` only mutation-tested a subset of alias pairs.
+  - this left a regression seam where nested alias-drift fail-close behavior could weaken without active verify mutation coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added verifier mutation for conflicting alias values between:
+      - `shippingLocales` and `shipping_locales`
+      - `acceptanceGates` and `acceptance_gates`
+      - `domainCoverage` and `domain_coverage`
+      - `localeDomainCoverage` and `locale_domain_coverage`
+      - `translationBacklogFindings` and `translation_backlog_findings`
+    - each mutation now requires verifier failure with explicit fail-close marker.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented explicit nested localization-gate alias pairs now treated as fail-close malformed payload examples in the materializer contract section.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected verifier fail-close mutation runs for all newly-added nested alias-drift seams).
+- Commits landed:
+  - `chummer-hub-registry`: `59728a6` (`fix(w1): mutation-test verifier localization alias drift fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `972bdd3..59728a6`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-4 continuity lane now treats full aftermath recap shorthand as campaign-return recap signal for packet synthesis
 
 - Trigger:
@@ -15,10 +43,11 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketIncludesRecapKindFallbackWhenRecapSignalsAreSparse|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketIncludesRecapKindFallbackWhenRecapUsesContinuityShorthand|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`27` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending local commit in `chummer.run-services` for campaign-return recap shorthand alignment.
-  - pending local commit in `fleet` for handoff refresh.
+  - `chummer.run-services`: `d87a99f7` (`fix(w3): align campaign return recap shorthand with aftermath continuity lane`).
+  - `fleet`: `b10ac88` (`docs(handoff): record w3 campaign-return recap shorthand alignment`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
