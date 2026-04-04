@@ -39656,9 +39656,10 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
     - `RELEASE_CHANNEL.generated.json` now emits explicit expected artifact/route/receipt targets per missing tuple.
     - `JOURNEY_GATES.generated.json` install journey external blockers now include those explicit targets while remaining `blocked_by_external_constraints_only: true`.
 - Commits landed:
-  - `chummer6-hub-registry`: pending local commit (this slice).
-  - `fleet`: pending local commit (this slice).
+  - `chummer6-hub-registry`: `f9a8636` (`feat(w1-1-3): project explicit external tuple proof targets`).
+  - `fleet`: `70c287c` (`feat(w1-1-3): surface tuple proof targets in install blockers`).
 - Push attempts:
-  - pending for this slice.
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `3eb17fa..f9a8636`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
