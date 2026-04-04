@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 workspace change-packet projection now prefers newest roster/prep/travel receipts instead of list-order first
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return and GM operations packet lanes to reflect the newest governed movement/prep/travel receipts, not whichever receipt appears first in an unsorted list.
+  - `CampaignSpineService.BuildWorkspaceChangePackets(...)` still selected `rosterTransfers`, `prepLaunches`, and `travelPrefetchReceipts` via `FirstOrDefault()`, so stale receipt ordering could hide the latest operational signal.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `rosterTransfers` now select the most recent transfer by `TransferredAtUtc`.
+    - `prepLaunches` now select the most recent launch by `LaunchedAtUtc`.
+    - `travelPrefetchReceipts` now select the most recent receipt by `StagedAtUtc`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineWorkspaceChangePacketsPreferMostRecentRosterTransferReceipt`.
+    - added `CampaignSpineWorkspaceChangePacketsPreferMostRecentPrepLaunchReceipt`.
+    - added `CampaignSpineWorkspaceChangePacketsPreferMostRecentTravelPrefetchReceipt`.
+    - locked expectation that stale-first input order still projects the newest governed receipt packet per lane.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentRosterTransferReceipt|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentPrepLaunchReceipt|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentTravelPrefetchReceipt|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`310` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - workspace change packets for roster movement, GM prep launch, and travel prefetch now track the latest governed receipt timestamps even when upstream list order is stale.
+  - milestone-4 return continuity and milestone-5 operator/event-control visibility stay aligned on recency-safe packet projection for these three operational lanes.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 workspace change-packet projection now keeps downtime and after-action packets visible together when both exist
 
 - Trigger:
@@ -80,6 +104,37 @@
 - Push status:
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-2 UI parity checklist now fail-closes unacknowledged catalog-only and dialog-factory-only ids
+
+- Trigger:
+  - frontier milestone `2` flagship proof in `chummer6-ui` still treated catalog-only tabs/actions and dialog-factory-only desktop controls as informational output (`catalog_only` / `present_in_dialog_factory_only`) without explicit oracle governance.
+  - this left parity drift paths in the flagship repo looser than the hardened hub checklist lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-parity-checklist.sh`:
+    - added strict fail-close checks for unacknowledged and stale catalog-only ids across:
+      - tabs (`acknowledgedCatalogOnlyTabs`)
+      - workspace actions (`acknowledgedCatalogOnlyWorkspaceActions`)
+      - dialog-factory-only desktop controls (`acknowledgedDialogFactoryOnlyDesktopControls`)
+    - added explicit checklist guidance lines for catalog-only/dialog-factory-only acknowledgment requirements.
+    - changed desktop extra-id status label from `present_in_dialog_factory_only` to `present_in_dialog_factory_acknowledged`.
+  - patched `/docker/chummercomplete/chummer6-ui/docs/PARITY_ORACLE.json`:
+    - added `acknowledgedCatalogOnlyTabs`.
+    - added `acknowledgedCatalogOnlyWorkspaceActions`.
+    - added `acknowledgedDialogFactoryOnlyDesktopControls`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added `Parity_oracle_lists_use_canonical_string_tokens`.
+    - extended runbook/parity generator compliance assertions to lock new fail-close seams and acknowledged status markers.
+  - regenerated `/docker/chummercomplete/chummer6-ui/docs/PARITY_CHECKLIST.md`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode|FullyQualifiedName~Parity_oracle_lists_use_canonical_string_tokens|FullyQualifiedName~Legacy_ui_control_dialog_templates_cover_legacy_shell_controls" --nologo -v minimal` -> PASS (`3` tests on `net10.0`; pre-existing analyzer warnings in `AvaloniaFlagshipUiGateTests` remain non-blocking).
+- Current trusted state:
+  - milestone-2 parity checklist strictness is now aligned between flagship UI and hub lanes for tabs/workspace actions/desktop controls.
+  - unacknowledged or stale extra-id drift now fails closed in UI instead of appearing only as informational checklist rows.
+- Push status:
+  - `chummer6-ui`: local changes in working tree (`scripts/generate-parity-checklist.sh`, `docs/PARITY_ORACLE.json`, `docs/PARITY_CHECKLIST.md`, `Chummer.Tests/Compliance/MigrationComplianceTests.cs`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-2 parity checklist now fail-closes unacknowledged dialog-factory-only desktop control ids
 
