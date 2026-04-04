@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-13 master-index now recognizes governed site-snapshot references alongside PDF/URL sourcebook sources
+
+- Trigger:
+  - frontier milestone `13` exit requires governed rules-reference evidence from approved local PDFs, URLs, or site-backed source snapshots.
+  - master-index reference-source posture only modeled PDF/URL targets, so snapshot-backed references were treated as missing and could not be first-class parity evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexSourcebookEntry` now includes:
+      - `ReferenceSnapshot`
+      - `ReferenceSnapshotPosture`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - sourcebook projection now reads optional snapshot fields from `books.xml` (`snapshot`, `snapshoturl`, `referenceSnapshot`).
+    - reference-source posture now treats snapshots as a third governed reference source type beside PDF/URL.
+    - snapshot posture is explicit (`missing` / `stale` / `governed`) and validates URL scheme + local snapshot artifact extensions.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - added `Master_index_treats_site_snapshot_reference_as_governed_reference_source`.
+    - added `Master_index_marks_reference_source_stale_when_snapshot_target_has_invalid_scheme`.
+    - expanded existing sourcebook projection assertions to fail-prove snapshot fields/posture.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now checks sourcebook payload exposes snapshot fields when sourcebooks are present.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-13 sourcebook row now records that PDF/URL/site-snapshot source targets are explicit while source-selection UX remains open.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_treats_site_snapshot_reference_as_governed_reference_source|FullyQualifiedName~ToolCatalogServiceTests.Master_index_marks_reference_source_stale_when_snapshot_target_has_invalid_scheme|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_reference_source_lane_when_all_sourcebooks_have_valid_pdf_or_url_targets|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests run due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+- Commits landed:
+  - pending local commit in `chummer6-core` for snapshot-source master-index support.
+  - pending local doc sync commit in `chummer6-design` and `fleet` mirror.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for milestone-13 snapshot lane projection; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: milestone-6 restore planning now exposes explicit travel-companion cached/stale/offline-action truth
 
 - Trigger:
