@@ -21,6 +21,35 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity audit now fail-closes receipt anti-tamper drift and loaded-runner tab proof markers
+
+- Trigger:
+  - frontier milestone `2` requires flagship workbench familiarity proof that cannot be bypassed by manually forcing pass-status receipts while leaving inconsistent head-proof metadata or weak tab-surface runtime evidence.
+  - Hub parity audit enforced high-level status and required families/screenshots, but did not fail-close on generated anti-tamper marker arrays (`flagship_gate.headProofs.status_*`), release-channel id/version presence, workflow parity channel-id consistency, or loaded-runner tab control proof booleans in the visual receipt.
+  - this left a regression window where hand-edited pass receipts could mask canonical marker drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added strict release-channel field checks for workflow/visual receipts (`release_channel_channel_id`, `release_channel_version`).
+    - added workflow fail-close on `workflow_parity_receipt_channel_ids` drift from release-channel channel id.
+    - added workflow/visual fail-close on non-empty anti-tamper marker arrays:
+      - `flagship_gate.headProofs.status_malformed_entries`
+      - `flagship_gate.headProofs.status_non_canonical_keys`
+      - `flagship_gate.headProofs.status_duplicate_normalized_keys`
+    - added visual fail-close checks for runtime-backed chrome/menu/tab posture markers and loaded-runner tab control booleans:
+      - `runtime_backed_shell_menu`, `runtime_backed_menu_bar_labels`, `runtime_backed_toolstrip_actions`, `runtime_backed_tab_panel_only_header`, `runtime_backed_clickable_primary_menus`
+      - `loaded_runner_tab_strip_control_present`, `loaded_runner_tab_posture_control_present`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock new anti-tamper/release-channel/tab-proof markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now fail-closes key receipt anti-tamper and channel-consistency drift vectors instead of trusting pass-status alone.
+  - loaded-runner tab posture evidence is now explicitly required as executable proof for flagship workbench familiarity.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `heat` prep retrieval across API and workspace route
 
 - Trigger:
