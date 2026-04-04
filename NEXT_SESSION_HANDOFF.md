@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-5 league/community operations shorthand now fail-closes compact and split `league ops` and `community ops` aliases across campaign prep retrieval, GM unresolved-domain triage, and live API/UI journey audits
+
+- Trigger:
+  - frontier milestone `5` calls for GM/organizer operations to deepen beyond event/season shorthand while staying on the same governed account/control backbone.
+  - prep query canonicalization and unresolved-domain triage already covered `gm/event/season ops`, but did not explicitly normalize `league ops` and `community ops` compact/split aliases.
+  - this left a drift path where organizer-facing league/community ops language on signed-in surfaces could miss governed prep packets or unresolved-domain prioritization without tripping live journey proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - event-control compact token set now includes `leagueops|leagueop|communityops|communityop`.
+    - prep-library alias rewriting now canonicalizes split and compact `league/community ops` forms into governed `eventcontrol + season + operation` tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - GM prep query tokenization now canonicalizes split and compact `league/community ops` forms to the same governed event-control lane.
+    - unresolved-domain classifier now treats split/hyphen/compact `league/community ops` aliases as `event_control` signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded split shorthand coverage to assert `leagueops|leagueop|league ops|league-ops|communityops|communityop|community ops|community-ops` matching against governed event-control packets.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatLeagueAndCommunityOpsShorthandAsEventControlDomain`.
+    - expanded prep-asset shorthand matching to include compact/split/hyphen `league/community ops` aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=leagueops`, `queryText=league%20ops`, `queryText=communityops`, and `queryText=community%20ops`.
+    - added signed-in workspace route checks for `prepQuery=leagueops`, `prepQuery=league%20ops`, `prepQuery=communityops`, and `prepQuery=community%20ops` with non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertions for compact/split `league/community ops` route preservation and non-empty governed packet results.
+  - verified script-marker lock coverage is present in `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs` for both live-audit and Playwright league/community shorthand checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatLeagueAndCommunityOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`382` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 organizer operations shorthand now keeps `league/community ops` on the same governed event-control lane as `gm/event/season ops`, with API and signed-in browser audits failing closed if those aliases regress.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable tuple integrity now fail-closes Linux startup-smoke `rid` and receipt-status drift in per-head desktop executable proof
 
 - Trigger:
