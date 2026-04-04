@@ -803,6 +803,13 @@ groups: []
         "external proof request: capture promoted_installer_artifact, startup_smoke_receipt" in reason
         for reason in journey["external_blocking_reasons"]
     )
+    assert any(
+        "Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, "
+        "public route /downloads/install/avalonia-win-x64-installer, "
+        "startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json."
+        in reason
+        for reason in journey["external_blocking_reasons"]
+    )
 
 
 def test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_not_in_allowed_set(tmp_path: Path) -> None:

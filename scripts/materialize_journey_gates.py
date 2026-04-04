@@ -144,10 +144,24 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
         proof_tokens = [str(token or "").strip() for token in required_proofs if str(token or "").strip()]
         if not proof_tokens:
             continue
+        expected_artifact_id = str(item.get("expectedArtifactId") or "").strip()
+        expected_installer = str(item.get("expectedInstallerFileName") or "").strip()
+        expected_route = str(item.get("expectedPublicInstallRoute") or "").strip()
+        expected_receipt = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
+        detail_parts: List[str] = []
+        if expected_artifact_id:
+            detail_parts.append(f"artifactId {expected_artifact_id}")
+        if expected_installer:
+            detail_parts.append(f"installer {expected_installer}")
+        if expected_route:
+            detail_parts.append(f"public route {expected_route}")
+        if expected_receipt:
+            detail_parts.append(f"startup-smoke receipt {expected_receipt}")
+        details = f" Expected targets: {', '.join(detail_parts)}." if detail_parts else ""
         reasons.append(
             "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
             f"external proof request: capture {', '.join(proof_tokens)} on {required_host or 'required'} host "
-            f"for tuple {tuple_id}."
+            f"for tuple {tuple_id}.{details}"
         )
     return sorted(set(reasons))
 

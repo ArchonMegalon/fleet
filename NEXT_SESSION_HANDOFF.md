@@ -39616,3 +39616,49 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-1/3 install external-proof requests now carry explicit artifact, route, and receipt targets from registry through Fleet blockers
+
+- Trigger:
+  - install lane blockers were correctly marked `blocked_by_external_constraints_only`, but per-tuple host requests only named generic proof types (`promoted_installer_artifact`, `startup_smoke_receipt`).
+  - cross-host operators still had to infer exact artifact ids, expected install routes, and startup-smoke receipt paths for each missing Windows/macOS tuple.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `desktopTupleCoverage.externalProofRequests` rows now include explicit targets per missing tuple:
+      - `expectedArtifactId`
+      - `expectedInstallerFileName`
+      - `expectedPublicInstallRoute`
+      - `expectedStartupSmokeReceiptPath`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier allow-list and strict equality checks now fail-close those new external-proof request fields.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture assertions now require non-empty/route-shaped values for the new target fields.
+  - regenerated hub-registry published artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - install-lane external blocker lines now project those explicit per-tuple targets in the reason text.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - `test_install_journey_surfaces_release_channel_external_proof_requests` now fail-closes the presence of the explicit target text.
+  - regenerated Fleet journey/readiness artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --channel docker --version local-docker --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && python3 - <<'PY' ... test_install_journey_surfaces_release_channel_external_proof_requests(Path(tmp)) ... test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof() ... PY` -> PASS.
+  - evidence checks:
+    - `RELEASE_CHANNEL.generated.json` now emits explicit expected artifact/route/receipt targets per missing tuple.
+    - `JOURNEY_GATES.generated.json` install journey external blockers now include those explicit targets while remaining `blocked_by_external_constraints_only: true`.
+- Commits landed:
+  - `chummer6-hub-registry`: pending local commit (this slice).
+  - `fleet`: pending local commit (this slice).
+- Push attempts:
+  - pending for this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
