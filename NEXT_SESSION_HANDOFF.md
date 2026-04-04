@@ -30,8 +30,15 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .external_blocking_reasons' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (now includes per-tuple `external proof request` lines).
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
+- Commits landed:
+  - `chummer6-hub-registry`: `3eb17fa` (`feat(w1-1-3): emit external desktop proof requests for missing tuples`).
+  - `fleet`: `0b948a9` (`feat(w1-1-3): surface tuple host-proof requests in install journey blockers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6988081..3eb17fa`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - promotion remains externally blocked until native Windows/macOS hosts publish matching startup-smoke receipts for promoted installer tuple bytes.
+  - environment still lacks GitHub HTTPS credentials for `fleet` push.
 
 ## 2026-04-04: milestone-4/5/6 status-plane fallback now promotes Hub/Mobile from public campaign continuity proof receipts
 
