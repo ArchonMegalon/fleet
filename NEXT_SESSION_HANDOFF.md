@@ -1,3 +1,59 @@
+## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 external-proof capture contract source-of-truth hardening slice
+
+- Commits landed:
+  - `chummer6-hub-registry`: `3d840e6` (`feat(w1-1-3): canonicalize external-proof capture contract in release channel`).
+  - `chummer6-ui`: `fe7b3c78` (`feat(w1-1-3): fail-close executable gate on rich external-proof request rows`).
+  - `fleet`: `4e41f91` (`feat(w1-1-3): consume release-channel external-proof capture contract`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`f9a8636..3d840e6`, branch `fleet/hub-registry`).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes in `chummer6-ui` and `fleet`.
+
+## 2026-04-04: milestone-1/3 release-channel external-proof requests now carry canonical host-capture contract fields and downstream gates consume them directly
+
+- Trigger:
+  - W1 install/update/recovery plus packaged-proof lanes still depended on Fleet-side derivation for startup-smoke receipt contract and host capture commands, while registry `desktopTupleCoverage.externalProofRequests` rows only carried tuple metadata.
+  - that left source-of-truth drift risk: release truth did not natively encode the exact operator capture contract that executable/support/journey gates were enforcing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `desktopTupleCoverage.externalProofRequests` rows now emit canonical `startupSmokeReceiptContract` and `proofCaptureCommands` fields in addition to tuple/target metadata.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - fail-closed allowlist and parity checks now require the enriched external-proof request row contract and exact row-level value equality.
+  - updated `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented the strict external-proof row contract as verifier-bound release truth.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - expanded allowed/expected external-proof row schema to include `startupSmokeReceiptContract` and `proofCaptureCommands`.
+    - added fail-close validation for receipt-contract shape/value drift and proof-capture-command shape/value drift.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - compliance assertion now pins the richer external-proof contract markers.
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - journey-gate external-proof request projection now consumes release-channel-provided `startupSmokeReceiptContract` and `proofCaptureCommands` when present, with deterministic fallback derivation retained.
+  - regenerated artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Portal/downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Portal/downloads/releases.json`
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest .codex-studio/published/RELEASE_CHANNEL.generated.json --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/fleet/scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" -v minimal` -> PASS (`33 passed`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py -q` -> PASS (`7 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL-CLOSE as expected for external-only Windows/macOS tuple proof gaps; no local blocker remains.
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,blocked_by_external_constraints_only,local_blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state=blocked`, `blocked_by_external_constraints_only=true`, `local_blocking_reasons=[]`).
 ## 2026-04-04: handoff follow-up commit + push status for W3-6 mobile safehouse continuity offline-truth hardening slice
 
 - Commits landed:
