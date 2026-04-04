@@ -1,3 +1,84 @@
+## 2026-04-04: milestone-7/8/9/16 build-handoff now carries explicit print-ready PDF export continuity alongside template/foundry/sheet lanes
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require Build Lab handoff truth to cover sheet/print/export/viewer plus exchange lanes with the same explain and rule-environment grounding.
+  - Hub handoff projections already emitted `character_template`, `foundry_exchange`, and `sheet_viewer` governed outputs, but there was no explicit print/PDF output lane in the same governed handoff surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `BuildBuildLabOutputs(...)` now appends a governed `print_pdf_export` output (`Print-ready PDF export`) with `workflow.export.pdf` next-safe action.
+    - build-handoff progression outcomes now explicitly include print-ready PDF continuity in the explain-receipt follow-through line.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - account work detail now renders up to four per-output follow-through rows (`Outputs.Take(4)`) so print/PDF can appear alongside template/foundry/sheet cues.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves `print_pdf_export` and `print-ready PDF` continuity wording.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`:
+    - source guard now expects `selectedBuildLabHandoff.Outputs.Take(4)` and progression-outcome rendering coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: milestone-17 import-oracle lane now preserves Hero Lab Online metadata provenance when exports drift between metadata, root, and nested game shapes
+
+- Trigger:
+  - frontier milestone `17` requires import-oracle receipts to stay truthful when adjacent client payloads drift in structure, not only in casing/alias spellings.
+  - `DetectRulesetFromOnlineJson(...)` already accepted `metadata`, root, and nested `game` ruleset metadata, but `ImportOnlineJson(...)` still projected `gameName`, `hloVersion`, and `exportVersion` from `metadata` only.
+  - result: valid Hero Lab Online exports could detect SR6 correctly yet silently lose gameplay-option and version provenance in import snapshots whenever metadata was root-level or nested.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Application/Workspaces/HeroLabShadowrunImporter.cs`:
+    - `ImportOnlineJson(...)` now resolves `gameName`, `hloVersion`, and `exportVersion` with deterministic fallback across:
+      - `metadata.*`
+      - root-level fields
+      - nested `game.*`
+    - added helper methods:
+      - `ResolveOnlineGameName(...)`
+      - `ResolveOnlineAppVersion(...)`
+      - `ResolveOnlineExportVersion(...)`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/HeroLabRulesParityAudit.cs`:
+    - extended `AssertOnlineAliasAndMetadataDriftHandling()` with explicit import assertions for:
+      - root-level metadata projection into gameplay option + app/created version provenance
+      - nested `game` metadata projection into gameplay option + app/created version provenance
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - repaired constructor-compat drift by supplying the new `MasterIndexResponse` required fields (`ReferenceLanePosture`, `SourcebookCount`, `Sourcebooks`) so core-engine verification can compile and run.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+- Commits landed:
+  - `chummer6-core`: `43462a3f` (`fix(w17): preserve Hero Lab metadata provenance across online shape drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `b95e1b0b..43462a3f`).
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: widened Fleet push recovery now reads GitHub token from `/run/gh/hosts.yml` when `gh` is unavailable in-container
+
+- Trigger:
+  - the widened 5-shard topology exposed a real shard-5 control-plane blocker after the supervisor image restarted without a `gh` binary in-container.
+  - host-side push recovery already knew how to use `gh auth token`, but the live `fleet-design-supervisor` container only mounted `/run/gh/hosts.yml`.
+  - result: completed widened shard runs could still stop with `fatal: could not read Username for 'https://github.com': No such device or address` even though valid GitHub auth material was present in the container.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_inherit_host_git_auth_environment(...)` now falls back to `/run/gh` when no usable host home config is present.
+    - added `_github_token_from_hosts_yml(...)` and `_github_auth_token(...)`.
+    - host-side push recovery now reads GitHub tokens from `GH_TOKEN` / `GITHUB_TOKEN`, `gh auth token`, or `/run/gh/hosts.yml` / `GH_CONFIG_DIR` before building the HTTPS extraheader.
+    - `_worker_reported_git_push_repos(...)` now parses command lines line-by-line and extracts only the real repo root before the first `&&`, so chained `git add && git commit && git push` worker commands recover `/docker/fleet` instead of malformed pseudo-paths.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added regression proving token recovery from `hosts.yml` without `gh`
+    - kept the explicit empty-token path covered
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k 'github_auth_token_reads_hosts_yml_without_gh or github_https_auth_extraheader_returns_empty_when_gh_missing or retry_worker_reported_git_pushes_uses_host_git_auth or is_missing_github_push_blocker_accepts_remote_push_wording or status_command_on_shard_root_reports_shard_local_frontier_not_aggregate_union or effective_supervisor_state_filters_history_that_does_not_match_current_manifest_pack'` -> PASS (`6 passed`).
+  - live replay in `fleet-design-supervisor`:
+    - `_github_https_auth_extraheader(_prepare_host_git_push_environment(), Path("/docker/fleet"))` now returns a non-empty GitHub auth header.
+    - `_retry_worker_reported_git_pushes(...)` against `/var/lib/codex-fleet/chummer_design_supervisor/shard-5/runs/20260404T153109Z/worker.stderr.log` -> `attempted=["/docker/fleet"]`, `succeeded=["/docker/fleet"]`, `failed={}`.
+    - `_retry_worker_reported_git_pushes(...)` against `/var/lib/codex-fleet/chummer_design_supervisor/shard-2/runs/20260404T153619Z/worker.stderr.log` -> `attempted=["/docker/chummercomplete/chummer6-core", "/docker/fleet"]`, `succeeded=["/docker/chummercomplete/chummer6-core", "/docker/fleet"]`, `failed={}`.
+- Exact blocker:
+  - none in source; live `status --json` may still show the pre-fix shard-5 blocker until the next completed widened shard run overwrites that historical receipt.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests startup-smoke receipt metadata fail-close branches for promoted desktop installer tuples
 
 - Trigger:
