@@ -26172,3 +26172,25 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push status:
   - `chummer.run-services`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-2 hub parity audit now fail-closes stale/future nested `releaseProof.generatedAt` drift
+
+- Trigger:
+  - frontier milestone `2` parity gates already fail-closed nested release proof status/base-url/journeys/routes in `audit-ui-parity.sh`, but did not validate nested `releaseProof.generatedAt` freshness.
+  - this left a false-green path where stale or future-skewed release proof packets could pass hub parity while registry verifier freshness checks would fail later.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added release-proof freshness defaults (`7d` max age, `5m` future skew) and ISO timestamp parsing for nested `releaseProof.generatedAt`.
+    - added fail-close freshness checks for stale/future nested release proof timestamps.
+    - added bounded env overrides: `CHUMMER_UI_PARITY_RELEASE_PROOF_MAX_AGE_SECONDS` / `CHUMMER_RELEASE_PROOF_MAX_AGE_SECONDS` and `CHUMMER_UI_PARITY_RELEASE_PROOF_MAX_FUTURE_SKEW_SECONDS` / `CHUMMER_RELEASE_PROOF_MAX_FUTURE_SKEW_SECONDS`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded parity-script marker assertions to lock the new timestamp/freshness fail-close markers and env controls.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - hub parity and registry release-proof governance now align on freshness semantics, removing a stale/future timestamp false-green seam from milestone-2 release-proof evidence.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
