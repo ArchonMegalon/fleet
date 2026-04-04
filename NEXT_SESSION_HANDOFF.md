@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-2 flagship readiness now fail-closes missing locale-summary coverage for declared shipping locales
+
+- Trigger:
+  - frontier milestone `2` and blocker `BLK-009` require localization proof to stay executable and fail-honest across all declared shipping locales.
+  - Fleet readiness only read snake_case localization fields and did not enforce `localeSummary` coverage for declared `shippingLocales`, so a passing UI localization gate could still omit a declared locale row (observed live as missing `en-us`) without adding a readiness blocker reason.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - localization parsing now reads both snake_case and camelCase payload shapes for `locale_summary`/`localeSummary`, `shipping_locales`/`shippingLocales`, `translation_backlog_findings`/`translationBacklogFindings`, and per-locale untranslated counts.
+    - readiness now fail-closes when a passed localization gate declares no shipping locales.
+    - readiness now fail-closes when `localeSummary` omits any declared shipping locale.
+    - published explicit evidence markers for shipping-locale and locale-summary coverage drift:
+      - `ui_localization_release_gate_shipping_locale_count`
+      - `ui_localization_release_gate_shipping_locales`
+      - `ui_localization_release_gate_missing_locale_summary_shipping_locale_count`
+      - `ui_localization_release_gate_missing_locale_summary_shipping_locales`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - updated untranslated-keys regression fixture to declare shipping locales explicitly.
+    - added `test_materialize_flagship_product_readiness_fail_closes_when_localization_gate_is_missing_shipping_locale_summary_rows` to lock the new fail-close behavior and camelCase payload handling.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k "localization_gate_reports_untranslated_shipping_locale_keys or missing_shipping_locale_summary_rows" -q` -> PASS (`2` tests).
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -q` -> PASS (`38` tests).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+- Current trusted state:
+  - Fleet readiness now flags the live UI localization proof gap directly: declared `shippingLocales=6` but `localeSummary=5` (`en-us` missing), instead of treating the localization gate as structurally complete.
+  - milestone-2 localization proof posture is stricter and less gameable in the control-plane readiness output.
+- Push status:
+  - `fleet`: local changes pending commit/push in this environment (`scripts/materialize_flagship_product_readiness.py`, `tests/test_materialize_flagship_product_readiness.py`, readiness generated mirrors, handoff; credential-dependent).
+
 ## 2026-04-04: milestone-5 GM-ops unresolved board now prioritizes opposition/event-control/roster blockers before newer general unresolved noise
 
 - Trigger:

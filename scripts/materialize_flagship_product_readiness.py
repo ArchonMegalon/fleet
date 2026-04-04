@@ -806,31 +806,67 @@ def build_flagship_product_readiness_payload(
     localization_locale_summary = (
         ui_localization_release_gate.get("locale_summary")
         if isinstance(ui_localization_release_gate.get("locale_summary"), list)
-        else []
+        else (
+            ui_localization_release_gate.get("localeSummary")
+            if isinstance(ui_localization_release_gate.get("localeSummary"), list)
+            else []
+        )
+    )
+    localization_shipping_locales = sorted(
+        {
+            locale.strip().lower()
+            for locale in _as_string_list(
+                ui_localization_release_gate.get("shipping_locales")
+                if isinstance(ui_localization_release_gate.get("shipping_locales"), list)
+                else ui_localization_release_gate.get("shippingLocales")
+            )
+            if locale.strip()
+        }
     )
     localization_translation_backlog_findings = _as_string_list(
         ui_localization_release_gate.get("translation_backlog_findings")
+        if isinstance(ui_localization_release_gate.get("translation_backlog_findings"), list)
+        else ui_localization_release_gate.get("translationBacklogFindings")
     )
     localization_untranslated_counts_by_locale: Dict[str, int] = {}
+    localization_locale_summary_locales: set[str] = set()
     for locale_entry in localization_locale_summary:
         if not isinstance(locale_entry, dict):
             continue
         locale = str(locale_entry.get("locale") or "").strip().lower()
         if not locale:
             continue
+        localization_locale_summary_locales.add(locale)
         try:
-            untranslated_count = int(locale_entry.get("untranslated_key_count"))
+            untranslated_count = int(
+                locale_entry.get("untranslated_key_count")
+                if locale_entry.get("untranslated_key_count") is not None
+                else locale_entry.get("untranslatedKeyCount")
+            )
         except (TypeError, ValueError):
             continue
         if untranslated_count > 0:
             localization_untranslated_counts_by_locale[locale] = untranslated_count
+    localization_missing_locale_summary_shipping_locales = sorted(
+        locale for locale in localization_shipping_locales if locale not in localization_locale_summary_locales
+    )
     if ui_localization_release_gate:
         if proof_passed(
             ui_localization_release_gate,
             expected_contract="chummer6-ui.localization_release_gate",
             accepted_statuses=("passed", "pass", "ready"),
         ):
-            if localization_untranslated_counts_by_locale:
+            if not localization_shipping_locales:
+                desktop_hard_fail = True
+                desktop_reasons.append(
+                    "Localization release gate does not declare shipping locales. Milestone-2 locale coverage cannot be proven."
+                )
+            elif localization_missing_locale_summary_shipping_locales:
+                desktop_hard_fail = True
+                desktop_reasons.append(
+                    "Localization release gate is missing locale-summary rows for declared shipping locales."
+                )
+            elif localization_untranslated_counts_by_locale:
                 desktop_hard_fail = True
                 desktop_reasons.append(
                     "Localization release gate still reports untranslated shipping-locale trust-surface keys."
@@ -1546,6 +1582,12 @@ def build_flagship_product_readiness_payload(
                 ui_localization_release_gate.get("default_key_count") or 0
             ),
             "ui_localization_release_gate_locale_summary_count": len(localization_locale_summary),
+            "ui_localization_release_gate_shipping_locale_count": len(localization_shipping_locales),
+            "ui_localization_release_gate_shipping_locales": localization_shipping_locales,
+            "ui_localization_release_gate_missing_locale_summary_shipping_locale_count": len(
+                localization_missing_locale_summary_shipping_locales
+            ),
+            "ui_localization_release_gate_missing_locale_summary_shipping_locales": localization_missing_locale_summary_shipping_locales,
             "ui_localization_release_gate_translation_backlog_finding_count": len(
                 localization_translation_backlog_findings
             ),
