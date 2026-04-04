@@ -292,10 +292,11 @@
     - `release_gate_lock_stale_removed=true`
     - `release_gate_lock_stale_reason=stale_empty_lock_dir_removed_after_..._without_active_b14_process`
 - Commits landed:
-  - pending local commit in `chummer6-ui` for stale b14 lock recovery + compliance guards.
-  - pending local commit in `fleet` for this handoff refresh.
+  - `chummer6-ui`: `222c8244` (`fix(w1): prune stale flagship release lock before executable gate wait fail-close`).
+  - `fleet`: `13f61d0` (`docs(handoff): record W1 stale release lock recovery slice`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-ui && git -c http.https://github.com/.extraheader=AUTHORIZATION: basic <run-gh-token> push` -> PASS (`fix/windows-installer-payload-20260401` updated: `2c742067..222c8244`).
+  - `cd /docker/fleet && git -c http.https://github.com/.extraheader=AUTHORIZATION: basic <run-gh-token> push` -> PASS (`main` updated: `d79d61c..d7a4d12`, includes handoff commit `13f61d0`).
 - Exact blocker:
   - promoted Windows/macOS installer tuples and matching startup-smoke receipts are still absent from release-channel/public shelf truth in this workspace (external to this stale-lock recovery slice).
 
