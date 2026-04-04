@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-6 travel/offline continuity lane now fail-closes plural `stalecaches` and `staleofflinecaches` compact forms across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `6` continuity proof requires stale-cache readiness language to remain governed across desktop, travel, and mobile continuity paths.
+  - plural compact forms (`stalecaches`, `staleofflinecaches`) were not canonicalized or journey-audited, leaving a compact-query seam outside existing stale-cache fail-close proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `stalecaches`
+      - `staleofflinecaches`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesPluralTravelOfflineSafehouseAndMobileCompactForms` with both plural stale-cache forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand` with `stalecaches` and `staleofflinecaches` matching assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace compact query probes for both plural stale-cache forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for `stalecaches` and `staleofflinecaches`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for both plural stale-cache forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesPluralTravelOfflineSafehouseAndMobileCompactForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `508424ff` (`feat(w3-6): fail-close plural stale cache continuity query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 compact roster move packet continuity slice
 
 - Commits landed:
