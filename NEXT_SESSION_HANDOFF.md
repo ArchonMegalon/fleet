@@ -40232,3 +40232,12 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
     - `JOURNEY_GATES.generated.json` and `FLAGSHIP_PRODUCT_READINESS.generated.json` now expose `install_claim_restore_continue.external_proof_requests[*].proof_capture_commands` for each missing Windows/macOS tuple.
 - Exact blocker:
   - journey remains external-only blocked on native Windows/macOS host execution and receipt ingestion for promoted installer tuples.
+
+## 2026-04-04: handoff follow-up push retry for milestone-1/3 executable external-proof command slice
+
+- Commits landed:
+  - `fleet`: `c558b86` (`feat(w1-1-3): project executable host commands for external install proof`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
