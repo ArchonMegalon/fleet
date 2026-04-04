@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-3 readiness now downgrades desktop external-only install blockers from missing to warning when local executable blockers are zero
+
+- Trigger:
+  - after install-lane blocker classification, `install_claim_restore_continue` correctly reported `blocked_by_external_constraints_only: true`, but flagship readiness still hard-failed `desktop_client` as `missing`.
+  - this overstated repo-local failure posture when executable gate local blockers were zero and only Windows/macOS host-proof constraints remained.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - reads `ui_executable_exit_gate` local blocker count (`local_blocking_findings_count` / `localBlockingFindingsCount`).
+    - when install journey is external-only with zero local journey blockers and zero executable local blockers, desktop hard-fail is relaxed so `desktop_client` degrades to `warning` instead of `missing`.
+    - readiness evidence now emits `ui_executable_exit_gate_local_blocking_findings_count`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
+  - `cd /docker/fleet && jq '{desktop_client:.coverage.desktop_client, install_external_only:.coverage_details.desktop_client.evidence.install_claim_restore_continue_blocked_by_external_constraints_only, executable_local_blockers:.coverage_details.desktop_client.evidence.ui_executable_exit_gate_local_blocking_findings_count}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`desktop_client: warning`, `install_external_only: true`, `executable_local_blockers: 0`).
+- Exact blocker:
+  - remaining install lane closure still depends on native Windows/macOS startup-smoke receipts for promoted installer bytes; this Linux-only host cannot execute those installer smokes locally.
+
 ## 2026-04-04: milestone-9/16 media-factory now projects explicit local release + artifact publication proofs and boundary-pure fallback posture
 
 - Trigger:

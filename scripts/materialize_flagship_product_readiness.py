@@ -1551,6 +1551,11 @@ def build_flagship_product_readiness_payload(
         for item in (build_journey.get("local_blocking_reasons") or [])
         if str(item).strip()
     ]
+    executable_local_blocking_findings_count = int(
+        ui_executable_exit_gate.get("local_blocking_findings_count")
+        or ui_executable_exit_gate.get("localBlockingFindingsCount")
+        or 0
+    )
     if install_journey_state == "ready":
         desktop_positives += 1
     else:
@@ -1569,6 +1574,14 @@ def build_flagship_product_readiness_payload(
             )
         else:
             desktop_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
+    if (
+        desktop_hard_fail
+        and bool(install_journey.get("blocked_by_external_constraints_only"))
+        and install_journey_external_blockers
+        and not install_journey_local_blockers
+        and executable_local_blocking_findings_count == 0
+    ):
+        desktop_hard_fail = False
     ui_stage = str(ui_project.get("readiness_stage") or "").strip()
     ui_promotion = project_posture(ui_project)
     if compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0:
@@ -1802,6 +1815,7 @@ def build_flagship_product_readiness_payload(
             "install_claim_restore_continue_local_blocking_reason_count": len(
                 install_journey_local_blockers
             ),
+            "ui_executable_exit_gate_local_blocking_findings_count": executable_local_blocking_findings_count,
             "install_claim_restore_continue_blocked_by_external_constraints_only": bool(
                 install_journey.get("blocked_by_external_constraints_only")
             ),

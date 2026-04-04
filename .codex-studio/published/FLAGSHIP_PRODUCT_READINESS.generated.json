@@ -1,12 +1,12 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T18:11:45Z",
+  "generated_at": "2026-04-04T18:14:26Z",
   "status": "fail",
   "summary": {
     "ready_count": 0,
-    "warning_count": 6,
-    "missing_count": 2,
+    "warning_count": 7,
+    "missing_count": 1,
     "history_snapshot_count": 9
   },
   "source_documents": [
@@ -29,7 +29,7 @@
     "no_step_back_client_parity"
   ],
   "coverage": {
-    "desktop_client": "missing",
+    "desktop_client": "warning",
     "rules_engine_and_import": "warning",
     "hub_and_registry": "warning",
     "mobile_play_shell": "warning",
@@ -40,7 +40,7 @@
   },
   "coverage_details": {
     "desktop_client": {
-      "status": "missing",
+      "status": "warning",
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
         "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts.",
@@ -157,7 +157,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
-        "ui_executable_gate_age_seconds": 41,
+        "ui_executable_gate_age_seconds": 203,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -258,7 +258,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T12:27:07Z",
-        "release_channel_age_seconds": 20678,
+        "release_channel_age_seconds": 20839,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -423,6 +423,7 @@
         "build_explain_publish": "warning",
         "install_claim_restore_continue_external_blocking_reason_count": 3,
         "install_claim_restore_continue_local_blocking_reason_count": 0,
+        "ui_executable_exit_gate_local_blocking_findings_count": 0,
         "install_claim_restore_continue_blocked_by_external_constraints_only": true,
         "build_explain_publish_external_blocking_reason_count": 0,
         "build_explain_publish_local_blocking_reason_count": 0,
@@ -466,7 +467,7 @@
       "status": "warning",
       "summary": "Mobile and live-play flagship proof is still incomplete.",
       "reasons": [
-        "Campaign/recover/recap journey is warning, not ready.",
+        "Campaign/recover/recap journey is blocked, not ready.",
         "Recover-from-sync-conflict journey is warning, not ready.",
         "Mobile project posture is repo_local_complete / public, below flagship play-shell promotion."
       ],
@@ -474,7 +475,7 @@
         "mobile_stage": "repo_local_complete",
         "mobile_promotion": "public",
         "mobile_local_release_status": "passed",
-        "campaign_session_recover_recap": "warning",
+        "campaign_session_recover_recap": "blocked",
         "recover_from_sync_conflict": "warning"
       }
     },
@@ -484,7 +485,7 @@
       "reasons": [
         "UI kit readiness is repo_local_complete, below boundary-pure shared-surface posture.",
         "Build/explain/publish journey is warning, not ready.",
-        "Campaign/recover/recap journey is warning, not ready.",
+        "Campaign/recover/recap journey is blocked, not ready.",
         "Workbench and mobile promoted posture is not yet jointly proven."
       ],
       "evidence": {
@@ -492,7 +493,7 @@
         "ui_stage": "repo_local_complete",
         "mobile_stage": "repo_local_complete",
         "build_explain_publish": "warning",
-        "campaign_session_recover_recap": "warning"
+        "campaign_session_recover_recap": "blocked"
       }
     },
     "media_artifacts": {
@@ -540,7 +541,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T18:11:41Z",
+        "supervisor_updated_at": "2026-04-04T18:13:38Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -552,6 +553,7 @@
   },
   "ready_keys": [],
   "warning_keys": [
+    "desktop_client",
     "rules_engine_and_import",
     "hub_and_registry",
     "mobile_play_shell",
@@ -560,7 +562,6 @@
     "fleet_and_operator_loop"
   ],
   "missing_keys": [
-    "desktop_client",
     "ui_kit_and_flagship_polish"
   ],
   "evidence_sources": {
@@ -570,7 +571,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-4/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260404T163340Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
