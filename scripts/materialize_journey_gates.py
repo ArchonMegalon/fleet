@@ -1147,20 +1147,29 @@ def evaluate_journey(
             if str(item.get("tuple_id") or "").strip()
         }
 
-        def _is_case_backed_packet(packet: Dict[str, Any]) -> bool:
+        def _is_case_backed_packet(packet: Dict[str, Any], *, packet_id: str | None = None) -> bool:
             # Backward compatibility: older packets do not include support_case_backed and
             # are support-case-backed by default.
             if "support_case_backed" not in packet:
                 return True
-            return bool(packet.get("support_case_backed"))
+            support_case_backed = packet.get("support_case_backed")
+            if not isinstance(support_case_backed, bool):
+                support_packet_contract_violations.append(
+                    f"support packet {packet_id or 'unknown'} is missing boolean support_case_backed."
+                )
+                return False
+            return support_case_backed
 
+        case_backed_packets: List[Dict[str, Any]] = []
         for index, packet in enumerate(packets, start=1):
             packet_id = str(packet.get("packet_id") or "").strip() or f"packet#{index}"
             install_truth_state = str(packet.get("install_truth_state") or "").strip().lower()
             install_diagnosis = packet.get("install_diagnosis")
             fix_confirmation = packet.get("fix_confirmation")
             recovery_path = packet.get("recovery_path")
-            case_backed = _is_case_backed_packet(packet)
+            case_backed = _is_case_backed_packet(packet, packet_id=packet_id)
+            if case_backed:
+                case_backed_packets.append(packet)
             if not install_truth_state:
                 support_packet_contract_violations.append(
                     f"support packet {packet_id} is missing install_truth_state."
@@ -1484,9 +1493,9 @@ def evaluate_journey(
                 str((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("required_host") or "")
                 .strip()
                 .lower()
-                for item in packets
-                if _is_case_backed_packet(item)
-                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+                for item in case_backed_packets
+                if isinstance((item.get("install_diagnosis") or {}).get("external_proof_required"), bool)
+                if (item.get("install_diagnosis") or {}).get("external_proof_required")
             ]
         )
         reported_external_proof_required_host_counts = _normalized_summary_counter(
@@ -1500,9 +1509,9 @@ def evaluate_journey(
         expected_external_proof_required_tuple_counts = _counter_map(
             [
                 str((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id") or "").strip()
-                for item in packets
-                if _is_case_backed_packet(item)
-                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+                for item in case_backed_packets
+                if isinstance((item.get("install_diagnosis") or {}).get("external_proof_required"), bool)
+                if (item.get("install_diagnosis") or {}).get("external_proof_required")
             ]
         )
         reported_external_proof_required_tuple_counts = _normalized_summary_counter(
