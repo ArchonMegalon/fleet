@@ -1,3 +1,44 @@
+## 2026-04-04: follow-up on W3 compact `eventctrls` prep-query parity script-lock slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `5579f29a` (`fix(w3): script-lock compact eventctrls prep-query parity`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-5 event-controls lane now fail-closes compact plural `eventctrls` across campaign workspace prep search and GM ops prep-library queries
+
+- Trigger:
+  - W3 milestone `5` requires event controls and prep-library operator wording to stay governed across API, workspace search routes, and live journey proof.
+  - compact plural shorthand `eventctrls` was not canonicalized or script-locked in query lanes, leaving a drift seam where this operator phrasing could regress without failing live audit or browser journey checks.
+- Landed:
+  - patched shared prep-query canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrite: `eventctrls -> eventcontrol`.
+  - expanded campaign workspace compact shorthand coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries` now asserts `eventctrls` matching.
+  - expanded GM ops prep query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation` now asserts `queryText=eventctrls`.
+  - patched live API and workspace audit journeys:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - added governed checks for `queryText=eventctrls` and `prepQuery=eventctrls`.
+  - patched browser e2e journey:
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added workspace search route and non-empty result assertions for `?prepQuery=eventctrls`.
+  - patched verification script-lock markers:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - added required markers for `queryText=eventctrls`, `prepQuery=eventctrls`, and Playwright `?prepQuery=eventctrls` plus `eventctrls prep query` copy.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control prep search now fail-closes compact plural `eventctrls` through the same shared canonicalizer and script-lock journey lanes used by existing event-control shorthand coverage.
+  - governed campaign workspace and GM ops prep retrieval no longer depend on operators avoiding compact plural `eventctrls` wording.
+
 ## 2026-04-04: follow-up on W3 `opfors` prep-query parity script-lock slice (commit and push status)
 
 - Commits landed:
