@@ -348,6 +348,7 @@ def evaluate_journey(
                 )
 
     support_summary = dict(support_packets.get("summary") or {})
+    support_packet_contract_violations: List[str] = []
     support_generated_at = str(support_packets.get("generated_at") or "").strip()
     support_freshness = dict(artifacts.get("support_packets") or {})
     if bool(fleet_gate.get("require_support_freshness")) and support_freshness.get("state") != "fresh":
@@ -370,6 +371,58 @@ def evaluate_journey(
             blocking_reasons.append(
                 "support packets do not prove all update-required cases route to /downloads."
             )
+    if bool(fleet_gate.get("require_support_install_truth_contract")):
+        packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
+        for index, packet in enumerate(packets, start=1):
+            packet_id = str(packet.get("packet_id") or "").strip() or f"packet#{index}"
+            install_truth_state = str(packet.get("install_truth_state") or "").strip().lower()
+            install_diagnosis = packet.get("install_diagnosis")
+            fix_confirmation = packet.get("fix_confirmation")
+            recovery_path = packet.get("recovery_path")
+            if not install_truth_state:
+                support_packet_contract_violations.append(
+                    f"support packet {packet_id} is missing install_truth_state."
+                )
+            if not isinstance(install_diagnosis, dict):
+                support_packet_contract_violations.append(
+                    f"support packet {packet_id} is missing install_diagnosis."
+                )
+            else:
+                if not str(install_diagnosis.get("registry_channel_id") or "").strip():
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing install_diagnosis.registry_channel_id."
+                    )
+                if not str(install_diagnosis.get("registry_release_version") or "").strip():
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing install_diagnosis.registry_release_version."
+                    )
+            if not isinstance(fix_confirmation, dict):
+                support_packet_contract_violations.append(
+                    f"support packet {packet_id} is missing fix_confirmation."
+                )
+            elif not str(fix_confirmation.get("state") or "").strip():
+                support_packet_contract_violations.append(
+                    f"support packet {packet_id} is missing fix_confirmation.state."
+                )
+            if not isinstance(recovery_path, dict):
+                support_packet_contract_violations.append(
+                    f"support packet {packet_id} is missing recovery_path."
+                )
+            else:
+                if not str(recovery_path.get("action_id") or "").strip():
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing recovery_path.action_id."
+                    )
+                if not str(recovery_path.get("href") or "").strip():
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing recovery_path.href."
+                    )
+        if support_packet_contract_violations:
+            blocking_reasons.extend(support_packet_contract_violations[:5])
+            if len(support_packet_contract_violations) > 5:
+                blocking_reasons.append(
+                    f"support packet install-truth contract has {len(support_packet_contract_violations) - 5} additional violations."
+                )
 
     state = "ready"
     if blocking_reasons:
@@ -401,6 +454,7 @@ def evaluate_journey(
         "support_update_required_misrouted_case_count": int(
             support_summary.get("update_required_misrouted_case_count") or 0
         ),
+        "support_install_truth_contract_violation_count": len(support_packet_contract_violations),
     }
     return {
         "id": str(row.get("id") or "").strip(),
