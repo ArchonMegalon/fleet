@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 parity checklist now fail-closes deep legacy magic/resonance workflow families (arts/powers/foci/mentor+critter anchors)
+
+- Trigger:
+  - milestone-2 baseline fail-close covered core shell, gear, contacts, and several magic/matrix anchors, but still left drift room for deeper legacy magic/resonance families that the familiarity bridge explicitly treats as high-friction trust oracles.
+  - `scripts/generate-parity-checklist.sh` required `metamagics/initiationgrades/spirits/complexforms` but did not hard-require `arts`, `martialarts`, `mentorspirits`, `foci`, `powers`, or `critterpowers` even though those actions are in `docs/PARITY_ORACLE.json`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - expanded required milestone-2 workspace action baseline to include:
+      - `arts`
+      - `critterpowers`
+      - `foci`
+      - `martialarts`
+      - `mentorspirits`
+      - `powers`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityChecklistMilestone2BaselineTests.cs`:
+    - script-lock assertions now require those six baseline action markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs/actions/desktop-controls` coverage remains `17/17`, `47/47`, `29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistMilestone2BaselineTests" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (expected mutation-probe `parity audit failed: ...` lines; final `run-services in-process smoke passed`).
+- Commits landed:
+  - `chummer6-hub`: `54f0db5e` (`fix(milestone-2): fail-close deep magic legacy workflow baselines`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `54f0db5e` remains local-only until auth is restored.
+
 ## 2026-04-04: follow-up on milestone-2 legacy workflow baseline hardening in chummer6-hub parity checklist generator (commit and push status)
 
 - Commits landed:
