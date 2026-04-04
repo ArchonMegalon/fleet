@@ -445,15 +445,32 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             for item in reported_missing_tuples
             if str(item or "").strip()
         ]
-        if len(raw_reported_missing_tuples) != len(set(raw_reported_missing_tuples)):
+        canonical_reported_missing_tuples: List[str] = []
+        noncanonical_missing_tuples: List[str] = []
+        malformed_missing_tuple = False
+        for tuple_id in raw_reported_missing_tuples:
+            parts = [part.strip().lower() for part in tuple_id.split(":")]
+            if len(parts) != 3 or not all(parts):
+                malformed_missing_tuple = True
+                continue
+            canonical_tuple_id = ":".join(parts)
+            canonical_reported_missing_tuples.append(canonical_tuple_id)
+            if tuple_id != canonical_tuple_id:
+                noncanonical_missing_tuples.append(tuple_id)
+        if noncanonical_missing_tuples:
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
+                "must contain lowercase canonical 'head:rid:platform' entries."
+            )
+        if len(canonical_reported_missing_tuples) != len(set(canonical_reported_missing_tuples)):
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
                 "must not contain duplicate entries."
             )
         normalized_reported_missing_tuples = sorted(
             {
-                token.lower()
-                for token in raw_reported_missing_tuples
+                token
+                for token in canonical_reported_missing_tuples
             }
         )
         if isinstance(reported_complete, bool):
@@ -470,7 +487,6 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             )
         expected_missing_platforms: set[str] = set()
         expected_missing_head_pairs: set[str] = set()
-        malformed_missing_tuple = False
         for tuple_id in normalized_reported_missing_tuples:
             parts = [part.strip().lower() for part in tuple_id.split(":")]
             if len(parts) != 3 or not all(parts):

@@ -341,6 +341,55 @@ def test_external_proof_reasons_fail_close_duplicate_missing_tuple_inventory_row
     )
 
 
+def test_external_proof_reasons_fail_close_noncanonical_and_case_variant_duplicate_missing_tuple_rows() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatformHeadRidTuples": [
+                "Avalonia:win-x64:windows",
+                "avalonia:win-x64:windows",
+            ],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' must contain lowercase canonical 'head:rid:platform' entries."
+        in reason
+        for reason in reasons
+    )
+    assert any(
+        "desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' must not contain duplicate entries." in reason
+        for reason in reasons
+    )
+
+
 def test_install_journey_blocks_when_support_external_proof_backlog_summary_drifts(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
