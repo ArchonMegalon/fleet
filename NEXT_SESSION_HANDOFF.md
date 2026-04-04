@@ -44,8 +44,8 @@
   - executable gate now provides per-head actionable blocker truth for missing Windows/macOS tuple coverage, rather than only aggregate release-channel tuple deficits.
   - true blocker remains external proof materialization for promoted Windows/macOS installer bytes + startup-smoke receipts on appropriate hosts.
 - Push status:
-  - `chummer6-ui`: local commit/push pending in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`, `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`; credential-dependent).
-  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+  - `chummer6-ui`: committed locally as `90865620` and `0609db0a`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: committed locally as `d4994d4`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-4/5 compact shorthand now stays governed across campaign workspace packets and GM unresolved triage
 
