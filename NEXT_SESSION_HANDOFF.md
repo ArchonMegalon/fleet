@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-2 hub parity audit now fail-closes canonical ordering drift for visual tests, legacy interaction keys, and required screenshots
+
+- Trigger:
+  - frontier milestone `2` parity checks validated presence/absence of required visual tests, interaction keys, and screenshots, but treated those inventories as unordered sets.
+  - this allowed canonical ordering drift between UI materialization and Hub verification to pass silently, weakening deterministic proof posture for legacy-familiar visual/workflow evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - converted required visual test, interaction-key, and screenshot baselines to canonical ordered sequences.
+    - added explicit fail-close checks for order drift:
+      - `required_tests` must preserve canonical milestone-2 visual test ordering.
+      - `required_legacy_interaction_keys` must preserve canonical milestone-2 interaction key ordering.
+      - `required_screenshots` must preserve canonical milestone-2 screenshot ordering.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock marker assertions for the three new ordering fail-close messages.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - isolated mutation probe with temp published receipts (`CHUMMER_UI_PUBLISHED_DIR`) that swaps the first two `required_tests` entries in `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` -> FAIL-CLOSE with `required_tests must preserve canonical milestone-2 visual test ordering`.
+- Push status:
+  - pending commit/push in this slice (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `postsession` / `post-run` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
