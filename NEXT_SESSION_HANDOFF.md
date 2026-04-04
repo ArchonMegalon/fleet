@@ -1,3 +1,34 @@
+## 2026-04-04: handoff follow-up commit + push status for milestone-4/5/6 compact packet-form live-audit proof slice
+
+- Commits landed:
+  - `chummer6-hub`: `6250c651` (`test(w3-4-5-6): fail-close compact continuity and gm packet aliases in live journey audit`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 live journey proof now fail-closes compact continuity+GM packet-form shorthand across API and workspace audit lanes
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require one governed continuity lane across campaign return (`downtime/diary/contacts/heat/aftermath`), GM packet operations (`opposition/roster/event/prep`), and travel/offline/mobile continuity.
+  - hub alias canonicalization already supported compact packet-form queries (for example `campaignreturnpacket`, `diarycontactsheatpacket`, `gmopspacket`), but live audit and workspace browser proof did not fail-close those exact forms, leaving a regression seam outside unit-level canonicalizer tests.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added API `queryText=` coverage and workspace `prepQuery=` tuple coverage for compact packet forms:
+      - `preplibrarypacket(s)`, `oppositionpackets`, `rostermovementpacket(s)`, `eventcontrolpackets`
+      - `campaignreturnpacket(s)`, `diarycontactsheatpacket(s)`, `aftermathdowntimepacket(s)`
+      - `travelofflinepacket(s)`, `mobileofflinepacket(s)`, `safehousetravelpacket(s)`
+      - `gmopspacket(s)`, `gmoperationpacket(s)`, `gmcontrolpacket(s)`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - extended `assertWorkspacePrepQuerySearch(...)` matrix with the same compact packet-form query set so signed-in journey evidence fails closed.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - locked all new compact packet-form audit markers (`queryText` and tuple-driven workspace list markers).
+    - locked new Playwright helper-call markers for all compact packet-form queries.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" -v minimal` -> PASS.
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 compact continuity+GM packet query canonicalization slice
 
 - Commits landed:
