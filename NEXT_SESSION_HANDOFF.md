@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for missing-required and unexpected `releaseProof.journeysPassed` baseline coverage
+
+- Trigger:
+  - milestone-2 parity audit already fail-closed missing/extra baseline journey ids in nested `releaseProof.journeysPassed`, but Hub verify mutation coverage only exercised `releaseProof.proofRoutes` and `releaseProof.baseUrl` branches.
+  - this left high-impact journey-coverage fail-close branches unproven in Hub’s own end-to-end verify entrypoint.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.journeysPassed=["launch-and-link"]` and asserted `audit-ui-parity.sh` fails for missing required baseline journey ids.
+    - added mutation with canonical baseline journeys plus `bonus-noncanonical-journey` and asserted `audit-ui-parity.sh` fails for unexpected journey ids.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock both missing-required and unexpected-journey mutation coverage text.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for missing-required and unexpected `releaseProof.journeysPassed` mutation cases, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves milestone-2 nested journey inventory fail-close behavior in the same mutation lane as route-grammar and origin-policy checks.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes macOS installer artifacts missing explicit head/rid tuple metadata
 
 - Trigger:
