@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-7/8/9/16 account build-handoff detail now keeps every governed export lane visible after JSON exchange promotion
+
+- Trigger:
+  - after promoting governed `json_exchange` into Build Lab handoff outputs, account work detail still rendered `selectedBuildLabHandoff.Outputs.Take(4)`.
+  - governed handoff lanes now total five (`character_template`, `json_exchange`, `foundry_exchange`, `sheet_viewer`, `print_pdf_export`), so one lane could be silently hidden in the primary account decision surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - increased per-output rendering cap to `selectedBuildLabHandoff.Outputs.Take(6)` so all governed lanes remain visible within the bounded output cap.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`:
+    - source guard now fail-proves `selectedBuildLabHandoff.Outputs.Take(6)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `8f1f8b51` (`fix(w4-16): keep all governed build-handoff outputs visible in account detail`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
+
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now carries explicit governed JSON exchange continuity alongside template/foundry/sheet/print lanes
 
 - Trigger:
