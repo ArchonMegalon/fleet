@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `lesson learned` / `lessons learned` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require aftermath/recap continuity and GM prep operations to remain one governed prep-library lane across canonical query rewrite, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand coverage already fail-closed debrief/postmortem/postsession/postrun/postgame/after-action/retro/hot-wash variants, but common table phrasing `lesson learned` and `lessons learned` was not canonicalized.
+  - this left a drift seam where lesson-learned recap language could miss governed prep packets and unresolved GM triage could classify recap signals outside `prep_library`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes compact/split/hyphen `lesson(s) learned` variants to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added lesson-learned recap vocabulary/pair detection to campaign return + aftermath matching so continuity publication and packet search remain aligned with canonical aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact/split/hyphen lesson-learned phrasing as governed `prep_library`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity matching, unresolved-domain coverage, and script-lock assertions for lesson-learned variants.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added prep-library API/workspace/browser checks for compact/split/hyphen lesson-learned variants, each fail-closing on route drift, non-`200`, empty governed result, or missing snippets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `67c24f14` (`fix(w3): canonicalize lesson-learned recap shorthand across continuity and gm ops`).
+- Push attempts:
+  - pending after commit.
+- Exact blocker:
+  - expected GitHub HTTPS credential absence may still block push in this environment.
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes non-canonical parity-oracle token ordering with active verify mutation coverage
 
 - Trigger:
