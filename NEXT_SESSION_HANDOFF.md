@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-4/5 carry-forward and campaign-memory now prefer newest consequence/roster/prep/travel anchors under stale list ordering
+
+- Trigger:
+  - frontier milestones `4` and `5` require return-loop and GM-ops narrative anchors to stay on the newest governed consequence and operations receipts.
+  - `BuildNextSessionCarryForward(...)` and `BuildCampaignMemory(...)` still had stale-order risk for consequence/roster/prep/travel lead selection and lacked direct regression tests that force stale-first ordering for those anchors.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineNextSessionCarryForwardPrefersMostRecentConsequencePrepAndTravelReceipts`.
+    - added `CampaignSpineCampaignMemoryPrefersMostRecentConsequenceRosterPrepAndTravelReceipts`.
+    - added helper overloads to invoke private carry-forward/memory builders with explicit consequence/roster/prep/travel lists for bounded stale-order regression coverage.
+  - retained corresponding service hardening already present in this run for timestamp-based lead selection in carry-forward and campaign-memory builders.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineNextSessionCarryForwardPrefersMostRecentConsequencePrepAndTravelReceipts|FullyQualifiedName~CampaignSpineCampaignMemoryPrefersMostRecentConsequenceRosterPrepAndTravelReceipts|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`314` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - carry-forward and campaign-memory summary/evidence anchors now remain recency-safe for consequence and GM-ops receipts even when upstream arrays arrive stale-first.
+  - milestone-4 return-loop language and milestone-5 ops-memory language stay aligned on newest governed anchors across consequence, roster movement, prep launch, and travel prefetch lanes.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 carry-forward and campaign-memory anchors now prefer newest aftermath/ops receipts instead of list-order first
 
 - Trigger:
