@@ -158,6 +158,38 @@
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 UI parity checklist now fail-closes missing legacy desktop control ids and enforces canonical oracle token shape
+
+- Trigger:
+  - frontier milestone `2` flagship proof lives primarily in `chummer6-ui`, but its parity checklist generator remained permissive compared with hardened Hub behavior.
+  - `scripts/generate-parity-checklist.sh` in UI still silently normalized token drift, lacked explicit desktop-control coverage projection, and did not fail-close if legacy desktop controls fell out of active dialog mappings.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-parity-checklist.sh`:
+    - added strict token canonicalization for `tabs`, `workspaceActions`, and `desktopControls` (string-only, non-blank, no whitespace padding, no duplicate-normalized ids).
+    - added source-path env overrides:
+      - `CHUMMER_CORE_ENGINE_ROOT`
+      - `CHUMMER_PRESENTATION_ROOT`
+      - `CHUMMER_PARITY_NAVIGATION_TAB_CATALOG_PATH`
+      - `CHUMMER_PARITY_WORKSPACE_ACTION_CATALOG_PATH`
+      - `CHUMMER_PARITY_DESKTOP_DIALOG_FACTORY_PATH`
+    - switched default catalog sources to sibling repos:
+      - `../chummer-core-engine/.../NavigationTabCatalog.cs`
+      - `../chummer-core-engine/.../WorkspaceSurfaceActionCatalog.cs`
+      - `../chummer-presentation/.../DesktopDialogFactory.cs`
+    - added desktop-controls coverage partitioning and fail-close check for missing legacy desktop control ids in live `DesktopDialogFactory` mappings.
+    - added desktop dialog source and `Desktop Controls Coverage` projection to checklist output, with informational extra-id label `present_in_dialog_factory_only`.
+  - regenerated `/docker/chummercomplete/chummer6-ui/docs/PARITY_CHECKLIST.md`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode|FullyQualifiedName~Legacy_ui_control_dialog_templates_cover_legacy_shell_controls" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; unrelated pre-existing analyzer warnings from `chummer-presentation` test project observed).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1` test on `net10.0`; same pre-existing analyzer warnings observed).
+- Current trusted state:
+  - milestone-2 parity checklist strictness in the flagship UI repo now matches the hardened posture expected for executable legacy-familiar proof: malformed oracle tokens and missing legacy desktop controls fail closed.
+  - checklist output now provides explicit desktop-control coverage evidence alongside tabs and workspace actions.
+- Push status:
+  - `chummer6-ui`: local changes in working tree (`scripts/generate-parity-checklist.sh`, `docs/PARITY_CHECKLIST.md`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes missing legacy desktop control ids against live DesktopDialogFactory coverage
 
 - Trigger:
