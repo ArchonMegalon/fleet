@@ -194,6 +194,39 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 desktop exit gates now fail-honest with explicit non-native host startup-smoke blockers for Windows and macOS
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged desktop install/update/recovery proof that cannot lie when per-platform startup smoke evidence is missing.
+  - Windows/macOS gate receipts already failed on missing startup smoke receipts, but they did not explicitly surface host-capability blockers when executed on non-native hosts (for example Linux without Windows or macOS startup-smoke capability).
+  - this made operator diagnosis ambiguous between missing evidence and impossible-in-host execution conditions, slowing honest promotion triage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added host capability evidence fields: `host_operating_system`, `host_operating_system_normalized`, and `host_supports_windows_startup_smoke`.
+    - added explicit startup-smoke blocker evidence `startup_smoke_external_blocker=missing_windows_host_capability` when receipt is missing on non-Windows-capable hosts.
+    - added explicit fail-close reason: `Windows startup smoke requires a Windows-capable host; current host cannot run promoted Windows installer smoke.`
+    - restored fail-close legacy path detection reasons for installer and startup-smoke receipt paths resolved from `chummer5a`.
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - added host capability evidence fields: `host_operating_system`, `host_operating_system_normalized`, and `host_supports_macos_startup_smoke`.
+    - added explicit startup-smoke blocker evidence `external_blocker=missing_macos_host_capability` when receipt is missing on non-macOS hosts lacking `hdiutil`.
+    - added explicit fail-close reason: `macOS startup smoke requires a macOS host with hdiutil; current host cannot run promoted macOS installer smoke.`
+    - restored fail-close legacy path detection reasons for installer and startup-smoke receipt paths resolved from `chummer5a`.
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded macOS and Windows desktop-exit gate script assertions to lock new host-blocker evidence/reason markers.
+  - regenerated `/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - top-level failure reasons now include explicit host-capability blockers propagated from Windows/macOS gate receipts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/materialize-windows-desktop-exit-gate.sh` -> FAIL expected with explicit reason `Windows startup smoke requires a Windows-capable host; current host cannot run promoted Windows installer smoke.`
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL expected with explicit reason `macOS startup smoke requires a macOS host with hdiutil; current host cannot run promoted macOS installer smoke.`
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL expected with propagated Windows/macOS host-capability blocker reasons in top-level milestone receipt.
+- Current trusted state:
+  - milestone-1/3 desktop executable proof now fails explicitly on missing non-native host capability, not only missing receipt files.
+  - operator triage can distinguish evidence-regression versus host-capability blockers without reading script internals.
+- Push status:
+  - `chummer6-ui`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 live journey audits now fail-close on governed `return` prep retrieval across API and workspace route
 
 - Trigger:
