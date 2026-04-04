@@ -52,6 +52,33 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-17 import-oracle lane now accepts Hero Lab Online array-shaped actors/items payloads with executable parity coverage
+
+- Trigger:
+  - frontier milestone `17` requires Hero Lab Online import-oracle proofs to stay resilient to real payload-shape drift, not only key alias/casing drift.
+  - `HeroLabShadowrunImporter` still assumed object-only shapes for:
+    - root `actors`
+    - actor `items`
+    - nested item `items`
+  - this left a regression seam where array-shaped exports could fail import despite carrying equivalent governed content.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Application/Workspaces/HeroLabShadowrunImporter.cs`:
+    - `ResolveOnlineLeadActor(...)` now accepts `actors` as object or array (prefers explicit lead flags, then first usable actor).
+    - online item enumeration now accepts both object and array shapes via `EnumerateOnlineItems(...)`.
+    - nested item parsing now recurses through object or array child collections.
+    - import path now uses alias-tolerant property readers for actor/player/name/game-values and item ids.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/HeroLabRulesParityAudit.cs`:
+    - extended `AssertOnlineAliasAndMetadataDriftHandling()` with an explicit array-shaped Hero Lab Online payload fixture-in-code.
+    - new assertions lock actor selection, profile/progress carry-forward, attribute projection, and nested weapon/armor parsing for array forms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+- Commits landed:
+  - `chummer6-core`: `102977cd` (`fix(w17): harden Hero Lab online array-shape import parity`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `2079ab04..102977cd`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 fleet status lane now preserves shard-local frontier/open-milestone truth on shard-root status and manifest-aware live refresh
 
 - Trigger:
