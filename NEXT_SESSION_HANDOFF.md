@@ -1,3 +1,21 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for hostless `releaseProof.baseUrl` origins
+
+- Trigger:
+  - frontier milestone `2` parity audit enforces canonical origin structure for nested `releaseProof.baseUrl`, including mandatory authority host.
+  - verify mutations covered non-http scheme, path/query segments, userinfo, casing, and allowlist drift, but did not execute the hostless-origin fail-close branch.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.baseUrl="https://"` and asserted parity-audit rejection of hostless origins.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now explicitly executes `releaseProof.baseUrl must include authority host` fail-close).
+- Current trusted state:
+  - Hub verify now executes the full nested base-origin hardening set, including hostless-origin rejection, rather than only scheme/path/userinfo/casing and allowlist branches.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes gate-envelope channel alias drift across Linux head metadata plus Windows/macOS gate payloads
 
 - Trigger:
