@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-2 release verifier now fail-closes incomplete baseline golden journey coverage in `releaseProof.journeysPassed`
+
+- Trigger:
+  - frontier milestone `2` requires release shelf proof to stay grounded in canonical end-to-end journey coverage, not only token-valid journey labels.
+  - `chummer6-hub-registry` verifier already enforced `releaseProof.journeysPassed` shape (non-empty, canonical token format, duplicate-free), but still accepted incomplete subsets of the canonical golden journey baseline.
+  - this left a drift path where promoted release truth could pass with partial journey provenance while still looking structurally valid.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added required baseline journey set for `releaseProof.journeysPassed`:
+      - `install_claim_restore_continue`
+      - `build_explain_publish`
+      - `campaign_session_recover_recap`
+      - `report_cluster_release_notify`
+    - verifier now fail-closes when any baseline golden journey id is missing.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving verifier fail-close when `releaseProof.journeysPassed` omits one required baseline golden journey id.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented baseline golden journey completeness requirement for `releaseProof.journeysPassed`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - promoted release-channel verification now rejects partial golden-journey provenance even when entries are otherwise canonical and non-empty.
+  - milestone-2 shelf proof must carry complete baseline journey coverage instead of format-only journey placeholders.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 aggregate executable gate now fail-closes missing host-capability blocker markers across Windows/macOS/Linux when startup-smoke receipts are absent
 
 - Trigger:
