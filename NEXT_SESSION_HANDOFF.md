@@ -1,3 +1,54 @@
+## 2026-04-04: milestone-2 localization gate now emits explicit `en-us` locale-summary coverage, closing Fleet fail-close drift on shipping-locale completeness
+
+- Trigger:
+  - after Fleet milestone-2 hardening, live readiness started fail-closing `UI_LOCALIZATION_RELEASE_GATE.generated.json` because `shipping_locales` declared `en-us` but `locale_summary` omitted it.
+  - `b15-localization-release-gate.sh` intentionally summarized only non-default locales, leaving a structural mismatch between declared shipping-locale inventory and summary coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh`:
+    - localization gate now emits an explicit `locale_summary` row for `en-us` with zero untranslated debt and full default override coverage.
+    - `en-us` row now includes the same structural keys as non-default rows (`override_count`, `minimum_override_count`, `default_key_count`, `untranslated_key_count`, `missing_release_seed_keys`, legacy corpus flags), so downstream parsers can enforce one complete shipping-locale shape.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json` via B15.
+  - rematerialized Fleet readiness mirrors to consume updated UI localization proof:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~DesktopLocalizationCatalogTests|FullyQualifiedName~LocalizationReleaseGateSmokeTests" --nologo -v minimal` -> PASS (`1` filtered test on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+  - readiness evidence probe:
+    - `ui_localization_release_gate_locale_summary_count=6`
+    - `ui_localization_release_gate_shipping_locale_count=6`
+    - `ui_localization_release_gate_missing_locale_summary_shipping_locale_count=0`
+- Current trusted state:
+  - milestone-2 localization structural integrity now stays consistent across declared shipping locales and summary coverage.
+  - Fleet no longer reports the newly surfaced missing-`en-us` locale-summary blocker; remaining `desktop_client` fail reasons are still real Windows/macOS promoted installer tuple blockers.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/b15-localization-release-gate.sh`, `.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`; credential-dependent).
+  - `fleet`: readiness mirrors and handoff updated locally in this follow-on slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-5 GM unresolved triage now treats prep-launch and travel-prefetch pressure as event-control domain signals
+
+- Trigger:
+  - frontier milestone `5` requires event/season operations to stay first-class in the same governed GM lane as opposition and roster movement.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` only recognized literal `event control` and `season` tokens, so unresolved prep-launch/travel-prefetch signals could be misclassified as `general` and drop below newer generic unresolved noise.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded event-control domain detection to classify these variants as `event_control`: `checkpoint`, `timeline`, `operation(s)`, `prep launch`/`prep_launch`, and `travel prefetch`/`travel_prefetch` (while preserving `opposition` > `event_control` > `roster_movement` > `general` priority).
+    - added shared `ContainsAny(...)` helper for normalized token checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatPrepLaunchAndTravelPrefetchSignalsAsEventControlDomain`.
+    - test locks ordering so prep-launch/travel-prefetch unresolved rows stay ahead of newer general unresolved items when severity is equal.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`17` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`340` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM unresolved projection no longer depends on literal `event control` phrasing to keep milestone-5 event-control blockers in the prioritized triage lane.
+  - prep-launch and travel-prefetch operator pressure now aligns with the same event-control semantics already used in campaign workspace prep/event packet surfaces.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 flagship readiness now fail-closes missing locale-summary coverage for declared shipping locales
 
 - Trigger:
