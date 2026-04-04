@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests required-head emptiness plus promoted/missing head shape fail-close
+
+- Trigger:
+  - frontier milestones `1` and `3` still needed active mutation coverage for additional `desktopTupleCoverage` shape guards in `scripts/verify_public_release_channel.py`:
+    - `desktopTupleCoverage.requiredDesktopHeads must include at least one head`
+    - `desktopTupleCoverage.promotedPlatformHeads must be an object`
+    - `desktopTupleCoverage.missingRequiredHeads must be a string list`
+  - without explicit mutations, these fail-close branches could regress silently while the verify lane remained green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation setting `desktopTupleCoverage.requiredDesktopHeads = []` and marker assertion for required-head non-empty fail-close.
+    - added mutation setting `desktopTupleCoverage.promotedPlatformHeads` to a non-object value and marker assertion for object-shape fail-close.
+    - added mutation setting `desktopTupleCoverage.missingRequiredHeads` to a scalar and marker assertion for string-list fail-close.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close marker emissions for all three new mutations).
+- Commits landed:
+  - `chummer-hub-registry`: `fc2a75a` (`test(w1): mutate desktop tuple coverage required-head/object shapes`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `caf5716..fc2a75a`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests missing and malformed desktopTupleCoverage shape fail-close
 
 - Trigger:
