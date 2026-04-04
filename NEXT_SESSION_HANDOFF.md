@@ -41,6 +41,41 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 event-control shorthand now fail-closes compact `eventops` and `eventop` aliases across prep query normalization, GM unresolved-domain triage, and live API/UI journey audits
+
+- Trigger:
+  - frontier milestone `5` requires GM operations, prep library, and event controls to stay one governed lane without shorthand drift.
+  - compact event-control shorthand `eventops`/`eventop` was not explicitly normalized in campaign workspace and GM prep search token rewriting, and unresolved-domain event triage plus live audit/browser journey checks did not exercise those aliases.
+  - this left a drift path where common event-ops shorthand could regress without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `eventops` and `eventop` to compact event-control token vocabulary.
+    - prep query alias rewrite now canonicalizes `eventops|eventop` to event-control tokens (`eventcontrol`, `event`, `operation`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - GM prep-asset query tokenization now rewrites `eventops|eventop` to canonical event-control tokens.
+    - unresolved-domain classifier now treats `eventops|eventop` (plus separator variants) as `event_control` lane signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsEventOpsShorthandAcrossWhitespaceBoundaries`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatEventOpsShorthandAsEventControlDomain`.
+    - expanded compact shorthand prep-asset query test to assert `eventops` and `eventop` match governed event-control assets.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=eventops` and `queryText=eventop`.
+    - added signed-in workspace route checks for `prepQuery=eventops` and `prepQuery=eventop` with non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `eventops` and `eventop`, including route-preservation and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and Playwright marker assertions to lock `eventops|eventop` coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsEventOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatEventOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control shorthand retrieval/triage now fail-closes compact `eventops`/`eventop` coverage across server packet matching, GM unresolved-domain prioritization, API audits, and signed-in workspace route/browser proof.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 GM ops board now fail-closes compact `gmops` and `gmop` aliases across prep-asset search tokenization and unresolved-domain triage
 
 - Trigger:
