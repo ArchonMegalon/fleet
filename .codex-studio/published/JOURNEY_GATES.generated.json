@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:12:26Z",
+  "generated_at": "2026-04-04T18:15:07Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:11:45Z",
+      "at": "2026-04-04T18:14:54Z",
       "state": "fresh",
-      "age_seconds": 41
+      "age_seconds": 13
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:11:14Z",
       "state": "fresh",
-      "age_seconds": 72
+      "age_seconds": 233
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 3264
+      "age_seconds": 3425
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 3264
+      "age_seconds": 3425
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 3263
+      "age_seconds": 3424
     }
   },
   "journeys": [
@@ -674,7 +674,13 @@
             "path": ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
             "must_contain": [
               "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
-              "\"campaign_session_recover_recap\""
+              "\"campaign_session_recover_recap\"",
+              "Assert(projection.OfflineTruthSummary.Contains(\\\"Stale:\\\", StringComparison.Ordinal)",
+              "Assert(plan.TravelCompanionSummary.Contains(\\\"Cached:\\\", StringComparison.Ordinal)",
+              "Assert(plan.TravelCompanionSummary.Contains(\\\"Offline actions:\\\", StringComparison.Ordinal)",
+              "id=\\\"workspace-offline-truth\\\"",
+              "id=\\\"restore-offline-truth\\\"",
+              "id=\\\"restore-travel-companion\\\""
             ]
           },
           {

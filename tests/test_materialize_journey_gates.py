@@ -1763,6 +1763,17 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'public const string Dashboard = "dashboard";' in hub_dashboard_contracts.get("must_contain", [])
     assert 'public const string SessionDashboard = "session-dashboard";' in hub_dashboard_contracts.get("must_contain", [])
 
+    mobile_local_release_proof = proof_for(
+        "chummer6-mobile",
+        ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    )
+    assert 'Assert(projection.OfflineTruthSummary.Contains(\\"Stale:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(plan.TravelCompanionSummary.Contains(\\"Cached:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(plan.TravelCompanionSummary.Contains(\\"Offline actions:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'id=\\"workspace-offline-truth\\"' in mobile_local_release_proof.get("must_contain", [])
+    assert 'id=\\"restore-offline-truth\\"' in mobile_local_release_proof.get("must_contain", [])
+    assert 'id=\\"restore-travel-companion\\"' in mobile_local_release_proof.get("must_contain", [])
+
     executive_assistant_skill_catalog = proof_for("executive-assistant", "SKILLS.md")
     assert "`gm_ops_briefing`" in executive_assistant_skill_catalog.get("must_contain", [])
     assert "`opposition_packet`" in executive_assistant_skill_catalog.get("must_contain", [])
