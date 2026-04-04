@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests promoted installer tupleId integrity fail-close
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-channel tuple truth to fail closed if promoted installer tuple rows lose required identifiers or permit duplicate tuple identities.
+  - `scripts/verify_public_release_channel.py` already fail-closed both seams:
+    - `desktopTupleCoverage.promotedInstallerTuples entries must include tupleId`
+    - `desktopTupleCoverage.promotedInstallerTuples must not contain duplicate tupleId values`
+  - `scripts/ai/verify.sh` did not actively mutate these two tupleId-integrity branches.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation that removes `tupleId` from a `desktopTupleCoverage.promotedInstallerTuples` row and asserts explicit fail-close marker text.
+    - added mutation that duplicates a promoted tuple row (duplicate `tupleId`) and asserts explicit duplicate-id fail-close marker text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close marker emissions for both tupleId integrity mutations).
+- Commits landed:
+  - `chummer-hub-registry`: `5b8ed2d` (`test(w1): mutate promoted tupleId integrity in verify lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `fc2a75a..5b8ed2d`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests required-head emptiness plus promoted/missing head shape fail-close
 
 - Trigger:
