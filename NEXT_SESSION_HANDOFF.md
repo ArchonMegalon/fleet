@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-5 live journey audits now fail-close on compact `eventcontrol` and `eventctrl` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestone `5` requires GM event-control operations to stay first-class on the same governed prep-library lane as opposition packets, season operations, and roster movement.
+  - campaign workspace token normalization already supports compact event-control forms (`eventcontrol`, `eventctrl`) and GM ops tests prove those aliases map to governed prep assets.
+  - live signed-in closeout audits did not assert these compact event-control queries in API or workspace-route journeys, leaving a drift window where alias retrieval could regress without breaking closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=eventcontrol` with non-empty governed packet results.
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=eventctrl` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=eventcontrol` and `?prepQuery=eventctrl`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search steps for `eventcontrol` and `eventctrl` after compact season queries, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=eventcontrol`, `queryText=eventctrl`, `prepQuery=eventcontrol`, `prepQuery=eventctrl`, and playwright markers `?prepQuery=eventcontrol` / `?prepQuery=eventctrl`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-5 audits now fail-close if compact event-control alias retrieval (`eventcontrol`, `eventctrl`) drifts in API or workspace route flows.
+  - GM event-control prep retrieval proof now spans compact `seasonops`/`seasonop` and compact `eventcontrol`/`eventctrl` token paths in closeout automation.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on compact `rostermove` prep retrieval across API and workspace route
 
 - Trigger:
