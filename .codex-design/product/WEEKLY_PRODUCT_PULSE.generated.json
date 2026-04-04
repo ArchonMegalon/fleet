@@ -1,54 +1,67 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 1,
-  "generated_at": "2026-03-31T14:34:09Z",
-  "as_of": "2026-04-01",
+  "generated_at": "2026-04-03T15:29:59Z",
+  "as_of": "2026-04-04",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
   "progress_history_source": "products/chummer/PROGRESS_HISTORY.generated.json",
-  "summary": "Next 20 Big Wins After Post-Audit Closeout remains the active wave; journey proof is warning; overall progress is 100% in 'Public-fit polish'; the longest pole remains Core Engine; support closure is clear.",
-  "active_wave": "Next 20 Big Wins After Post-Audit Closeout",
-  "active_wave_status": "complete",
+  "summary": "Next 12 Biggest Wins remains the active wave; journey proof is blocked; overall progress is 100% in 'Public-fit polish'; the longest pole remains Core Engine; support closure is clear.",
+  "active_wave": "Next 12 Biggest Wins",
+  "active_wave_status": "active",
   "journey_gate_health": {
-    "state": "warning",
-    "reason": "Close the remaining target-stage warnings before claiming the campaign OS is boringly proven.",
-    "blocked_count": 0,
-    "warning_count": 5
+    "state": "blocked",
+    "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
+    "blocked_count": 3,
+    "warning_count": 0
   },
   "governor_decisions": [
     {
-      "decision_id": "2026-04-01-closeout-and-continue-next-20-big-wins-after-post-audit-closeout",
-      "action": "closeout_and_continue",
-      "reason": "Keep the recommended wave on Next 20 Big Wins After Post-Audit Closeout now that the Post-Audit Next 20 Big Wins program is materially closed. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 6 snapshots, and the pacing risk is still concentrated in Core Engine rather than in reopened foundation, campaign-middle, or trust-surface blockers.",
+      "decision_id": "2026-04-04-focus-next-12-biggest-wins",
+      "action": "focus_shift",
+      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 9 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
       "cited_signals": [
         "overall_progress_percent=100",
-        "history_snapshot_count=6",
+        "history_snapshot_count=9",
         "oldest_blocker_days=0",
         "phase_label=Public-fit polish",
-        "longest_pole=Core Engine"
+        "longest_pole=Core Engine",
+        "active_wave_status=active"
+      ]
+    },
+    {
+      "decision_id": "2026-04-04-launch-governance",
+      "action": "freeze_launch",
+      "reason": "Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked.",
+      "cited_signals": [
+        "journey_gate_state=blocked",
+        "journey_gate_blocked_count=3",
+        "local_release_proof_status=unknown",
+        "provider_canary_status=Canary green on all active lanes",
+        "closure_health_state=clear"
       ]
     }
   ],
   "next_checkpoint_question": "What is the smallest cross-repo slice that makes the campaign OS indispensable and turns trust, adoption, and publication depth into a real launch advantage?",
   "snapshot": {
     "release_health": {
-      "state": "green_or_explained",
-      "reason": "No red blockers are open. Foundation release remains closed and the active work is additive middle-layer and trust-surface depth.",
+      "state": "needs_attention",
+      "reason": "At least one red blocker is open, so release posture needs explicit justification before promotion or claim expansion.",
       "front_door_wave_closed": true
     },
     "journey_gate_health": {
-      "state": "warning",
-      "reason": "Close the remaining target-stage warnings before claiming the campaign OS is boringly proven.",
-      "blocked_count": 0,
-      "warning_count": 5
+      "state": "blocked",
+      "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
+      "blocked_count": 3,
+      "warning_count": 0
     },
     "top_support_or_feedback_clusters": [
       {
-        "cluster_id": "campaign_os_indispensable_and_launch_scale",
-        "summary": "Next 20 Big Wins After Post-Audit Closeout is the post-post-audit additive pressure cluster: make the campaign OS indispensable, widen Build and Explain, strengthen exchange and publication, and turn trust plus operator depth into launch-scale product posture.",
+        "cluster_id": "next12_trust_publication_launch_scale",
+        "summary": "Next 12 Biggest Wins is the active pressure cluster: finish install-specific trust/support truth, creator publication and shelf posture, pulse-v3 launch governance, and no-step-back utility parity.",
         "source_paths": [
           "products/chummer/ROADMAP.md",
-          "products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
+          "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
         ]
       },
       {
@@ -73,68 +86,77 @@
     "public_promise_drift_count": 0,
     "governor_decisions": [
       {
-        "decision_id": "2026-04-01-closeout-and-continue-next-20-big-wins-after-post-audit-closeout",
-        "action": "closeout_and_continue",
-        "reason": "Keep the recommended wave on Next 20 Big Wins After Post-Audit Closeout now that the Post-Audit Next 20 Big Wins program is materially closed. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 6 snapshots, and the pacing risk is still concentrated in Core Engine rather than in reopened foundation, campaign-middle, or trust-surface blockers.",
+        "decision_id": "2026-04-04-focus-next-12-biggest-wins",
+        "action": "focus_shift",
+        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 9 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
         "cited_signals": [
           "overall_progress_percent=100",
-          "history_snapshot_count=6",
+          "history_snapshot_count=9",
           "oldest_blocker_days=0",
           "phase_label=Public-fit polish",
-          "longest_pole=Core Engine"
+          "longest_pole=Core Engine",
+          "active_wave_status=active"
+        ]
+      },
+      {
+        "decision_id": "2026-04-04-launch-governance",
+        "action": "freeze_launch",
+        "reason": "Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked.",
+        "cited_signals": [
+          "journey_gate_state=blocked",
+          "journey_gate_blocked_count=3",
+          "local_release_proof_status=unknown",
+          "provider_canary_status=Canary green on all active lanes",
+          "closure_health_state=clear"
         ]
       }
     ],
     "next_checkpoint_question": "What is the smallest cross-repo slice that makes the campaign OS indispensable and turns trust, adoption, and publication depth into a real launch advantage?"
   },
   "supporting_signals": {
-    "current_recommended_wave": "Next 20 Big Wins After Post-Audit Closeout",
+    "current_recommended_wave": "Next 12 Biggest Wins",
     "overall_progress_percent": 100,
     "phase_label": "Public-fit polish",
-    "history_snapshot_count": 6,
+    "history_snapshot_count": 9,
     "longest_pole": "Core Engine",
-    "launch_readiness": "Hold launch expansion pending fresh local release proof on the public edge.",
+    "launch_readiness": "Hold launch expansion pending route-canary validation. 3 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
       "canary_status": "Canary green on all active lanes",
-      "review_due": "2026-04-14",
+      "review_due": "2026-04-17",
       "next_decision": "Hold broad promotion until fresh local release proof passes on the public edge."
     },
     "journey_gate_source": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "post_audit_next20_status": "complete",
-    "active_wave_registry": "products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml",
+    "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
     "scorecard_metric_count": 22,
     "closure_health": {
       "state": "clear",
       "open_case_count": 0,
       "waiting_closure_count": 0,
       "pending_human_response_count": 0,
-      "reported_case_count": 1,
+      "reported_case_count": 0,
       "materialized_packet_count": 0,
       "design_impact_count": 0,
-      "summary": "0 waiting closure / 0 pending human response. 0 open support packets across 1 reported cases."
+      "summary": "0 waiting closure / 0 pending human response. 0 open support packets across 0 reported cases."
     },
     "adoption_health": {
       "state": "early",
       "local_release_proof_status": "unknown",
       "proven_journey_count": 0,
       "proven_route_count": 0,
-      "history_snapshot_count": 6,
-      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 6 weekly snapshots are on record for the current public trust posture."
+      "history_snapshot_count": 9,
+      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 9 weekly snapshots are on record for the current public trust posture."
     },
     "progress_trend": {
       "state": "steady",
       "direction": "flat",
       "delta_percent": 0,
-      "from_as_of": "2026-03-29",
-      "to_as_of": "2026-03-31",
-      "summary": "Flat trend 0% from 2026-03-29 to 2026-03-31. Trend window: 2026-03-23 100% -> 2026-03-25 73% -> 2026-03-27 73% -> 2026-03-28 100% -> 2026-03-29 100% -> 2026-03-31 100%.",
-      "sample_count": 6,
+      "from_as_of": "2026-04-02",
+      "to_as_of": "2026-04-03",
+      "summary": "Flat trend 0% from 2026-04-02 to 2026-04-03. Trend window: 2026-03-25 73% -> 2026-03-27 73% -> 2026-03-28 100% -> 2026-03-29 100% -> 2026-03-31 100% -> 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100%.",
+      "sample_count": 8,
       "samples": [
-        {
-          "as_of": "2026-03-23",
-          "overall_progress_percent": 100
-        },
         {
           "as_of": "2026-03-25",
           "overall_progress_percent": 73
@@ -153,6 +175,18 @@
         },
         {
           "as_of": "2026-03-31",
+          "overall_progress_percent": 100
+        },
+        {
+          "as_of": "2026-04-01",
+          "overall_progress_percent": 100
+        },
+        {
+          "as_of": "2026-04-02",
+          "overall_progress_percent": 100
+        },
+        {
+          "as_of": "2026-04-03",
           "overall_progress_percent": 100
         }
       ]
