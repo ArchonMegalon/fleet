@@ -34,6 +34,7 @@
 
 - Commits landed:
   - `chummer6-ui`: `3a9cb92e` (`fix(w1): classify quarantined installer marker posture in executable gate`).
+  - `chummer6-ui`: `8854b386` (`test(w1): script-lock quarantine marker classifier rails`).
 - Trigger:
   - milestone-1/3 executable gate reasons reported quarantined tuples, but did not distinguish whether candidate installer bytes were structurally promotion-ready (embedded payload + bundled sample markers present) or structurally invalid.
   - this obscured whether the next action was platform startup-smoke proof collection vs installer rebuild.
@@ -47,6 +48,8 @@
       - payload-valid quarantined bytes blocked pending matching startup-smoke proof.
       - quarantined bytes failing embedded marker checks (cannot be promoted).
   - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` so published receipt reasons include the new tuple-level classifier output.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - script-lock assertions now require the quarantine marker summarizer helper, evidence field wiring, and new Windows/macOS classifier reason strings.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL honestly on missing promoted Windows/macOS tuples and missing non-Linux startup-smoke host capability, now with explicit quarantine marker classification reasons.
@@ -54,7 +57,7 @@
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - local environment has no configured GitHub HTTPS credentials, so commit `3a9cb92e` remains local-only until auth is restored.
+  - local environment has no configured GitHub HTTPS credentials, so commits `3a9cb92e` and `8854b386` remain local-only until auth is restored.
 
 ## 2026-04-04: milestone-4/5 GM ops lane now script-locks split singular `league ctrl` and `community ctrl` aliases across API and workspace/browser audits
 
