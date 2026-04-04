@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5/6 EA now also fail-proves W3 builtin contract runtime-policy resolution at service level
+
+- Trigger:
+  - planner-level W3 matrix coverage was landed, but service-level builtin contract resolution still lacked one direct regression that pins runtime-policy defaults across the same campaign/GM key set.
+- Landed:
+  - patched `/docker/EA/tests/test_task_contract_runtime_policy.py`:
+    - added `test_builtin_w3_campaign_and_gm_contracts_resolve_with_groundwork_runtime_policy` parameterized across all milestone `4`/`5`/`6` EA builtin keys.
+    - fail-proves per-key contract resolution for task key, deliverable type, required tool availability, and runtime policy defaults:
+      - `workflow_template == tool_then_artifact`
+      - `pre_artifact_capability_key == structured_generate`
+      - `brain_profile == groundwork`
+      - `posthoc_review_profile == review_light`
+      - `artifact_output_template == groundwork_brief`
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest tests/test_planner.py tests/test_task_contract_runtime_policy.py -q` -> PASS (`50 passed`).
+- Commits landed:
+  - `EA`: `319ef1e` (`test(w3-4-5-6): pin builtin contract runtime policy matrix`).
+- Push attempts:
+  - `cd /docker/EA && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push remains credential-gated for GitHub HTTPS in this environment.
+
 ## 2026-04-04: milestone-4/5/6 EA built-in campaign and GM contract matrix is now fully fail-proved and cataloged
 
 - Trigger:
