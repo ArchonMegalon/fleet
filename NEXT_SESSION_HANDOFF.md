@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4 continuity lane now treats full aftermath recap shorthand as campaign-return recap signal for packet synthesis
+
+- Trigger:
+  - frontier milestone `4` requires campaign truth to span recap and next-session return as one governed lane.
+  - workspace aftermath and GM ops routing already recognized broad recap shorthand (`debrief*`, `outbrief*`, `post*`, `retro*`, `hotwash*`, `lesson*`, `afteraction*`), but campaign-return recap detection still only consumed a narrower subset.
+  - this left a drift seam where recap publications using valid continuity shorthand could fail to seed `campaign_return_packet` evidence unless separate return tokens existed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return recap detection now also accepts the shared aftermath recap shorthand vocabulary by wiring `ContainsAftermathRecapToken(...)` into:
+      - `IsCampaignReturnRecapSignal(...)`
+      - `ContainsCampaignReturnRecapToken(...)`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketIncludesRecapKindFallbackWhenRecapUsesContinuityShorthand` theory covering:
+      - `debriefing`, `de-briefing`, `out-briefing`, `post-session`, `post-run`, `post-game`, `postmortem`, `afteractionreview`, `retrospective`, `hotwash`, `lessonlearned`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketIncludesRecapKindFallbackWhenRecapSignalsAreSparse|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketIncludesRecapKindFallbackWhenRecapUsesContinuityShorthand|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`27` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` for campaign-return recap shorthand alignment.
+  - pending local commit in `fleet` for handoff refresh.
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes release-proof `journeysPassed` and `proofRoutes` alias drift at projection time
 
 - Trigger:
