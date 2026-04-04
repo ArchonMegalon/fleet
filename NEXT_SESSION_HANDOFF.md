@@ -40,6 +40,36 @@
 - Current trusted state:
   - milestone-4/5 prep-library query behavior now treats `contact`/`contacts` as first-class continuity wording in both campaign workspace and GM ops lanes through the same shared contracts canonicalizer.
 
+## 2026-04-04: follow-up on milestone-2 published release-channel parity drift guard commit and push status
+
+- Commits landed:
+  - `chummer6-hub-registry`: `429ff37` (`fix(milestone-2): fail-close published release-channel parity drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry -> fleet/hub-registry` updated to `429ff37`).
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: milestone-2 hub-registry verify now fail-closes checked-in release-channel receipt drift before contract/runtime verification
+
+- Trigger:
+  - `chummer6-hub` milestone-2 parity verify consumed `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` and failed on alias drift in nested `releaseProof` fields.
+  - hub-registry verify only exercised generated fixtures, so drift in the checked-in published receipt could bypass repo-local verify and break downstream parity consumers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added an early fail-closed check that requires the checked-in published release channel receipt to exist.
+    - added an early fail-closed check that requires `python3 scripts/verify_public_release_channel.py` to pass on that checked-in receipt.
+  - repaired `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` canonical release-proof shape:
+    - refreshed `releaseProof.generatedAt`/`generated_at` to current UTC receipt generation.
+    - restored canonical `releaseProof.journeysPassed` baseline ids.
+    - restored canonical `releaseProof.baseUrl` origin form.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 parity consumers now fail fast when the checked-in registry release channel receipt drifts, and the current published receipt passes both registry and hub parity verification paths.
+
 ## 2026-04-04: follow-up on prep-query canonicalization unification commit and push status
 
 - Commits landed:
