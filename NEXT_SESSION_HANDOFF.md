@@ -59,6 +59,35 @@
 - Exact blocker:
   - none for this landed slice; remote push is blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-6 travel mode now emits explicit offline actionability proof for downtime/diary, contacts/heat, aftermath, and prep review
+
+- Trigger:
+  - milestone `6` requires continuity proof to show not only stale-vs-fresh travel cache posture, but also what claimed users can still do while offline.
+  - account workspace travel mode already exposed cache freshness counts and per-device status, but did not expose a governed offline actionability summary tied to campaign lanes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Contracts/CampaignWorkspaceServerPlaneContracts.cs`:
+    - `TravelModeReadinessSummary` now includes `OfflineActionabilitySummary`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - travel mode now computes `OfflineActionabilitySummary` from governed campaign lanes and counts:
+      - downtime/diary lane cues
+      - contacts/heat consequence cues
+      - aftermath recap package count
+      - governed prep packet count
+    - summary fail-closes to blocked posture when no travel-safe claimed device exists.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/TravelModeCacheFreshnessTests.cs`:
+    - fail-proves offline actionability summary presence for both fresh/stale and no-prefetch-receipt travel states.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`:
+    - source guard now requires `OfflineActionabilitySummary` + `Offline actionability` rendering hook in account workspace travel mode.
+    - aligned existing publication/trust source-guard assertions with rendered expression form (`output.PublicationState` and `output.TrustBand`), removing brittle `@output...` mismatch.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`388` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `9a3c49b2` (`feat(w3-6): expose offline actionability in travel mode`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for this landed milestone-6 slice; remote push is blocked in this environment by missing GitHub credential material.
+
 ## 2026-04-04: milestone-6 account workspace now renders per-device travel cache status so stale readiness is actionable
 
 - Trigger:
