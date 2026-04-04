@@ -573,6 +573,54 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 B14 now enforces explicit install-update-recovery lifecycle runtime proof in per-head workflow contracts
+
+- Trigger:
+  - frontier milestones 1 and 3 require the desktop install/update/recovery lane to stay honest alongside visual/workflow per-head proof.
+  - `b14-flagship-ui-release-gate.sh` did not require or execute explicit desktop lifecycle runtime tests (`install linking`, `startup smoke`, `update scheduling`) before emitting per-head pass proofs.
+  - `materialize-desktop-workflow-execution-gate.sh` per-head contract markers did not enforce lifecycle markers, so executable acceptance could pass without explicit lifecycle proof markers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - added required lifecycle runtime test inventory checks for:
+      - `CheckAndScheduleStartupUpdateAsync_rollout_blocked_manifests_reason_and_stops_scheduling`
+      - `BuildSupportPortalRelativePathForUpdate_includes_manifest_and_error_context`
+      - `TryHandleAsync_writes_receipt_when_requested`
+    - added explicit runtime execution step:
+      - `run_with_retry 2 "desktop install/update/recovery runtime tests" ...`
+    - extended generated flagship proof payload:
+      - interaction marker `installUpdateRecoveryLifecycle: pass`
+      - per-head markers `releaseLifecycle: pass`
+      - per-head `requiredLifecycleTests`
+      - top-level `desktopLifecycleProof`
+    - fixed B14 sequencing so flagship receipt is written before workflow materializer re-evaluates per-head contract markers.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - per-head required marker contracts now include:
+      - status marker `releaseLifecycle`
+      - list marker `requiredLifecycleTests`
+    - both Avalonia and Blazor-desktop per-head contracts fail when lifecycle marker families are missing/failing.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked new B14 lifecycle test execution and marker contract strings.
+    - locked workflow materializer lifecycle marker expectations.
+  - refreshed generated UI gate receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/b14-flagship-ui-release-gate.sh scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal -m:1` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-1/3 per-head workflow contracts now explicitly require install/update/recovery lifecycle markers, and B14 executes lifecycle runtime tests before asserting per-head pass proof.
+  - executable gate remains fail-honest on true external publication gaps only (Windows/macOS promoted tuple availability).
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 workflow execution proof now enforces per-head contract markers and executable gate consumption
 
 - Trigger:
