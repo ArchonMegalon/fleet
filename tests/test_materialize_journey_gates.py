@@ -217,6 +217,48 @@ def test_release_channel_external_proof_reasons_reject_missing_platform_pair_inv
     )
 
 
+def test_release_channel_external_proof_reasons_require_explicit_complete_flag() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ],
+        }
+    }
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any("desktopTupleCoverage.complete' must be an explicit boolean" in reason for reason in reasons)
+
+
+def test_release_channel_external_proof_reasons_reject_complete_flag_drift() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "complete": True,
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ],
+        }
+    }
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.complete' must match missingRequiredPlatformHeadRidTuples completeness" in reason
+        for reason in reasons
+    )
+
+
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"

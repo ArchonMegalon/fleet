@@ -310,6 +310,11 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
     requests = _release_channel_external_proof_requests(payload)
     reasons: List[str] = []
     coverage = dict(payload.get("desktopTupleCoverage") or {})
+    reported_complete = coverage.get("complete")
+    if not isinstance(reported_complete, bool):
+        reasons.append(
+            "release_channel.generated.json field 'desktopTupleCoverage.complete' must be an explicit boolean."
+        )
     reported_missing_tuples = coverage.get("missingRequiredPlatformHeadRidTuples")
     if requests and not isinstance(reported_missing_tuples, list):
         reasons.append(
@@ -331,6 +336,13 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
                 if str(item or "").strip()
             }
         )
+        if isinstance(reported_complete, bool):
+            expected_complete = not bool(normalized_reported_missing_tuples)
+            if reported_complete is not expected_complete:
+                reasons.append(
+                    "release_channel.generated.json field 'desktopTupleCoverage.complete' "
+                    "must match missingRequiredPlatformHeadRidTuples completeness."
+                )
         if normalized_reported_missing_tuples != request_tuple_ids:
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
