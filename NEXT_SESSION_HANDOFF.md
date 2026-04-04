@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-3 executable/visual/workflow proof now fail-closes release-version drift across same-channel receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require installer/update/recovery truth and per-head packaged proof to align by release head, not channel alone.
+  - visual/workflow gates emitted and validated `channelId`, but executable-gate cross-checks did not require `releaseVersion` identity across dependent receipts, leaving a stale same-channel prior-version receipt lie path.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - now reads release-channel `version`, emits `evidence.release_channel_version`, fail-closes missing version, and writes top-level `releaseVersion`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - now reads release-channel `version`, emits `evidence.release_channel_version`, fail-closes missing version, and writes top-level `releaseVersion`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - now reads `visual_familiarity.release_channel_version` / `workflow_execution.release_channel_version` (with top-level `releaseVersion` fallback).
+    - fail-closes when visual/workflow `releaseVersion` does not match release-channel `version`.
+    - emits `visual_familiarity_release_version` and `workflow_execution_release_version` evidence markers.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added assertions locking new release-version markers and fail-close reason strings across executable/visual/workflow scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> visual/workflow PASS; executable gate expected FAIL (`exit 43`) on existing Windows/macOS missing promoted installer tuple blockers.
+- Current trusted state:
+  - milestone-3 per-head proof can no longer pass by reusing same-channel stale receipts from a different release version.
+  - executable, visual familiarity, and workflow execution gates now align on `channelId + releaseVersion` for release truth binding.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 desktopTupleCoverage now fail-closes under-declared required platforms/heads against policy and canonical head inventory
 
 - Trigger:
