@@ -22,8 +22,8 @@
   - campaign return-loop and recap-fallback change packets now keep canonical packet ids when carry-forward/recap ids differ only by whitespace formatting.
   - milestone-4 diary/return continuity and milestone-5 GM packet audit routing remain aligned on one normalized packet identity seam.
 - Push status:
-  - `chummer.run-services`: commit landed locally (`64591a66`); push attempted after this entry in current slice.
-  - `fleet`: pending (this handoff update is local until credentials permit push).
+  - `chummer.run-services`: commit landed locally (`64591a66`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: commit landed locally (`4ae4a71`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 localization release-proof domain maps now fail-close normalized key-collision drift in materializer and verifier
 
