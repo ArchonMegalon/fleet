@@ -54,6 +54,28 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-17 import-oracle lane now fail-proves Hero Lab Online alias/case/separator drift in the executable core parity harness
+
+- Trigger:
+  - frontier milestone `17` requires Chummer4/5a/Hero Lab/adjacent import-oracle claims to stay evidence-backed by executable oracle tests, not only nominal fixture imports.
+  - `HeroLabShadowrunImporter` now accepts case/separator drift (`actor_1`, `Game_Values`, `game_code`, mixed casing), but that resilience was not locked in the `Chummer.CoreEngine.Tests` executable parity harness.
+  - the same harness was red locally on an adjacent Build Lab receipt invariant (`explain-receipt` missing guaranteed `buildlab` token), which blocked trustworthy import-oracle proof runs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/HeroLabRulesParityAudit.cs`:
+    - added `AssertOnlineAliasAndMetadataDriftHandling()` and wired it into `AssertHeroLabImportsAndParity(...)`.
+    - locked ruleset detection parity for snake_case metadata aliases (`game_code`/`game_name`).
+    - locked import parity for mixed-case and separator-drift Hero Lab Online payload keys (`Actors`, `actor_1`, `Game_Values`, `base_value`, `total_value`), including profile/rules/progress and projected attribute totals.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs`:
+    - added `CreateExplainReceiptFieldValue(...)` so governed export payloads always emit an `explain-receipt` value containing the `buildlab` token even when upstream explain ids use non-buildlab naming.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+- Commits landed:
+  - `chummer6-core`: `2079ab04` (`test(w17): harden Hero Lab alias-drift audit in core harness`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `acd75790..2079ab04`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests promoted installer tupleId integrity fail-close
 
 - Trigger:
