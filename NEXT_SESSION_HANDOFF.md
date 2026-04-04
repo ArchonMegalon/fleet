@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves alias-only stale/future fail-close for nested/localization `generated_at` release-proof timestamps
+
+- Trigger:
+  - frontier milestone `2` parity audit enforces stale/future skew rejection for alias-resolved nested timestamps, but verify mutations still focused on camelCase `generatedAt` in key future/stale branches.
+  - `releaseProof.generated_at` future-skew and `releaseProof.uiLocalizationReleaseGate.generated_at` stale/future-skew branches were not explicitly executed in the end-to-end mutation lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added alias-only stale mutation for `releaseProof.uiLocalizationReleaseGate.generated_at`.
+    - added alias-only future-skew mutation for `releaseProof.uiLocalizationReleaseGate.generated_at`.
+    - added alias-only future-skew mutation for `releaseProof.generated_at`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `VerifyEntrypointRunsUiParityAudit` script-lock assertions to require the new alias-only stale/future mutation markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now explicitly executes both alias paths for stale/future checks in nested and localization release-proof timestamps).
+- Current trusted state:
+  - Hub verify now proves stale and future-skew fail-close through both `generatedAt` and alias-only `generated_at` timestamp paths for root `releaseProof` and nested `uiLocalizationReleaseGate` receipts.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for stale nested `releaseProof.generated_at` alias timestamps
 
 - Trigger:
