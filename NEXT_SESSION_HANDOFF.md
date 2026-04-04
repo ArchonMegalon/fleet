@@ -35,6 +35,17 @@
   - `chummer.run-services`: local changes landed in this slice (`CampaignWorkspaceServerPlaneService.cs`, `GmOpsBoardService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`, `GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: follow-up on `heats`/`journals` continuity lock commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `1c921e4e` (`fix(campaign-os): fail-close heats and journals continuity aliases`).
+  - `fleet`: `140ed61` (`docs(handoff): record heats and journals continuity lock`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits are local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops live audits now script-lock plural compact return alias `nextsessions` across API/workspace and browser journey proof
 
 - Trigger:
