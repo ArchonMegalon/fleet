@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-4 recap shelf timestamps now normalize whitespace-padded recap projection ids before aftermath lookup
+
+- Trigger:
+  - frontier milestone `4` return-loop continuity requires recap shelf ordering/timestamps to stay on governed aftermath truth even when recap projection ids arrive with formatting drift.
+  - `BuildRecapShelf(...)` normalized aftermath package ids when building the timestamp map but still performed `UpdatedAtUtc` lookup with raw `RecapShelf.ProjectionId`.
+  - whitespace-padded recap projection ids could bypass aftermath timestamp linkage and silently fall back to workspace-default timestamps.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - recap-shelf `UpdatedAtUtc` now resolves through `ResolveBoundedRecapShelfUpdatedAt(...)`.
+    - timestamp lookup now normalizes recap `ProjectionId` before dictionary access, so padded ids still bind to latest aftermath package timestamps.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RecapShelfUsesLatestAftermathTimestamp_WhenRecapProjectionIdHasWhitespacePadding`.
+    - regression proves whitespace-padded recap ids still resolve to newest aftermath `GeneratedAtUtc` row.
+  - committed in `chummer.run-services`:
+    - `f8743dfa` — `Normalize recap shelf timestamp lookup ids`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RecapShelfUsesLatestAftermathTimestamp_WhenRecapProjectionIdHasWhitespacePadding|FullyQualifiedName~RecapShelfUsesLatestAftermathTimestamp_WhenAftermathPackageIdsRepeat" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`282` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 recap shelf now preserves latest aftermath timestamps under recap-id formatting drift instead of defaulting to workspace timestamp fallback.
+  - campaign return-loop recap ordering and freshness cues stay aligned with governed aftermath package truth even with whitespace-padded recap projection ids.
+- Push status:
+  - `chummer.run-services`: push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 recap publication linkage now normalizes whitespace-padded ids across workspace and campaign-spine projection lanes
 
 - Trigger:
