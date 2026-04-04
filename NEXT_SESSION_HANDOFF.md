@@ -1,3 +1,33 @@
+## 2026-04-04: follow-up on milestone-2 opposition-plural prep-query canonicalization (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `25f5ef40` (`fix(milestone-2): canonicalize opposition plural prep-query aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2/5 prep-library query now treats `oppositions` as canonical `opposition` across campaign workspace and GM ops lanes
+
+- Trigger:
+  - opposition packet workflows are part of the flagship familiarity and GM-ops parity lanes, but shared prep-query canonicalization did not normalize plural `oppositions`.
+  - because prep search is all-tokens-required, `oppositions` queries could miss assets indexed with canonical `opposition`/`opfor` wording.
+- Landed:
+  - patched shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrite: `oppositions -> opposition`.
+  - expanded campaign workspace query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation` now asserts `oppositions` matching.
+  - expanded GM ops query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation` now asserts `oppositions` matching.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services verification passed`; parity-audit `parity audit failed: ...` lines are expected mutation probes in this script-lock lane; script exits with `run-services in-process smoke passed`).
+- Current trusted state:
+  - campaign workspace and GM ops prep search now treat plural opposition wording as first-class canonical query vocabulary through one shared contracts utility, reducing misses on opposition packet retrieval in flagship and GM operator workflows.
+
 ## 2026-04-04: follow-up on W3 roster-movement prep-query canonicalization (commit and push status)
 
 - Commits landed:
