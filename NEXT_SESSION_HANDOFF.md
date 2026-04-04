@@ -111,6 +111,48 @@
 - Current trusted state:
   - milestone-4/5 opposition packet search parity now fail-closes plural `opforces` phrasing through the same live-audit and browser-e2e proof lanes as existing `opfor`/`opforce` coverage, with script-lock tests guarding the new journey markers.
 
+## 2026-04-04: follow-up on milestone-2 parity-oracle baseline fail-close and workflow generatedAt drift refresh (commit and push status)
+
+- Commits landed:
+  - `chummer6-hub`: `64f5319f` (`fix(milestone-2): fail-close parity oracle baseline families`).
+  - `chummer6-ui`: `a21d0e6d` (`chore(milestone-2): refresh workflow parity generatedAt alignment`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so new commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 parity checklist now fail-closes required legacy-familiar baseline families before catalog coverage checks
+
+- Trigger:
+  - `scripts/generate-parity-checklist.sh` enforced oracle token shape and oracle-vs-catalog parity but did not explicitly enforce that the milestone-2 required legacy-familiar family baseline (contacts/diary/cyberware/vehicles plus companion workflows/controls) remains present in the parity oracle itself.
+  - this allowed a regression seam where a required family could be dropped from `docs/PARITY_ORACLE.json` and replaced with a same-count token while still satisfying generic coverage math.
+- Landed:
+  - patched parity checklist generator:
+    - `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`
+    - added `fail_on_missing_milestone2_baseline_ids(...)` fail-close helper.
+    - added required baseline sets for tabs, workspace actions, and desktop controls, including:
+      - tabs: `tab-cyberware`, `tab-vehicles`, `tab-contacts`, `tab-notes`, `tab-calendar` (plus core companion tabs for creation/advancement/magic/matrix/gear).
+      - actions: `cyberwares`, `vehicles`, `contacts`, `calendar`, `complexforms` (plus core companion workflow actions).
+      - desktop controls: `contact_add`, `contact_edit`, `gear_add`, `gear_edit`, `magic_add`, `magic_bind`, `open_notes`.
+    - generator now fails with explicit `missing required milestone-2 baseline ... ids` errors when baseline families drift.
+  - added script-lock coverage:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityChecklistMilestone2BaselineTests.cs`
+    - asserts the baseline fail-close helper, baseline sets, and milestone-2 required family markers stay present in the generator script.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistMilestone2BaselineTests|FullyQualifiedName~VerificationEntryPointTests.ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17, actions covered=47/47, desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services in-process smoke passed`; mutation-failure lines in output are expected script-lock probes).
+- Adjacent continuity fix to keep verification green:
+  - refreshed UI workflow-parity receipts after nested `generatedAt` drift blocked hub parity audit:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 legacy-familiar baseline surfaces are now enforced explicitly at parity-oracle generation time, preventing same-count token substitution drift from silently dropping required flagship families.
+
 ## 2026-04-04: follow-up on milestone-2 opfor-plural prep-query canonicalization (commit and push status)
 
 - Commits landed:
