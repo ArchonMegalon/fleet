@@ -132,6 +132,48 @@
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-16 Build Lab now projects explicit sheet/print/export/viewer parity receipts on account and signed-in home rails
+
+- Trigger:
+  - frontier milestone `16` requires sheet viewing, print/export, and adjacent exchange outputs to be explicit product promises grounded in the same governed artifact lane.
+  - Build Lab already emitted governed output cards, but it did not expose one dedicated parity receipt rail that summarized sheet/print/export/viewer/exchange readiness as a release decision cue.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - `BuildLabHandoffProjection` now includes:
+      - `ExchangeParitySummary`
+      - `ExchangeParityLines`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab handoff projection now derives explicit parity posture from governed outputs via:
+      - `BuildBuildLabExchangeParitySummary(...)`
+      - `BuildBuildLabExchangeParityLines(...)`
+      - `ResolveBuildLabExchangeParity(...)`
+    - parity lanes now explicitly include:
+      - `sheet_viewer`
+      - `print_pdf_export`
+      - `json_exchange`
+      - `foundry_exchange`
+      - `character_template`
+  - patched views:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`
+      - build-handoff detail now renders exchange-parity summary/lines.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`
+      - signed-in Home build rail now renders exchange-parity summary plus lane lines.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - build-handoff coverage test now fail-proves parity summary plus all five lane lines.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - now asserts Account view includes exchange-parity summary/line rendering hooks.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - now asserts signed-in Home build rail includes exchange-parity summary/line rendering hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`6` tests on `net10.0` + `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `0c8fff98` (`feat(w4-16): add explicit sheet-print-export parity receipts to build lab`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push in this environment remains credential-gated for GitHub HTTPS remotes.
+
 ## 2026-04-04: milestone-7 Build Lab now projects an explicit creation/compare/advancement/crew-fit cohesion rail on account and signed-in home surfaces
 
 - Trigger:
@@ -168,7 +210,7 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`6` tests on `net10.0` + `net10.0-windows`).
 - Commits landed:
-  - pending local commit in `chummer6-hub` / `chummer.run-services`.
+  - `chummer6-hub` / `chummer.run-services`: `09dd1778` (`feat(w4-7): project build-surface cohesion rail across build lab handoffs`).
 - Push attempts:
   - pending.
 - Exact blocker:
