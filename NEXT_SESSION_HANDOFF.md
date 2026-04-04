@@ -38133,3 +38133,27 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-6 compact cache continuity aliases now fail-close across live API and workspace journey audits
+
+- Trigger:
+  - after adding compact readiness alias coverage, adjacent cache aliases (`offlinecache`, `travelcache`, `safehousecache`, and mobile compact cache forms) still lacked explicit fail-close markers in live audit/journey proof.
+  - milestone `6` continuity proof must keep cache-ready vs stale-ready semantics queryable from the same governed prep lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - extended prep-library query loop to require governed packet results for compact cache aliases:
+      - `offlinecache`, `offlinecaches`
+      - `travelcache`, `travelcaches`
+      - `safehousecache`, `safehousecaches`
+      - `mobileofflinecache`, `mobileofflinecaches`
+      - `mobilesafehousecache`, `mobilesafehousecaches`
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added `assertWorkspacePrepQuerySearch(...)` coverage for compact cache aliases (desktop + mobile forms) on signed-in workspace prep query routing.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - locked new compact cache alias markers in hub-live-audit (`queryText=`) and Playwright helper-call assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`23` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-6 compact continuity proof now fail-closes both readiness and cache shorthand families across API and signed-in workspace journey evidence.
