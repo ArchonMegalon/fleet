@@ -76,6 +76,35 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-7/8/9/16 build handoff now emits governed template/foundry/sheet outputs plus explicit rule-environment diff and explain-receipt continuity
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` still required Hub-side build handoff continuity to carry explicit exchange/viewer/template output lanes and grounded receipt wording, not only a generic output list.
+  - `CampaignSpineService.BuildBuildLabHandoffs(...)` produced limited output carry-forward and did not stamp an explicit rule-environment diff line or explain-receipt export continuity on the handoff narrative.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - build handoffs now compose governed output projections for:
+      - `character_template`
+      - `foundry_exchange`
+      - `sheet_viewer`
+    - governed outputs include deterministic provenance/audit wording tied to runtime fingerprint and explain receipt id.
+    - build handoff tradeoff lines now include explicit rule-environment diff posture (pending/clear/requires-review).
+    - build handoff progression outcomes now include explicit explain-receipt continuity across template/foundry/sheet follow-through.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence`.
+    - added reflection helper `InvokeCampaignSpineBuildBuildLabHandoffs(...)` for direct static helper verification.
+- Verification:
+  - `dotnet test /docker/chummercomplete/chummer6-hub/Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL in this environment due pre-existing multi-repo reference instability:
+    - transient/competing access to `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/bin/Debug/net10.0/Chummer.Engine.Contracts.dll`
+    - follow-on missing metadata refs under `/docker/chummercomplete/chummer6-hub/.../obj/Debug/net10.0/ref/*.dll`
+  - `dotnet test ... -p:UseSharedCompilation=false` -> FAIL with same environment-level missing-ref chain (`CS0006`/`MSB4181`), not a direct assertion failure in the new test.
+- Commits landed:
+  - `chummer6-hub`: `2ce0f9a8` (`feat(w4): ground build handoff exports with rule-env and explain evidence`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no GitHub HTTPS credentials in this environment, and local Hub test execution is currently affected by existing cross-repo reference/build-lock instability (`CS0006` + `MSB4181` on generated ref assemblies).
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests promoted installer tupleId integrity fail-close
 
 - Trigger:
