@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-5 live journey audits now fail-close on compact plural `eventcontrols` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestone `5` event-control operations include compact plural query language (`eventcontrols`) in campaign prep token normalization, and this alias should stay governed in both API and signed-in workspace retrieval paths.
+  - closeout automation already locked compact `eventcontrol` and `eventctrl`, but omitted `eventcontrols`, leaving one remaining compact-event alias drift window.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=eventcontrols` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=eventcontrols`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `eventcontrols` between compact `eventcontrol` and `eventctrl` checks, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=eventcontrols`, `prepQuery=eventcontrols`, and playwright marker `?prepQuery=eventcontrols`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-5 audits now fail-close compact event-control retrieval across `eventcontrol`, `eventcontrols`, and `eventctrl` alias paths.
+  - event-control prep alias coverage is now complete across API retrieval, workspace-route retrieval, and signed-in Playwright verification markers.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on compact `eventcontrol` and `eventctrl` prep retrieval across API and workspace route
 
 - Trigger:
