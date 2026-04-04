@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-2 localization proof materialization now fail-closes malformed shipping locale and acceptance-gate token lists before release-channel projection
+
+- Trigger:
+  - frontier milestone `2` and blocker `BLK-009` still require localization shelf proof that cannot silently normalize malformed trust-critical gate metadata.
+  - `scripts/materialize_public_release_channel.py` previously deduped and filtered `shipping_locales` / `acceptance_gates`, which could hide blank, non-string, or duplicate ids before verifier checks.
+  - this left a fail-open seam where malformed localization source payloads could be sanitized into apparently-valid release proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added `normalize_required_token_list(...)` for strict localization token-list normalization.
+    - `shipping_locales` and `acceptance_gates` now fail-close on non-list, non-string, blank, or duplicate ids instead of silent dedupe/drop behavior.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression proving materialization fails when localization `acceptance_gates` contains duplicate ids.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented materializer-side fail-close behavior for malformed localization token lists.
+  - committed and pushed in `chummer-hub-registry`:
+    - `75e260d` — `Fail-close malformed localization gate list tokens`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new negative regression for duplicate `acceptance_gates` at materialization time).
+- Current trusted state:
+  - localization release proof materialization no longer normalizes malformed shipping locale / acceptance-gate ids into apparently-clean release-channel truth.
+  - malformed source payloads now fail before shelf projection, tightening milestone-2/`BLK-009` proof honesty.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `75e260d`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 publish lane now fail-closes future-skewed startup-smoke receipts for promoted desktop install media
 
 - Trigger:
