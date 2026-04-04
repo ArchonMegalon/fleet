@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes desktop install-media artifact `version/releaseVersion` drift against promoted release version
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, installer truth, and packaged-head proof to stay aligned by artifact/head/architecture/channel/version.
+  - executable gate validated desktop install-media `channelId/channel` and tuple identity, but did not fail-close artifact-level `version/releaseVersion` drift against release-channel `version`.
+  - this left a release-head identity seam where promoted install artifacts could carry stale or missing artifact-level version metadata without tripping milestone-1/3 proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added desktop install-media artifact version inventory evidence:
+      - `release_channel_desktop_install_artifact_versions`
+      - `release_channel_desktop_install_artifacts_missing_version`
+      - `release_channel_desktop_install_artifacts_version_mismatch`
+    - gate now fail-closes when promoted desktop install-media artifacts are missing `version/releaseVersion`.
+    - gate now fail-closes when promoted desktop install-media artifact `version/releaseVersion` differs from release-channel `version`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded script-marker assertions for new desktop install-media artifact version evidence keys and fail-close reason strings.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate marker assertions for desktop install-media artifact version evidence keys and version-drift fail-close reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable tuple proof now rejects missing or drifted desktop install-media artifact version metadata (`version/releaseVersion` vs promoted release-channel `version`) alongside channel/tuple/arch checks.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for incomplete `releaseProof.proofRoutes` required flagship routes
 
 - Trigger:
