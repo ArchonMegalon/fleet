@@ -9267,7 +9267,12 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
         audit["status"] = "fail"
         audit["reason"] = "desktop executable exit gate proof is missing a valid generatedAt/generated_at timestamp"
         return audit
-    audit["age_seconds"] = max(0, int((_utc_now() - generated_at_dt).total_seconds()))
+    age_delta_seconds = (_utc_now() - generated_at_dt).total_seconds()
+    if age_delta_seconds < -60:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate proof generatedAt timestamp is in the future"
+        return audit
+    audit["age_seconds"] = max(0, int(age_delta_seconds))
     if audit["age_seconds"] > DESKTOP_EXECUTABLE_EXIT_GATE_MAX_AGE_SECONDS:
         audit["status"] = "fail"
         audit["reason"] = f"desktop executable exit gate proof is stale ({audit['age_seconds']}s old)"
