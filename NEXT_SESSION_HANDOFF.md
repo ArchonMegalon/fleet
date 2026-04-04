@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-3 desktopTupleCoverage now fail-closes under-declared required platforms/heads against policy and canonical head inventory
+
+- Trigger:
+  - after canonical dual-head enforcement landed, `desktopTupleCoverage.requiredDesktopPlatforms` / `requiredDesktopHeads` could still under-declare required policy inventory while other fields remained internally consistent.
+  - that left a metadata lie path for milestone-3 “proof cannot lie” posture, even when executable gate stayed failing on unrelated tuple gaps.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `release_channel_tuple_coverage_missing_required_platforms_from_policy`.
+    - added `release_channel_tuple_coverage_missing_required_heads_from_policy`.
+    - added `release_channel_tuple_coverage_missing_canonical_required_heads`.
+    - fail-closes when `desktopTupleCoverage.requiredDesktopPlatforms` omits policy-required desktop platforms (`linux`, `windows`, `macos`).
+    - fail-closes when `desktopTupleCoverage.requiredDesktopHeads` omits any policy-required head in `heads_requiring_flagship_proof` (including canonical heads).
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added assertions locking the new tuple-coverage policy/canonical fail-close markers and reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`3` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+- Current trusted state:
+  - executable milestone-3 gating now rejects under-declared `desktopTupleCoverage` required inventory even when tuple metadata is otherwise self-consistent.
+  - canonical/policy required platform+head coverage is now enforced at both promoted-artifact and tuple-metadata declaration layers.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 canonical dual-head proof now fail-closes single-head drift across executable, visual, and workflow exit gates
 
 - Trigger:
