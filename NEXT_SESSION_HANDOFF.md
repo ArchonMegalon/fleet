@@ -1,3 +1,44 @@
+## 2026-04-04: milestone-4/5/6 campaign gate now fail-closes hub GM continuity-return stale/sync-drift triage proofs
+
+- Trigger:
+  - W3 milestone continuity/GM lanes require offline-safehouse-travel cache drift and sync-drift return risks to stay first-class on the same governed GM unresolved queue.
+  - `chummer6-hub` already carried runtime/test coverage for this triage posture, but `campaign_session_recover_recap` release-gate proof did not fail-close those concrete service/test markers.
+- Landed:
+  - finalized hub implementation commit for continuity-return triage in:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`
+  - patched canonical gate contract:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - added `campaign_session_recover_recap` proof rows for:
+      - `Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+      - `Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - required markers now fail-close:
+      - `return "continuity_return";`
+      - stale/sync/offline continuity cues (`"sync drift",`, `"out-of-sync",`, `"safehouse",`, `"cache stale",`)
+      - regression tests for stale cache/sync drift continuity-return classification and game-master ops shorthand query support.
+  - patched Fleet mirror and gate regression:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~TravelModeCacheFreshnessTests" -v minimal` -> PASS (`455 passed` on both target frameworks).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 22 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select(.path=="Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs" or .path=="Chummer.Tests/GmOpsBoardServiceTests.cs")' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (both new proof rows present).
+- Commits landed:
+  - `chummer6-hub`: `447b32a9` (`feat(w3-4-5-6): prioritize offline continuity drift in gm unresolved triage`).
+  - `chummer6-design`: `da78fc4` (`feat(w3-4-5-6): gate gm continuity-return stale-drift triage markers`).
+  - `fleet`: `fe39618` (`feat(w3-4-5-6): fail-close gm continuity-return stale-drift proof markers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes continuity rail and GM-operations markers end to end
 
 - Trigger:
