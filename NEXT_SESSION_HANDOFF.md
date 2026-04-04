@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-1/3 completion-review frontier now preserves every missing desktop tuple external-proof request instead of truncating after four criteria
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery and packaged-binary proof receipts that cannot lie about which platform/head tuples still need host proof.
+  - Fleet synthetic completion-review milestones hard-capped `exit_criteria` to four entries, which truncated additional `external proof request` lines once release-channel tuple coverage emitted multiple missing desktop tuples.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_synthetic_completion_review_milestone(...)` now deduplicates criteria, preserves up to four non-external criteria, and retains all `external proof request:` criteria so tuple backlog visibility is never silently clipped.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_synthetic_completion_review_milestone_keeps_all_external_proof_requests`.
+    - added `test_synthetic_completion_review_milestone_still_caps_non_external_criteria`.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "synthetic_completion_review_milestone_keeps_all_external_proof_requests or synthetic_completion_review_milestone_still_caps_non_external_criteria or completion_review_frontier_decomposes_visual_familiarity_backlog"` -> PASS (`3 passed`, `179 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (synthetic completion frontier now lists all four missing `external proof request` tuples).
+- Commits landed:
+  - `fleet`: `e3b5f6f` (`fix(w1-1-3): keep all external tuple proof requests in completion frontier`).
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-5 opposition lane now canonicalizes `opfor/opforce` shorthand directly to `opposition` tokens
 
 - Trigger:
