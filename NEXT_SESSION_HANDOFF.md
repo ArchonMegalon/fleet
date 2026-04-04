@@ -48,9 +48,9 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit or design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale"` -> PASS (`5 passed`, `179 deselected`).
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized with current audit contract).
 - Commits landed:
-  - pending
+  - `fleet`: `a296e74` (`fix(w1-1-3): fail-close executable gate blocker count contradictions`).
 - Push attempts:
-  - not attempted in this slice yet.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
