@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity alias `factions` across canonicalization and live API/UI journeys
+
+- Trigger:
+  - continuity and prep search checks covered singular `faction`, but plural `factions` was only implied and not script-locked in API/workspace/browser proof.
+  - follow-up testing showed query-token normalization did not rewrite `factions -> faction`, creating a real retrieval miss for continuity queries.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrite: `factions -> faction`.
+  - expanded continuity unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - continuity plural tests now assert both `faction` and `factions`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API check for `queryText=factions`.
+      - added signed-in workspace route check for `prepQuery=factions`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey check for `prepQuery=factions`.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions for plural `factions`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity retrieval now fail-closes `faction/factions` parity across workspace and GM prep tokenization, unit tests, live API checks, and browser route proof.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (same continuity file set as above, plus plural `factions` coverage); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity aliases `heats` and `journals` across canonicalization plus live API/UI journeys
 
 - Trigger:
