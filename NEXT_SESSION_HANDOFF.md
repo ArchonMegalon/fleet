@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for missing `releaseProof`, blank journey ids, and non-string proof-route entries
+
+- Trigger:
+  - parity audit already fail-closed missing nested `releaseProof`, blank `releaseProof.journeysPassed` ids, and non-string `releaseProof.proofRoutes` entries.
+  - Hub verify mutation coverage did not execute those branches, leaving key release-proof shape and token hygiene enforcement partially unproven in the end-to-end verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that removes `releaseProof` and asserts `audit-ui-parity.sh` fail-closes on missing nested proof payload.
+    - added mutation with blank `releaseProof.journeysPassed` entry (`""`) and asserted fail-close.
+    - added mutation with mixed-type `releaseProof.proofRoutes` array (`["/home/access", 42]`) and asserted fail-close.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `VerifyEntrypointRunsUiParityAudit` marker assertions to lock all three new mutation coverage texts.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now emits expected fail-close checks for missing `releaseProof`, blank journey ids, and non-string proof-route entries before completing smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves nested release-proof presence, journey-id non-blank hygiene, and proof-route string-array typing alongside existing release-proof status/freshness and route/journey grammar enforcement.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes split plural shorthand (`crew transfers/handoffs/moves`, `roster transfers/handoffs/moves`) across prep-library API, signed-in workspace routes, and GM ops prep search
 
 - Trigger:
