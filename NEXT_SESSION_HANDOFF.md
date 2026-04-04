@@ -41573,3 +41573,42 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-1/3 release-channel external-proof rows now carry canonical `channelId` and downstream executable gate fail-closes channel drift
+
+- Trigger:
+  - W1 install/update/recovery exit criteria require alignment by artifact, head, architecture, and channel, but release-channel `desktopTupleCoverage.externalProofRequests` rows still encoded tuple truth without explicit channel identity.
+  - Fleet now fail-closed downstream `channel_id`, so upstream source-of-truth and UI executable gate also needed explicit channel contract to avoid hidden alias drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `desktopTupleCoverage.externalProofRequests[*]` now emits `channelId` copied from canonical release channel.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - strict external-proof request allowlist now includes `channelId`.
+    - row normalization/parity now requires per-row `channelId` to match top-level release channel identity.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fail-closed local fixture assertions now require external-proof request `channelId` parity.
+  - updated `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented `channelId` as required external-proof row contract field.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - external-proof row allowlist now requires `channelId`.
+    - fail-closes when external-proof row `channelId` differs from release-channel `channelId`.
+    - canonical expected external-proof row synthesis now includes `channelId`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - compliance assertion now pins `channelId` contract marker in the executable gate script.
+  - regenerated artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest .codex-studio/published/RELEASE_CHANNEL.generated.json --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_fail_closes_external_proof_request_contract_drift" -v minimal` -> PASS (`1 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL-CLOSE as expected on real missing promoted Windows/macOS tuple proofs; no schema blocker.
+- Commits landed:
+  - `chummer6-hub-registry`: `76029e1` (`feat(w1-1-3): bind external-proof tuple rows to release channel identity`).
+  - `chummer6-ui`: `a9fbffc1` (`feat(w1-1-3): fail-close external-proof tuple channelId drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`3d840e6..76029e1`, branch `fleet/hub-registry`).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `chummer6-ui` push.
