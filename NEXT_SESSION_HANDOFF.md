@@ -30,6 +30,36 @@
   - milestone-2 hub parity verification no longer depends on shared fixed temp paths for run-services helper binaries and runtimeconfigs.
   - hub verify baseline is green again after re-synchronizing desktop workflow execution gate receipt timestamps with nested SR4/SR6 workflow evidence.
 
+## 2026-04-04: follow-up on W3 league/community `ctl` API script-lock closeout slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `87f83db5` (`fix(w3): script-lock league/community ctl api prep queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 GM operations lane now script-locks API `queryText` coverage for compact `league/community ctl` shorthand
+
+- Trigger:
+  - the prior W3 slice fail-closed canonicalization, unresolved-domain routing, workspace prep query, and browser journey checks for `league/community ctl` compact forms.
+  - API-side hub live audit `queryText` probes still omitted compact `leaguectl`/`leaguectls` and `communityctl`/`communityctls`, leaving a residual script-lock seam.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added governed prep-library API checks for:
+      - `queryText=leaguectl`
+      - `queryText=leaguectls`
+      - `queryText=communityctl`
+      - `queryText=communityctls`
+    - each probe now requires HTTP `200` and non-empty governed packet results.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock marker assertions for all new API `queryText` variants.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 league/community `ctl` shorthand is now script-locked across both API `queryText` and workspace/browser `prepQuery` journey rails.
+
 ## 2026-04-04: follow-up on W3 league/community `ctl` compact shorthand fail-close slice (commit and push status)
 
 - Commits landed:
