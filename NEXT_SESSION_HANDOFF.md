@@ -1,3 +1,89 @@
+## 2026-04-04: milestone-1/3 install journey now fail-closes on desktop executable gate evidence scope (per-head receipt roots + zero blocking findings)
+
+- Trigger:
+  - frontier milestones `1` and `3` require installer/update/recovery truth and packaged-binary proof that cannot lie across `head × platform × rid`.
+  - install journey previously required only top-level `status: pass` for `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`, which allowed a seam where detailed per-head receipt scope or blocking findings could drift without a structured gate assertion.
+- Landed:
+  - patched canonical design source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml` install journey proof for `chummer6-ui` desktop executable gate:
+    - now requires `blocking_findings_count: 0`.
+    - now requires `evidence.hub_registry_root_trusted_for_startup_smoke_proof: true`.
+    - now requires `evidence.flagship_status`, `evidence.visual_familiarity_status`, and `evidence.workflow_execution_status` to be `pass`.
+    - now requires all promoted per-head receipt-scope rows to remain repo-root trusted:
+      - `windows_gate:avalonia:win-x64`
+      - `windows_gate:blazor-desktop:win-x64`
+      - `linux_gate:avalonia:linux-x64`
+      - `linux_gate:blazor-desktop:linux-x64`
+      - `macos_gate:avalonia:osx-arm64`
+      - `macos_gate:blazor-desktop:osx-arm64`
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same structured assertions.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - strengthened `test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof` to pin the expanded `json_must_equal` contract for desktop executable gate proof.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state, blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (blocking reasons now explicitly include `blocking_findings_count` mismatch when desktop executable gate is not clean).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof` -> FAIL (`No module named pytest`).
+
+## 2026-04-04: milestone-13/14/17/18 release-gate proof now fail-closes on core master-index parity lane receipts
+
+- Trigger:
+  - frontier milestones `13`, `14`, `17`, and `18` had executable master-index parity fields in `chummer6-core`, but `build_explain_publish` release gating still only enforced UI markers and could pass while sourcebook/settings/custom-data/translator/import/SR6 successor parity receipts regressed.
+- Landed:
+  - patched canonical design gate file `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - `build_explain_publish` `repo_source_proof` now requires `chummer6-core` markers in:
+      - `Chummer.Tests/ApiIntegrationTests.cs` for:
+        - `settingsLaneReceipt`
+        - `sourceToggleLaneReceipt`
+        - `customDataLaneReceipt`
+        - `translatorLaneReceipt`
+        - `importOracleLaneReceipt`
+        - `sr6SuccessorLaneReceipt`
+        - `referenceSnapshotPosture`
+      - `Chummer.Infrastructure/Xml/XmlToolCatalogService.cs` for parity-lane receipt builders and reference snapshot posture resolver.
+  - patched Fleet mirror + validation:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` mirrored the same new `chummer6-core` proof rows.
+    - `/docker/fleet/tests/test_materialize_journey_gates.py` now fail-proves those new core proof markers under `test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers`.
+    - regenerated `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/tests/test_materialize_journey_gates.py` -> PASS.
+  - `python3 -m pytest --version` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `chummer6-design`: `0ebf398` (`docs(w2-13-14-17-18): gate master-index parity receipts in build-explain journey`).
+  - `fleet`: `af89473` (`feat(w2-13-14-17-18): fail-close build-explain gate on master-index parity proofs`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+  - `pytest` is unavailable in this environment, so Fleet test execution beyond compile/materialize checks remains blocked.
+
+## 2026-04-04: milestone-6 travel continuity now surfaces degraded offline lanes when staged caches are stale
+
+- Trigger:
+  - milestone `6` requires continuity proof to make cached vs stale posture explicit and to show what remains possible offline.
+  - `chummer6-hub` travel readiness previously reported stale cache counts, but `OfflineLaneCues` stayed binary `ready|blocked`, which masked degraded continuity when travel caches were stale.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildTravelOfflineLaneCues(...)` now receives fresh/stale cache counts and emits `degraded` lane status when any travel-safe device cache is stale.
+    - lane summaries now explicitly call out stale-cache impact and prefetch refresh guidance.
+    - `BuildOfflineActionabilitySummary(...)` now emits a degraded-mode summary (`bounded but degraded`) when stale cache posture exists.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/TravelModeCacheFreshnessTests.cs`:
+    - stale-cache scenarios now fail-prove `OfflineLaneCues` status `degraded` and degraded offline actionability summaries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter FullyQualifiedName~TravelModeCacheFreshnessTests -v minimal --nologo -m:1 -p:BuildInParallel=false` -> FAIL before test execution on pre-existing upstream compile break:
+    - `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs(64,56): error CS1736: Default parameter value for 'ImportOracleMissingSources' must be a compile-time constant`.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter \"FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale\" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> FAIL with the same pre-existing compile break.
+- Commits landed:
+  - `chummer6-hub`: pending.
+  - `fleet`: pending.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - cross-repo baseline compile instability in `chummer-core-engine` currently prevents `chummer6-hub` test execution in this workspace until the `ToolCatalogModels.cs` default-parameter compile break is fixed.
+
 ## 2026-04-04: follow-up on W1 release-proof/publish-state install-gate hardening (handoff commit + push status)
 
 - Commits landed:
