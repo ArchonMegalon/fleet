@@ -19,6 +19,27 @@
   - `chummer6-hub`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/HubPageChromeService.cs`, `Chummer.Tests/HubPageChromeServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 GM unresolved triage now classifies crew-handoff roster signals without requiring literal `roster` wording
+
+- Trigger:
+  - frontier milestone `5` requires roster movement to stay first-class inside the governed GM ops lane.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` only classified roster domain when unresolved payloads contained literal `roster`, so common crew-transfer wording (`crew handoff`, `assignment`, `transfer`, `rotation`) could fall to `general` and be outranked by newer generic unresolved noise.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded roster-domain detection to classify these variants as `roster_movement`: `crew`, `handoff`, `transfer`, `assignment`, `reassign`, `bench`, and `rotation` (while preserving existing domain priority ordering).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatCrewHandoffSignalsAsRosterMovementDomain`.
+    - test locks ordering so `crew handoff` unresolved rows stay ahead of newer `general` unresolved rows within the same severity tier.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`19` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`436` tests on `net10.0` and `net10.0-windows`; one transient runtimeconfig file-lock retry occurred under concurrent local activity before the passing rerun).
+- Current trusted state:
+  - GM unresolved projection no longer depends on literal `roster` phrasing to keep crew transfer pressure in milestone-5 roster-movement triage.
+  - roster movement domain ordering now stays stable for common ops vocabulary used in live GM checklists and handoff notes.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now treats favor/loyalty pressure as first-class relationship mutations
 
 - Trigger:
