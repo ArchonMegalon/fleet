@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5 parity rail now carries explicit localization-gate alias drift marker in audit script so verify mutation coverage and script-contract tests stay fail-closed
+
+- Trigger:
+  - full `Chummer.Tests` run in `chummer.run-services` failed on `ParityAuditLocalizationGateAliasDriftTests.AuditUiParityFailClosesLocalizationGateAliasDrift`.
+  - new script-contract test requires the exact fail-close marker string for nested localization alias drift to exist literally in `scripts/audit-ui-parity.sh`.
+  - the parity audit already fail-closed alias drift generically through `resolve_alias_value(...)`, but the marker literal was only template-driven and not present as one contiguous string.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/audit-ui-parity.sh`:
+    - added canonical marker constant:
+      - `releaseProof.uiLocalizationReleaseGate alias values drift between uiLocalizationReleaseGate and ui_localization_release_gate`
+    - added explicit pre-resolution guard in `validate_release_channel_proof(...)` that fail-closes when both alias keys are present with conflicting values and emits that marker.
+  - this keeps parity audit behavior strict while aligning script text with verify/test contract expectations.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityAuditLocalizationGateAliasDriftTests" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`534` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `11b92185` (`fix(w3): fail-close localization gate alias drift marker in parity audit`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-4/5 campaign-return packet dedupe and roster-handover prep-query aliasing restored for continuity and GM ops rails
 
 - Trigger:
