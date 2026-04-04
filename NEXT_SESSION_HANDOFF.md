@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-2 release materializer now fail-closes incomplete baseline golden journey coverage before channel projection
+
+- Trigger:
+  - frontier milestone `2` shelf-proof provenance must fail early when release proof omits baseline golden journeys, not only at downstream verifier time.
+  - `materialize_public_release_channel.py` normalized release proof shape but accepted partial `journeys_passed` lists; completeness was only guaranteed later by `verify_public_release_channel.py`.
+  - this left a drift path where incomplete journey proof could still be projected into generated channel artifacts before verification closed it.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical required baseline journey ids:
+      - `install_claim_restore_continue`
+      - `build_explain_publish`
+      - `campaign_session_recover_recap`
+      - `report_cluster_release_notify`
+    - `normalize_release_proof_payload(...)` now fail-closes with explicit error when `journeys_passed` omits any baseline golden journey id.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving materializer fail-close on incomplete `proof.json` baseline journey coverage before canonical release channel projection.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - updated contract text to mark `releaseProof.journeysPassed` enforcement as materializer-and-verifier bound.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - incomplete baseline journey coverage is now rejected before and after channel materialization, removing the projection-time drift window for milestone-2 shelf proof.
+  - release-channel artifacts cannot be materialized from partial baseline journey receipts.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes incomplete baseline golden journey coverage in `releaseProof.journeysPassed`
 
 - Trigger:
