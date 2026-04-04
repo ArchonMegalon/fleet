@@ -1,3 +1,40 @@
+## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 desktop tuple external-proof contract canonicalization slice
+
+- Commits landed:
+  - `chummer6-ui`: `fa695ab8` (`feat(w1-1-3): canonicalize desktop tuple external-proof request contract`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-1/3 desktop executable gate now treats release-channel external-proof requests as canonical tuple-coverage contract truth
+
+- Trigger:
+  - W1 install/update/recovery plus packaged-proof lanes require per-head per-platform tuple proof that cannot lie.
+  - registry release-channel tuple coverage now emits `desktopTupleCoverage.externalProofRequests`, but UI aggregate executable gate still treated that key as unexpected and did not validate row-level parity against missing tuple inventory.
+  - this left a local false-fail seam and weakened tuple-level proof-contract rigor when Windows/macOS proofs are externally blocked.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - accepted `desktopTupleCoverage.externalProofRequests` as canonical tuple-coverage key.
+    - added explicit declaration requirement for `externalProofRequests` (empty list when complete).
+    - added row-shape validation (`tupleId`, `head`, `platform`, `rid`, `requiredHost`, `requiredProofs`, expected artifact/install/route/startup-smoke fields).
+    - added deterministic parity checks between reported external-proof requests and derived missing platform/head/rid tuple inventory.
+    - fail-closes on non-object rows, missing/derived-mismatch tuple ids, duplicate tuple ids, invalid requiredHost, invalid requiredProofs shape, and expected-vs-reported row drift.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - hardened key-allowlist compliance assertion to include `externalProofRequests`.
+    - added `Desktop_executable_gate_fail_closes_external_proof_request_contract_drift` coverage.
+  - regenerated UI executable gate artifact:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_fail_closes_unexpected_desktop_tuple_coverage_keys|FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_fail_closes_external_proof_request_contract_drift" -v minimal` -> PASS (`2 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL-CLOSE as expected on real external tuple gaps (Windows/macOS promoted installer + startup-smoke proof still missing); no false `externalProofRequests`-unexpected-key drift.
+- Commits landed:
+  - `chummer6-ui`: `fa695ab8` (`feat(w1-1-3): canonicalize desktop tuple external-proof request contract`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 workspace-v4 compact prep query canonicalization slice
 
 - Commits landed:
