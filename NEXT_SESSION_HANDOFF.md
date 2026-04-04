@@ -50,6 +50,36 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 Windows and macOS gate receipts now emit and validate releaseVersion for startup-smoke identity
+
+- Trigger:
+  - executable milestone-3 gate now fail-closes platform receipt release-version drift, but Windows/macOS gate materializers still emitted channel-only identity and did not explicitly validate startup-smoke `version`.
+  - that left downstream receipt schema drift risk when promoted Windows/macOS tuples eventually return.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - reads and emits `release_channel_version` evidence.
+    - fail-closes missing release-channel version.
+    - reads startup-smoke `version`/`releaseVersion`, emits `startup_smoke_version`, and fail-closes missing/mismatched startup-smoke version against release-channel version.
+    - writes top-level `channelId` and `releaseVersion` in Windows gate payload.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - reads and emits `release_channel_version` evidence.
+    - fail-closes missing release-channel version.
+    - reads startup-smoke `version`/`releaseVersion`, emits version evidence in `startup_smoke`, and fail-closes missing/mismatched startup-smoke version against release-channel version.
+    - writes top-level `channelId` and `releaseVersion` in macOS gate payload.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended Windows/macOS gate compliance assertions to lock new release-version validation and payload markers.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh && bash -n /docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`4` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-windows-desktop-exit-gate.sh && bash scripts/materialize-macos-desktop-exit-gate.sh` -> expected FAIL on existing promoted-artifact/startup-smoke absence for Windows/macOS, but receipts now include release-version contract fields.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with release-version drift reasons retained for Linux startup-smoke receipts plus existing missing Windows/macOS tuples.
+- Current trusted state:
+  - Windows/macOS gate payload schemas now align with executable-gate release-head identity requirements (`channelId + releaseVersion`).
+  - startup-smoke identity validation is version-aware across Linux/Windows/macOS gate families.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (Windows/macOS scripts, compliance tests, updated generated gate receipts; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable gate now fail-closes per-platform startup-smoke release-version drift against release-channel head
 
 - Trigger:
