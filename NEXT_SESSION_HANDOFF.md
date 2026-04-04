@@ -1,3 +1,29 @@
+## 2026-04-04: fleet W1 shard refresh now preserves per-shard pinned frontier ids from active shard-group env during live status aggregation
+
+- Trigger:
+  - frontier milestones `1` and `3` run in parallel shard packs, and root `status --json` must report each shard's own pinned frontier truth instead of inheriting whichever shard refreshed last.
+  - `_live_shard_summaries()` was rebuilding sibling shard snapshots with caller args, so sibling `frontier_ids` could drift during refresh.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - added explicit `--frontier-id` arg support for derive/status context.
+    - added active-shard manifest + shard-index helpers so refresh prefers configured shard roots over stale directories.
+    - added shard-group env readers (`*_GROUPS`) and per-shard arg reconstruction in `_live_shard_summaries()` for owners/text/frontier/worker bin/lane/model.
+    - scoped shard frontier slicing so explicit pinned `--frontier-id` values survive focus and shard refresh.
+    - hardened GitHub auth helper subprocess calls to fail soft when `git`/`gh` binaries are absent.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added/updated coverage for explicit frontier-id override and per-shard configured frontier-pack refresh behavior.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py --help` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status --help` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest ...` -> FAIL in this environment (`No module named pytest`).
+- Commits landed:
+  - `fleet`: pending local commit in this session.
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - local env is missing `pytest`, so targeted test execution could not be rerun locally after the patch.
+
 ## 2026-04-04: milestone-1/3 registry verifier lane now mutation-tests desktop tuple coverage missing-inventory drift fail-close
 
 - Trigger:
@@ -60,6 +86,30 @@
   - not attempted yet for this slice.
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-04: active 5-shard frontier refresh now preserves each shard's own pinned frontier pack instead of letting one shard overwrite sibling state
+
+- Trigger:
+  - widening the live loop from the old 3-shard frontier to the explicit 5-pack wave (`1/2/3`, `13/14/17/18`, `4/5/6`, `7/8/9/16`, `10/11/12/15`) exposed a control-plane bug in aggregate shard refresh.
+  - `_live_shard_summaries()` was recomputing every sibling shard with the caller shard's args, so whichever shard refreshed last could overwrite other shards' persisted `frontier_ids`, `focus_*`, and worker posture.
+  - that made root `status --json` lie about shard assignment and would have made 4+ shard scaling unsafe because the saved state no longer reflected the launched shard packs.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - added runtime-env shard-group readers for semicolon-delimited shard packs.
+    - added `_shard_index_from_root(...)` to map `shard-N` state roots back to their configured shard slot.
+    - `_live_shard_summaries()` now rebuilds per-shard args from the configured shard group env (`OWNER_GROUPS`, `ACCOUNT_GROUPS`, `FOCUS_TEXT_GROUPS`, `FRONTIER_ID_GROUPS`, `WORKER_*`) before refreshing that shard's live snapshot.
+    - sibling shard refreshes now preserve their own pinned frontier packs instead of inheriting the caller shard's frontier.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_live_shard_summaries_refresh_each_shard_with_its_own_configured_frontier_pack`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "live_shard_summaries_refresh_each_shard_with_its_own_configured_frontier_pack or configured_shard_roots_prefers_active_manifest_over_stale_dirs or open_milestone_shard_frontier_uses_active_manifest_to_avoid_stranded_slices or run_supervisor_launcher_exits_loudly_when_frontier_probe_fails or derive_context_honors_frontier_id_override_without_shard_reslicing"` -> PASS (`5` tests).
+- Commits landed:
+  - pending local commit in `fleet` (not yet pushed in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for the local control-plane patch; the next step is reloading the live supervisor container so root status and shard state use the new shard-safe refresh logic.
 
 ## 2026-04-04: milestone-4/5 campaign continuity query lane now normalizes diary/contact/heat mutation wording (`updates`/`changes`) to governed prep search tokens
 

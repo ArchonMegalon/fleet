@@ -194,6 +194,7 @@ def _args(root: Path) -> Namespace:
         worker_lane="",
         fallback_worker_model=[],
         fallback_worker_lane=[],
+        frontier_id=[],
         account_owner_id=[],
         account_alias=[],
         focus_owner=[],
@@ -275,6 +276,68 @@ def test_default_worker_timeout_seconds_tracks_codexea_stream_budget(monkeypatch
     )
 
     assert module._default_worker_timeout_seconds() == 9000.0
+
+
+def test_derive_context_applies_focus_within_explicit_handoff_frontier() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "\n".join(
+                [
+                    "# Handoff",
+                    "",
+                    "Current active frontier from design plus handoff:",
+                    "- `6` Build Lab progression planner",
+                    "- `15` Artifact shelf v2",
+                    "- `18` Public trust surface v3",
+                    "- `19` Guided onboarding",
+                    "- `21` Rules Navigator v2",
+                    "",
+                    "Frontier milestone ids to prioritize first: 6, 15, 18, 19, 21",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.focus_owner = ["chummer6-hub"]
+        args.focus_text = ["trust", "publication"]
+
+        context = module.derive_context(args)
+
+        assert [item.id for item in context["frontier"]] == [18, 15, 19, 21]
+
+
+def test_derive_context_honors_frontier_id_override_without_shard_reslicing() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text(
+            "Frontier milestone ids to prioritize first: 6, 15, 18, 19, 21\n",
+            encoding="utf-8",
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_roots = [aggregate_root / f"shard-{index}" for index in range(1, 6)]
+        for shard_root in shard_roots:
+            shard_root.mkdir(parents=True, exist_ok=True)
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": [path.name for path in shard_roots]}),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.state_root = str(shard_roots[3])
+        args.frontier_id = [6, 15, 18, 19]
+
+        context = module.derive_context(args)
+
+        assert [item.id for item in context["frontier"]] == [6, 15, 18, 19]
 
 
 def _write_project_backlog(root: Path, *, project_id: str, repo_slug: str, task: str) -> None:
@@ -1699,6 +1762,21 @@ def test_retry_worker_reported_git_pushes_uses_host_git_auth(monkeypatch) -> Non
         assert calls[2][1]["GIT_CONFIG_GLOBAL"] == str(host_home / ".gitconfig")
         assert calls[2][1]["XDG_CONFIG_HOME"] == str(host_home / ".config")
         assert calls[2][1]["GH_CONFIG_DIR"] == str(gh_dir)
+
+
+def test_github_https_auth_extraheader_returns_empty_when_gh_missing(monkeypatch) -> None:
+    module = _load_module()
+
+    def fake_run(command, *, text, capture_output, check, env=None):
+        if command[:5] == ["git", "-C", "/docker/fleet", "remote", "get-url"]:
+            return subprocess.CompletedProcess(command, 0, stdout="https://github.com/ArchonMegalon/fleet.git\n", stderr="")
+        if command[:3] == ["gh", "auth", "token"]:
+            raise FileNotFoundError("gh")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    assert module._github_https_auth_extraheader({}, Path("/docker/fleet")) == ""
 
 
 def test_is_missing_github_push_blocker_accepts_remote_push_wording() -> None:
@@ -3981,6 +4059,102 @@ def test_prior_active_shard_frontier_ids_ignores_aggregate_root() -> None:
         )
 
         assert module._prior_active_shard_frontier_ids(aggregate_root) == []
+
+
+def test_configured_shard_roots_prefers_active_manifest_over_stale_dirs() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_three_root = aggregate_root / "shard-3"
+        shard_four_root = aggregate_root / "shard-4"
+        for shard_root in (shard_one_root, shard_two_root, shard_three_root, shard_four_root):
+            shard_root.mkdir(parents=True, exist_ok=True)
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": ["shard-1", "shard-3"]}),
+            encoding="utf-8",
+        )
+
+        configured_roots = module._configured_shard_roots(aggregate_root)
+
+        assert configured_roots == [shard_one_root, shard_three_root]
+
+
+def test_open_milestone_shard_frontier_uses_active_manifest_to_avoid_stranded_slices() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_three_root = aggregate_root / "shard-3"
+        shard_four_root = aggregate_root / "shard-4"
+        for shard_root in (shard_one_root, shard_two_root, shard_three_root, shard_four_root):
+            shard_root.mkdir(parents=True, exist_ok=True)
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": ["shard-1", "shard-2", "shard-3"]}),
+            encoding="utf-8",
+        )
+        frontier = [
+            module.Milestone(
+                id=index,
+                title=f"Milestone {index}",
+                wave="W1",
+                status="in_progress",
+                owners=["fleet"],
+                exit_criteria=["Ship it."],
+                dependencies=[],
+            )
+            for index in range(1, 7)
+        ]
+
+        shard_one_frontier = module._open_milestone_shard_frontier(shard_one_root, frontier, default_limit=5)
+        shard_two_frontier = module._open_milestone_shard_frontier(shard_two_root, frontier, default_limit=5)
+        shard_three_frontier = module._open_milestone_shard_frontier(shard_three_root, frontier, default_limit=5)
+
+        assert [item.id for item in shard_one_frontier] == [1, 2]
+        assert [item.id for item in shard_two_frontier] == [3, 4]
+        assert [item.id for item in shard_three_frontier] == [5, 6]
+        assert shard_four_root not in module._configured_shard_roots(aggregate_root)
+
+
+def test_run_supervisor_launcher_exits_loudly_when_frontier_probe_fails() -> None:
+    launcher = Path("/docker/fleet/scripts/run_chummer_design_supervisor.sh")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        wrapper = root / "python3"
+        wrapper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"status\" && \"${3:-}\" == \"--json\" ]]; then",
+                    "  echo 'probe boom' >&2",
+                    "  exit 17",
+                    "fi",
+                    "echo 'unexpected python3 invocation' >&2",
+                    "exit 99",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        result = subprocess.run(
+            [str(launcher)],
+            cwd="/docker/fleet",
+            env={
+                **os.environ,
+                "PATH": f"{root}:{os.environ['PATH']}",
+                "CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS": "2",
+                "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(root / "state" / "chummer_design_supervisor"),
+            },
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode != 0
+        assert "failed to derive frontier via status --json" in result.stderr
 
 
 def test_derive_completion_review_context_can_focus_repo_backlog_items_beyond_first_five() -> None:
@@ -6510,6 +6684,87 @@ def test_live_shard_summaries_persist_refreshed_shard_state() -> None:
         assert summaries[0]["mode"] == "flagship_product"
         assert persisted["mode"] == "flagship_product"
         assert persisted["frontier_ids"] == summaries[0]["frontier_ids"]
+
+
+def test_live_shard_summaries_refresh_each_shard_with_its_own_configured_frontier_pack(
+    monkeypatch,
+) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}, {"id": "W2"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Install lane",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["chummer6-ui"],
+                            "exit_criteria": ["Install lane exists."],
+                        },
+                        {
+                            "id": 2,
+                            "title": "Legacy workbench",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["chummer6-ui"],
+                            "exit_criteria": ["Workbench exists."],
+                        },
+                        {
+                            "id": 13,
+                            "title": "Sourcebook parity",
+                            "wave": "W2",
+                            "status": "planned",
+                            "owners": ["chummer6-core"],
+                            "exit_criteria": ["Sourcebooks exist."],
+                        },
+                        {
+                            "id": 14,
+                            "title": "Settings parity",
+                            "wave": "W2",
+                            "status": "planned",
+                            "owners": ["chummer6-core"],
+                            "exit_criteria": ["Settings exist."],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Continue the work.\n", encoding="utf-8")
+        aggregate_root = root / "state"
+        shard_1 = aggregate_root / "shard-1"
+        shard_2 = aggregate_root / "shard-2"
+        shard_1.mkdir(parents=True, exist_ok=True)
+        shard_2.mkdir(parents=True, exist_ok=True)
+        for shard_root in (shard_1, shard_2):
+            module._write_json(
+                shard_root / "state.json",
+                {
+                    "updated_at": "2026-03-31T08:00:00Z",
+                    "mode": "loop",
+                    "open_milestone_ids": [1, 2, 13, 14],
+                    "frontier_ids": [99],
+                    "focus_owners": ["stale-owner"],
+                },
+            )
+
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS", "1,2;13,14")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS", "chummer6-ui;chummer6-core")
+
+        summaries = module._live_shard_summaries(_args(root), aggregate_root)
+        persisted_1 = json.loads((shard_1 / "state.json").read_text(encoding="utf-8"))
+        persisted_2 = json.loads((shard_2 / "state.json").read_text(encoding="utf-8"))
+
+        assert summaries[0]["frontier_ids"] == [1, 2]
+        assert summaries[1]["frontier_ids"] == [13, 14]
+        assert persisted_1["frontier_ids"] == [1, 2]
+        assert persisted_2["frontier_ids"] == [13, 14]
 
 
 def test_persist_live_state_snapshot_strips_aggregate_only_fields() -> None:

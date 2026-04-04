@@ -733,6 +733,13 @@ def parse_args() -> argparse.Namespace:
             help="Bias the frontier toward milestones whose title/exit criteria contain these case-insensitive terms. Repeatable.",
         )
         subparser.add_argument(
+            "--frontier-id",
+            action="append",
+            type=int,
+            default=[],
+            help="Pin this worker/shard to one or more explicit open milestone ids before focus steering. Repeatable.",
+        )
+        subparser.add_argument(
             "--dry-run",
             action="store_true",
             help="Print derived prompt metadata without launching the worker.",
@@ -1815,9 +1822,48 @@ def _bounded_frontier(frontier: Sequence[Milestone], *, limit: int = 5) -> List[
     return list(frontier[: min(limit, len(frontier))])
 
 
+def _active_shard_manifest_path(aggregate_root: Path) -> Path:
+    return aggregate_root / "active_shards.json"
+
+
+def _shard_index_from_root(aggregate_root: Path, shard_root: Path) -> Optional[int]:
+    try:
+        relative = shard_root.resolve().relative_to(aggregate_root.resolve())
+    except Exception:
+        return None
+    parts = relative.parts
+    if len(parts) != 1:
+        return None
+    name = parts[0]
+    if not name.startswith("shard-"):
+        return None
+    suffix = name[6:]
+    if not suffix.isdigit():
+        return None
+    index = int(suffix)
+    return index if index > 0 else None
+
+
 def _configured_shard_roots(aggregate_root: Path) -> List[Path]:
     if not aggregate_root.exists() or not aggregate_root.is_dir():
         return []
+    manifest_path = _active_shard_manifest_path(aggregate_root)
+    if manifest_path.exists():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+        rows = payload.get("active_shards") if isinstance(payload, dict) else []
+        configured_roots: List[Path] = []
+        for name in rows if isinstance(rows, list) else []:
+            token = str(name).strip()
+            if not token or not token.startswith("shard-"):
+                continue
+            candidate = aggregate_root / token
+            if candidate.exists() and candidate.is_dir():
+                configured_roots.append(candidate)
+        if configured_roots:
+            return configured_roots
     return [
         candidate
         for candidate in sorted(aggregate_root.iterdir())
@@ -3029,6 +3075,27 @@ def _env_split_list(raw: str) -> List[str]:
     return [item.strip() for item in compact.split(",") if item.strip()]
 
 
+def _runtime_env_group_rows(name: str) -> List[str]:
+    raw = str(_runtime_env_default(name, "") or "")
+    if not raw:
+        return []
+    return [item.strip() for item in raw.replace("\n", ";").split(";")]
+
+
+def _runtime_env_group_list(name: str, index: int) -> Optional[List[str]]:
+    rows = _runtime_env_group_rows(name)
+    if index < 0 or index >= len(rows):
+        return None
+    return _env_split_list(rows[index])
+
+
+def _runtime_env_group_value(name: str, index: int) -> Optional[str]:
+    rows = _runtime_env_group_rows(name)
+    if index < 0 or index >= len(rows):
+        return None
+    return rows[index].strip()
+
+
 def _openai_escape_hatch_account_aliases() -> List[str]:
     return _env_split_list(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", ""))
 
@@ -3293,23 +3360,29 @@ def _prepare_host_git_push_environment() -> Dict[str, str]:
 
 
 def _github_https_auth_extraheader(env: Dict[str, str], repo: Path) -> str:
-    remote = subprocess.run(
-        ["git", "-C", str(repo), "remote", "get-url", "origin"],
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
+    try:
+        remote = subprocess.run(
+            ["git", "-C", str(repo), "remote", "get-url", "origin"],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return ""
     remote_url = str(remote.stdout or "").strip()
     if remote.returncode != 0 or not remote_url.startswith("https://github.com/"):
         return ""
-    token_process = subprocess.run(
-        ["gh", "auth", "token"],
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
-    )
+    try:
+        token_process = subprocess.run(
+            ["gh", "auth", "token"],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return ""
     token = str(token_process.stdout or "").strip()
     if token_process.returncode != 0 or not token:
         return ""
@@ -4560,9 +4633,16 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
     handoff_text = _read_text(handoff_path) if handoff_path.exists() else ""
     _handoff_frontier_ids, handoff_has_explicit_frontier = _parse_frontier_ids_from_handoff_with_source(handoff_text)
     frontier, frontier_ids = _select_frontier(open_milestones, handoff_text)
-    if not handoff_has_explicit_frontier:
-        frontier = _focused_frontier(args, open_milestones, frontier)
-    frontier = _open_milestone_shard_frontier(resolved_state_root, frontier)
+    pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
+    if pinned_frontier_ids:
+        by_id = {item.id: item for item in open_milestones}
+        frontier = [by_id[value] for value in pinned_frontier_ids if value in by_id]
+        frontier_ids = [item.id for item in frontier]
+        handoff_has_explicit_frontier = True
+    focus_source = frontier if handoff_has_explicit_frontier else open_milestones
+    frontier = _focused_frontier(args, focus_source, frontier)
+    if not pinned_frontier_ids:
+        frontier = _open_milestone_shard_frontier(resolved_state_root, frontier)
     frontier_ids = [item.id for item in frontier]
     focus_profiles = _configured_focus_profiles(args)
     focus_owners = _configured_focus_owners(args)
@@ -4814,6 +4894,24 @@ def _live_state_with_current_completion_audit(
         if include_shards:
             updated["shards"] = _live_shard_summaries(effective_args, state_root)
             updated["shard_count"] = len(updated.get("shards") or [])
+            shard_frontier_ids = sorted(
+                {
+                    _coerce_int(value, value)
+                    for item in (updated.get("shards") or [])
+                    for value in (item.get("frontier_ids") or [])
+                }
+            )
+            if shard_frontier_ids:
+                updated["frontier_ids"] = shard_frontier_ids
+            shard_open_milestone_ids = sorted(
+                {
+                    _coerce_int(value, value)
+                    for item in (updated.get("shards") or [])
+                    for value in (item.get("open_milestone_ids") or [])
+                }
+            )
+            if shard_open_milestone_ids:
+                updated["open_milestone_ids"] = shard_open_milestone_ids
             if any(str((item or {}).get("active_run_id") or "").strip() for item in (updated.get("shards") or [])):
                 updated["mode"] = "sharded"
             else:
@@ -5081,8 +5179,81 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
     for shard_root in _shard_state_roots(aggregate_root):
         shard_state = _read_state(_state_payload_path(shard_root))
         shard_history = _read_history(_history_payload_path(shard_root), limit=ETA_HISTORY_LIMIT)
+        shard_args = argparse.Namespace(**vars(args))
+        shard_args.state_root = str(shard_root.resolve())
+        shard_index = _shard_index_from_root(aggregate_root, shard_root)
+        if shard_index is not None:
+            group_index = shard_index - 1
+            shard_args.account_alias = _env_split_list(
+                _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", "")
+            )
+            shard_args.focus_owner = _env_split_list(
+                _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER", "")
+            )
+            shard_args.focus_text = _env_split_list(
+                _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT", "")
+            )
+            shard_args.frontier_id = []
+            shard_args.worker_bin = _runtime_env_default(
+                "CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN",
+                str(getattr(args, "worker_bin", "") or DEFAULT_WORKER_BIN),
+            )
+            shard_args.worker_lane = _runtime_env_default(
+                "CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE",
+                str(getattr(args, "worker_lane", "") or ""),
+            )
+            shard_args.worker_model = _runtime_env_default(
+                "CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL",
+                str(getattr(args, "worker_model", "") or DEFAULT_MODEL),
+            )
+            shard_account_aliases = _runtime_env_group_list(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS",
+                group_index,
+            )
+            if shard_account_aliases is not None:
+                shard_args.account_alias = shard_account_aliases
+            shard_focus_owners = _runtime_env_group_list(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS",
+                group_index,
+            )
+            if shard_focus_owners is not None:
+                shard_args.focus_owner = shard_focus_owners
+            shard_focus_texts = _runtime_env_group_list(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS",
+                group_index,
+            )
+            if shard_focus_texts is not None:
+                shard_args.focus_text = shard_focus_texts
+            shard_frontier_ids = _runtime_env_group_list(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS",
+                group_index,
+            )
+            if shard_frontier_ids is not None:
+                shard_args.frontier_id = [
+                    coerced
+                    for coerced in (_coerce_int(value, 0) for value in shard_frontier_ids)
+                    if coerced > 0
+                ]
+            shard_worker_bin = _runtime_env_group_value(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_BINS",
+                group_index,
+            )
+            if shard_worker_bin:
+                shard_args.worker_bin = shard_worker_bin
+            shard_worker_lane = _runtime_env_group_value(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES",
+                group_index,
+            )
+            if shard_worker_lane is not None:
+                shard_args.worker_lane = shard_worker_lane
+            shard_worker_model = _runtime_env_group_value(
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_MODELS",
+                group_index,
+            )
+            if shard_worker_model:
+                shard_args.worker_model = shard_worker_model
         updated_shard, _ = _live_state_with_current_completion_audit(
-            args,
+            shard_args,
             shard_root,
             shard_state,
             shard_history,
