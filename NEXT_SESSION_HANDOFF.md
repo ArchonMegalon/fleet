@@ -39,17 +39,27 @@
     - added `release_channel_tuple_coverage_unexpected_keys` evidence emission.
     - added fail-close reason:
       - `Release channel desktopTupleCoverage has unexpected keys: ...`
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh`:
+    - added active mutation that injects `bonus_noncanonical_tuple_coverage_key` into release-channel `desktopTupleCoverage`.
+    - verify now requires executable-gate failure on that mutation and checks for the fail-close marker.
+    - added verify markers:
+      - `verify gate failed: desktop executable gate should reject unexpected desktopTupleCoverage keys.`
+      - `verify gate failed: desktop executable gate mutation did not emit unexpected desktopTupleCoverage key marker.`
   - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
     - added `Desktop_executable_gate_fail_closes_unexpected_desktop_tuple_coverage_keys` script-lock coverage for the new fail-close contract and evidence marker.
+    - added `Verify_entrypoint_runs_active_mutation_for_unexpected_desktop_tuple_coverage_keys` to lock the active mutation path in `scripts/ai/verify.sh`.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
-  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`12` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`13` tests on `net10.0`).
 - Commits landed:
-  - pending local commit in `chummer6-ui` for this slice.
+  - `chummer6-ui`: `aa51d4d5` (`fix(w1): fail-close unexpected desktop tuple coverage keys`).
+  - pending second local commit in `chummer6-ui` for active verify mutation coverage.
 - Push attempts:
-  - not run yet for this slice.
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for implementation or verification; push auth blocker still expected when attempting `git push`.
+  - local environment still lacks configured GitHub HTTPS credentials, so `chummer6-ui` commits remain local-only until auth is restored.
 
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close split/hyphen `de-brief` recap shorthand across prep-query canonicalization, workspace aftermath matching, and unresolved-domain routing
 
