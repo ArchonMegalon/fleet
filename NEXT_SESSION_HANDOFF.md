@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-3 journey-gate output now separates external host blockers from repo-local blockers
+
+- Trigger:
+  - W1 milestone `3` requires honest packaged-binary proof, but journey-gate blocker output was flat and did not distinguish platform-host constraints from repo-local gaps.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added `external_blocking_reasons`, `local_blocking_reasons`, and `blocked_by_external_constraints_only` on each journey row.
+    - added blocker classification signal counters and summary counters (`blocked_external_only_count`, `blocked_with_local_count`).
+    - when blockers are external-only, journey `recommended_action` now points directly at platform-host proof capture and receipt ingestion.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "external_only_blockers or mixed_blockers or repo_source_proof_marker_is_missing"` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `fleet`: `cde8956` (`feat(w1-3): classify external vs local journey blockers`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - missing GitHub HTTPS credentials in this environment; `pytest` is also unavailable.
+
 ## 2026-04-04: milestone-3 journey-gate proof now classifies external host blockers vs repo-local blockers
 
 - Trigger:
@@ -89,6 +109,8 @@
     - extended `test_builtin_w3_campaign_and_gm_contracts_resolve_with_groundwork_runtime_policy` matrix to fail-close `campaign_workspace_v4_brief`.
   - patched `/docker/EA/tests/test_planner.py`:
     - extended W3 continuity and campaign/GM planner matrix tests to compile `campaign_workspace_v4_brief` with standard grounded tool-then-artifact flow.
+  - patched `/docker/EA/tests/test_skills.py`:
+    - added `test_skill_catalog_projects_builtin_campaign_workspace_v4_skill` to fail-close `/v1/skills` + `/v1/plans/compile` projection for the new umbrella lane.
   - patched `/docker/EA/SKILLS.md`:
     - added first-class skill catalog row for `campaign_workspace_v4_brief` with integrated memory read set spanning campaign v4, GM ops, and offline/mobile continuity.
   - patched canonical + mirror journey gates:
@@ -102,20 +124,26 @@
 - Verification:
   - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest -q tests/test_task_contract_runtime_policy.py -k "builtin_w3_campaign_and_gm_contracts"` -> PASS (`16 passed, 5 deselected`).
   - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest -q tests/test_planner.py -k "campaign_workspace_v4_brief or campaign_mobile_continuity_contracts_build_tool_then_artifact_plan or campaign_and_gm_ops_contracts_compile_tool_then_artifact_plan"` -> PASS (`21 passed, 11 deselected`).
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest -q tests/test_skills.py -k "campaign_workspace_v4_skill"` -> FAIL during collection (`httpx` missing; Starlette TestClient dependency not installed in this environment).
   - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 16 deselected`).
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select(.repo=="executive-assistant" and .path=="SKILLS.md") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes ``campaign_workspace_v4_brief``).
 - Commits landed:
   - `executive-assistant`: `fe0b0a8` (`feat(w3-4-5-6): add integrated campaign workspace v4 briefing contract`).
+  - `executive-assistant`: `4c179bf` (`test(w3-4-5-6): cover campaign workspace v4 builtin skill projection`).
   - `chummer6-design`: `b2955df` (`feat(w3-4-5-6): require EA workspace-v4 umbrella marker in campaign gate`).
   - `fleet`: `e06af78` (`feat(w3-4-5-6): gate and handoff for EA workspace-v4 continuity contract`).
+  - `fleet`: `8d2a251` (`docs(handoff): record commit and push outcomes for w3 workspace-v4 slice`).
 - Push attempts:
+  - `cd /docker/EA && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/EA && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - push from this environment still depends on GitHub HTTPS credentials for repos where credentials are absent.
+  - local execution of API-level `tests/test_skills.py` slices is blocked until `httpx` is installed in this environment.
 
 ## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
 
