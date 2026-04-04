@@ -90,6 +90,8 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["closure_waiting_on_release_truth"] == 0
     assert payload["summary"]["needs_human_response"] == 2
     assert payload["summary"]["update_required_case_count"] == 0
+    assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
+    assert payload["summary"]["update_required_misrouted_case_count"] == 0
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -433,6 +435,8 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["needs_human_response"] == 0
     assert payload["summary"]["install_truth_state_counts"]["promoted_tuple_match"] == 2
     assert payload["summary"]["update_required_case_count"] == 0
+    assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
+    assert payload["summary"]["update_required_misrouted_case_count"] == 0
     waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
     assert waiting_packet["install_diagnosis"]["tuple_present_on_promoted_shelf"] is True
@@ -519,6 +523,8 @@ def test_materialize_support_case_packets_marks_update_required_when_fixed_versi
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["summary"]["open_case_count"] == 1
     assert payload["summary"]["update_required_case_count"] == 1
+    assert payload["summary"]["update_required_routed_to_downloads_count"] == 1
+    assert payload["summary"]["update_required_misrouted_case_count"] == 0
     packet = payload["packets"][0]
     assert packet["install_diagnosis"]["case_installed_version"] == "1.2.2"
     assert packet["install_diagnosis"]["case_version_matches_registry_release"] is False

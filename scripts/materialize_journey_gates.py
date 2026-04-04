@@ -231,6 +231,20 @@ def evaluate_journey(
         )
     if bool(fleet_gate.get("require_support_closure_waiting_zero")) and int(support_summary.get("closure_waiting_on_release_truth") or 0) > 0:
         warning_reasons.append("support closure is still waiting on release truth.")
+    if bool(fleet_gate.get("require_support_update_required_routes_to_downloads")):
+        update_required_case_count = int(support_summary.get("update_required_case_count") or 0)
+        update_required_routed_to_downloads_count = int(
+            support_summary.get("update_required_routed_to_downloads_count") or 0
+        )
+        update_required_misrouted_case_count = int(support_summary.get("update_required_misrouted_case_count") or 0)
+        if update_required_misrouted_case_count > 0:
+            blocking_reasons.append(
+                "support packets include update-required cases not routed to /downloads."
+            )
+        if update_required_routed_to_downloads_count < update_required_case_count:
+            blocking_reasons.append(
+                "support packets do not prove all update-required cases route to /downloads."
+            )
 
     state = "ready"
     if blocking_reasons:
@@ -255,6 +269,13 @@ def evaluate_journey(
         "warning_reason_count": len(warning_reasons),
         "support_closure_waiting_count": int(support_summary.get("closure_waiting_on_release_truth") or 0),
         "support_needs_human_response_count": int(support_summary.get("needs_human_response") or 0),
+        "support_update_required_case_count": int(support_summary.get("update_required_case_count") or 0),
+        "support_update_required_routed_to_downloads_count": int(
+            support_summary.get("update_required_routed_to_downloads_count") or 0
+        ),
+        "support_update_required_misrouted_case_count": int(
+            support_summary.get("update_required_misrouted_case_count") or 0
+        ),
     }
     return {
         "id": str(row.get("id") or "").strip(),

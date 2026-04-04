@@ -600,6 +600,18 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "update_required_case_count": sum(
                 1 for item in open_packets if bool((item.get("fix_confirmation") or {}).get("update_required"))
             ),
+            "update_required_routed_to_downloads_count": sum(
+                1
+                for item in open_packets
+                if bool((item.get("fix_confirmation") or {}).get("update_required"))
+                and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() == "open_downloads"
+            ),
+            "update_required_misrouted_case_count": sum(
+                1
+                for item in open_packets
+                if bool((item.get("fix_confirmation") or {}).get("update_required"))
+                and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
+            ),
         },
         "packets": packets,
     }

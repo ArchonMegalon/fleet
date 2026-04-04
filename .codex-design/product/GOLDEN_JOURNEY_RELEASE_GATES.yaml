@@ -304,6 +304,7 @@ journey_gates:
             - '"/contact"'
       require_support_freshness: true
       require_support_closure_waiting_zero: true
+      require_support_update_required_routes_to_downloads: true
       required_project_posture:
         - project_id: hub
           minimum_stage: pre_repo_local_complete
