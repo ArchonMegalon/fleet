@@ -40,6 +40,7 @@
 - Commits landed:
   - `chummer.run-services`: `1c921e4e` (`fix(campaign-os): fail-close heats and journals continuity aliases`).
   - `fleet`: `140ed61` (`docs(handoff): record heats and journals continuity lock`).
+  - `fleet`: `fb684c6` (`docs(handoff): record push blocker for heats journals slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
