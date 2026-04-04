@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-5 live journey audits now fail-close on compact `rostermove` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestone `5` requires roster movement and event-control operations to remain governed on the same prep-library retrieval lane across API and signed-in workspace journeys.
+  - live closeout audits already fail-closed `roster` retrieval, but they did not explicitly assert compact `rostermove` retrieval despite compact roster-move semantics being part of GM operator domain surfaces.
+  - this left a drift window where compact roster-move query handling could regress in API or route-level journeys without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=rostermove` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=rostermove`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `rostermove` after `roster`, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=rostermove`, `prepQuery=rostermove`, and playwright `?prepQuery=rostermove` marker coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-5 audits now fail-close if compact `rostermove` prep retrieval drifts in API or workspace route flows.
+  - governed roster retrieval proof now covers both `roster` and `rostermove` token paths in closeout automation.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on compact `seasonop` prep retrieval across API and workspace route
 
 - Trigger:
