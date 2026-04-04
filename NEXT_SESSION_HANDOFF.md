@@ -37,6 +37,7 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,signals:{support_unresolved_external_proof_request_count:.signals.support_unresolved_external_proof_request_count,external_proof_request_count:.signals.external_proof_request_count}}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (both counts `4`, state remains `blocked` for external host-proof reasons).
 - Commits landed:
   - `fleet`: `deae48d` (`feat(w1-1-3): fail-close unresolved support external-proof backlog drift`).
+  - `fleet`: `1c80ea1` (`docs(handoff): record w1 support external-proof backlog hardening slice`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
