@@ -133,6 +133,33 @@
   - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-1/3 windows and macOS desktop exit gates now fail-close startup-smoke `artifactPath` provenance drift
+
+- Trigger:
+  - frontier milestones `1` and `3` require cross-platform packaged-head startup-smoke receipts to prove promoted installer provenance, not only digest/channel metadata.
+  - windows/macOS gates already validated release-channel digest/version/channel and host provenance, but did not fail-close missing or drifted startup-smoke `artifactPath`.
+  - this left a drift window where receipts could pass while referencing installer paths outside promoted shelf truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added fail-close checks for missing startup-smoke `artifactPath`.
+    - added fail-close checks for `artifactPath` resolving inside legacy `chummer5a` roots.
+    - added fail-close checks when startup-smoke `artifactPath` does not resolve to the promoted installer shelf bytes, including explicit unresolvable-path failure.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - added fail-close checks for missing startup-smoke `artifactPath`.
+    - added fail-close checks for legacy `chummer5a`-root `artifactPath`.
+    - added fail-close checks when startup-smoke `artifactPath` does not resolve to promoted installer shelf bytes, including explicit unresolvable-path failure.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended macOS and Windows exit-gate marker assertions to lock the new `artifactPath` fail-close coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh && bash -n scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+- Current trusted state:
+  - all promoted desktop platform exit gates (Linux/Windows/macOS) now fail-close startup-smoke receipt provenance when artifact paths are missing, legacy-rooted, or detached from promoted shelf installer bytes.
+- Push status:
+  - `chummer6-ui`: local changes staged in this slice; commit/push pending.
+  - `fleet`: handoff updated locally in this slice; commit/push pending.
+
 ## 2026-04-04: milestone-1/3 linux desktop exit gate now fail-closes startup-smoke host provenance and artifactPath shelf drift
 
 - Trigger:
@@ -154,7 +181,7 @@
   - linux packaged-binary exit proof now rejects startup-smoke receipts that omit host provenance or detach artifact path provenance from promoted shelf installer truth, improving milestone-1/3 per-platform proof integrity.
 - Push status:
   - `chummer6-ui`: committed locally (`ea35f875`); push failed in this environment (`could not read Username for 'https://github.com'`).
-  - `fleet`: handoff updated locally in this slice; commit/push pending.
+  - `fleet`: committed locally (`78b0fec`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-2 parity audit now fail-closes missing nested release-proof journey and route coverage in release-channel receipts
 
