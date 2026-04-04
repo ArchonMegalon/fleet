@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-1/3 support packets now fail-close tuple-level drift against release-channel external-proof truth
+
+- Trigger:
+  - W1 install/update/recovery requires release truth, public shelf truth, and installer truth to stay aligned by artifact, head, architecture, and channel.
+  - support install-truth contract checks enforced field presence plus command host/installer markers, but still allowed tuple-level value drift (for example wrong public install route or stale expected artifact metadata) while packets remained structurally valid.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now enforces tuple-level parity for support packet `install_diagnosis.external_proof_request` against release-channel `desktopTupleCoverage.externalProofRequests` when registry proof is present.
+    - new fail-close checks cover:
+      - tuple membership in release-channel backlog
+      - exact match on `required_host`, `expected_artifact_id`, `expected_installer_file_name`, `expected_public_install_route`, `expected_startup_smoke_receipt_path`
+      - exact `required_proofs` set parity
+      - startup-smoke contract parity (`ready_checkpoint`, `head_id`, `platform`, `rid`, `host_class_contains`, `status_any_of`)
+      - required release-channel `proof_capture_commands` presence in support packet command list
+  - patched regression suite:
+    - `/docker/fleet/tests/test_materialize_journey_gates_external_proof_contract.py`
+      - added `test_install_journey_blocks_when_support_external_proof_tuple_fields_drift_from_release_channel`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_journey_gates.py -k "support_external_proof or external_proof_request or install_journey_blocks_when_support_external_proof_tuple_fields_drift_from_release_channel"` -> PASS (`9 passed, 20 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py` -> PASS (`4 passed`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_external_proof"` -> PASS (`3 passed, 22 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending (recorded after commit step below).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-1/3 support packets now fail-close unresolved external-proof backlog truth even without open support cases
 
 - Trigger:

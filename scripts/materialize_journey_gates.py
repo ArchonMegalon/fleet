@@ -615,6 +615,11 @@ def evaluate_journey(
 
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         support_external_proof_required_count = 0
+        expected_external_proof_request_by_tuple = {
+            str(item.get("tuple_id") or "").strip(): dict(item)
+            for item in external_proof_requests
+            if str(item.get("tuple_id") or "").strip()
+        }
         for index, packet in enumerate(packets, start=1):
             packet_id = str(packet.get("packet_id") or "").strip() or f"packet#{index}"
             install_truth_state = str(packet.get("install_truth_state") or "").strip().lower()
@@ -745,6 +750,126 @@ def evaluate_journey(
                                     support_packet_contract_violations.append(
                                         f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands does not declare expected host token '{expected_host_token}'."
                                     )
+                        tuple_id = str(external_proof_request.get("tuple_id") or "").strip()
+                        if expected_external_proof_request_by_tuple:
+                            expected_request = expected_external_proof_request_by_tuple.get(tuple_id)
+                            if expected_request is None:
+                                support_packet_contract_violations.append(
+                                    f"support packet {packet_id} external proof tuple '{tuple_id or 'unknown'}' is not present in release-channel external proof backlog."
+                                )
+                            else:
+                                for required_key in (
+                                    "required_host",
+                                    "expected_artifact_id",
+                                    "expected_installer_file_name",
+                                    "expected_public_install_route",
+                                    "expected_startup_smoke_receipt_path",
+                                ):
+                                    actual_value = str(external_proof_request.get(required_key) or "").strip()
+                                    expected_value = str(expected_request.get(required_key) or "").strip()
+                                    if required_key == "required_host":
+                                        actual_value = actual_value.lower()
+                                        expected_value = expected_value.lower()
+                                    if actual_value != expected_value:
+                                        support_packet_contract_violations.append(
+                                            f"support packet {packet_id} install_diagnosis.external_proof_request.{required_key} must match release-channel tuple truth '{expected_value}' but was '{actual_value}'."
+                                        )
+
+                                actual_required_proofs = sorted(
+                                    {
+                                        str(token or "").strip()
+                                        for token in (required_proofs if isinstance(required_proofs, list) else [])
+                                        if str(token or "").strip()
+                                    }
+                                )
+                                expected_required_proofs = sorted(
+                                    {
+                                        str(token or "").strip()
+                                        for token in (
+                                            expected_request.get("required_proofs")
+                                            if isinstance(expected_request.get("required_proofs"), list)
+                                            else []
+                                        )
+                                        if str(token or "").strip()
+                                    }
+                                )
+                                if actual_required_proofs != expected_required_proofs:
+                                    support_packet_contract_violations.append(
+                                        "support packet "
+                                        f"{packet_id} install_diagnosis.external_proof_request.required_proofs "
+                                        f"must match release-channel tuple truth {expected_required_proofs!r} but was {actual_required_proofs!r}."
+                                    )
+
+                                expected_smoke_contract = expected_request.get("startup_smoke_receipt_contract")
+                                if isinstance(smoke_contract, dict) and isinstance(expected_smoke_contract, dict):
+                                    for required_key in (
+                                        "ready_checkpoint",
+                                        "head_id",
+                                        "platform",
+                                        "rid",
+                                        "host_class_contains",
+                                    ):
+                                        actual_value = str(smoke_contract.get(required_key) or "").strip()
+                                        expected_value = str(expected_smoke_contract.get(required_key) or "").strip()
+                                        if required_key in {"platform", "host_class_contains"}:
+                                            actual_value = actual_value.lower()
+                                            expected_value = expected_value.lower()
+                                        if actual_value != expected_value:
+                                            support_packet_contract_violations.append(
+                                                "support packet "
+                                                f"{packet_id} install_diagnosis.external_proof_request.startup_smoke_receipt_contract.{required_key} "
+                                                f"must match release-channel tuple truth '{expected_value}' but was '{actual_value}'."
+                                            )
+
+                                    actual_status_any_of = sorted(
+                                        {
+                                            str(token or "").strip()
+                                            for token in (
+                                                smoke_contract.get("status_any_of")
+                                                if isinstance(smoke_contract.get("status_any_of"), list)
+                                                else []
+                                            )
+                                            if str(token or "").strip()
+                                        }
+                                    )
+                                    expected_status_any_of = sorted(
+                                        {
+                                            str(token or "").strip()
+                                            for token in (
+                                                expected_smoke_contract.get("status_any_of")
+                                                if isinstance(expected_smoke_contract.get("status_any_of"), list)
+                                                else []
+                                            )
+                                            if str(token or "").strip()
+                                        }
+                                    )
+                                    if actual_status_any_of != expected_status_any_of:
+                                        support_packet_contract_violations.append(
+                                            "support packet "
+                                            f"{packet_id} install_diagnosis.external_proof_request.startup_smoke_receipt_contract.status_any_of "
+                                            f"must match release-channel tuple truth {expected_status_any_of!r} but was {actual_status_any_of!r}."
+                                        )
+
+                                expected_commands = [
+                                    str(token or "").strip()
+                                    for token in (expected_request.get("proof_capture_commands") or [])
+                                    if str(token or "").strip()
+                                ]
+                                if isinstance(proof_capture_commands, list) and expected_commands:
+                                    actual_commands = {
+                                        str(token or "").strip()
+                                        for token in proof_capture_commands
+                                        if str(token or "").strip()
+                                    }
+                                    missing_expected_commands = [
+                                        token for token in expected_commands if token not in actual_commands
+                                    ]
+                                    if missing_expected_commands:
+                                        support_packet_contract_violations.append(
+                                            "support packet "
+                                            f"{packet_id} install_diagnosis.external_proof_request.proof_capture_commands is missing "
+                                            f"release-channel command(s): {missing_expected_commands}."
+                                        )
                 if install_truth_state == "tuple_not_on_promoted_shelf" and external_proof_required is not True:
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} with install_truth_state 'tuple_not_on_promoted_shelf' must declare external_proof_required=true."
