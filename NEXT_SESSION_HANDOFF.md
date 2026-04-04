@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-6 travel mode now exposes explicit fresh-vs-stale cache freshness proof across workspace server plane and account surface
+
+- Trigger:
+  - frontier milestone `6` requires continuity proof to make cache freshness and stale posture explicit across desktop/travel/mobile lanes.
+  - travel mode already exposed claimed/travel-ready counts, but did not publish governed fresh-vs-stale cache posture per claimed device.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Contracts/CampaignWorkspaceServerPlaneContracts.cs`:
+    - `TravelModeReadinessSummary` now includes `CacheFreshnessSummary`, `FreshCacheDeviceCount`, and `StaleCacheDeviceCount`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - travel mode now computes per-device cache freshness from latest staged travel-prefetch receipts.
+    - ready devices without receipts or with receipts older than 14 days are marked stale.
+    - device status now emits `stale` when travel-ready cache freshness is out of date.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - workspace GM prep/travel section now renders fresh cache count, stale cache count, and explicit cache freshness summary.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - updated travel-mode fixture helper for new contract fields.
+  - added `/docker/chummercomplete/chummer.run-services/Chummer.Tests/TravelModeCacheFreshnessTests.cs`:
+    - fail-proves fresh/stale cache counts and stale device status from receipt recency and missing-receipt posture.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`:
+    - source guard now requires account workspace travel cache freshness cues.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`388` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this slice; pending pushability depends on GitHub credentials in this environment.
+
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now exposes governed replay, recap, and run-module artifact lanes alongside export/exchange/viewer/print continuity
 
 - Trigger:
@@ -23,7 +53,7 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer6-hub` / `chummer.run-services`: `bed2b3b3` (`feat(w4-9-16): add governed replay recap module handoff lanes`).
-  - `fleet`: `91cc3b2` (`docs: refresh handoff for build-lab artifact lanes slice`), `b989c9f` (`docs: record push results for build-lab artifact lanes slice`).
+  - `fleet`: `91cc3b2` (`docs: refresh handoff for build-lab artifact lanes slice`), `b989c9f` (`docs: record push results for build-lab artifact lanes slice`), `c65eb20` (`docs: include final fleet commit id in handoff`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
