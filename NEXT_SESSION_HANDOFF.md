@@ -1,3 +1,41 @@
+## 2026-04-04: milestone-1/3 journey gates now fail-close on stale per-head desktop executable proof receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/recovery and packaged-binary proof lanes to fail honest when platform/head receipts are stale.
+  - Fleet journey-gate repo proof checks only validated marker presence, so stale generated desktop proof receipts could still pass.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `repo_source_proof` now supports:
+      - `max_age_hours`
+      - `generated_at_fields` (default: `generated_at`, `generatedAt`)
+      - `max_future_skew_seconds` (default: `300`)
+    - evaluation now fail-closes when proof JSON is invalid, missing parseable timestamp fields, too far in the future, or older than allowed age.
+  - patched gate registry mirrors:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `install_claim_restore_continue` now requires fresh `chummer6-ui` desktop executable proof coverage for Avalonia/Blazor tuple markers across Windows/Linux/macOS plus startup-smoke trust marker (`max_age_hours: 48`).
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added stale-proof test:
+      - `test_materialize_journey_gates_blocks_when_repo_source_proof_is_stale`
+    - added registry contract test:
+      - `test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof`
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/tests/test_materialize_journey_gates.py` -> PASS.
+  - stale-proof executable check:
+    - `python3 /docker/fleet/scripts/materialize_journey_gates.py --registry <tmp>/GOLDEN_JOURNEY_RELEASE_GATES.yaml --status-plane <tmp>/STATUS_PLANE.generated.yaml --progress-report <tmp>/PROGRESS_REPORT.generated.json --progress-history <tmp>/PROGRESS_HISTORY.generated.json --support-packets <tmp>/SUPPORT_CASE_PACKETS.generated.json --out <tmp>/JOURNEY_GATES.generated.json` -> PASS.
+    - output includes `overall_state: blocked` and stale blocking reason for `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - `fleet`: `c0083c7` (`feat(w1-3): fail-close journey gates on stale desktop proof receipts`).
+  - `chummer6-design`: `63aa925` (`docs(w1-3): require fresh desktop executable proof tuple coverage`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - full pytest execution remains unavailable because `pytest` is not installed.
+
 ## 2026-04-04: milestone-13 master-index now recognizes governed site-snapshot references alongside PDF/URL sourcebook sources
 
 - Trigger:
