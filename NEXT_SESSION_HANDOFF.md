@@ -1,3 +1,57 @@
+## 2026-04-04: milestone-6 travel/offline continuity lane now fail-closes compact `stalecache` and `staleofflinecache` queries across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `6` continuity proof requires explicit offline-readiness and stale-cache truth across desktop, travel, and mobile companion flows.
+  - compact stale-cache aliases (`stalecache`, `staleofflinecache`) existed in alias canonicalization but were not fail-closed in the compact continuity packet lane and live audit journey probes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesPluralTravelOfflineSafehouseAndMobileCompactForms` with `stalecache` and `staleofflinecache` assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand` to assert compact matches for both forms.
+    - aligned packet fixture search terms to include `stale` + `cache` so stale-cache compact query proof is explicit.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes for `stalecache` and `staleofflinecache`.
+    - added workspace `prepQuery=` compact probes for `stalecache` and `staleofflinecache`.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for both compact stale-cache forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed marker assertions for new live-audit and Playwright stale-cache compact probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesPluralTravelOfflineSafehouseAndMobileCompactForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `4d734789` (`feat(w3-6): fail-close compact stale cache continuity query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: false-complete recovery pass revalidated frontier 3194227093 and refreshed shard-1 completion-review source-of-truth
+
+- Trigger:
+  - active completion-review shard artifact was stale against current repo-local Linux proof posture and needed re-materialization before any completion claim.
+- Landed:
+  - re-derived shard-1 completion-review frontier artifacts pinned to recovery frontier `3194227093`:
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+  - regenerated frontier now records:
+    - `linux_desktop_exit_gate_audit.status: pass`
+    - `repo_backlog_audit.status: pass`
+    - `journey_gate_audit.status: fail` (single blocked journey remains)
+- Verification:
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer-presentation`
+  - `jq '{generatedAt,desktopTupleCoverage}' /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` confirms missing required tuple coverage is still only `windows` and `macos` desktop tuples.
+  - `find /docker/chummercomplete/chummer6-ui/Docker/Downloads -maxdepth 3 -type f \( -name '*osx-arm64*' -o -name '*win-x64*' -o -name '*macos*' -o -name '*windows*' \)` confirms no promotable macOS tuple installers/startup-smoke receipts are present in publish paths; only quarantined Windows installers exist.
+- Exact blocker:
+  - missing external-host proof capture (promoted installer artifact + startup-smoke receipt) for required tuples in release-channel coverage:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+  - without those native macOS/Windows host receipts, `install_claim_restore_continue` stays blocked and completion remains untrusted.
+
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 gamemaster compact packet query canonicalization slice
 
 - Commits landed:
@@ -32,6 +86,31 @@
   - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
   - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" -v minimal` -> PASS (`4 passed` on both target frameworks).
+
+## 2026-04-04: false-complete recovery pass repaired shard-1 synthetic completion frontier truth and re-confirmed external tuple-proof blocker
+
+- Trigger:
+  - completion-review frontier shard artifact still reported a stale Linux startup-smoke failure even though repo-local Linux gate proof had already passed.
+  - active completion-review work needed source-of-truth repair before any canon closeout claims.
+- Landed:
+  - re-materialized completion-review frontier artifacts from live repo evidence while pinned to recovery frontier `3194227093`:
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+  - shard frontier now reports:
+    - `linux_desktop_exit_gate_audit.status: pass`
+    - `journey_gate_audit.status: fail` (blocked only by required Windows/macOS promoted installer tuple proof gaps)
+    - `repo_backlog_audit.status: pass` (no repo-local uncatalogued backlog items)
+- Verification:
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer-presentation`
+  - `sed -n '1,260p' /docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml` confirms Linux gate is `pass` and frontier remains `3194227093`.
+  - `jq '{missingRequiredPlatforms:.desktopTupleCoverage.missingRequiredPlatforms,missingRequiredPlatformHeadPairs:.desktopTupleCoverage.missingRequiredPlatformHeadPairs,missingRequiredPlatformHeadRidTuples:.desktopTupleCoverage.missingRequiredPlatformHeadRidTuples}' /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` confirms only `windows`/`macos` tuple coverage is missing.
+- Exact blocker:
+  - promoted installer artifact + startup-smoke receipt capture is still missing on native macOS and Windows hosts for required tuples:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+  - without those external-host receipts, `install_claim_restore_continue` remains blocked and completion cannot be trusted.
 
 ## 2026-04-04: handoff follow-up commit + push status for W3 gamemaster compact ctl/ctrl plural prep-query proof slice
 
