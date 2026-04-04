@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 UI parity gate now audits active parity-oracle catalogs instead of retired legacy-shell files
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar tab/action/control parity checks to stay executable in current active heads.
+  - `scripts/audit-ui-parity.sh` still depended on retired legacy paths (`Chummer.Web/wwwroot/index.html`, `Chummer/Forms/ChummerMainForm.Designer.cs`), so the required parity gate exited immediately with `required files missing` instead of auditing real catalog drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - removed retired legacy-shell file probes.
+    - rewired the gate to the active parity-oracle pipeline by invoking `scripts/generate-parity-checklist.sh`.
+    - added explicit runtime prerequisites checks (`rg`, `python3`), generated checklist existence checks, and summary extraction from `docs/PARITY_CHECKLIST.md`.
+    - gate now fails only on real parity drift/generation failures and prints current tabs/actions/desktop-controls coverage summary.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && RUNBOOK_MODE=parity-checklist bash scripts/runbook.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 parity gate no longer false-fails on removed compatibility assets.
+  - required PR-gate command `bash scripts/audit-ui-parity.sh` now audits the active parity-oracle contract and surfaces real coverage drift.
+- Push status:
+  - `chummer6-hub` (repo root maps to `/docker/chummercomplete/chummer.run-services` in this workspace): local changes pending commit/push in this environment (`scripts/audit-ui-parity.sh`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: hub public chrome no longer self-loops sign-in routing on auth pages while keeping downloads provider handoff intact
 
 - Trigger:
