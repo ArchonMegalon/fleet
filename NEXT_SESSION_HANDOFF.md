@@ -56,6 +56,33 @@
   - `pytest -q tests/test_chummer_design_supervisor.py -k 'assess_worker_result_rejects_unpublished_remote_work or heal_state_push_blockers_repairs_verified_remote_push_residue or heal_state_push_blockers_repairs_recorded_missing_github_push_blocker or effective_supervisor_state_filters_history_that_does_not_match_current_manifest_pack or live_shard_summaries_ignore_stale_dirs_not_in_manifest'` -> PASS (`5 passed`).
   - live `python3 scripts/chummer_design_supervisor.py status --json` now shows shard-2 `last_run.remains` without the stale `not yet pushed to remote` clause.
 
+## 2026-04-04: milestone-1/3 desktop tuple coverage verifier now fail-closes non-canonical contract growth in release channel truth
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, installer truth, and public shelf truth to stay structurally aligned instead of tolerating drift-prone payload growth.
+  - `verify_public_release_channel.py` validated required `desktopTupleCoverage` fields and tuple metadata values, but it still accepted unexpected keys in `desktopTupleCoverage` and `promotedInstallerTuples` rows.
+  - result: non-canonical contract expansion could pass verification even when downstream consumers depended on strict tuple-shape truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added strict allowlists for `desktopTupleCoverage` keys and `promotedInstallerTuples` row keys.
+    - verifier now fail-closes unexpected top-level coverage keys and unexpected tuple-row keys.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation coverage for both new fail-close branches:
+      - unexpected key on `desktopTupleCoverage`
+      - unexpected key on `desktopTupleCoverage.promotedInstallerTuples[]` row
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented strict `desktopTupleCoverage`/tuple-row contract posture in the startup-smoke + tuple-coverage verification section.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation markers for unexpected coverage/tuple-row keys).
+- Commits landed:
+  - `chummer-hub-registry`: `fd57ad5` (`test(w1): fail-close desktop tuple coverage contract drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `c2fa852..fd57ad5`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now carries structured rule-environment before/after diff cues across account and signed-in home rails
 
 - Trigger:
