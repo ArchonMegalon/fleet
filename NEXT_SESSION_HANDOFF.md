@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-5 season-control shorthand now fail-closes compact `seasoncontrol`, `seasoncontrols`, and `seasonctrl` aliases across campaign prep query normalization, GM unresolved-domain triage, and live API/UI journey audits
+
+- Trigger:
+  - frontier milestone `5` requires event/season controls to remain a first-class governed lane across campaign workspace prep retrieval and GM operations triage.
+  - compact season-control aliases (`seasoncontrol`, `seasoncontrols`, `seasonctrl`) were not normalized in campaign prep query rewriting or GM prep query tokenization, and unresolved-domain classification plus live API/UI journey audits did not explicitly assert those alias paths.
+  - this left a drift path where common season-control shorthand could regress without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `seasoncontrol`, `seasoncontrols`, and `seasonctrl` to compact event-control token recognition.
+    - prep query alias rewriting now canonicalizes all three aliases into governed event/season operation tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - GM prep-asset query tokenization now canonicalizes `seasoncontrol`, `seasoncontrols`, and `seasonctrl` to event-control/season operation tokens.
+    - unresolved-domain classifier now treats `seasoncontrol` alias forms as `event_control` lane signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsSeasonControlShorthandAcrossWhitespaceBoundaries`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatSeasonControlShorthandAsEventControlDomain`.
+    - expanded compact shorthand prep query test to assert `seasoncontrol`, `seasoncontrols`, and `seasonctrl` query matches.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=seasoncontrol`, `queryText=seasoncontrols`, and `queryText=seasonctrl`.
+    - added signed-in workspace route checks for `prepQuery=seasoncontrol`, `prepQuery=seasoncontrols`, and `prepQuery=seasonctrl` with non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `seasoncontrol`, `seasoncontrols`, and `seasonctrl`, including route-preservation and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and Playwright marker assertions to lock `seasoncontrol|seasoncontrols|seasonctrl` coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSeasonControlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatSeasonControlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`379` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 season-control shorthand now fail-closes `seasoncontrol`, `seasoncontrols`, and `seasonctrl` coverage across campaign prep query normalization, GM unresolved-domain prioritization, API audits, and signed-in workspace route/browser proof.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release-channel canonical proof now fail-closes unexpected journey and route supersets at registry materialization and verification
 
 - Trigger:
