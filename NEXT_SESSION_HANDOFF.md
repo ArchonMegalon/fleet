@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-5 live journey audits now verify compact `seasonops` prep search across API and workspace route
+
+- Trigger:
+  - milestone `5` requires GM event-control operations to remain first-class on the same governed account lane across both API prep retrieval and signed-in workspace search surfaces.
+  - earlier hardening added `seasonops/seasonop` alias rewrites in service tokenizers, but live journey audits still only exercised `opposition` prep queries.
+  - this left a regression window where compact season shorthand could drift in end-to-end routes without breaking CI audit flows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=seasonops` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=seasonops`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `seasonops` after opposition search, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `seasonops` markers in `hub-live-audit.py` and `e2e-hub-playwright.cjs`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact season-operation shorthand is now covered by both backend service tests and live signed-in audit flows, reducing milestone-5 drift risk between API and UI retrieval lanes.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep search now canonicalizes compact `seasonops`/`seasonop` shorthand across campaign workspace and GM assets
 
 - Trigger:
