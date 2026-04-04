@@ -18,8 +18,8 @@
 - Current trusted state:
   - milestone-1/3 executable proof now rejects publishable+complete release channels that advertise non-promoted rollout posture, keeping status, tuple completeness, and rollout semantics aligned.
 - Push status:
-  - `chummer6-ui`: committed (`8d7cd1b8`); push attempted below (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `chummer6-ui`: committed (`8d7cd1b8`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: committed (`fefc9ff`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes unrecognized registry rollout/supportability state tokens for desktop install media
 
