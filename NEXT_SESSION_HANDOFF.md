@@ -1,3 +1,39 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 gamemaster compact ctl/ctrl plural prep-query proof slice
+
+- Commits landed:
+  - `chummer6-hub`: `4f7a8287` (`feat(w3-5): fail-close compact gamemaster ctrls and ctls prep queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-5 prep-library GM lane now fail-closes compact `gamemasterctls` and `gamemasterctrls` forms across canonicalization and live journey audits
+
+- Trigger:
+  - W3 milestone `5` requires GM operations and event-control packet flows to stay in one governed prep lane.
+  - compact game-master control plurals (`gamemasterctls`, `gamemasterctrls`) were not canonicalized or audited end-to-end, leaving a compact-shorthand seam outside the same fail-close proof path used by existing `gm*` compact forms.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `gamemasterctls`
+      - `gamemasterctrls`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with both new compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsGameMasterOpsShorthandAcrossWhitespaceAndPunctuation` to assert matching for:
+      - `gamemasterctls`
+      - `gamemasterctrls`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for both compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for both compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new live-audit and Playwright marker assertions for both compact forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsGameMasterOpsShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 compact return-brief continuity canonicalization slice
 
 - Commits landed:
