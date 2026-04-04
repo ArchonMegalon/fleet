@@ -1,3 +1,47 @@
+## 2026-04-04: milestone-4 recap-family synthesis now deduplicates semantically identical recap rows across summary and return/continuity packet lanes
+
+- Trigger:
+  - frontier milestone 4 requires recap, diary, downtime, and return-loop packet truth to reflect unique continuity artifacts even when projection ids drift.
+  - recap-family synthesis in campaign summary and prep packets still used identity-oriented recap dedupe (`DeduplicateIdenticalPublicationRecapVersions(...)`), which could overcount semantically identical recap rows that only differed by projection id.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - switched recap-family synthesis call sites from identity dedupe to semantic recap dedupe for:
+      - `BuildCampaignWorkspaceSummary(...)`
+      - `BuildContinuityPrepPacket(...)`
+      - `BuildCampaignReturnPrepPacket(...)`
+      - `BuildAftermathPrepPacket(...)`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignWorkspaceSummaryDeduplicatesSemanticallyIdenticalRecapRows_WhenProjectionIdsDiffer`.
+    - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalDiaryRecapVersions_WhenProjectionIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceSummaryDeduplicatesSemanticallyIdenticalRecapRows_WhenProjectionIdsDiffer|FullyQualifiedName~CampaignReturnPacketDeduplicatesSemanticallyIdenticalDiaryRecapVersions_WhenProjectionIdsDiffer|FullyQualifiedName~RecapShelfDeduplicatesSemanticallyIdenticalRows_WhenProjectionIdsDiffer" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`258` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 recap-family summary and campaign-return/continuity/aftermath packet synthesis now converge on semantic recap dedupe when projection ids differ.
+  - milestone-4/5 campaign workspace and GM-ops suites remain green after semantic recap dedupe expansion.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-2 accessibility gate no longer false-fails on browse active-option aria binding syntax drift
+
+- Trigger:
+  - active frontier milestone 2 requires executable legacy-familiar workbench proof rails to stay trustworthy under ongoing UI refactors.
+  - `scripts/ai/verify.sh` failed at `b13-accessibility-signoff-check.sh` with `browse workspace is missing active-option aria-selected state` even though `SectionPane.razor` still emitted `aria-selected` bound to `IsBrowseResultActive(...)`.
+  - the guard was over-specific (`aria-selected="@IsBrowseResultActive`) and did not match the current expression form (`aria-selected="@(IsBrowseResultActive(...) ? \"true\" : \"false\")"`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b13-accessibility-signoff-check.sh`:
+    - widened the required marker from `aria-selected="@IsBrowseResultActive` to `aria-selected=".*IsBrowseResultActive`.
+    - kept the guard semantic anchored to `IsBrowseResultActive` while accepting both direct and wrapped Razor binding forms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b13-accessibility-signoff-check.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 accessibility/familiarity release proof no longer fail-closes on benign Razor binding-shape drift for browse active-option semantics.
+  - full UI verifier lane is green again after the guardrail hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 recap shelf projection now deduplicates semantically identical recap rows before bounded category selection
 
 - Trigger:
