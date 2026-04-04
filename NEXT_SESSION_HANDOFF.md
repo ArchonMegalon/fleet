@@ -79,6 +79,15 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: follow-up on W2-14 XML-bridge receipt handoff commit (push status)
+
+- Commits landed:
+  - `fleet`: `dbbd614` (`docs(handoff): record w2-14 xml bridge receipt closure`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials, so fleet handoff commit remains local-only.
+
 ## 2026-04-04: milestone-14 XML bridge successor lane now emits explicit lane receipts and build-explain gate fail-closes on receipt markers
 
 - Trigger:
