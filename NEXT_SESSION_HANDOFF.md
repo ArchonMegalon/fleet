@@ -1,3 +1,14 @@
+## 2026-04-04: follow-up on W1/W3 desktop proof root-path hardening and handoff refresh (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `d6901007` (`fix(w1): keep desktop exit proof paths rooted to chummer6-ui`).
+  - `fleet`: `9a7573b` (`chore(handoff): record chummer6-ui desktop gate root-path hardening`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub HTTPS credentials, so both commits remain local-only until auth is restored.
+
 ## 2026-04-04: W1/W3 desktop exit proofs now preserve chummer6-ui repo-root identity instead of symlink-resolved legacy path drift
 
 - Trigger:
