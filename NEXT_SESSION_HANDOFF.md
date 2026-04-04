@@ -74,6 +74,13 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
   - `cd /docker/fleet && python3 - <<'PY' ... synthetic support packet missing expected_public_install_route ... PY` -> PASS (journey gate blocks with `expected_public_install_route` violation).
+- Commits landed:
+  - `fleet`: `02d9592` (`feat(w1-1-3): fail-close support expected installer target fields`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+  - environment is missing `pytest` for direct local pytest execution.
 
 ## 2026-04-04: handoff follow-up commit + push status for W3 gm continuity-return stale-drift gate slice
 
