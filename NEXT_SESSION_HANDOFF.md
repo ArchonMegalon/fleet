@@ -1,3 +1,49 @@
+## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests startup-smoke receipt metadata fail-close branches for promoted desktop installer tuples
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-desktop promotion proof to fail honest when startup-smoke receipts lose required tuple metadata, not only when tuple inventory or digest/channel checks drift.
+  - `scripts/verify_public_release_channel.py` already fail-closed startup-smoke metadata omissions (`head`, `platform`, `rid/arch`, `channelId`, `timestamp`) but `scripts/ai/verify.sh` did not actively mutate those branches.
+  - this left a regression seam where critical promoted-installer receipt guards could weaken silently while the registry verify lane stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative startup-smoke mutations for promoted tuple receipt rows missing:
+      - `headId/head`
+      - `platform`
+      - `rid` with no fallback `arch`
+      - `channelId/channel`
+      - timestamp fields (`completedAtUtc`/`recordedAtUtc`/`startedAtUtc`/`generatedAt`/`generated_at`)
+    - added explicit fail-close marker assertions for each new metadata omission branch so verifier behavior is locked by message and condition.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected startup-smoke metadata omission fail-close markers plus existing mutation suite).
+- Commits landed:
+  - `chummer-hub-registry`: `def5389` (`test(w1): mutate startup-smoke receipt metadata fail-close guards`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `bde7cf2..def5389`).
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: milestone-7/8/9/16 account workbench now has executable source-guard coverage for per-output build-handoff follow-through cues
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require build/explain/exchange/viewer continuity to stay explicit where users make real decisions.
+  - `Account.cshtml` already renders per-output Build Lab handoff follow-through (`Outputs.Take(3)`, `NextSafeAction`, `ProvenanceSummary`), but this repo lacked a dedicated executable guard that would fail closed on accidental view regressions.
+- Landed:
+  - added `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`:
+    - source-level assertion that account work detail keeps bounded per-output rendering:
+      - `selectedBuildLabHandoff.Outputs.Take(3)`
+      - `@output.NextSafeAction`
+      - `@output.ProvenanceSummary`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AccountBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-4/6 prep-library query lane now collapses travel/offline readiness + stale-cache shorthand to governed safehouse/travel continuity tokens
 
 - Trigger:
