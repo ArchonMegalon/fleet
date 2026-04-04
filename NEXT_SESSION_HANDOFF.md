@@ -3,6 +3,7 @@
 - Commits landed:
   - `chummer6-hub`: `b96c423a` (`feat(w3-5): fail-close compact roster move packet prep queries`).
   - `fleet`: `a3ae168` (`docs(handoff): record w3 compact roster move packet continuity slice`).
+  - `fleet`: `84f7761` (`docs(handoff): record w3 compact roster move packet push status`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
