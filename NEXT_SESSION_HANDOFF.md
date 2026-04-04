@@ -70,6 +70,44 @@
 - Exact blocker:
   - no product blocker for this lane-receipt projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and `chummer6-design`/`fleet` pushes remain credential-gated.
 
+## 2026-04-04: milestone-16 Build Lab now exposes explicit JSON-exchange and print-PDF workflow rails in core intake projections
+
+- Trigger:
+  - frontier milestone `16` requires sheet/viewer/print/export and adjacent exchange posture to be explicit product promises on the same governed Build Lab lane.
+  - `chummer6-core` Build Lab intake already exposed Foundry + sheet workflow rails, but JSON exchange and print-PDF lanes were still implicit in downstream lore instead of first-class projection rails.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs`:
+    - added new Build Lab export actions:
+      - `open-json-exchange` -> `target.json-exchange`
+      - `open-print-pdf-export` -> `target.print-pdf-export`
+    - added new governed export targets:
+      - `target.json-exchange` (`workflow.exchange.json`)
+      - `target.print-pdf-export` (`workflow.export.pdf`)
+    - preserved existing Foundry and sheet-viewer rails so Build Lab export lane now explicitly projects JSON + Foundry + viewer + print posture together.
+  - patched regression coverage:
+    - `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/Program.cs`
+      - fail-proves both new actions and both new workflow targets are present on Build Lab intake projection output.
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/WorkspaceServiceTests.cs`
+      - SR5 Build Lab section test now asserts JSON-exchange + print-PDF actions and targets are projected through workspace section loading.
+  - canon/mirror sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-16 matrix row now explicitly references governed Build Lab workflow lanes:
+      - `workflow.exchange.json`
+      - `workflow.exchange.foundry`
+      - `workflow.viewer.sheet`
+      - `workflow.export.pdf`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~WorkspaceServiceTests.Import_get_build_lab_projection_from_sr5_workspace" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered test execution on pre-existing test-project compile/reference instability in `/docker/chummercomplete/chummer-core-engine/Chummer.Tests` (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Desktop`/`Chummer.Api` namespace graph unresolved in current baseline).
+- Commits landed:
+  - `chummer6-core`: `c744d3be` (`feat(w4-16): add explicit build-lab json and print export workflow rails`).
+  - `chummer6-design`: `cbaff3c` (`docs(w2-16): note build-lab json foundry viewer print workflow lane coverage`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local blocker for this milestone-16 Build Lab workflow-rail slice; broader `Chummer.Tests` filtered execution remains blocked by pre-existing compile/reference instability in the current workspace baseline.
+
 ## 2026-04-04: milestone-9 media-factory creator packet planning now preserves Build Lab portability pillar receipts
 
 - Trigger:
