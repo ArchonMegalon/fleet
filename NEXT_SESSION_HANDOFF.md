@@ -105,6 +105,42 @@
 - Exact blocker:
   - promoted Windows/macOS install tuples remain blocked by missing native startup-smoke receipts for shipped bytes; current host is Linux-only and cannot execute native Windows/macOS installer smoke.
 
+## 2026-04-04: milestone-13/14/17/18 desktop master-index parity now surfaces source-selection, custom-data-authoring, adjacent-oracle, and online-storage receipts on the flagship dialog lane
+
+- Trigger:
+  - frontier milestones `13`, `14`, `17`, and `18` require sourcebook/settings/custom-data/import-oracle/storage parity to be first-class user-visible lanes, not only API-level receipt fields.
+  - desktop `master_index` dialog projected posture counts but still omitted key receipt-level evidence now emitted by `MasterIndexResponse` (`sourceSelection`, `customDataAuthoring`, `adjacent SR6 oracle`, `online storage`, `SR6 successor`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopDialogFactory.cs`:
+    - `BuildMasterIndexFields(...)` now surfaces explicit receipt + coverage fields for:
+      - source selection,
+      - custom-data authoring,
+      - XML bridge receipt,
+      - translator receipt,
+      - import-oracle receipt,
+      - adjacent SR6 oracle posture + receipt coverage,
+      - online-storage lane posture/receipt coverage,
+      - SR6 successor receipt.
+  - patched presentation parity tests:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs`
+    - master-index dialog assertions now fail-close on the new receipt fields.
+  - patched canonical + mirror parity prose:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - family rows for milestones `13/14/17/18` now explicitly state flagship desktop `master_index`/`character_settings`/`translator` receipt projection posture.
+  - patched canonical journey gate source:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `build_explain_publish` now includes UI proof markers requiring `DesktopDialogFactory` and `DesktopDialogFactoryTests` receipt-lane markers for source-selection/custom-data-authoring/import-oracle/adjacent-oracle/online-storage/SR6-successor surfaces.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopDialogFactoryTests.CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture|FullyQualifiedName~CharacterOverviewPresenterTests.ExecuteCommandAsync_master_index_opens_dialog_with_catalog_parity_fields" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS build/compile, but MSTest filter expression did not match test names in this environment.
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() ... PY` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-ui" and (.path=="Chummer.Presentation/Overview/DesktopDialogFactory.cs" or .path=="Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs"))' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS.
+- Exact blocker:
+  - MSTest fine-grained filter execution for these new presentation test names did not resolve in this environment; verification relied on compile + direct fleet gate regression invocation.
+
 ## 2026-04-04: milestone-3 readiness evidence now carries journey external-vs-local blocker counts
 
 - Trigger:
