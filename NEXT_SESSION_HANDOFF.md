@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes promoted desktop install-media artifacts missing/invalid explicit arch metadata
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, shelf truth, and installer truth to align by artifact, head, architecture, channel, and version.
+  - executable gate already rejected many channel/version/head/rid drifts, but promoted desktop install-media artifacts could still pass with missing artifact-level `arch` metadata.
+  - this left an architecture-proof seam where artifact metadata could drift while RID-only checks still passed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added desktop install-media artifact arch inventory evidence:
+      - `release_channel_desktop_install_artifacts_missing_arch`
+      - `release_channel_desktop_install_artifacts_arch_mismatch`
+    - gate now fail-closes when promoted desktop install-media artifacts are missing `arch`.
+    - gate now fail-closes when artifact `arch` does not match RID-derived architecture.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded script-marker assertions for new arch evidence keys and fail-close reason strings.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate marker assertions for missing-arch and arch-mismatch guardrails.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable tuple proof now rejects promoted desktop install-media artifacts that omit explicit architecture metadata or carry arch metadata inconsistent with RID-derived architecture.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 release-channel materialization now stamps per-artifact desktop install channel/version identity in both UI and registry source lanes
 
 - Trigger:
