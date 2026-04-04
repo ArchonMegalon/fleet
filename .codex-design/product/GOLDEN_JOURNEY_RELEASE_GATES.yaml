@@ -51,8 +51,11 @@ journey_gates:
             - BuildSupportPortalRelativePathForWorkspace
         - repo: chummer6-ui
           path: .codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+          json_must_equal:
+            status: pass
           must_contain:
             - '"contract_name": "chummer6-ui.desktop_executable_exit_gate"'
+            - '"status": "pass"'
             - '"windows_gate:avalonia:win-x64"'
             - '"windows_gate:blazor-desktop:win-x64"'
             - '"linux_gate:avalonia:linux-x64"'

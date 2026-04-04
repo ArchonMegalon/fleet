@@ -79,6 +79,27 @@ def parse_iso(value: Any) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _resolve_json_path(payload: Any, path: str) -> Any:
+    current = payload
+    for segment in [part.strip() for part in str(path).split(".") if part.strip()]:
+        if isinstance(current, dict):
+            if segment not in current:
+                return None
+            current = current[segment]
+            continue
+        if isinstance(current, list):
+            try:
+                index = int(segment)
+            except ValueError:
+                return None
+            if index < 0 or index >= len(current):
+                return None
+            current = current[index]
+            continue
+        return None
+    return current
+
+
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
@@ -222,7 +243,34 @@ def evaluate_journey(
                 blocking_reasons.append(
                     f"repo proof {repo_name}:{relative_path} is missing required marker '{snippet_text}'."
                 )
+        json_required = dict(proof_row.get("json_must_equal") or {})
         max_age_hours_raw = proof_row.get("max_age_hours")
+        enforce_json_parsing = bool(json_required) or (max_age_hours_raw is not None and str(max_age_hours_raw).strip())
+        proof_payload: Dict[str, Any] | None = None
+        if enforce_json_parsing:
+            try:
+                decoded = json.loads(text)
+            except json.JSONDecodeError:
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} is not valid json, cannot enforce structured checks."
+                )
+                continue
+            if not isinstance(decoded, dict):
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} must be a json object to enforce structured checks."
+                )
+                continue
+            proof_payload = decoded
+
+        if json_required:
+            assert proof_payload is not None
+            for field_path, expected in json_required.items():
+                actual = _resolve_json_path(proof_payload, str(field_path))
+                if actual != expected:
+                    blocking_reasons.append(
+                        f"repo proof {repo_name}:{relative_path} field '{field_path}' expected {expected!r} but was {actual!r}."
+                    )
+
         if max_age_hours_raw is not None and str(max_age_hours_raw).strip():
             try:
                 max_age_hours = float(max_age_hours_raw)
@@ -237,18 +285,7 @@ def evaluate_journey(
                 if str(item).strip()
             ]
             max_future_skew_seconds = int(proof_row.get("max_future_skew_seconds") or 300)
-            try:
-                proof_payload = json.loads(text)
-            except json.JSONDecodeError:
-                blocking_reasons.append(
-                    f"repo proof {repo_name}:{relative_path} is not valid json, cannot enforce max_age_hours."
-                )
-                continue
-            if not isinstance(proof_payload, dict):
-                blocking_reasons.append(
-                    f"repo proof {repo_name}:{relative_path} must be a json object to enforce max_age_hours."
-                )
-                continue
+            assert proof_payload is not None
             proof_generated_at = None
             proof_generated_field = ""
             for field_name in timestamp_fields:

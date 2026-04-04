@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:03:23Z",
+  "generated_at": "2026-04-04T17:07:18Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:01:12Z",
+      "at": "2026-04-04T17:06:10Z",
       "state": "fresh",
-      "age_seconds": 131
+      "age_seconds": 68
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T16:40:25Z",
       "state": "fresh",
-      "age_seconds": 1378
+      "age_seconds": 1613
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-03T15:29:59Z",
       "state": "fresh",
-      "age_seconds": 92004
+      "age_seconds": 92239
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-03T15:29:59Z",
       "state": "fresh",
-      "age_seconds": 92004
+      "age_seconds": 92239
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:01:12Z",
       "state": "fresh",
-      "age_seconds": 131
+      "age_seconds": 366
     }
   },
   "journeys": [
@@ -58,7 +58,8 @@
       "blocking_reasons": [
         "required project ui is missing from status-plane truth.",
         "required project hub is missing from status-plane truth.",
-        "required project hub-registry is missing from status-plane truth."
+        "required project hub-registry is missing from status-plane truth.",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'."
       ],
       "warning_reasons": [],
       "owner_repos": [
@@ -118,8 +119,12 @@
           {
             "repo": "chummer6-ui",
             "path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            "json_must_equal": {
+              "status": "pass"
+            },
             "must_contain": [
               "\"contract_name\": \"chummer6-ui.desktop_executable_exit_gate\"",
+              "\"status\": \"pass\"",
               "\"windows_gate:avalonia:win-x64\"",
               "\"windows_gate:blazor-desktop:win-x64\"",
               "\"linux_gate:avalonia:linux-x64\"",
@@ -181,7 +186,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 3,
+        "blocking_reason_count": 4,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,

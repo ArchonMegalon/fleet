@@ -71,6 +71,41 @@
 - Exact blocker:
   - no product blocker for this milestone-17 projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and design/fleet pushes remain credential-gated.
 
+## 2026-04-04: milestone-1/3 install journey proof now fail-closes on structured desktop exit-gate pass status
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/recovery and packaged desktop proof to fail honest when promoted executable truth is not actually passing.
+  - journey-gate `repo_source_proof.must_contain` checks were substring-based, so adding `"status": "pass"` was insufficient: the desktop gate payload can still contain that substring in nested evidence while top-level `status` is `fail`.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added structured proof checks via `repo_source_proof.json_must_equal`.
+    - added dot-path JSON field resolver (dict/list aware) used for fail-close equality checks.
+    - unified JSON parsing for structured checks and stale-proof age checks so malformed/non-object JSON fail-closes once with explicit reason.
+  - patched gate registry mirrors:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - install journey desktop executable proof now requires:
+      - `json_must_equal.status: pass`
+      - plus existing tuple/startup-smoke markers and freshness requirements.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_mismatches`.
+    - strengthened registry contract test to require `json_must_equal: {"status": "pass"}`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - install journey now includes explicit blocking reason:
+      - `field 'status' expected 'pass' but was 'fail'`.
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - receipt inspection confirms new blocking reason in `JOURNEY_GATES.generated.json` for install journey desktop proof status mismatch.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - pending local commits in `fleet` and `chummer6-design`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - full pytest execution remains unavailable in this environment because `pytest` is not installed.
+
 ## 2026-04-04: milestone-1/3 journey gates now fail-close on stale per-head desktop executable proof receipts
 
 - Trigger:
