@@ -31,6 +31,24 @@
   - `chummer-hub-registry`: committed and pushed (`15e6d15` -> `fleet/hub-registry`).
   - `fleet`: handoff committed (`8418dad`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
+## 2026-04-04: milestone-2 Hub verify unexpected-journey mutation now uses canonical baseline journey ids plus one explicit extra id
+
+- Trigger:
+  - the verify mutation labeled for unexpected `releaseProof.journeysPassed` ids previously used only legacy-style journey ids, so parity audit could fail early on missing-required baseline ids instead of deterministically proving the unexpected-id branch.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - rewired the unexpected-journey mutation to use the canonical required baseline set (`install_claim_restore_continue`, `build_explain_publish`, `campaign_session_recover_recap`, `report_cluster_release_notify`) plus one explicit extra id `bonus-noncanonical-journey`.
+    - preserved existing fail-close assertion text and restore flow.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (now emits explicit unexpected-journey fail-close for `bonus-noncanonical-journey` in mutation lane, then completes smoke).
+- Current trusted state:
+  - Hub verify mutation coverage now deterministically exercises the unexpected journey-id fail-close branch rather than relying on incidental missing-required failure ordering.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for unexpected `releaseProof.proofRoutes` and duplicate `releaseProof.journeysPassed` ids
 
 - Trigger:
