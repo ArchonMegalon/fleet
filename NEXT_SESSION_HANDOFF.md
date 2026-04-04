@@ -50,6 +50,7 @@
   - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
     - requires `evidence.required_tests` and fail-closes if core milestone-2 visual tests are absent.
     - requires `evidence.required_screenshots` and fail-closes if canonical 15 screenshot slots are missing.
+    - requires pass-ready visual rhythm/familiarity status markers (`runtime_backed_legacy_workbench`, creation/advancement/magic/matrix/gear/cyberware/vehicles/contacts/diary rhythms, and `legacy_familiarity_bridge`).
     - fail-closes on non-empty `missing_screenshots`, `invalid_screenshots`, `undersized_screenshots`, `stale_screenshots`, and `screenshots_older_than_flagship_receipt`.
     - fail-closes on non-empty `missing_theme_tokens` and non-pass `flagship_theme_readability_contrast`.
   - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
@@ -60,7 +61,31 @@
 - Current trusted state:
   - milestone-2 parity proof now fails if canonical flagship screenshot evidence or legacy theme/readability proof drifts, instead of allowing interaction-only status to pass.
 - Push status:
-  - `chummer6-hub`: committed locally as `58c76850`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `chummer6-hub`: committed locally as `58c76850` and `edd35cf4`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes stale passing Linux tuple receipts that are no longer promoted
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-binary proof that cannot lie by carrying stale passing tuple receipts outside current release-channel promotion truth.
+  - `materialize-desktop-executable-exit-gate.sh` already failed on stale passing non-promoted Windows/macOS tuple receipts, but Linux tuple receipts were not included in the same stale-receipt sweep.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - extended `collect_stale_platform_gate_receipts_without_promoted_tuples(...)` to include Linux (`UI_LINUX*_DESKTOP_EXIT_GATE.generated.json`) alongside Windows/macOS.
+    - added Linux promoted tuple set derivation (`promoted_linux_tuples`) from release-channel desktop installer artifacts with explicit `head` + `rid`.
+    - added evidence emission `stale_linux_gate_receipts_without_promoted_tuples` and wired Linux promoted tuples into stale receipt collection.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Desktop_executable_gate_fail_closes_stale_passing_linux_windows_and_macos_tuple_receipts_that_are_not_promoted` to lock Linux stale-receipt fail-close markers.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - remains expected-fail (`43`) on real missing promoted Windows/macOS tuples; Linux stale-receipt evidence path is now governed in the same executable gate.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`5` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with unchanged real blocker reasons for missing promoted Windows/macOS installer/startup-smoke proof.
+- Current trusted state:
+  - executable-gate stale tuple-receipt fail-close logic now covers Linux, Windows, and macOS consistently, preventing stale passing Linux tuple receipts from surviving outside promoted release truth.
+  - frontier blocker remains external publication truth for promoted Windows/macOS installer bytes and startup-smoke receipts.
+- Push status:
+  - `chummer6-ui`: local commit/push pending for this slice in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-2 parity audit now fail-closes when workflow-family proof is missing required audit tests
