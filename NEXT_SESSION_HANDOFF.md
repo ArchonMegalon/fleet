@@ -1,3 +1,35 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 workspace-v4 compact prep query canonicalization slice
+
+- Commits landed:
+  - `chummer6-hub`: `fe0d931b` (`feat(w3-4-5-6): canonicalize workspace-v4 compact prep query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 prep-library lane now fail-closes compact workspace-v4 packet/brief shorthand across API and workspace audits
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign workspace v4 continuity and GM/offline continuity to remain one governed prep-library lane.
+  - compact workspace-v4 query forms (`workspacev4`, `workspacev4packet`, `campaignworkspacev4packet`, `campaignworkspacev4brief`) were not canonicalized, leaving under-match risk for operator shorthand tied to the workspace-v4 lane label.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact workspace-v4 alias rewrites and workspace+`v4` folding into governed campaign-return packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - added `RewriteAliases_CollapsesWorkspaceV4CompactFormsIntoCampaignReturnPacketTokens`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended compact continuity+GM packet matching coverage to include workspace-v4 compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - API `queryText=` and workspace `prepQuery=` audit matrices now include workspace-v4 compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace-v4 compact query assertions via `assertWorkspacePrepQuerySearch(...)`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new audit/playwright markers for all workspace-v4 compact forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`11 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for compact packet-form handoff push-status docs slice
 
 - Commits landed:
