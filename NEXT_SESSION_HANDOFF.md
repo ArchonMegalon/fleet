@@ -28839,8 +28839,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - milestone-2 hub parity now enforces the same high-value localization-gate contract families that release-channel verification expects, reducing delayed discovery of localization release-proof drift.
   - localization parity trust no longer depends solely on status/freshness checks when schema-level localization evidence has drifted.
 - Push status:
-  - `chummer6-hub`: local changes landed (`scripts/audit-ui-parity.sh`, `scripts/ai/verify.sh`); commit/push pending (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+  - commits landed:
+    - `chummer6-hub`: `3a3dd5b5` (`fix(parity): fail-close localization gate contract drift`).
+    - `fleet`: `432b367` (`docs(handoff): record localization parity fail-close slice`).
+  - push attempts:
+    - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+    - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - exact blocker:
+    - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local until auth is restored.
 
 ## 2026-04-03: UI executable gate now requires explicit release-channel desktop tuple-coverage metadata so platform/head pair truth cannot hide behind inferred fallback
 
