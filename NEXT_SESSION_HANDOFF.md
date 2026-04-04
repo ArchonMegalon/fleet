@@ -27,9 +27,10 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`389` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending (workspace is concurrently dirty across multiple tracked files in `chummer.run-services`; this slice is implemented and verified locally).
+  - `fleet`: `102926c` (`docs(handoff): record w3 travel offline lane continuity cues`).
+  - `chummer6-hub` / `chummer.run-services`: pending local commit (workspace is concurrently dirty across multiple tracked files; this slice is implemented and verified locally).
 - Push attempts:
-  - not attempted for this slice because scoped commit is pending in the concurrent dirty worktree.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - no product blocker for the implemented milestone-6 lane-proof slice; commit/push is operationally blocked until concurrent dirty worktree state is isolated for safe scoped commit.
 
