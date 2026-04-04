@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:33:37Z",
+  "generated_at": "2026-04-04T17:36:31Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:31:19Z",
+      "at": "2026-04-04T17:36:12Z",
       "state": "fresh",
-      "age_seconds": 138
+      "age_seconds": 19
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 889
+      "age_seconds": 1063
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 935
+      "age_seconds": 1109
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 935
+      "age_seconds": 1109
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 934
+      "age_seconds": 1108
     }
   },
   "journeys": [
@@ -237,7 +237,8 @@
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
-        "support_update_required_misrouted_case_count": 0
+        "support_update_required_misrouted_case_count": 0,
+        "support_install_truth_contract_violation_count": 0
       }
     },
     {
@@ -316,6 +317,7 @@
               "response[\"customDataLaneReceipt\"]",
               "response[\"translatorLaneReceipt\"]",
               "response[\"importOracleLaneReceipt\"]",
+              "response[\"importOracleMissingSources\"]",
               "response[\"sr6SuccessorLaneReceipt\"]",
               "firstSourcebook[\"referenceSnapshotPosture\"]"
             ]
@@ -329,6 +331,7 @@
               "BuildCustomDataLaneReceipt",
               "BuildTranslatorLaneReceipt",
               "BuildImportOracleLaneReceipt",
+              "ImportOracleMissingSources",
               "BuildSr6SuccessorLaneReceipt",
               "ResolveReferenceSnapshotPosture"
             ]
@@ -413,7 +416,8 @@
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
-        "support_update_required_misrouted_case_count": 0
+        "support_update_required_misrouted_case_count": 0,
+        "support_install_truth_contract_violation_count": 0
       }
     },
     {
@@ -522,7 +526,8 @@
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
-        "support_update_required_misrouted_case_count": 0
+        "support_update_required_misrouted_case_count": 0,
+        "support_install_truth_contract_violation_count": 0
       }
     },
     {
@@ -625,7 +630,8 @@
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
-        "support_update_required_misrouted_case_count": 0
+        "support_update_required_misrouted_case_count": 0,
+        "support_install_truth_contract_violation_count": 0
       }
     },
     {
@@ -689,6 +695,7 @@
         "require_support_freshness": true,
         "require_support_closure_waiting_zero": true,
         "require_support_update_required_routes_to_downloads": true,
+        "require_support_install_truth_contract": true,
         "required_project_posture": [
           {
             "project_id": "hub",
@@ -731,7 +738,8 @@
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
-        "support_update_required_misrouted_case_count": 0
+        "support_update_required_misrouted_case_count": 0,
+        "support_install_truth_contract_violation_count": 0
       }
     },
     {
@@ -816,7 +824,8 @@
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
-        "support_update_required_misrouted_case_count": 0
+        "support_update_required_misrouted_case_count": 0,
+        "support_install_truth_contract_violation_count": 0
       }
     }
   ]

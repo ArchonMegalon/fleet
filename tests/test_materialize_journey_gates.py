@@ -895,6 +895,129 @@ groups: []
     )
 
 
+def test_materialize_journey_gates_blocks_when_support_packet_install_truth_contract_is_incomplete(tmp_path: Path) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: report_cluster_release_notify
+    title: Report, cluster, release, notify
+    user_promise: Honest closure stays tied to release truth.
+    canonical_journeys:
+      - journeys/claim-install-and-close-a-support-case.md
+    owner_repos: [chummer6-hub, fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report, support_packets]
+      minimum_history_snapshots: 2
+      require_support_freshness: true
+      require_support_install_truth_contract: true
+      required_project_posture:
+        - project_id: hub
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: hub
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 2}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 2}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "summary": {
+                    "closure_waiting_on_release_truth": 0,
+                    "needs_human_response": 0,
+                    "update_required_case_count": 0,
+                    "update_required_routed_to_downloads_count": 0,
+                    "update_required_misrouted_case_count": 0,
+                },
+                "packets": [
+                    {
+                        "packet_id": "support_packet_bad_contract",
+                        "status": "new",
+                        "install_truth_state": "promoted_tuple_match",
+                        "install_diagnosis": {
+                            "registry_channel_id": "preview",
+                            "registry_release_version": "",
+                        },
+                        "fix_confirmation": {"state": "awaiting_reporter_verification"},
+                        "recovery_path": {"action_id": "", "href": "/downloads"},
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    journey = payload["journeys"][0]
+    assert payload["summary"]["overall_state"] == "blocked"
+    assert journey["signals"]["support_install_truth_contract_violation_count"] == 2
+    assert any(
+        "support packet support_packet_bad_contract is missing install_diagnosis.registry_release_version." in reason
+        for reason in journey["blocking_reasons"]
+    )
+    assert any(
+        "support packet support_packet_bad_contract is missing recovery_path.action_id." in reason
+        for reason in journey["blocking_reasons"]
+    )
+
+
 def test_materialize_journey_gates_blocks_when_mobile_local_release_proof_marker_is_missing(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -1132,6 +1255,7 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert 'response["customDataLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["translatorLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["importOracleLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["importOracleMissingSources"]' in core_api.get("must_contain", [])
     assert 'response["sr6SuccessorLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'firstSourcebook["referenceSnapshotPosture"]' in core_api.get("must_contain", [])
 
@@ -1141,6 +1265,7 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert "BuildCustomDataLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildTranslatorLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildImportOracleLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "ImportOracleMissingSources" in core_tool_catalog.get("must_contain", [])
     assert "BuildSr6SuccessorLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "ResolveReferenceSnapshotPosture" in core_tool_catalog.get("must_contain", [])
 
@@ -1217,6 +1342,8 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
         "knownIssueSummary": True,
         "fixAvailabilitySummary": True,
     }
+    assert release_channel_proof.get("max_age_hours") == 48
+    assert release_channel_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
     release_channel_markers = release_channel_proof.get("must_contain", [])
     assert '"desktopTupleCoverage"' in release_channel_markers
     assert '"releaseProof"' in release_channel_markers
@@ -1224,3 +1351,36 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
     assert '"missingRequiredPlatforms"' in release_channel_markers
     assert '"missingRequiredPlatformHeadPairs"' in release_channel_markers
     assert '"missingRequiredPlatformHeadRidTuples"' in release_channel_markers
+
+    hub_local_release_proof = next(
+        row
+        for row in proofs
+        if isinstance(row, dict)
+        and row.get("repo") == "chummer6-hub"
+        and row.get("path") == ".codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json"
+    )
+    assert hub_local_release_proof.get("max_age_hours") == 48
+    assert hub_local_release_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
+
+    mobile_local_release_proof = next(
+        row
+        for row in proofs
+        if isinstance(row, dict)
+        and row.get("repo") == "chummer6-mobile"
+        and row.get("path") == ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    )
+    assert mobile_local_release_proof.get("max_age_hours") == 48
+    assert mobile_local_release_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
+
+
+def test_report_cluster_release_notify_requires_support_install_truth_contract() -> None:
+    registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    journeys = registry.get("journey_gates") or []
+    support_gate = next(
+        row for row in journeys if isinstance(row, dict) and row.get("id") == "report_cluster_release_notify"
+    )
+    fleet_gate = support_gate.get("fleet_gate") or {}
+    assert fleet_gate.get("require_support_freshness") is True
+    assert fleet_gate.get("require_support_closure_waiting_zero") is True
+    assert fleet_gate.get("require_support_update_required_routes_to_downloads") is True
+    assert fleet_gate.get("require_support_install_truth_contract") is True
