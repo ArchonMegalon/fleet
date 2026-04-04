@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-2 registry release-proof now fail-closes incomplete canonical flagship `proofRoutes` coverage at materialization and verification
+
+- Trigger:
+  - milestone `2` parity automation now requires canonical flagship route coverage in nested release-channel `releaseProof.proofRoutes`.
+  - `chummer-hub-registry` materializer and verifier still accepted any non-empty canonical route list, which left a drift path where promoted shelf proof could silently drop milestone-critical route evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added required canonical flagship `proof_routes` coverage set:
+      - `/downloads/install/avalonia-linux-x64-installer`
+      - `/home/access`
+      - `/home/work`
+      - `/account/work`
+      - `/account/support`
+      - `/contact`
+    - materializer now fail-closes when normalized `proof_routes` is missing any required flagship route.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - mirrored the same required canonical flagship `releaseProof.proofRoutes` coverage checks at verification time.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - updated release-proof fixtures to carry canonical flagship route coverage.
+    - added mutation proving materializer fail-close when required flagship route coverage is incomplete.
+    - added mutation proving verifier fail-close when required flagship route coverage is incomplete.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented required canonical flagship route-set coverage for `releaseProof.proofRoutes`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - release-channel truth now fail-closes incomplete milestone-2 flagship route evidence at both projection and verifier boundaries, aligning registry gate semantics with hub parity-audit expectations.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes missing nested release-proof journey and route coverage in release-channel receipts
 
 - Trigger:
