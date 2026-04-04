@@ -91,6 +91,28 @@
 - Exact blocker:
   - no repo-local blocker for this slice; remote push remains credential-gated for GitHub HTTPS in this environment.
 
+## 2026-04-04: milestone-17 import parity receipt hardening + design/mirror canon sync landed with core push success
+
+- Trigger:
+  - after landing executable receipt guards in `chummer6-core`, canon still needed an explicit wording sync in design + local mirror so milestone-17 prose matches the new `import_oracles`/`adjacent_oracles` receipt contract.
+- Landed:
+  - committed in `chummer6-core`:
+    - `38caa64a` (`feat(w2-17): lock import parity receipt oracle coverage`)
+    - adds core-engine test guard for explicit oracle naming and updates import parity receipt payload.
+  - committed in `chummer6-design`:
+    - `e5edf7a` (`docs(w2-17): sync parity canon with import receipt oracle fields`)
+    - updates parity matrix wording for milestone-17 to call out explicit `import_oracles` + `adjacent_oracles` fail-close posture.
+  - updated local mirror:
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md` now mirrors the same milestone-17 wording.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `38caa64a`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> pending for this handoff append.
+- Exact blocker:
+  - no repo-local blocker for milestone-17 receipt hardening or canon sync; push for `chummer6-design` remains credential-gated in this environment.
+
 ## 2026-04-04: milestone-17 import parity receipt now fail-closes on explicit Chummer4/5a/Hero Lab plus Genesis/CommLink oracle coverage
 
 - Trigger:
