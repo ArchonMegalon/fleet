@@ -304,6 +304,88 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
 def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
     requests = _release_channel_external_proof_requests(payload)
     reasons: List[str] = []
+    coverage = dict(payload.get("desktopTupleCoverage") or {})
+    reported_missing_tuples = coverage.get("missingRequiredPlatformHeadRidTuples")
+    if requests and not isinstance(reported_missing_tuples, list):
+        reasons.append(
+            "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
+            "must be an explicit list (empty when complete) whenever externalProofRequests are present."
+        )
+    request_tuple_ids = sorted(
+        {
+            str(item.get("tuple_id") or "").strip()
+            for item in requests
+            if str(item.get("tuple_id") or "").strip()
+        }
+    )
+    if isinstance(reported_missing_tuples, list):
+        normalized_reported_missing_tuples = sorted(
+            {
+                str(item or "").strip()
+                for item in reported_missing_tuples
+                if str(item or "").strip()
+            }
+        )
+        if normalized_reported_missing_tuples != request_tuple_ids:
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
+                "must exactly match externalProofRequests tupleId inventory."
+            )
+        expected_missing_platforms: set[str] = set()
+        expected_missing_head_pairs: set[str] = set()
+        malformed_missing_tuple = False
+        for tuple_id in normalized_reported_missing_tuples:
+            parts = [part.strip().lower() for part in tuple_id.split(":")]
+            if len(parts) != 3 or not all(parts):
+                malformed_missing_tuple = True
+                break
+            head, _rid, platform = parts
+            expected_missing_platforms.add(platform)
+            expected_missing_head_pairs.add(f"{head}:{platform}")
+        if malformed_missing_tuple:
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
+                "must contain canonical 'head:rid:platform' entries."
+            )
+        else:
+            reported_missing_platforms = coverage.get("missingRequiredPlatforms")
+            if requests and not isinstance(reported_missing_platforms, list):
+                reasons.append(
+                    "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' "
+                    "must be an explicit list (empty when complete) whenever externalProofRequests are present."
+                )
+            elif isinstance(reported_missing_platforms, list):
+                normalized_reported_missing_platforms = sorted(
+                    {
+                        str(item or "").strip().lower()
+                        for item in reported_missing_platforms
+                        if str(item or "").strip()
+                    }
+                )
+                if normalized_reported_missing_platforms != sorted(expected_missing_platforms):
+                    reasons.append(
+                        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' "
+                        "must match platforms implied by missingRequiredPlatformHeadRidTuples."
+                    )
+            reported_missing_head_pairs = coverage.get("missingRequiredPlatformHeadPairs")
+            if requests and not isinstance(reported_missing_head_pairs, list):
+                reasons.append(
+                    "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' "
+                    "must be an explicit list (empty when complete) whenever externalProofRequests are present."
+                )
+            elif isinstance(reported_missing_head_pairs, list):
+                normalized_reported_missing_head_pairs = sorted(
+                    {
+                        str(item or "").strip().lower()
+                        for item in reported_missing_head_pairs
+                        if str(item or "").strip()
+                    }
+                )
+                if normalized_reported_missing_head_pairs != sorted(expected_missing_head_pairs):
+                    reasons.append(
+                        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' "
+                        "must match head/platform pairs implied by missingRequiredPlatformHeadRidTuples."
+                    )
     for item in requests:
         tuple_id = str(item.get("tuple_id") or "").strip()
         required_host = str(item.get("required_host") or "").strip().lower()

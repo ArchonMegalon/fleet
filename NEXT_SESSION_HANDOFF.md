@@ -1,3 +1,40 @@
+## 2026-04-04: milestone-1/3 install proof lane now fail-closes tuple-coverage drift between missing tuple inventory and external-proof request inventory
+
+- Trigger:
+  - W1 milestones `1` and `3` require release-channel external proof backlog truth to remain canonical so packaged-binary install/update/recovery receipts cannot lie.
+  - `materialize_journey_gates` validated `externalProofRequests` tuple shape/host semantics, but did not fail-close when `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples` drifted from external-proof tuple requests or when reported missing platforms/head-pairs drifted from tuple inventory.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - fail-closed when `desktopTupleCoverage.externalProofRequests` is present but `missingRequiredPlatformHeadRidTuples` is not an explicit list.
+    - fail-closed when `missingRequiredPlatformHeadRidTuples` does not exactly match external-proof `tupleId` inventory.
+    - fail-closed malformed `missingRequiredPlatformHeadRidTuples` entries that are not canonical `head:rid:platform`.
+    - fail-closed `missingRequiredPlatforms` and `missingRequiredPlatformHeadPairs` drift against values implied by `missingRequiredPlatformHeadRidTuples`.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_release_channel_external_proof_reasons_reject_missing_tuple_inventory_mismatch`.
+    - added `test_release_channel_external_proof_reasons_reject_missing_platform_pair_inventory_drift`.
+    - updated existing malformed/mismatch/duplicate tests for the stricter explicit inventory contract.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "release_channel_external_proof_reasons_reject_missing_tuple_inventory_mismatch or release_channel_external_proof_reasons_reject_missing_platform_pair_inventory_drift or release_channel_external_proof_reasons_reject_duplicate_tuple_rows or release_channel_external_proof_reasons_reject_malformed_tuple_identity or release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch"` -> PASS (`5 passed`, `27 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py -k "external_proof_requests_include_startup_smoke_contract_fields or install_journey_blocks_when_support_external_proof_backlog_summary_drifts" && python3 -m pytest -q tests/test_materialize_support_case_packets.py -k "external_proof"` -> PASS (`2 passed`, `5 deselected`; `4 passed`, `7 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion-review frontier rematerialized; active blocker remains missing external macOS/Windows tuple proof capture).
+- Exact blocker:
+  - missing external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
+
+## 2026-04-04: milestone-1/3 completion-review executable gate now fail-closes future-generated proof timestamps
+
+- Trigger:
+  - W1 milestones `1` and `3` require packaged-binary proof receipts that cannot lie on freshness semantics.
+  - `_desktop_executable_exit_gate_audit(...)` clamped negative age deltas to zero, so a future `generatedAt` timestamp could evade stale/freshness integrity checks.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - fail-closed executable-gate payloads whose `generatedAt/generated_at` timestamp is more than 60 seconds in the future.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_desktop_executable_exit_gate_audit_rejects_future_generated_at_timestamp`.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit_rejects_future_generated_at_timestamp or desktop_executable_exit_gate_audit_rejects_duplicate_external_blocking_rows or desktop_executable_exit_gate_audit_rejects_blocking_row_content_mismatch_vs_local_and_external"` -> PASS (`3 passed`, `185 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit or design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale"` -> PASS (`9 passed`, `179 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized; external host tuple proof remains the active blocker).
+
 ## 2026-04-04: milestone-1/3 completion-review executable gate now fail-closes duplicate or contradictory finding-row payloads
 
 - Trigger:

@@ -72,6 +72,7 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
 def test_release_channel_external_proof_reasons_reject_malformed_tuple_identity() -> None:
     payload = {
         "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia-win-x64-windows"],
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia-win-x64-windows",
@@ -84,13 +85,15 @@ def test_release_channel_external_proof_reasons_reject_malformed_tuple_identity(
 
     reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
 
-    assert len(reasons) == 1
-    assert "must be canonical 'head:rid:platform'" in reasons[0]
+    assert any("must be canonical 'head:rid:platform'" in reason for reason in reasons)
 
 
 def test_release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch() -> None:
     payload = {
         "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
@@ -103,13 +106,15 @@ def test_release_channel_external_proof_reasons_reject_required_host_tuple_platf
 
     reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
 
-    assert len(reasons) == 1
-    assert "requiredHost' must match tuple platform" in reasons[0]
+    assert any("requiredHost' must match tuple platform" in reason for reason in reasons)
 
 
 def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() -> None:
     payload = {
         "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
@@ -127,9 +132,64 @@ def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() ->
 
     reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
 
-    assert len(reasons) == 1
-    assert "must contain unique tupleId entries" in reasons[0]
-    assert "appeared 2 times" in reasons[0]
+    assert any("must contain unique tupleId entries" in reason for reason in reasons)
+    assert any("appeared 2 times" in reason for reason in reasons)
+
+
+def test_release_channel_external_proof_reasons_reject_missing_tuple_inventory_mismatch() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows", "blazor-desktop:osx-arm64:macos"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                }
+            ],
+        }
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert any(
+        "missingRequiredPlatformHeadRidTuples' must exactly match externalProofRequests tupleId inventory" in reason
+        for reason in reasons
+    )
+
+
+def test_release_channel_external_proof_reasons_reject_missing_platform_pair_inventory_drift() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows", "blazor-desktop:osx-arm64:macos"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+                {
+                    "tupleId": "blazor-desktop:osx-arm64:macos",
+                    "requiredHost": "macos",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ],
+        }
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert any(
+        "missingRequiredPlatforms' must match platforms implied by missingRequiredPlatformHeadRidTuples" in reason
+        for reason in reasons
+    )
+    assert any(
+        "missingRequiredPlatformHeadPairs' must match head/platform pairs implied by missingRequiredPlatformHeadRidTuples"
+        in reason
+        for reason in reasons
+    )
 
 
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
