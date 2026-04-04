@@ -30,6 +30,34 @@
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4 campaign spine now normalizes whitespace-padded aftermath package kinds for replay and downtime routing
+
+- Trigger:
+  - frontier milestone `4` requires downtime/aftermath return-loop truth to stay stable even when package kind strings arrive with formatting drift.
+  - `CampaignSpineService` still used raw `PackageKind` string equality in replay/downtime routing for next-session carry-forward, campaign memory anchor selection, and workspace change-packet replay detection.
+  - whitespace-padded package kinds (for example `"  replay_timeline  "` or `"  downtime_brief  "`) could mis-route replay-safe versus recap-safe summaries and duplicate downtime-only memory anchors as both aftermath recap and downtime brief.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added canonical package-kind normalization helpers for aftermath package routing.
+    - switched replay/downtime routing comparisons to normalized helpers.
+    - prevented duplicate anchor classification when the same package would otherwise be selected as both lead aftermath and lead downtime package.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineNextSessionCarryForwardTreatsWhitespacePaddedReplayPackageKindAsReplay`.
+    - added `CampaignSpineCampaignMemoryTreatsWhitespacePaddedDowntimePackageKindAsDowntimeBrief`.
+    - added focused reflection helpers and campaign fixture helper for exercising private campaign-spine routing seams directly.
+  - committed in `chummer.run-services`:
+    - `47960a86` — `Normalize aftermath package kind routing in campaign spine`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineNextSessionCarryForwardTreatsWhitespacePaddedReplayPackageKindAsReplay|FullyQualifiedName~CampaignSpineCampaignMemoryTreatsWhitespacePaddedDowntimePackageKindAsDowntimeBrief" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`285` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - replay and downtime package kinds now route through normalized bounded comparisons, so whitespace formatting drift no longer degrades campaign return-loop semantics.
+  - campaign memory summaries no longer double-count a downtime-only package as both `aftermath recap` and `downtime brief`.
+- Push status:
+  - `chummer.run-services`: pending (credential-dependent in this environment).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 campaign-spine creator publication build now normalizes whitespace-padded publication ids before dedup
 
 - Trigger:
