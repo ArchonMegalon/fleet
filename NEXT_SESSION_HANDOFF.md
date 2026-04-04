@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-5 GM operations lane now fail-closes `gm operation(s)` compact/split/hyphen aliases across prep tokenization, GM prep search, and live API/UI journeys
+
+- Trigger:
+  - frontier milestone `5` requires GM operations and event controls to remain one governed lane across prep retrieval, operator search, and signed-in journeys.
+  - canonicalization handled `gmops/gmop/gm ops/gm-ops`, but `gm operation(s)` variants were not explicitly normalized and audited.
+  - this left a drift seam where common long-form GM wording could skip governed event-control matching in prep retrieval proof.
+- Landed:
+  - patched service canonicalization:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+      - `EventControlCompactWordTokens` now includes `gmoperation` and `gmoperations`.
+      - prep-query alias rewrite now canonicalizes `gm + operation/operations`, `gmoperation`, and `gmoperations` onto the governed event-control lane.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+      - prep-asset query tokenization now canonicalizes the same `gm operation(s)` families.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - expanded GM shorthand matching to include `gmoperation`, `gmoperations`, `gm operation`, `gm-operation`, `gm operations`, and `gm-operations`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - expanded GM prep-asset shorthand matrix for compact/split/hyphen `gm operation(s)` queries.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions for all new `gm operation(s)` variants.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added API and workspace route checks for `gmoperation`, `gmoperations`, `gm operation`, `gm-operation`, `gm operations`, `gm-operations`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for the same six `gm operation(s)` variants with route-preservation and non-empty governed packet assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsGmOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 GM operations proof now fail-closes compact, split, and hyphen long-form `gm operation(s)` aliases end-to-end across canonicalization, API/workspace audits, and browser journey checks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 live audits now fail-close hyphen `gm-ops` and `gm-op` shorthand across prep-library API and signed-in workspace prep journeys
 
 - Trigger:
