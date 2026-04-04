@@ -1,3 +1,29 @@
+## 2026-04-04: W1/W3 executable gate now classifies quarantined installer bytes as startup-smoke-blocked vs payload-invalid for per-tuple fail-honest proof
+
+- Commits landed:
+  - `chummer6-ui`: `3a9cb92e` (`fix(w1): classify quarantined installer marker posture in executable gate`).
+- Trigger:
+  - milestone-1/3 executable gate reasons reported quarantined tuples, but did not distinguish whether candidate installer bytes were structurally promotion-ready (embedded payload + bundled sample markers present) or structurally invalid.
+  - this obscured whether the next action was platform startup-smoke proof collection vs installer rebuild.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `summarize_quarantine_installer_markers(...)` to inspect quarantined candidate installers for embedded markers:
+      - `ChummerInstaller.Payload.zip`
+      - `Samples/Legacy/Soma-Career.chum5`
+    - windows/macOS gate evidence now emits `quarantined_installer_marker_summary` with candidate classification.
+    - executable gate now emits explicit reasons separating:
+      - payload-valid quarantined bytes blocked pending matching startup-smoke proof.
+      - quarantined bytes failing embedded marker checks (cannot be promoted).
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` so published receipt reasons include the new tuple-level classifier output.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL honestly on missing promoted Windows/macOS tuples and missing non-Linux startup-smoke host capability, now with explicit quarantine marker classification reasons.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`10` tests).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub HTTPS credentials, so commit `3a9cb92e` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 GM ops prep lane now script-locks hyphen `gm-ctl` and `gm-ctls` aliases across API and workspace/browser audits
 
 - Commits landed:
