@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests missing desktopTupleCoverage metadata and missing promotedPlatformHeads mapping fail-close
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary per-head proof to fail honest when tuple-coverage metadata is absent or structurally incomplete.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` already fail-closed these metadata seams:
+    - `Release channel is missing desktopTupleCoverage metadata for promoted desktop install artifacts.`
+    - `Release channel desktopTupleCoverage is missing promotedPlatformHeads mapping for desktop install media.`
+  - `scripts/ai/verify.sh` did not run active mutations for either seam, leaving regression room where those fail-close branches could weaken silently while verify remained green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/verify.sh`:
+    - added active mutation that removes `desktopTupleCoverage` entirely and asserts the missing-metadata fail-close marker.
+    - added active mutation that removes `desktopTupleCoverage.promotedPlatformHeads` and asserts the missing-mapping fail-close marker.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added:
+      - `Verify_entrypoint_runs_active_mutation_for_missing_desktop_tuple_coverage_metadata`
+      - `Verify_entrypoint_runs_active_mutation_for_missing_promoted_platform_heads_mapping`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`30` tests on `net10.0`).
+- Commits landed:
+  - `chummer6-ui`: `2abe4e34` (`fix(w1): mutation-test missing desktop tuple coverage metadata seams`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests requiredDesktopHeads policy and canonical head coverage fail-close
 
 - Trigger:
@@ -21,6 +47,33 @@
   - `chummer6-ui`: `2a7c2da3` (`fix(w1): mutation-test required desktop head policy and canonical coverage`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-04: milestone-2 hub verify lane now mutation-tests localeSummary `untranslatedKeyCount`/`untranslated_key_count` alias drift fail-close
+
+- Trigger:
+  - frontier milestone `2` still depends on executable localization-gate fail-close proof in Hub’s parity verify lane.
+  - `scripts/audit-ui-parity.sh` already fail-closed locale-summary alias drift for `untranslatedKeyCount` vs `untranslated_key_count`, but `scripts/ai/verify.sh` only mutated non-zero untranslated counts and did not actively mutate conflicting alias values for this row field.
+  - this left regression room where locale-summary alias-drift fail-close behavior could weaken silently while verify stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added a mutation that sets conflicting values on the `de-de` row:
+      - `untranslatedKeyCount = 0`
+      - `untranslated_key_count = 1`
+    - requires `scripts/audit-ui-parity.sh` to fail.
+    - requires explicit fail-close expectation text:
+      - `verify gate failed: parity audit should reject conflicting alias values between releaseProof.uiLocalizationReleaseGate.localeSummary.untranslatedKeyCount and releaseProof.uiLocalizationReleaseGate.localeSummary.untranslated_key_count.`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityAuditLocaleSummaryRowContractTests.cs`:
+    - extended verify-entrypoint contract assertions to pin the new locale-summary alias-drift mutation marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityAuditLocaleSummaryRowContractTests" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityAudit" --nologo -v minimal` -> PASS (`9` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `6313e849` (`test(w1): mutate locale-summary untranslated alias drift in hub verify`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
