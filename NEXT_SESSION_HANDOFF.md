@@ -147,11 +147,13 @@
 - Commits landed:
   - `chummer6-ui`: `df6d53dd` (`feat(w2-18): surface explicit sr6 successor lanes in master-index dialog`).
   - `chummer6-design`: `1a69ee5` (`docs(w2-18): record explicit sr6 successor desktop projection coverage`).
+  - `fleet`: `87374ad` (`docs(handoff): record w2-18 explicit sr6 successor desktop lane slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - environment lacks GitHub HTTPS credentials for `chummer6-ui` and `chummer6-design` pushes.
+  - environment lacks GitHub HTTPS credentials for `chummer6-ui`, `chummer6-design`, and `fleet` pushes.
   - targeted MSTest method filters for these `master_index` tests do not resolve in this environment; verification remains build + source-marker gate regression based.
 
 ## 2026-04-04: milestone-3 readiness now downgrades desktop external-only install blockers from missing to warning when local executable blockers are zero
