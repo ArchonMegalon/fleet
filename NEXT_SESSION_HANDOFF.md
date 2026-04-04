@@ -32,6 +32,7 @@
 - Commits landed:
   - `chummer6-ui`: `ed06d47f` (`chore(w1-1-3): refresh desktop exit-gate receipts to external-only blockers`).
   - `fleet`: `35e46c4` (`chore(w1-1-3): refresh journey and completion frontier proof after ui gate rerun`).
+  - `fleet`: `71d3bcd` (`docs(handoff): record w1-1-3 desktop proof recovery push status`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
