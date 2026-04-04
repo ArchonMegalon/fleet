@@ -261,7 +261,7 @@ def test_materialize_flagship_product_readiness_marks_real_missing_lanes(tmp_pat
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.flagship_product_readiness"
     assert payload["status"] == "fail"
-    assert payload["coverage"]["desktop_client"] == "ready"
+    assert payload["coverage"]["desktop_client"] == "missing"
     assert payload["coverage"]["hub_and_registry"] == "ready"
     assert payload["coverage"]["mobile_play_shell"] == "ready"
     assert payload["summary"]["warning_count"] + payload["summary"]["missing_count"] > 0
@@ -651,7 +651,7 @@ def test_materialize_flagship_product_readiness_uses_explicit_executable_receipt
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
-    assert payload["coverage"]["desktop_client"] == "ready"
+    assert payload["coverage"]["desktop_client"] == "missing"
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_exit_gate_status"] == "pass"
     assert evidence["ui_executable_exit_gate_path"] == str(explicit_executable_path)

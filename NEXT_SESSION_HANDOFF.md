@@ -74,6 +74,25 @@
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: Fleet flagship-readiness regression tests now align with canonical dual-head policy and pass cleanly end-to-end
+
+- Trigger:
+  - after canonical dual-head tuple enforcement hardened in readiness logic, two legacy Fleet tests still expected `desktop_client=ready` under single-head (`avalonia`-only) fixture data.
+  - that left `tests/test_materialize_flagship_product_readiness.py` failing in full-file runs despite current policy being correct.
+- Landed:
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - updated `test_materialize_flagship_product_readiness_marks_real_missing_lanes` to assert `desktop_client=missing` under single-head fixture data.
+    - updated `test_materialize_flagship_product_readiness_uses_explicit_executable_receipt_paths` to assert `desktop_client=missing` while still verifying explicit receipt-path wiring/evidence fields.
+    - added `test_materialize_flagship_product_readiness_accepts_split_magic_and_matrix_visual_inventory_variants` to lock milestone-2 visual inventory compatibility for split magic+matrix test IDs.
+    - updated tuple-platform ordering assertion in `test_materialize_flagship_product_readiness_fail_closes_missing_required_platform_head_pairs` to match canonical sorted ordering.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -q` -> PASS (`37` tests).
+- Current trusted state:
+  - Fleet flagship-readiness tests no longer fail on stale single-head assumptions and now execute cleanly against current dual-head policy.
+  - milestone-2 split magic+matrix visual test naming is explicitly regression-covered in test fixtures.
+- Push status:
+  - `fleet`: local changes pending commit/push in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 flagship readiness now accepts split magic+matrix visual test inventory as equivalent proof to legacy combined token
 
 - Trigger:
