@@ -178,6 +178,7 @@
   - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
     - now captures the four upstream parity/frontier payloads and validates receipt `channelId`/`channel` identity against release-channel `channelId`.
     - emits `workflow_parity_receipt_channel_ids` evidence and fail-closes missing/mismatched channel identity.
+    - fail-closes stale/future-skewed release-channel receipt timestamps in workflow execution gate (`release_channel_age_seconds`, `release_channel_future_skew_seconds`).
   - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
     - extended `Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts` to lock workflow-gate channel-binding markers.
     - added `Desktop_workflow_parity_scripts_bind_receipts_to_release_channel_identity` to lock release-channel binding markers across Chummer5a/SR4/SR6/frontier parity scripts.
