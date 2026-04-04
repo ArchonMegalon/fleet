@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-8 Build Lab handoffs now project source-linked rule-environment hints across account and signed-in home decision rails
+
+- Trigger:
+  - milestone `8` requires explain/rule-environment evidence where users make real build/export decisions, and `BUILD_LAB_PRODUCT_MODEL.md` explicitly calls for source-linked hints.
+  - Build Lab handoffs already exposed rule-diff and conditional-state rails, but they did not expose source-pack/house-rule hint receipts as first-class decision cues on account/home rails.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - `BuildLabHandoffProjection` now includes:
+      - `SourceHintSummary`
+      - `SourceHintLines`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab handoff projection now computes deterministic source-linked hint summary/lines from the active rule environment (dossier/workspace):
+      - source packs
+      - house-rule overlays
+      - compatibility-fingerprint binding lane
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - Build handoff detail and build-path list now render source-linked hint summary/lines.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - signed-in Home Build rail now renders source-linked hint summary/lines beside planner/conditional/rule-diff cues.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves source-pack and house-rule hint lanes.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - source guard now requires source-hint summary/line rendering hooks.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - source guard now requires signed-in Home source-hint rendering hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `89c599ac` (`feat(w4-8): surface source-linked build-lab hints on decision rails`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local blocker for this milestone-8 slice; remote push remains blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-10 journey gates now fail-close if update-required support cases are not explicitly routed to /downloads
 
 - Trigger:
