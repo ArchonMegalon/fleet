@@ -1,3 +1,35 @@
+## 2026-04-04: follow-up on milestone-2 opfor-plural prep-query canonicalization (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `32542ee7` (`fix(milestone-2): canonicalize opfor plural shorthand aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2/5 prep-library query now canonicalizes `opforces` and `opfors` to `opfor` across campaign workspace and GM ops lanes
+
+- Trigger:
+  - opposition packet lanes already accepted `opfor`, `op force`, and `oppositions`, but compact plural operator shorthand (`opforces`, `opfors`) still depended on source-term coincidence.
+  - because prep search is all-tokens-required, those compact plural forms could miss assets indexed under canonical `opfor`/`opposition` terms.
+- Landed:
+  - patched shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrites:
+      - `opforces -> opfor`
+      - `opfors -> opfor`
+  - expanded campaign workspace query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation` now asserts `opforces` and `opfors` matching.
+  - expanded GM ops query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation` now asserts `opforces` and `opfors` matching.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services verification passed`; parity-audit mutation-failure lines are expected script-lock probes; script exits with `run-services in-process smoke passed`).
+- Current trusted state:
+  - campaign workspace and GM ops prep search now fail-close compact plural opfor shorthand through the shared contracts canonicalizer, reducing opposition packet retrieval misses in flagship and operator flows.
+
 ## 2026-04-04: follow-up on milestone-2 opposition-plural prep-query canonicalization (commit and push status)
 
 - Commits landed:
