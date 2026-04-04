@@ -19,6 +19,42 @@
   - `chummer6-hub`: local change landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-4 continuity lane now fail-closes plural diary query aliases `sessionlogs` and `session logs` across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-4 continuity proof already executed compact/split diary query surfaces with `sessionlog`, but plural user forms (`sessionlogs`, `session logs`) were not canonicalized or script-locked across workspace prep search and GM ops query surfaces.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added plural session-log alias rewrites:
+      - `sessionlogs -> session + log`
+      - `session + logs -> session + log`
+  - patched service/query tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - added `PrepLibraryQueryMatchingSupportsSessionLogPluralShorthandAcrossWhitespaceAndPunctuation`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - added `ListPrepAssets_QuerySupportsSessionLogPluralShorthandAcrossWhitespaceAndPunctuation`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=sessionlogs` and `queryText=session%20logs`.
+      - added signed-in workspace route checks for `prepQuery=sessionlogs` and `prepQuery=session%20logs`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for compact `sessionlogs` and split `session logs` continuity queries.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded hub live-audit and Playwright marker assertions for `sessionlogs` and `session logs`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSessionLogPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsSessionLogPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 diary continuity search now treats singular/plural session-log phrasing as one governed lane (`sessionlog`, `sessionlogs`, `session log`, `session logs`) across canonicalization, API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `chummer6-hub`: local mirror changes reflect same landed slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub parity audit now derives required workflow families from SR4/SR6 workflow ledgers
 
 - Trigger:
