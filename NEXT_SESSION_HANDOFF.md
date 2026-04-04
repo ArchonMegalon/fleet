@@ -36,9 +36,9 @@
   - `cd /docker/fleet && jq '.summary | {external_proof_required_case_count,unresolved_external_proof_request_count,unresolved_external_proof_request_host_counts,unresolved_external_proof_request_tuple_counts}' .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS (`unresolved_external_proof_request_count=4`, host split `macos=2`, `windows=2`).
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,signals:{support_unresolved_external_proof_request_count:.signals.support_unresolved_external_proof_request_count,external_proof_request_count:.signals.external_proof_request_count}}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (both counts `4`, state remains `blocked` for external host-proof reasons).
 - Commits landed:
-  - `fleet`: `<pending>` (`feat(w1-1-3): fail-close unresolved support external-proof backlog drift`).
+  - `fleet`: `deae48d` (`feat(w1-1-3): fail-close unresolved support external-proof backlog drift`).
 - Push attempts:
-  - pending commit.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - install journey still external-only blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
