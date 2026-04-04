@@ -485,6 +485,13 @@ def evaluate_journey(
                 )
                 continue
             proof_payload = decoded
+            if (
+                repo_name == "chummer6-hub-registry"
+                and relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+            ):
+                # Support/install contract checks need the tuple backlog whenever release-channel truth is present,
+                # even when this gate only enforces json_must_be_one_of fields.
+                external_proof_requests = _release_channel_external_proof_requests(proof_payload)
 
         if json_required:
             assert proof_payload is not None
@@ -499,7 +506,6 @@ def evaluate_journey(
                 and relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
             ):
                 blocking_reasons.extend(_release_channel_external_proof_reasons(proof_payload))
-                external_proof_requests = _release_channel_external_proof_requests(proof_payload)
 
         if json_required_one_of:
             assert proof_payload is not None

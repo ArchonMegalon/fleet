@@ -397,6 +397,11 @@ journey_gates:
             - 'Kind: "roster_movement_packet"'
             - 'Kind: "event_control_packet"'
             - 'InvokeBuildTokens("next-session-return-loops")'
+            - "PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms"
+            - 'InvokeBuildTokens("preplibrarypacket")'
+            - 'InvokeBuildTokens("oppositionpackets")'
+            - 'InvokeBuildTokens("rostermovementpacket")'
+            - 'InvokeBuildTokens("eventcontrolpackets")'
             - "PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms"
             - 'InvokeBuildTokens("mobilecompanionreturnloop")'
             - 'InvokeBuildTokens("campaignmobilecompanionsreturnlanes")'
@@ -707,6 +712,19 @@ journey_gates:
             - '"report_cluster_release_notify"'
             - '"/account/support"'
             - '"/contact"'
+        - repo: chummer6-hub-registry
+          path: .codex-studio/published/RELEASE_CHANNEL.generated.json
+          json_must_be_one_of:
+            status:
+              - published
+              - publishable
+          must_contain:
+            - '"desktopTupleCoverage"'
+            - '"externalProofRequests"'
+          max_age_hours: 48
+          generated_at_fields:
+            - generated_at
+            - generatedAt
       require_support_freshness: true
       require_support_closure_waiting_zero: true
       require_support_update_required_routes_to_downloads: true

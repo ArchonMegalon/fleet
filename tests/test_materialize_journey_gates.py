@@ -1974,6 +1974,14 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'Kind: "roster_movement_packet"' in hub_workspace_tests.get("must_contain", [])
     assert 'Kind: "event_control_packet"' in hub_workspace_tests.get("must_contain", [])
     assert 'InvokeBuildTokens("next-session-return-loops")' in hub_workspace_tests.get("must_contain", [])
+    assert "PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms" in hub_workspace_tests.get(
+        "must_contain",
+        [],
+    )
+    assert 'InvokeBuildTokens("preplibrarypacket")' in hub_workspace_tests.get("must_contain", [])
+    assert 'InvokeBuildTokens("oppositionpackets")' in hub_workspace_tests.get("must_contain", [])
+    assert 'InvokeBuildTokens("rostermovementpacket")' in hub_workspace_tests.get("must_contain", [])
+    assert 'InvokeBuildTokens("eventcontrolpackets")' in hub_workspace_tests.get("must_contain", [])
     assert (
         "PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms"
         in hub_workspace_tests.get("must_contain", [])
@@ -2336,6 +2344,17 @@ def test_report_cluster_release_notify_requires_support_install_truth_contract()
     assert fleet_gate.get("require_support_update_required_routes_to_downloads") is True
     assert fleet_gate.get("require_support_install_truth_contract") is True
     assert fleet_gate.get("require_support_recovery_path_contract") is True
+    proofs = [row for row in (fleet_gate.get("repo_source_proof") or []) if isinstance(row, dict)]
+    release_channel_proof = next(
+        row
+        for row in proofs
+        if row.get("repo") == "chummer6-hub-registry"
+        and row.get("path") == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+    )
+    assert release_channel_proof.get("json_must_be_one_of") == {"status": ["published", "publishable"]}
+    assert release_channel_proof.get("must_contain") == ['"desktopTupleCoverage"', '"externalProofRequests"']
+    assert release_channel_proof.get("max_age_hours") == 48
+    assert release_channel_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
 
 
 def test_materialize_journey_gates_blocks_when_support_tuple_gap_lacks_external_proof_contract(
