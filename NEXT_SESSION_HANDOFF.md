@@ -91,6 +91,25 @@
 - Exact blocker:
   - local environment has no configured GitHub credentials for HTTPS remotes, so commits are local-only until auth is restored.
 
+## 2026-04-04: milestone-2 Hub verify now fail-closes alias-only malformed `releaseProof.proof_routes` and `releaseProof.journeys_passed` payloads
+
+- Trigger:
+  - frontier milestone `2` parity audit already validated canonical route/journey semantics after alias resolution, and verify lane already covered conflicting alias pairs for `proofRoutes/proof_routes` and `journeysPassed/journeys_passed`.
+  - alias-only malformed payload branches were not explicitly executed (`proofRoutes` missing while `proof_routes` malformed, and `journeysPassed` missing while `journeys_passed` malformed), leaving a regression seam if alias-only paths drifted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that removes `releaseProof.proofRoutes`, sets `releaseProof.proof_routes=[" /home/access "]`, and asserts parity-audit rejection.
+    - added mutation that removes `releaseProof.journeysPassed`, sets `releaseProof.journeys_passed=["launch and link"]`, and asserts parity-audit rejection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (new alias-only malformed payload mutations execute and fail-close as expected before baseline smoke completes).
+- Current trusted state:
+  - milestone-2 Hub verify now proves alias-only fail-close for malformed route/journey release-proof payloads, not only dual-key alias-drift scenarios.
+  - release-proof canonical route/journey safety is enforced symmetrically across camelCase and snake_case alias paths in the end-to-end verify entrypoint.
+- Push status:
+  - `chummer6-hub`: local change landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops live audits now script-lock plural compact return alias `nextsessions` across API/workspace and browser journey proof
 
 - Trigger:
