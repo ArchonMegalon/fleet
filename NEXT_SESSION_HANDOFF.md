@@ -24,11 +24,13 @@
   - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Application/Chummer.Application.csproj -nologo -v minimal` -> PASS.
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~WorkspaceServiceTests.Import_get_build_lab_projection_from_sr5_workspace" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered test execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in current baseline).
 - Commits landed:
-  - pending local commits in `chummer6-core` and `fleet`.
+  - `chummer6-core`: `ca6f8c20` (`feat(w4-9): project replay recap and run-module rails from build-lab intake`).
+  - `fleet`: `6286932` (`docs(handoff): record milestone-9 build-lab replay recap module rails`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `ca6f8c20`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - no repo-local implementation blocker for this milestone-9 Build Lab portability-rails slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+  - no repo-local implementation blocker for this milestone-9 Build Lab portability-rails slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and `fleet` push remains credential-gated in this environment.
 
 ## 2026-04-04: milestone-12 governor validation now aligns with Next-12 active-wave truth and guide manifest no longer hardcodes retired successor registry
 
