@@ -21,8 +21,10 @@
   - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj -c Release` -> FAIL (`NU1101` missing private package feeds: `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, `Chummer.Ui.Kit` not resolvable from `nuget.org` in this environment).
 - Commits landed:
   - `chummer6-mobile`: `af2c2c0` (`feat(w3-6): mark cache-pressure offline continuity as degraded in mobile shell`).
+  - `fleet`: `809d162` (`docs(handoff): record w3-6 mobile degraded continuity wording slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for push.
   - local environment is missing configured private package feeds required to restore Chummer contract/ui packages, so mobile regression checks cannot execute end-to-end here.
