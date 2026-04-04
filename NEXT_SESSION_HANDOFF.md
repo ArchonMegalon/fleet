@@ -121,6 +121,38 @@
   - push from this environment still depends on GitHub HTTPS credentials for repos where credentials are absent.
   - local execution of API-level `tests/test_skills.py` slices is blocked until `httpx` is installed in this environment.
 
+## 2026-04-04: milestone-13/14 master-index now emits explicit source-selection and custom-data-authoring lane receipts for no-step-back parity evidence
+
+- Trigger:
+  - frontier milestones `13` and `14` require sourcebook selection plus custom-data/XML/translator successor posture to stay explicit as first-class product lanes.
+  - master-index already emitted source-toggle and custom-data lane receipts, but lacked dedicated source-selection and custom-data-authoring receipts for fail-close parity evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now exposes `SourceSelectionLaneReceipt` and `CustomDataAuthoringLaneReceipt`.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added `BuildSourceSelectionLaneReceipt(...)` for explicit sourcebook-selection posture receipts derived from sourcebook catalog + settings toggle coverage.
+    - added `BuildCustomDataAuthoringLaneReceipt(...)` for explicit custom-data authoring posture receipts derived from settings custom-data directory references + overlay bridge posture.
+    - wired both receipts into empty-catalog and populated `GetMasterIndex()` responses.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - fail-close assertions now require deterministic missing-lane receipt strings for both new fields.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now fail-proves `response["sourceSelectionLaneReceipt"]` and `response["customDataAuthoringLaneReceipt"]`.
+  - patched parity wording:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - sourcebook lane now names explicit source-selection receipts; custom-data lane now names explicit custom-data-authoring receipts.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Contracts/Chummer.Contracts.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `response["sourceSelectionLaneReceipt"]` and `response["customDataAuthoringLaneReceipt"]`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `BuildSourceSelectionLaneReceipt` and `BuildCustomDataAuthoringLaneReceipt`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reads_xml_files_and_tolerates_invalid_documents|FullyQualifiedName~ToolCatalogServiceTests.Master_index_projects_sourcebook_metadata_and_rule_snippets_from_books_catalog|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered execution due existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in this baseline).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` -> FAIL (`No module named pytest` in this environment).
+
 ## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
 
 - Trigger:
