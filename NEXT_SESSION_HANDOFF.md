@@ -22,7 +22,7 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`388` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer6-hub` / `chummer.run-services`: `fcb773f1` (`feat(w3-6): expose travel cache freshness and stale readiness`).
-  - `fleet`: no new commit needed in this session because this handoff section already existed on current local `main` before edits.
+  - `fleet`: `9075f76` (`docs: refresh handoff for w3 travel cache freshness push state`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
