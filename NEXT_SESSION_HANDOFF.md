@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes drift between UI visual-gate required test canon and hub-enforced visual test coverage
+
+- Trigger:
+  - frontier milestone `2` requires visual/workflow familiarity proof to stay complete across creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary workflows.
+  - `chummer6-ui` visual-gate materializer emits a large canonical `required_tests` set, but `chummer6-hub/scripts/audit-ui-parity.sh` still enforced only a narrow subset of visual test ids.
+  - this left a drift window where hub parity audit could pass while newer milestone-2 visual test obligations were missing from receipt enforcement.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - expanded `expected_required_tests` to the full canonical visual test set emitted by `materialize-desktop-visual-familiarity-exit-gate.sh`.
+    - explicitly fail-closes missing dense-workbench, gear, vehicles/drones, cyberware/cyberlimb, contacts/diary/support-route, runtime shell chrome, and standalone interaction route test markers.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-marker assertions that lock representative newly-required visual test ids so future script drift fails tests.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now enforces the same broad visual test canon that UI visual-gate materialization declares, reducing false-green parity receipts caused by partial required-test enforcement.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 contract verifier now asserts full canonical flagship `releaseProof.proofRoutes` set
 
 - Trigger:
