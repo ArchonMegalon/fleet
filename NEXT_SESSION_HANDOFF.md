@@ -1,3 +1,12 @@
+## 2026-04-04: follow-up on fleet handoff sync for milestone-3 Linux startup-smoke checks-alias parity slice
+
+- Commits landed:
+  - `fleet`: `4fb743a` (`docs(handoff): record linux startup-smoke checks alias parity slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: follow-up on milestone-3 Linux startup-smoke checks-alias parity hardening (commit and push status)
 
 - Commits landed:
