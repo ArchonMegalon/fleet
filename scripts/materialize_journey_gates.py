@@ -88,6 +88,7 @@ RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS = (
     "release_channel.generated.json field 'desktoptuplecoverage.missingrequiredplatformheadridtuples'",
 )
 REQUIRED_EXTERNAL_PROOF_TOKENS = ("promoted_installer_artifact", "startup_smoke_receipt")
+SUPPORTED_DESKTOP_PLATFORMS = ("linux", "macos", "windows")
 
 
 def utc_now() -> dt.datetime:
@@ -542,6 +543,7 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
     for item in requests:
         tuple_id = str(item.get("tuple_id") or "").strip()
         required_host = str(item.get("required_host") or "").strip().lower()
+        tuple_platform = str(item.get("platform") or "").strip().lower()
         proof_tokens = item.get("required_proofs")
         if not tuple_id or not isinstance(proof_tokens, list) or not proof_tokens:
             continue
@@ -555,6 +557,19 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
                 f"must be lowercase canonical 'head:rid:platform' but was {tuple_id!r}."
+            )
+            continue
+        if tuple_platform not in SUPPORTED_DESKTOP_PLATFORMS:
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
+                f"must use a supported desktop platform token {list(SUPPORTED_DESKTOP_PLATFORMS)!r} but tuple {tuple_id!r} "
+                f"used {tuple_platform!r}."
+            )
+            continue
+        if required_host not in SUPPORTED_DESKTOP_PLATFORMS:
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredHost' "
+                f"must be one of {list(SUPPORTED_DESKTOP_PLATFORMS)!r} for tuple {tuple_id} but was {required_host!r}."
             )
             continue
         if not bool(item.get("tuple_unique")):

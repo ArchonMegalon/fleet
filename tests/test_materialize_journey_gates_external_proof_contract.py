@@ -297,6 +297,48 @@ def test_external_proof_reasons_fail_close_noncanonical_tuple_id_casing() -> Non
     )
 
 
+def test_external_proof_reasons_fail_close_unsupported_tuple_platform_token() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:win32"],
+            "missingRequiredPlatforms": ["win32"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:win32"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:win32",
+                    "requiredHost": "win32",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "win32",
+                        "rid": "win-x64",
+                        "hostClassContains": "win32",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=win32-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer avalonia win-x64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.externalProofRequests.tupleId' must use a supported desktop platform token"
+        in reason
+        for reason in reasons
+    )
+
+
 def test_external_proof_reasons_fail_close_duplicate_missing_tuple_inventory_rows() -> None:
     payload = {
         "status": "published",
