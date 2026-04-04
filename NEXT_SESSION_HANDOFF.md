@@ -1,3 +1,54 @@
+## 2026-04-04: milestone-2 hub parity audit now fail-closes workflow/visual release-channel generation drift
+
+- Trigger:
+  - frontier milestone `2` requires workflow and visual flagship proof to describe the same release-channel truth, not adjacent snapshots.
+  - `audit-ui-parity.sh` cross-receipt alignment already fail-closed release-channel id and version drift, but it did not enforce alignment on `release_channel_path` or `release_channel_generated_at` between workflow and visual receipts.
+  - this left a drift path where both receipts could pass independently while targeting different fresh release-channel generations.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - cross-receipt alignment now fail-closes when workflow/visual `release_channel_path` values resolve to different nested release receipts.
+    - cross-receipt alignment now fail-closes when workflow/visual `release_channel_generated_at` timestamps drift.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - locked new fail-close markers for nested release-channel path drift and generated-at drift.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now requires workflow and visual receipts to bind to the same release-channel receipt path and generation timestamp, eliminating mixed-snapshot proof drift.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
+## 2026-04-04: milestone-5 opposition-packet prep retrieval now fail-closes canonical opposition queries (`oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, `threat`) across API and workspace route journeys
+
+- Trigger:
+  - frontier milestone `5` requires opposition packets and GM prep-library retrieval to remain first-class governed lanes, not only a single `opposition` query happy path.
+  - live API and workspace route/browser audits verified `opposition` but did not fail-close canonical opposition vocabulary variants.
+  - this left drift windows where opposition prep retrieval could regress for common packet-query variants without failing signed-in closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition prep packet search terms now guarantee canonical opposition query variants `oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, and `threat` while preserving existing derived signal tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, and `threat` with non-empty governed packet assertions.
+    - added signed-in workspace route checks for `prepQuery=oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, and `threat`, including search-result markers and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, and `threat`, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded opposition packet search-term assertions to lock canonical opposition vocabulary availability.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock API/live-audit and Playwright marker coverage for `oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, and `threat`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`342` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition prep retrieval now fail-closes canonical opposition query coverage across API, signed-in workspace route, and browser journey proof.
+  - opposition packets remain queryable through a governed vocabulary lane instead of a single-token `opposition` path.
+- Push status:
+  - `chummer.run-services`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes missing top-level `releaseProof` payloads
 
 - Trigger:
