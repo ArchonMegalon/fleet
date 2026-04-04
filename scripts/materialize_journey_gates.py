@@ -613,6 +613,17 @@ def evaluate_journey(
                     normalized[token] = count
             return {key: normalized[key] for key in sorted(normalized)}
 
+        def _normalized_summary_tokens(value: Any, *, lower: bool) -> List[str]:
+            if not isinstance(value, list):
+                return []
+            tokens = []
+            for raw in value:
+                token = str(raw or "").strip()
+                if not token:
+                    continue
+                tokens.append(token.lower() if lower else token)
+            return sorted(set(tokens))
+
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         support_external_proof_required_count = 0
         expected_external_proof_request_by_tuple = {
@@ -956,6 +967,15 @@ def evaluate_journey(
             blocking_reasons.append(
                 "support packet summary unresolved_external_proof_request_host_counts does not match release-channel external proof backlog."
             )
+        expected_external_proof_backlog_hosts = sorted(expected_external_proof_backlog_host_counts.keys())
+        reported_external_proof_backlog_hosts = _normalized_summary_tokens(
+            support_summary.get("unresolved_external_proof_request_hosts"),
+            lower=True,
+        )
+        if expected_external_proof_backlog_hosts != reported_external_proof_backlog_hosts:
+            blocking_reasons.append(
+                "support packet summary unresolved_external_proof_request_hosts does not match release-channel external proof backlog."
+            )
         expected_external_proof_backlog_tuple_counts = _counter_map(
             [str(item.get("tuple_id") or "").strip() for item in external_proof_requests]
         )
@@ -965,6 +985,15 @@ def evaluate_journey(
         if expected_external_proof_backlog_tuple_counts != reported_external_proof_backlog_tuple_counts:
             blocking_reasons.append(
                 "support packet summary unresolved_external_proof_request_tuple_counts does not match release-channel external proof backlog."
+            )
+        expected_external_proof_backlog_tuples = sorted(expected_external_proof_backlog_tuple_counts.keys())
+        reported_external_proof_backlog_tuples = _normalized_summary_tokens(
+            support_summary.get("unresolved_external_proof_request_tuples"),
+            lower=False,
+        )
+        if expected_external_proof_backlog_tuples != reported_external_proof_backlog_tuples:
+            blocking_reasons.append(
+                "support packet summary unresolved_external_proof_request_tuples does not match release-channel external proof backlog."
             )
     if bool(fleet_gate.get("require_support_recovery_path_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]

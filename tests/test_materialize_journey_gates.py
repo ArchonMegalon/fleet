@@ -1974,6 +1974,12 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'Kind: "roster_movement_packet"' in hub_workspace_tests.get("must_contain", [])
     assert 'Kind: "event_control_packet"' in hub_workspace_tests.get("must_contain", [])
     assert 'InvokeBuildTokens("next-session-return-loops")' in hub_workspace_tests.get("must_contain", [])
+    assert (
+        "PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms"
+        in hub_workspace_tests.get("must_contain", [])
+    )
+    assert 'InvokeBuildTokens("mobilecompanionreturnloop")' in hub_workspace_tests.get("must_contain", [])
+    assert 'InvokeBuildTokens("campaignmobilecompanionsreturnlanes")' in hub_workspace_tests.get("must_contain", [])
 
     hub_gm_ops_verify = proof_for("chummer6-hub", "tests/RunServicesVerification/GmOpsBoardVerification.cs")
     assert 'EventType: "heat.alert"' in hub_gm_ops_verify.get("must_contain", [])

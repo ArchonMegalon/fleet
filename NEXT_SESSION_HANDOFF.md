@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-4/5/6 campaign gate now fail-closes compact mobile-companion return-loop prep-query shorthand markers
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign workspace continuity, GM prep, and travel/offline/mobile companion return semantics to remain one governed lane.
+  - Hub now canonicalizes compact mobile-companion return shorthand, but gate proof still only required older continuity markers and could miss regressions in the new compact-token path.
+- Landed:
+  - hub implementation + regression coverage:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - compact aliases now include return-loop/lane forms for `mobilecompanion*` and `campaignmobilecompanion*` single-token query variants.
+  - canonical gate hardening:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `campaign_session_recover_recap` now fail-closes hub workspace proof markers:
+      - `PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms`
+      - `InvokeBuildTokens("mobilecompanionreturnloop")`
+      - `InvokeBuildTokens("campaignmobilecompanionsreturnlanes")`
+  - Fleet mirror + regression + generated artifacts:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms" -v minimal` -> PASS (`8 passed` on both target frameworks).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 25 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending (recorded after commit step below).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push remains blocked by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-4/5/6 hub prep-query lane now fail-closes compact mobile-companion return-loop shorthand into governed continuity truth
 
 - Trigger:
@@ -40768,3 +40804,35 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-1/3 support install-truth backlog lists now fail-close `hosts` and `tuples` drift against release-channel external-proof truth
+
+- Trigger:
+  - support install-truth contract already checked unresolved external-proof counts and host/tuple count maps, but did not enforce the companion list fields (`unresolved_external_proof_request_hosts`, `unresolved_external_proof_request_tuples`).
+  - this left a drift seam where generated summary lists could contradict release-channel backlog while count maps still matched.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added list normalization helper for support summary token arrays.
+    - `require_support_install_truth_contract` now fail-closes when:
+      - `summary.unresolved_external_proof_request_hosts` differs from release-channel backlog host set.
+      - `summary.unresolved_external_proof_request_tuples` differs from release-channel backlog tuple set.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_journey_gates_external_proof_contract.py`
+      - added `test_install_journey_blocks_when_support_external_proof_backlog_hosts_or_tuples_lists_drift`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_journey_gates.py tests/test_materialize_support_case_packets.py -k "external_proof"` -> PASS (`14 passed, 26 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending (recorded after commit step below).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.

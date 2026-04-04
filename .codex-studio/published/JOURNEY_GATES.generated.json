@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T19:28:54Z",
+  "generated_at": "2026-04-04T19:31:02Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,7 +17,7 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T19:28:54Z",
+      "at": "2026-04-04T19:31:02Z",
       "state": "fresh",
       "age_seconds": 0
     },
@@ -26,26 +26,26 @@
       "available": true,
       "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 2126
+      "age_seconds": 2254
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 3801
+      "age_seconds": 3929
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 3801
+      "age_seconds": 3929
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-04T19:28:54Z",
+      "at": "2026-04-04T19:31:02Z",
       "state": "fresh",
       "age_seconds": 0
     }
@@ -372,7 +372,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:28:54Z",
+        "support_packets_generated_at": "2026-04-04T19:31:02Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -812,7 +812,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:28:54Z",
+        "support_packets_generated_at": "2026-04-04T19:31:02Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -917,7 +917,10 @@
               "Kind: \"opposition_packet\"",
               "Kind: \"roster_movement_packet\"",
               "Kind: \"event_control_packet\"",
-              "InvokeBuildTokens(\"next-session-return-loops\")"
+              "InvokeBuildTokens(\"next-session-return-loops\")",
+              "PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms",
+              "InvokeBuildTokens(\"mobilecompanionreturnloop\")",
+              "InvokeBuildTokens(\"campaignmobilecompanionsreturnlanes\")"
             ]
           },
           {
@@ -1209,7 +1212,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:28:54Z",
+        "support_packets_generated_at": "2026-04-04T19:31:02Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1321,7 +1324,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:28:54Z",
+        "support_packets_generated_at": "2026-04-04T19:31:02Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1359,13 +1362,17 @@
       "blocking_reasons": [
         "support packet summary unresolved_external_proof_request_count does not match release-channel external proof backlog.",
         "support packet summary unresolved_external_proof_request_host_counts does not match release-channel external proof backlog.",
-        "support packet summary unresolved_external_proof_request_tuple_counts does not match release-channel external proof backlog."
+        "support packet summary unresolved_external_proof_request_hosts does not match release-channel external proof backlog.",
+        "support packet summary unresolved_external_proof_request_tuple_counts does not match release-channel external proof backlog.",
+        "support packet summary unresolved_external_proof_request_tuples does not match release-channel external proof backlog."
       ],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [
         "support packet summary unresolved_external_proof_request_count does not match release-channel external proof backlog.",
         "support packet summary unresolved_external_proof_request_host_counts does not match release-channel external proof backlog.",
-        "support packet summary unresolved_external_proof_request_tuple_counts does not match release-channel external proof backlog."
+        "support packet summary unresolved_external_proof_request_hosts does not match release-channel external proof backlog.",
+        "support packet summary unresolved_external_proof_request_tuple_counts does not match release-channel external proof backlog.",
+        "support packet summary unresolved_external_proof_request_tuples does not match release-channel external proof backlog."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
@@ -1446,7 +1453,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:28:54Z",
+        "support_packets_generated_at": "2026-04-04T19:31:02Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1459,7 +1466,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 3,
+        "blocking_reason_count": 5,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1471,7 +1478,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 3,
+        "local_blocking_reason_count": 5,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }
@@ -1540,7 +1547,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:28:54Z",
+        "support_packets_generated_at": "2026-04-04T19:31:02Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",

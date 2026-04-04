@@ -262,6 +262,134 @@ groups: []
     )
 
 
+def test_install_journey_blocks_when_support_external_proof_backlog_hosts_or_tuples_lists_drift(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    release_channel = tmp_path / ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+
+    release_channel.parent.mkdir(parents=True, exist_ok=True)
+    release_channel.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "desktopTupleCoverage": {
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "requiredHost": "windows",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        }
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: install_claim_restore_continue
+    title: Install, claim, restore, continue
+    user_promise: A person can install, claim, restore, and continue.
+    canonical_journeys:
+      - journeys/install-and-update.md
+    owner_repos: [chummer6-hub-registry, fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report, support_packets]
+      minimum_history_snapshots: 1
+      require_support_install_truth_contract: true
+      repo_source_proof:
+        - repo: chummer6-hub-registry
+          path: .codex-studio/published/RELEASE_CHANNEL.generated.json
+          json_must_equal:
+            status: published
+      required_project_posture:
+        - project_id: hub-registry
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        """
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '2026-04-04T18:00:00Z'
+projects:
+  - id: hub-registry
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": "2026-04-04T18:00:00Z", "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": "2026-04-04T18:00:00Z", "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-04T18:00:00Z",
+                "summary": {
+                    "external_proof_required_case_count": 0,
+                    "unresolved_external_proof_request_count": 1,
+                    "unresolved_external_proof_request_host_counts": {"windows": 1},
+                    "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+                    "unresolved_external_proof_request_hosts": ["macos"],
+                    "unresolved_external_proof_request_tuples": ["avalonia:osx-arm64:macos"],
+                },
+                "packets": [],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    original_roots = JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES.get("chummer6-hub-registry")
+    JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-hub-registry"] = (tmp_path,)
+    try:
+        payload = JOURNEY_GATES_MODULE.build_payload(
+            registry_path=registry,
+            status_plane_path=status_plane,
+            progress_report_path=progress_report,
+            progress_history_path=progress_history,
+            support_packets_path=support_packets,
+        )
+    finally:
+        if original_roots is None:
+            JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES.pop("chummer6-hub-registry", None)
+        else:
+            JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-hub-registry"] = original_roots
+
+    journey = payload["journeys"][0]
+    assert journey["state"] == "blocked"
+    assert any(
+        "unresolved_external_proof_request_hosts does not match release-channel external proof backlog" in reason
+        for reason in journey["blocking_reasons"]
+    )
+    assert any(
+        "unresolved_external_proof_request_tuples does not match release-channel external proof backlog" in reason
+        for reason in journey["blocking_reasons"]
+    )
+
+
 def test_install_journey_blocks_when_support_external_proof_tuple_fields_drift_from_release_channel(
     tmp_path: Path,
 ) -> None:
