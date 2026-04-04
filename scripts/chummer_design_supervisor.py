@@ -9303,6 +9303,11 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
     audit["local_blocking_findings_count"] = local_count
     audit["blocking_findings_count"] = blocking_count
 
+    if blocking_count < 0 or local_count < 0 or external_count < 0:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate blocking findings counts must be non-negative"
+        return audit
+
     proof_is_ready = str(audit["proof_status"]).lower() in {"pass", "passed", "ready"}
     if proof_is_ready:
         if blocked_external_only:

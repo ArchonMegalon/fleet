@@ -3484,6 +3484,33 @@ def test_desktop_executable_exit_gate_audit_rejects_total_count_mismatch_vs_loca
         assert "does not equal local plus external counts" in str(audit["reason"])
 
 
+def test_desktop_executable_exit_gate_audit_rejects_negative_blocking_counts() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "pass",
+                "blockedByExternalConstraintsOnly": False,
+                "blockingFindingsCount": -1,
+                "localBlockingFindingsCount": 0,
+                "externalBlockingFindingsCount": 0,
+                "blockingFindings": [],
+                "localBlockingFindings": [],
+                "externalBlockingFindings": [],
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "counts must be non-negative" in str(audit["reason"])
+
+
 def test_design_completion_audit_rejects_release_proof_warning() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
