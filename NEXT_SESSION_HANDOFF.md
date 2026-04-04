@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-2 registry verifier now fail-closes unexpected `releaseProof` and `releaseProof.uiLocalizationReleaseGate` key drift, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` needs deterministic flagship release-proof contract boundaries that cannot silently expand with non-canonical keys.
+  - `scripts/verify_public_release_channel.py` previously validated many value semantics but did not reject unexpected top-level keys in `releaseProof` or unexpected nested keys in `releaseProof.uiLocalizationReleaseGate`.
+  - this left a fail-open seam where non-canonical key growth could slip through verifier checks and weaken release proof trust.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added canonical `ALLOWED_RELEASE_PROOF_KEYS` contract and fail-close check for unexpected `releaseProof` keys.
+    - added canonical `ALLOWED_LOCALIZATION_GATE_KEYS` contract and fail-close check for unexpected nested localization-gate keys.
+    - added fail-close markers:
+      - `releaseProof has unexpected keys`
+      - `releaseProof.uiLocalizationReleaseGate has unexpected keys`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active mutation injecting `bonus_noncanonical_release_proof_key` under `releaseProof` and requiring verifier failure.
+    - added active mutation injecting `bonus_noncanonical_gate_key` under `releaseProof.uiLocalizationReleaseGate` and requiring verifier failure.
+    - added verifier markers:
+      - `verify gate failed: verifier should reject unexpected releaseProof keys.`
+      - `verify gate failed: verifier should reject unexpected releaseProof.uiLocalizationReleaseGate keys.`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical pipeline now states strict fail-close posture for unexpected top-level `releaseProof` keys and unexpected nested localization-gate keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation runs for both unexpected-key seams).
+- Commits landed:
+  - `chummer-hub-registry`: `551eb6c` (`fix(w1): fail-close unexpected release proof and localization gate keys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `e1b9d3d..551eb6c`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-2 registry verifier now fail-closes top-level `releaseProof.uiLocalizationReleaseGate` vs `releaseProof.ui_localization_release_gate` alias drift, with active verify mutation coverage
 
 - Trigger:
