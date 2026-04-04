@@ -948,6 +948,7 @@ def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dic
             request_items.append(
                 {
                     "tuple_id": _normalize_text(row.get("tuple_id")),
+                    "channel_id": _normalize_text(row.get("channel_id")).lower(),
                     "head_id": _normalize_text(row.get("head")).lower(),
                     "platform": _normalize_platform(row.get("platform")),
                     "rid": _normalize_text(row.get("rid")).lower(),

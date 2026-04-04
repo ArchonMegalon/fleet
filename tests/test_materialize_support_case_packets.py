@@ -879,6 +879,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                 "requests": [
                     {
                         "tuple_id": "blazor-desktop:osx-arm64:macos",
+                        "channel_id": "preview",
                         "head_id": "blazor-desktop",
                         "platform": "macos",
                         "rid": "osx-arm64",
@@ -908,6 +909,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                 "requests": [
                     {
                         "tuple_id": "avalonia:win-x64:windows",
+                        "channel_id": "preview",
                         "head_id": "avalonia",
                         "platform": "windows",
                         "rid": "win-x64",

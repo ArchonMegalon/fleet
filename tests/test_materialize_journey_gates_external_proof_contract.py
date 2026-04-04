@@ -721,6 +721,7 @@ groups: []
                             "requests": [
                                 {
                                     "tuple_id": "avalonia:win-x64:windows",
+                                    "channel_id": "stable",
                                     "head_id": "avalonia",
                                     "platform": "windows",
                                     "rid": "win-x64",
