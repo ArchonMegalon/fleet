@@ -708,6 +708,101 @@ groups: []
     )
 
 
+def test_install_journey_surfaces_release_channel_external_proof_requests(tmp_path: Path) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: install_claim_restore_continue
+    title: Install, claim, restore, continue
+    user_promise: A person can install, claim, restore, and continue.
+    canonical_journeys:
+      - journeys/install-and-update.md
+    owner_repos: [chummer6-hub-registry, fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report]
+      minimum_history_snapshots: 1
+      repo_source_proof:
+        - repo: chummer6-hub-registry
+          path: .codex-studio/published/RELEASE_CHANNEL.generated.json
+          json_must_equal:
+            desktopTupleCoverage.missingRequiredPlatformHeadRidTuples: []
+      required_project_posture:
+        - project_id: hub-registry
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: hub-registry
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps({"generated_at": generated_at, "summary": {}, "packets": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    journey = payload["journeys"][0]
+    assert journey["state"] == "blocked"
+    assert any(
+        "external proof request: capture promoted_installer_artifact, startup_smoke_receipt" in reason
+        for reason in journey["external_blocking_reasons"]
+    )
+
+
 def test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_not_in_allowed_set(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"

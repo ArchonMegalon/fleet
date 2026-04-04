@@ -118,6 +118,31 @@ def _resolve_json_path(payload: Any, path: str) -> Any:
     return current
 
 
+def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
+    coverage = dict(payload.get("desktopTupleCoverage") or {})
+    requests = coverage.get("externalProofRequests")
+    if not isinstance(requests, list):
+        return []
+    reasons: List[str] = []
+    for item in requests:
+        if not isinstance(item, dict):
+            continue
+        tuple_id = str(item.get("tupleId") or "").strip()
+        required_host = str(item.get("requiredHost") or item.get("platform") or "").strip().lower()
+        required_proofs = item.get("requiredProofs")
+        if not tuple_id or not isinstance(required_proofs, list):
+            continue
+        proof_tokens = [str(token or "").strip() for token in required_proofs if str(token or "").strip()]
+        if not proof_tokens:
+            continue
+        reasons.append(
+            "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
+            f"external proof request: capture {', '.join(proof_tokens)} on {required_host or 'required'} host "
+            f"for tuple {tuple_id}."
+        )
+    return sorted(set(reasons))
+
+
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
@@ -322,6 +347,11 @@ def evaluate_journey(
                     blocking_reasons.append(
                         f"repo proof {repo_name}:{relative_path} field '{field_path}' expected {expected!r} but was {actual!r}."
                     )
+            if (
+                repo_name == "chummer6-hub-registry"
+                and relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+            ):
+                blocking_reasons.extend(_release_channel_external_proof_reasons(proof_payload))
 
         if json_required_one_of:
             assert proof_payload is not None
