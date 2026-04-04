@@ -63,6 +63,7 @@
   - `chummer6-core`: `3dd29762` (`feat(w2-17): project explicit adjacent oracle coverage from receipts`).
   - `chummer6-design`: `640d4a1` (`docs(w2-17): record adjacent oracle posture projection`).
   - `fleet`: `a1d0ddd` (`docs(w2-17): sync adjacent import oracle parity and handoff`).
+  - `fleet`: `cff1ebc` (`docs(handoff): record w2-17 commit and push outcomes`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `3dd29762`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
