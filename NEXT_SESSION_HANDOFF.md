@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 localization verifier now rejects blank/non-string shipping-locale and acceptance-gate ids in release proof payloads
+
+- Trigger:
+  - milestone `2` / `BLK-009` proof still needed stronger verifier strictness when consuming pre-materialized release-channel payloads.
+  - `scripts/verify_public_release_channel.py` normalized `shippingLocales` and `acceptanceGates` by dropping blank tokens, so malformed list entries could be ignored rather than fail-closed.
+  - this left a verifier seam where blank/invalid token ids in localization proof lists could slip past explicit shape checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added strict `parse_required_token_list(...)` helper for release-proof token lists.
+    - `shippingLocales` and `acceptanceGates` now fail-close on non-list, non-string, blank token ids.
+    - added explicit duplicate-locale rejection for `shippingLocales` before required-locale set comparison.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression proving verifier rejects blank acceptance-gate ids in materialized release proof.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented that `shippingLocales` / acceptance-gate ids are fail-closed for blank/duplicate drift.
+  - committed and pushed in `chummer-hub-registry`:
+    - `3de7f35` — `Reject blank localization gate token ids in verifier`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new blank acceptance-gate negative regression).
+- Current trusted state:
+  - registry localization verification now fails malformed token lists instead of silently normalizing blank ids out of proof checks.
+  - milestone-2 localization shelf-truth strictness is tighter for direct manifest verification consumers.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `3de7f35`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization proof materialization now fail-closes malformed shipping locale and acceptance-gate token lists before release-channel projection
 
 - Trigger:
