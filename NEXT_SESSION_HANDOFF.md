@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-5 live audits now fail-close hyphen `gm-ops` and `gm-op` shorthand across prep-library API and signed-in workspace prep journeys
+
+- Trigger:
+  - frontier milestone `5` keeps GM operations on the same governed prep-library lane as event/season controls and roster movement.
+  - live audits covered `gmops`, `gm ops`, and `gmop`, but did not execute hyphen query forms (`gm-ops`, `gm-op`) even though service tokenization accepts them.
+  - this left a route-level drift seam where hyphen operator wording could regress without tripping API/browser closeout checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=gm-ops` and `queryText=gm-op` with non-empty governed packet assertions.
+    - added signed-in workspace route checks for `prepQuery=gm-ops` and `prepQuery=gm-op`, including route/body proof and governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey assertions for `?prepQuery=gm-ops` and `?prepQuery=gm-op` with encoded-route preservation and non-empty governed packet checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 closeout audits now fail-close compact, split, and hyphen GM-op shorthand on the same governed prep lane, preventing route/query punctuation drift from bypassing operator proof.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (`scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release status when desktop tuple coverage is still incomplete
 
 - Trigger:
