@@ -25,9 +25,11 @@
   - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatHotWashContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - `chummer.run-services`: pending local commit for this slice.
+  - `chummer.run-services`: `88acec73` (`fix(w3): canonicalize hot-wash recap shorthand across continuity and gm ops`).
+  - `fleet`: `0c87b0c` (`docs: record hot-wash continuity+gm-ops frontier slice`).
 - Push attempts:
-  - pending after commit.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected push blocker remains local GitHub HTTPS credential absence in this environment.
 
