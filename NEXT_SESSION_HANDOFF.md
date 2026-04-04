@@ -139,11 +139,11 @@
   - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py` -> PASS.
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py` -> FAIL in this environment (`No module named pytest`).
 - Commits landed:
-  - pending local commit in `fleet` (not yet created in this session).
+  - `fleet`: `f42a011` (`feat(w5): enrich support packets with install-truth and fix confirmation`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - local environment does not have `pytest` installed, so runtime test execution could not be completed beyond syntax validation.
+  - local environment does not have `pytest` installed, and Fleet remote push is blocked by missing GitHub HTTPS credentials.
 
 ## 2026-04-04: milestone-1/3 registry lane now fail-closes tuple coverage coherence drift and localization signoff status alias contradictions
 
