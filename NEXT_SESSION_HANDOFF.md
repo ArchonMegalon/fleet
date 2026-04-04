@@ -26,6 +26,7 @@
 - Commits landed:
   - `chummer-design`: `7969d00` (`feat(w12): align weekly pulse with active-wave launch governance`).
   - `fleet`: `b13220f` (`docs(w12): refresh pulse mirror and handoff for launch governance`).
+  - `fleet`: `0c5011f` (`docs: record w12 commit and push-attempt status in handoff`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
