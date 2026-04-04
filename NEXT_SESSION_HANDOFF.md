@@ -1,3 +1,67 @@
+## 2026-04-04: milestone-1/3 Linux promoted installer proof lane now rematerializes localization-bound release truth and passes for both Avalonia + Blazor heads
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged installer/startup-smoke proof to stay aligned across release-channel truth, promoted shelf bytes, and per-head Linux receipts.
+  - Linux exit + executable gates were failing on stale release-channel/localization proof wiring and Blazor promoted installer drift (`rid`/`releaseVersion` missing from promoted-smoke receipts, digest/version mismatch).
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh`:
+    - added `UI_LOCALIZATION_RELEASE_GATE_PATH` wiring and now forwards `--ui-localization-release-gate` into `materialize_public_release_channel.py`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh`:
+    - localization receipt now emits canonical `domain_coverage` and `locale_domain_coverage` for required desktop localization domains.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - regression asserts lock new release-manifest localization-argument wiring.
+    - regression asserts lock B15 domain/locale-domain coverage emission.
+  - rematerialized/re-promoted release artifacts and proofs:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json` (Avalonia pass)
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE.generated.json` (Blazor pass)
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` (fail-honest: only missing Windows/macOS tuples remain)
+    - promoted Blazor Linux installer + startup-smoke proof refreshed in `Docker/Downloads/files` and `Docker/Downloads/startup-smoke`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift|FullyQualifiedName~Desktop_download_matrix_includes_avalonia_and_blazor_desktop_artifacts" --nologo -v minimal` -> PASS (`2` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_RELEASE_REQUIRE_COMPLETE_DESKTOP_COVERAGE=0 RELEASE_VERSION=local-docker RELEASE_CHANNEL=docker bash scripts/generate-releases-manifest.sh` -> PASS.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py ... --proof /docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json --ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json` -> PASS.
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS (`avalonia/linux-x64`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS (`blazor-desktop/linux-x64`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL with only real missing-platform blockers (Windows/macOS tuple coverage).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`; desktop blockers now centered on missing Windows/macOS promoted tuples).
+- Current trusted state:
+  - Linux promoted installer/startup-smoke proof now passes for both promoted desktop heads (`avalonia`, `blazor-desktop`) with release-bound `rid`/`releaseVersion` receipts.
+  - release-channel metadata and promoted shelf bytes are re-aligned for both Linux installer heads.
+  - executable gate remains fail-honest only for unresolved Windows/macOS promoted tuple coverage.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (script + test + generated proof + promoted artifact updates; credential-dependent).
+  - `chummer-hub-registry`: release-channel proof rematerialization pending commit/push in this environment (credential-dependent).
+  - `fleet`: readiness mirrors + handoff pending commit/push in this environment (credential-dependent).
+
+## 2026-04-04: milestone-4/5 opposition packet lane now classifies encounter/enemy/opfor wording across campaign workspace and event-control fallback
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return/opposition truth and GM operations shorthand to stay one governed lane.
+  - `GmOpsBoardService` unresolved triage already recognized `encounter`/`enemy`/`opfor`, but `CampaignWorkspaceServerPlaneService` opposition detection still depended on older opposition-hostile-adversary-threshold wording, which could under-classify common shorthand in campaign workspace packet synthesis.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded opposition token canon with `encounter`, `encounters`, `enemy`, and `enemies`.
+    - added compact/split opfor detection (`opfor`, `op-for`, `op force`) via `ContainsOpforTokenPair(...)`.
+    - wired that detection into opposition token checks, opposition kind checks, and carry-forward opposition identity checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `OppositionPacketFallsBackToEncounterEnemyAndOpforSignalsWhenCanonicalOppositionTermsAreMissing`.
+    - added `EventControlPacketFallsBackToEncounterEnemyAndOpforSignalsWhenCanonicalOppositionTermsAreMissing`.
+    - added fixture helper `BuildWorkspaceWithEncounterEnemyAndOpforSignalsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketFallsBackToEncounterEnemyAndOpforSignalsWhenCanonicalOppositionTermsAreMissing|FullyQualifiedName~EventControlPacketFallsBackToEncounterEnemyAndOpforSignalsWhenCanonicalOppositionTermsAreMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`352` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign workspace opposition and event-control fallback packet synthesis now classifies encounter/enemy/opfor shorthand on the same governed semantics already used in GM unresolved triage.
+  - milestone-4 return loop and milestone-5 operator lane no longer diverge on these common opposition terms.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes on receipt schema and required surface coverage (not status-only receipts)
 
 - Trigger:
