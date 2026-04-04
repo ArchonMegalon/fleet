@@ -129,6 +129,30 @@
   - `chummer6-hub`: local commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-4 recap-focused prep retrieval now fail-closes `recap` query coverage across API and workspace route journeys
+
+- Trigger:
+  - frontier milestone `4` requires recap and return continuity to remain first-class on the governed prep-library lane.
+  - campaign-return prep packet synthesis now carries `recap` as a canonical search token, but live API/workspace route/browser closeout checks did not assert `recap` query paths.
+  - this left a drift window where recap-focused retrieval could regress without tripping signed-in closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `queryText=recap` with non-empty governed packet assertions.
+    - added signed-in workspace route verification for `prepQuery=recap`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `recap`, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock `queryText=recap`, `prepQuery=recap`, and Playwright `?prepQuery=recap` marker coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - signed-in campaign continuity audits now fail-close recap-focused prep retrieval on the same governed lane as diary, downtime, aftermath, and return flows.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign-return prep retrieval now fail-closes canonical continuity queries `contact`, `journal`, and `sessionlog` across API and workspace route journeys
 
 - Trigger:
