@@ -29,8 +29,9 @@
 - Commits landed:
   - `fleet`: `cd79666` (`fix(w1-1-3): fail-close external-proof required-proofs contract drift`).
 - Push attempts:
-  - pending (credential gate expected to fail in this environment).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` pushes.
   - missing native-host promoted installer artifact + startup-smoke receipts for required release-channel tuples:
     - `avalonia:osx-arm64:macos`
     - `blazor-desktop:osx-arm64:macos`
