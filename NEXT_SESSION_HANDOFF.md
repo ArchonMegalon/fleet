@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `postgame` / `post-game` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` keep campaign aftermath continuity and GM prep operations on one governed prep-library lane across canonical query normalization, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand coverage already fail-closed `postsession`, `postrun`, `postmortem`, `debrief`, `after-action`, `aar`, and `retro`, but common table recap phrasing `postgame` / `post-game` was still outside canonical rewrite and live journey locks.
+  - this left a continuity seam where post-game recap wording could miss governed packets and unresolved GM triage could classify recap signals outside `prep_library`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `postgame` / `postgames` and split `post game` / `post games` to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `postgame` / `postgames` to aftermath recap vocabulary and extended aftermath signal detection to treat split/hyphen `post game` forms as recap shorthand.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact, split, and hyphen `postgame` phrasing as governed `prep_library` signals.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity shorthand + unresolved-domain + script-lock assertions for `postgame` / `post-game` coverage.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added API/workspace/browser journey checks for compact, split, and hyphen `postgame` queries, each fail-closing on route drift, non-`200`, empty governed result, or missing snippets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPostGameContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `fab705ba` (`fix(w3): canonicalize post-game recap shorthand across continuity and gm ops`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `after action review` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
