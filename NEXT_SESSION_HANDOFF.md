@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-5 GM unresolved triage now classifies `op_for` and `opforce` shorthand as opposition-domain pressure
+
+- Trigger:
+  - frontier milestone `5` requires opposition packet pressure to remain first-class in GM unresolved triage even when operators use underscore/compact shorthand.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` already recognized `opfor`/`op-force`/`op force`, but common variants (`op_for`, `opforce`) could still fall to `general`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded opposition-domain detection with `op_for` and `opforce`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatOpForSignalsAsOppositionDomain`.
+    - regression locks ordering so unresolved `op_for` pressure stays ahead of newer `event_control` and `general` unresolved rows at equal severity.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GetProjection_UnresolvedItemsTreatOpForSignalsAsOppositionDomain|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`353` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM unresolved triage now keeps `op_for`/`opforce` shorthand in the opposition lane instead of demoting it to general queue noise.
+  - milestone-5 opposition ordering remains severity-first, then domain-priority, then recency.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 Linux promoted installer proof lane now rematerializes localization-bound release truth and passes for both Avalonia + Blazor heads
 
 - Trigger:
