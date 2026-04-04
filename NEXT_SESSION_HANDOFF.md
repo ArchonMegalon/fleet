@@ -89,6 +89,30 @@
 - Exact blocker:
   - no product blocker for the implemented milestone-6 lane-proof slice; commit/push is operationally blocked until concurrent dirty worktree state is isolated for safe scoped commit.
 
+## 2026-04-04: milestone-8/9/16 Build Lab receipts now carry explicit per-output lane tokens in publication and audit summaries
+
+- Trigger:
+  - milestones `8/9/16` require explain/rule-diff and exchange/export/replay lineage cues to stay machine-readable where users and operators decide follow-through.
+  - governed Build Lab outputs already carried rule-diff/runtime/explain receipts, but the receipt strings did not encode the concrete lane token (`character_template`, `json_exchange`, `replay_timeline`, etc.).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added `BuildBuildLabOutputLaneLabel(...)` for canonical lane labels.
+    - `BuildBuildLabGovernedOutput(...)` now emits:
+      - `PublicationSummary`: `Lane <lane-label> is ready ...; rule diff ...`
+      - `AuditSummary`: `lane:<kind>; rule-environment:...; runtime:...; explain:...`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves:
+      - `PublicationSummary` includes the output lane token
+      - `AuditSummary` includes `lane:<output-kind>`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `f3a74981` (`feat(w4-8-9-16): include build output lane tokens in receipts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - remote push remains blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-16 signed-in home Build Lab rail now surfaces explicit output lane kinds (template/exchange/viewer/print/replay/recap/module)
 
 - Trigger:
