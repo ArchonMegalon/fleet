@@ -2,6 +2,7 @@
 
 - Commits landed:
   - `fleet`: `4fb743a` (`docs(handoff): record linux startup-smoke checks alias parity slice`).
+  - `fleet`: `4990d11` (`docs(handoff): add fleet push-blocker status for linux checks alias slice`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
