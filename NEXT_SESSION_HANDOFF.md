@@ -33,9 +33,11 @@
 - Commits landed:
   - `chummer6-hub-registry`: `3eb17fa` (`feat(w1-1-3): emit external desktop proof requests for missing tuples`).
   - `fleet`: `0b948a9` (`feat(w1-1-3): surface tuple host-proof requests in install journey blockers`).
+  - `fleet`: `7f4309c` (`docs(handoff): record w1 external proof-request slice commits and push outcomes`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6988081..3eb17fa`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `7f4309c`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - promotion remains externally blocked until native Windows/macOS hosts publish matching startup-smoke receipts for promoted installer tuple bytes.
   - environment still lacks GitHub HTTPS credentials for `fleet` push.
