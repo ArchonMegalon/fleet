@@ -22,6 +22,35 @@
 - Exact blocker:
   - local environment has no configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
 
+## 2026-04-04: follow-up on registry verify date-rot hardening for milestone-2 release proof lanes (commit and push status)
+
+- Commits landed:
+  - `chummer-hub-registry`: `5b87400` (`fix(verify): remove date-rot from release fixture timestamps`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated to `5b87400`).
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: chummer-hub-registry verify fixtures now use dynamic freshness timestamps so release-proof/localization checks cannot fail spuriously as wall-clock time advances
+
+- Trigger:
+  - `chummer-hub-registry/scripts/ai/verify.sh` encoded baseline fixture timestamps as fixed 2026 literals across startup-smoke receipts, release-proof payloads, and localization gate payloads.
+  - those literals are freshness-gated by materializer/verifier rules; as calendar time advances they risk flipping baseline PASS fixtures into stale false failures.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - introduced dynamic timestamp seeds:
+      - `startup_smoke_fresh_recorded_at` (`now - 3m`)
+      - `startup_smoke_stale_recorded_at` (`now - 30d`, for explicit stale negative probe)
+      - `release_proof_fresh_generated_at` (`now - 2m`)
+      - `ui_localization_fresh_generated_at` (`now - 90s`)
+    - replaced baseline hard-coded fixture timestamps with deterministic placeholder substitution so default positive-path fixtures stay fresh while stale/future mutation probes remain fail-closed.
+    - kept existing digest substitution and mutation coverage intact.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected traceback/error lines are negative mutation probes in script-lock coverage; verifier exits clean).
+- Current trusted state:
+  - registry release-channel verifier/materializer mutation coverage is still strict, and baseline verify no longer depends on aging static fixture dates.
+
 ## 2026-04-04: follow-up on milestone-2 localization gate timestamp drift self-heal in chummer6-hub (commit and push status)
 
 - Commits landed:
