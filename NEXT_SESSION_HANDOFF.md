@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-canonical lowercase and token-shape `releaseProof.journeysPassed` ids
+
+- Trigger:
+  - parity audit already fail-closed non-lowercase and non-token `releaseProof.journeysPassed` entries, but Hub verify mutation coverage still did not execute those journey-id grammar branches.
+  - this left canonical journey-id grammar enforcement partially unproven in Hub’s end-to-end verify harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation with `releaseProof.journeysPassed[0]="Launch-and-link"` and asserted `audit-ui-parity.sh` fails for non-canonical lowercase journey ids.
+    - added mutation with `releaseProof.journeysPassed[0]="launch and link"` and asserted `audit-ui-parity.sh` fails for non-canonical token-shape journey ids.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock both lowercase and token-shape journey mutation coverage text.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for non-canonical lowercase and token-shape `releaseProof.journeysPassed` mutations, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves all currently enforced `releaseProof.journeysPassed` grammar/completeness fail-close branches (`missing required`, `unexpected`, `lowercase`, and `token-shape`) in the mutation lane.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes promoted desktop install-media artifacts missing explicit `head`
 
 - Trigger:
