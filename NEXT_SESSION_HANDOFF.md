@@ -69,6 +69,27 @@
   - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub verify entrypoint now proves release-proof origin fail-close (`disallowed` and `non-canonical`) before smoke
+
+- Trigger:
+  - Hub parity audit already enforced `releaseProof.baseUrl` origin policy (allowed canonical origins + canonical origin formatting), but Hub verify entrypoint mutations only exercised malformed route-path checks (`%` and `\\`).
+  - this left release-proof origin guardrails unproven in Hub’s own end-to-end verify harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.baseUrl="https://example.com"` and asserted `audit-ui-parity.sh` fails (outside allowed canonical release origins).
+    - added mutation `releaseProof.baseUrl="https://Chummer.run/"` and asserted `audit-ui-parity.sh` fails (non-canonical origin casing/trailing slash).
+    - preserved receipt restore between each mutation before continuing smoke.
+  - existing `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs` marker assertions already covered the two new failure messages, so no test-file patch was required.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for disallowed/non-canonical `releaseProof.baseUrl`, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now proves both release-proof route grammar and release-proof origin policy fail-close behavior in the same end-to-end path, reducing drift risk between parity-audit enforcement and verify harness coverage.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now proves parity-audit fail-close on malformed `releaseProof.proofRoutes` (`%` and `\\`) before smoke
 
 - Trigger:
