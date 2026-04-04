@@ -38871,3 +38871,22 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-4/6 live-audit matrix now fail-closes compact continuity `updates/changed` mutation forms
+
+- Trigger:
+  - after closing baseline compact mutation aliases, adjacent `updates/changed` compact forms were still not explicitly enforced in live audit markers for contacts/relationships/heat/diary continuity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - extended prep-query fail-close list with `updates/changed` compact forms for contacts, connections, relationships, heat, diary, and session-log continuity terms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added explicit `queryText=` marker assertions for the new compact `updates/changed` entries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`1` test on `net10.0` and `1` test on `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `9c341a1e` (`test(w3-4-6): extend compact mutation alias live-audit matrix`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
