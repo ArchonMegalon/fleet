@@ -22363,3 +22363,25 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - readiness now fails honest on localization depth until untranslated shipping-locale trust-surface counts are driven to zero or the localization gate contract changes explicitly.
 - Push status:
   - pending in this environment (push remains credential-dependent).
+
+## 2026-04-04: milestone-2 parity checklist now fail-closes non-canonical token casing across oracle and catalog surfaces
+
+- Trigger:
+  - frontier milestone `2` legacy-familiar proof depends on deterministic parity tokens that cannot silently coerce case aliases across tabs, workspace actions, and desktop control ids.
+  - `scripts/generate-parity-checklist.sh` trimmed and deduped tokens but did not fail-close mixed-case token drift before normalization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/generate-parity-checklist.sh`:
+    - hardened `normalize_required_token(...)` to fail-close non-canonical token casing (`token != token.lower()`) with explicit expected canonical token evidence.
+    - this strictness applies to parity-oracle arrays and catalog-derived tab/action/dialog tokens because all token parsing funnels through the same normalizer.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended script compliance assertion to lock the new `contains non-canonical token` fail-close marker.
+    - strengthened oracle canonical-token assertions to require lowercase canonical values (`token == token.ToLowerInvariant()`) in addition to trim + duplicate-normalized checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~ParityOracleTokenListsUseCanonicalStringIds" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity receipts now fail closed on casing drift rather than silently normalizing case aliases.
+  - legacy-familiar tab/action/dialog parity tokens stay one canonical lowercase lane across oracle inventory and extracted catalog surfaces.
+- Push status:
+  - `chummer.run-services`: local changes in working tree (`scripts/generate-parity-checklist.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
