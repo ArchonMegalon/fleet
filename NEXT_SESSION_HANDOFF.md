@@ -65,9 +65,9 @@
   - `cd /docker/fleet && jq '.summary' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`ready_count=5`, `blocked_count=1`, `blocked_with_local_count=0`; only `install_claim_restore_continue` remains blocked and external-only).
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=3, warning=4, missing=1`).
 - Commits landed:
-  - pending (recorded after commit step below).
+  - `fleet`: `1f69c88` (`feat(w1-1-3): normalize support external-proof smoke contracts`).
 - Push attempts:
-  - pending.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - remaining W1 block is external host proof capture for missing promoted Windows/macOS installer + startup-smoke tuple receipts; push still depends on environment GitHub HTTPS credentials.
 
