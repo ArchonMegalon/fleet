@@ -46,8 +46,8 @@
   - Linux desktop exit-gate proof now matches Windows/macOS fail-honest posture for host capability blockers.
   - milestone-1/3 startup-smoke triage can distinguish missing evidence from impossible host execution for Linux promoted installer smoke.
 - Push status:
-  - `chummer6-ui`: local commit/push pending in this environment for this slice (credential-dependent).
-  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+  - `chummer6-ui`: committed locally (`0644bdbd`); `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
+  - `fleet`: committed locally (`0a79d7c`); `git push` failed in this environment: `fatal: could not read Username for 'https://github.com': No such device or address`.
 
 ## 2026-04-04: milestone-2 parity audit now fail-closes workflow-vs-visual release-channel drift
 
