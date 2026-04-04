@@ -1,53 +1,53 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:50:54Z",
+  "generated_at": "2026-04-04T18:55:03Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 4,
+    "ready_count": 5,
     "warning_count": 0,
-    "blocked_count": 2,
+    "blocked_count": 1,
     "blocked_external_only_count": 1,
-    "blocked_with_local_count": 1,
+    "blocked_with_local_count": 0,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:49:34Z",
+      "at": "2026-04-04T18:54:38Z",
       "state": "fresh",
-      "age_seconds": 80
+      "age_seconds": 25
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-04T18:34:10Z",
+      "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 1004
+      "age_seconds": 95
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 1521
+      "age_seconds": 1770
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 1521
+      "age_seconds": 1770
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T18:45:44Z",
       "state": "fresh",
-      "age_seconds": 310
+      "age_seconds": 559
     }
   },
   "journeys": [
@@ -85,10 +85,25 @@
             "promoted_installer_artifact",
             "startup_smoke_receipt"
           ],
+          "head_id": "avalonia",
+          "rid": "osx-arm64",
+          "platform": "macos",
           "expected_artifact_id": "avalonia-osx-arm64-installer",
           "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
           "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+          "startup_smoke_receipt_contract": {
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ],
+            "ready_checkpoint": "pre_ui_event_loop",
+            "head_id": "avalonia",
+            "platform": "macos",
+            "rid": "osx-arm64",
+            "host_class_contains": "macos"
+          }
         },
         {
           "tuple_id": "avalonia:win-x64:windows",
@@ -97,10 +112,25 @@
             "promoted_installer_artifact",
             "startup_smoke_receipt"
           ],
+          "head_id": "avalonia",
+          "rid": "win-x64",
+          "platform": "windows",
           "expected_artifact_id": "avalonia-win-x64-installer",
           "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
           "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
-          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+          "startup_smoke_receipt_contract": {
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ],
+            "ready_checkpoint": "pre_ui_event_loop",
+            "head_id": "avalonia",
+            "platform": "windows",
+            "rid": "win-x64",
+            "host_class_contains": "windows"
+          }
         },
         {
           "tuple_id": "blazor-desktop:osx-arm64:macos",
@@ -109,10 +139,25 @@
             "promoted_installer_artifact",
             "startup_smoke_receipt"
           ],
+          "head_id": "blazor-desktop",
+          "rid": "osx-arm64",
+          "platform": "macos",
           "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
           "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
-          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json"
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+          "startup_smoke_receipt_contract": {
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ],
+            "ready_checkpoint": "pre_ui_event_loop",
+            "head_id": "blazor-desktop",
+            "platform": "macos",
+            "rid": "osx-arm64",
+            "host_class_contains": "macos"
+          }
         },
         {
           "tuple_id": "blazor-desktop:win-x64:windows",
@@ -121,10 +166,25 @@
             "promoted_installer_artifact",
             "startup_smoke_receipt"
           ],
+          "head_id": "blazor-desktop",
+          "rid": "win-x64",
+          "platform": "windows",
           "expected_artifact_id": "blazor-desktop-win-x64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
           "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
-          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json"
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+          "startup_smoke_receipt_contract": {
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ],
+            "ready_checkpoint": "pre_ui_event_loop",
+            "head_id": "blazor-desktop",
+            "platform": "windows",
+            "rid": "win-x64",
+            "host_class_contains": "windows"
+          }
         }
       ],
       "warning_reasons": [],
@@ -315,10 +375,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "avalonia",
+            "rid": "osx-arm64",
+            "platform": "macos",
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "avalonia",
+              "platform": "macos",
+              "rid": "osx-arm64",
+              "host_class_contains": "macos"
+            }
           },
           {
             "tuple_id": "avalonia:win-x64:windows",
@@ -327,10 +402,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "avalonia",
+            "rid": "win-x64",
+            "platform": "windows",
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "avalonia",
+              "platform": "windows",
+              "rid": "win-x64",
+              "host_class_contains": "windows"
+            }
           },
           {
             "tuple_id": "blazor-desktop:osx-arm64:macos",
@@ -339,10 +429,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "blazor-desktop",
+            "rid": "osx-arm64",
+            "platform": "macos",
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "blazor-desktop",
+              "platform": "macos",
+              "rid": "osx-arm64",
+              "host_class_contains": "macos"
+            }
           },
           {
             "tuple_id": "blazor-desktop:win-x64:windows",
@@ -351,10 +456,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "blazor-desktop",
+            "rid": "win-x64",
+            "platform": "windows",
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "blazor-desktop",
+              "platform": "windows",
+              "rid": "win-x64",
+              "host_class_contains": "windows"
+            }
           }
         ]
       },
@@ -691,21 +811,11 @@
       "id": "campaign_session_recover_recap",
       "title": "Campaign, session, recover, recap",
       "user_promise": "A table can prepare, run, reconnect, recover, and return without rebuilding campaign truth from memory.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blocking_reasons": [
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthSummary.Contains(\\\"Can do now:\\\", StringComparison.Ordinal)'.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthSummary.Contains(\\\"Needs online:\\\", StringComparison.Ordinal)'.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Can-do-now lane:\\\", StringComparison.Ordinal))'.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Needs-online lane:\\\", StringComparison.Ordinal))'."
-      ],
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
+      "blocking_reasons": [],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthSummary.Contains(\\\"Can do now:\\\", StringComparison.Ordinal)'.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthSummary.Contains(\\\"Needs online:\\\", StringComparison.Ordinal)'.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Can-do-now lane:\\\", StringComparison.Ordinal))'.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is missing required marker 'Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Needs-online lane:\\\", StringComparison.Ordinal))'."
-      ],
+      "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [],
       "warning_reasons": [],
@@ -883,6 +993,11 @@
             "must_contain": [
               "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
               "\"campaign_session_recover_recap\"",
+              "Assert(projection.ContinuityRailSummary.Contains(\\\"Downtime:\\\", StringComparison.Ordinal)",
+              "Assert(projection.ContinuityRailSummary.Contains(\\\"Return:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsSummary.Contains(\\\"Opposition:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsSummary.Contains(\\\"Event controls:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Governance lane:\\\", StringComparison.Ordinal))",
               "Assert(projection.OfflineTruthSummary.Contains(\\\"Stale:\\\", StringComparison.Ordinal)",
               "Assert(projection.OfflineTruthSummary.Contains(\\\"Can do now:\\\", StringComparison.Ordinal)",
               "Assert(projection.OfflineTruthSummary.Contains(\\\"Needs online:\\\", StringComparison.Ordinal)",
@@ -890,6 +1005,8 @@
               "Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Needs-online lane:\\\", StringComparison.Ordinal))",
               "Assert(plan.TravelCompanionSummary.Contains(\\\"Cached:\\\", StringComparison.Ordinal)",
               "Assert(plan.TravelCompanionSummary.Contains(\\\"Offline actions:\\\", StringComparison.Ordinal)",
+              "id=\\\"workspace-continuity-rail\\\"",
+              "id=\\\"workspace-gm-ops\\\"",
               "id=\\\"workspace-offline-truth\\\"",
               "id=\\\"restore-offline-truth\\\"",
               "id=\\\"restore-travel-companion\\\""
@@ -979,7 +1096,7 @@
         "external_proof_requests": []
       },
       "signals": {
-        "blocking_reason_count": 4,
+        "blocking_reason_count": 0,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -990,7 +1107,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 4,
+        "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 0
       }

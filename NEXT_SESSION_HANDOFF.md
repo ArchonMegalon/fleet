@@ -1,3 +1,45 @@
+## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes continuity rail and GM-operations markers end to end
+
+- Trigger:
+  - W3 journey gate `campaign_session_recover_recap` only fail-closed offline-truth markers, so milestone-4/5 continuity (`downtime/diary/contacts/heat/aftermath/return`) and GM operations (`opposition/roster/prep/event/governance`) could regress while release proof still passed.
+  - mobile local-release proof generation also lagged newly-added offline/GM/continuity assertions, creating stale proof artifacts relative to source truth.
+- Landed:
+  - tightened canonical gate contract:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - tightened Fleet mirror gate contract:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - `campaign_session_recover_recap` mobile proof requirements now additionally fail-close on:
+    - continuity-rail assertions:
+      - `Assert(projection.ContinuityRailSummary.Contains("Downtime:", ...))`
+      - `Assert(projection.ContinuityRailSummary.Contains("Return:", ...))`
+    - GM-operations assertions:
+      - `Assert(projection.GmOperationsSummary.Contains("Opposition:", ...))`
+      - `Assert(projection.GmOperationsSummary.Contains("Event controls:", ...))`
+      - `Assert(projection.GmOperationsLabels.Any(item => item.Contains("Governance lane:", ...)))`
+    - shell ids:
+      - `id="workspace-continuity-rail"`
+      - `id="workspace-gm-ops"`
+  - patched mobile local proof materializer:
+    - `/docker/chummercomplete/chummer6-mobile/scripts/materialize_mobile_local_release_proof.py`
+    - expanded required markers to include continuity-rail, GM-operations, and explicit offline split markers (`Can do now` / `Needs online`) plus new shell ids.
+  - regenerated mobile artifact:
+    - `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
+  - patched Fleet gate contract test coverage:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 - <<'PY' ... test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() ... PY` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 -m py_compile scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - readiness check:
+    - `JOURNEY_GATES.generated.json`: `campaign_session_recover_recap.state=ready` with `blocking_reasons=[]` and `warning_reasons=[]`.
+
 ## 2026-04-04: milestone-6 offline continuity gate now fail-closes mobile can-do-now vs needs-online proof markers
 
 - Trigger:

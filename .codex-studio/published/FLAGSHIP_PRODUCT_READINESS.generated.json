@@ -1,11 +1,11 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T18:51:01Z",
+  "generated_at": "2026-04-04T18:55:03Z",
   "status": "fail",
   "summary": {
-    "ready_count": 2,
-    "warning_count": 6,
+    "ready_count": 4,
+    "warning_count": 4,
     "missing_count": 0,
     "history_snapshot_count": 10
   },
@@ -32,8 +32,8 @@
     "desktop_client": "warning",
     "rules_engine_and_import": "ready",
     "hub_and_registry": "warning",
-    "mobile_play_shell": "warning",
-    "ui_kit_and_flagship_polish": "warning",
+    "mobile_play_shell": "ready",
+    "ui_kit_and_flagship_polish": "ready",
     "media_artifacts": "ready",
     "horizons_and_public_surface": "warning",
     "fleet_and_operator_loop": "warning"
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
-        "ui_executable_gate_age_seconds": 2397,
+        "ui_executable_gate_age_seconds": 2639,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -256,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T18:37:08Z",
-        "release_channel_age_seconds": 833,
+        "release_channel_age_seconds": 1075,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -440,10 +440,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "avalonia",
+            "rid": "osx-arm64",
+            "platform": "macos",
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "avalonia",
+              "platform": "macos",
+              "rid": "osx-arm64",
+              "host_class_contains": "macos"
+            }
           },
           {
             "tuple_id": "avalonia:win-x64:windows",
@@ -452,10 +467,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "avalonia",
+            "rid": "win-x64",
+            "platform": "windows",
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "avalonia",
+              "platform": "windows",
+              "rid": "win-x64",
+              "host_class_contains": "windows"
+            }
           },
           {
             "tuple_id": "blazor-desktop:osx-arm64:macos",
@@ -464,10 +494,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "blazor-desktop",
+            "rid": "osx-arm64",
+            "platform": "macos",
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "blazor-desktop",
+              "platform": "macos",
+              "rid": "osx-arm64",
+              "host_class_contains": "macos"
+            }
           },
           {
             "tuple_id": "blazor-desktop:win-x64:windows",
@@ -476,10 +521,25 @@
               "promoted_installer_artifact",
               "startup_smoke_receipt"
             ],
+            "head_id": "blazor-desktop",
+            "rid": "win-x64",
+            "platform": "windows",
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json"
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+            "startup_smoke_receipt_contract": {
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ],
+              "ready_checkpoint": "pre_ui_event_loop",
+              "head_id": "blazor-desktop",
+              "platform": "windows",
+              "rid": "win-x64",
+              "host_class_contains": "windows"
+            }
           }
         ],
         "ui_executable_exit_gate_local_blocking_findings_count": 0,
@@ -518,31 +578,27 @@
       }
     },
     "mobile_play_shell": {
-      "status": "warning",
-      "summary": "Mobile and live-play flagship proof is still incomplete.",
-      "reasons": [
-        "Campaign/recover/recap journey is blocked, not ready."
-      ],
+      "status": "ready",
+      "summary": "Mobile play-shell continuity and reconnect proof are current.",
+      "reasons": [],
       "evidence": {
         "mobile_stage": "publicly_promoted",
         "mobile_promotion": "public",
         "mobile_local_release_status": "passed",
-        "campaign_session_recover_recap": "blocked",
+        "campaign_session_recover_recap": "ready",
         "recover_from_sync_conflict": "ready"
       }
     },
     "ui_kit_and_flagship_polish": {
-      "status": "warning",
-      "summary": "Shared UI and flagship polish proof is still incomplete.",
-      "reasons": [
-        "Campaign/recover/recap journey is blocked, not ready."
-      ],
+      "status": "ready",
+      "summary": "Shared UI, accessibility, and flagship polish proof is current across heads.",
+      "reasons": [],
       "evidence": {
         "ui_kit_stage": "boundary_pure",
         "ui_stage": "publicly_promoted",
         "mobile_stage": "publicly_promoted",
         "build_explain_publish": "ready",
-        "campaign_session_recover_recap": "blocked"
+        "campaign_session_recover_recap": "ready"
       }
     },
     "media_artifacts": {
@@ -586,7 +642,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T18:49:50Z",
+        "supervisor_updated_at": "2026-04-04T18:52:00Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -598,13 +654,13 @@
   },
   "ready_keys": [
     "rules_engine_and_import",
+    "mobile_play_shell",
+    "ui_kit_and_flagship_polish",
     "media_artifacts"
   ],
   "warning_keys": [
     "desktop_client",
     "hub_and_registry",
-    "mobile_play_shell",
-    "ui_kit_and_flagship_polish",
     "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
@@ -616,7 +672,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260404T163340Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",

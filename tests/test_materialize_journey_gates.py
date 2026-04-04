@@ -853,8 +853,6 @@ groups: []
         in reason
         for reason in journey["external_blocking_reasons"]
     )
-
-
 def test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_not_in_allowed_set(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -2008,9 +2006,16 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
         "chummer6-mobile",
         ".codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
     )
+    assert 'Assert(projection.ContinuityRailSummary.Contains(\\"Downtime:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(projection.ContinuityRailSummary.Contains(\\"Return:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(projection.GmOperationsSummary.Contains(\\"Opposition:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(projection.GmOperationsSummary.Contains(\\"Event controls:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\"Governance lane:\\", StringComparison.Ordinal))' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(projection.OfflineTruthSummary.Contains(\\"Stale:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(plan.TravelCompanionSummary.Contains(\\"Cached:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(plan.TravelCompanionSummary.Contains(\\"Offline actions:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'id=\\"workspace-continuity-rail\\"' in mobile_local_release_proof.get("must_contain", [])
+    assert 'id=\\"workspace-gm-ops\\"' in mobile_local_release_proof.get("must_contain", [])
     assert 'id=\\"workspace-offline-truth\\"' in mobile_local_release_proof.get("must_contain", [])
     assert 'id=\\"restore-offline-truth\\"' in mobile_local_release_proof.get("must_contain", [])
     assert 'id=\\"restore-travel-companion\\"' in mobile_local_release_proof.get("must_contain", [])
