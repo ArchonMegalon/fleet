@@ -1,3 +1,13 @@
+## 2026-04-04: follow-up on handoff push-blocker commit status for `recaps`/`returns` slice
+
+- Additional commit landed:
+  - `fleet`: `eccbef2` (`docs(handoff): record recaps returns push blocker`).
+- Push attempts (post-follow-up commit):
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so local commits remain unpushed.
+
 ## 2026-04-04: follow-up on `recaps`/`returns` continuity lock commit and push status
 
 - Commits landed:
