@@ -1,24 +1,26 @@
-## 2026-04-04: milestone-1/3 executable tuple integrity now fail-closes Linux startup-smoke `rid` drift in per-head desktop executable proof
+## 2026-04-04: milestone-1/3 executable tuple integrity now fail-closes Linux startup-smoke `rid` and receipt-status drift in per-head desktop executable proof
 
 - Trigger:
   - frontier milestones `1` and `3` require startup smoke receipts to bind to exact promoted desktop tuple identity (`head/platform/rid/channel/version`) on every promoted platform.
-  - executable-gate Linux startup-smoke validation enforced `head/platform/arch/channel/version` and digest checks but did not require receipt `rid` presence or exact match against the promoted tuple.
-  - this left a false-green path where Linux startup-smoke receipts could pass with missing/wrong `rid` while still matching by `arch`.
+  - executable-gate Linux startup-smoke validation enforced `head/platform/arch/channel/version` and digest checks but did not require receipt `rid` presence/match or receipt-level passing `status`.
+  - this left false-green paths where Linux startup-smoke receipts could pass with missing/wrong `rid` while still matching by `arch`, or with non-passing receipt status when gate-level status stayed green.
 - Landed:
   - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
     - Linux startup-smoke evidence now records `primary_receipt_rid`.
+    - Linux startup-smoke evidence now records `primary_receipt_status`.
+    - Linux startup-smoke validation now fail-closes non-passing receipt `status`.
     - Linux startup-smoke validation now fail-closes missing `rid` in installer startup-smoke receipts.
     - Linux startup-smoke validation now fail-closes when receipt `rid` does not match the promoted tuple `rid`.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
-    - extended marker assertions to lock Linux startup-smoke `rid` missing/mismatch fail-close reason strings and `primary_receipt_rid` evidence key coverage.
+    - extended marker assertions to lock Linux startup-smoke receipt-status and `rid` fail-close reason strings plus `primary_receipt_status`/`primary_receipt_rid` evidence key coverage.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
-    - expanded executable-gate compliance marker assertions to lock the Linux startup-smoke `rid` guard strings.
+    - expanded executable-gate compliance marker assertions to lock the Linux startup-smoke receipt-status and `rid` guard strings.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
 - Current trusted state:
-  - milestone-1/3 executable tuple proof now fail-closes Linux startup-smoke `rid` drift in the same identity lane already enforced on Windows/macOS, reducing false-green per-head artifact proofs.
+  - milestone-1/3 executable tuple proof now fail-closes Linux startup-smoke receipt-status and `rid` drift in the same identity lane already enforced on Windows/macOS, reducing false-green per-head artifact proofs.
 - Push status:
   - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
