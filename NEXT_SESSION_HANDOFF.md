@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release truth that still uses the `unpublished` version sentinel
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth and installer truth to align by real release identity (`channel/head/rid/version`) rather than placeholder state.
+  - executable gate previously accepted publishable release-channel status with `version: unpublished`, allowing version checks to pass against a non-release sentinel.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added evidence key `release_channel_version_uses_unpublished_sentinel`.
+    - gate now fail-closes when release-channel status is publishable (`published/ready/pass/passed`) and version is the `unpublished` sentinel.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded executable-gate marker assertions for the sentinel-version fail-close evidence and reason text.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded migration/executable-gate marker assertions for the same fail-close coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_RELEASE_CHANNEL_PATH=/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected, now includes reason `Release channel version cannot be the unpublished sentinel when status is publishable.`
+- Current trusted state:
+  - milestone-1/3 executable proof can no longer report publishable desktop release truth while carrying the non-release `unpublished` version sentinel.
+- Push status:
+  - `chummer6-ui`: committed (`333b2885`); push failed in this environment (`could not read Username for 'https://github.com'`).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for uppercase and empty-segment `releaseProof.proofRoutes` values
 
 - Trigger:
