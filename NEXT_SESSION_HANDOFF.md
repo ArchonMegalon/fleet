@@ -16,6 +16,40 @@
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 organizer event-control lane now fail-closes split/hyphen `event control(s)` aliases across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-5 already fail-closed compact organizer event-control aliases (`eventcontrol`, `eventcontrols`, `eventctrl`) and several split shorthand families (`gm/league/community` variants).
+  - split/hyphen generic wording (`event control`, `event controls`, `event-control`) remained unnormalized in prep query token rewrite, leaving a natural-language retrieval drift seam.
+  - live API/workspace/browser audit paths also did not explicitly execute those split/hyphen generic aliases.
+- Landed:
+  - patched service canonicalization:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - both now rewrite split `event + control/controls` onto governed event-control tokens (`eventcontrol` + `operation`).
+  - patched service tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added split/hyphen assertions and query matrix coverage for `event control`, `event controls`, and `event-control`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added API checks for `queryText=event%20control`, `queryText=event%20controls`, and `queryText=event-control`.
+      - added workspace route checks for `prepQuery=event%20control`, `prepQuery=event%20controls`, and `prepQuery=event-control`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for split/hyphen generic event-control aliases with route-preservation and non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded `queryText`, `prepQuery`, and Playwright marker assertions for split/hyphen generic event-control aliases.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep retrieval and journey proof now fail-close compact, split, and hyphen generic event-control phrasing on the same governed organizer event-control lane.
+- Push status:
+  - `chummer.run-services`: local follow-on changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice.
+
 ## 2026-04-04: milestone-5 organizer-control search now fail-closes split plural aliases (`league controls`, `community controls`) across campaign prep canonicalization and live API/UI journeys
 
 - Trigger:
@@ -27747,4 +27781,29 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - hub parity and registry release-proof governance now align on freshness semantics, removing a stale/future timestamp false-green seam from milestone-2 release-proof evidence.
 - Push status:
   - `chummer6-hub`: local changes landed in this slice (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes startup-smoke `channelId/channel` and `version/releaseVersion` alias drift across Linux, Windows, and macOS receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/startup-smoke release truth to stay one non-contradictory lane per promoted tuple.
+  - executable gate already fail-closed top-level release-channel and embedded installer alias conflicts, but startup-smoke receipt validation on Linux/Windows/macOS still normalized `channelId/channel` and `version/releaseVersion` by fallback precedence without explicit alias-conflict rejection.
+  - this left a drift seam where contradictory startup-smoke alias payloads could pass when one alias happened to match promoted channel truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added helper `scalar_alias_conflicts(...)` for alias-aware startup-smoke scalar validation.
+    - Linux (`primary_receipt_*`) now emits `primary_receipt_channel_id_alias_conflict` and `primary_receipt_version_alias_conflict` and fail-closes on either.
+    - Windows (`startup_smoke_*`) now emits `startup_smoke_channel_id_alias_conflict` and `startup_smoke_version_alias_conflict` and fail-closes on either.
+    - macOS (`startup_smoke_receipt_*`) now emits `startup_smoke_receipt_channel_id_alias_conflict` and `startup_smoke_receipt_version_alias_conflict` and fail-closes on either.
+  - patched compliance tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - expanded marker assertions for all three platform alias-conflict evidence keys and fail-close reason text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 executable proof no longer allows startup-smoke alias contradictions to hide behind fallback ordering; promoted release-channel identity/version truth now fail-closes contradictory startup-smoke aliases on Linux, Windows, and macOS.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
