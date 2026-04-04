@@ -1290,12 +1290,15 @@ def evaluate_journey(
                                             f"support packet {packet_id} install_diagnosis.external_proof_request.{required_key} must match release-channel tuple truth '{expected_value}' but was '{actual_value}'."
                                         )
 
-                                try:
-                                    actual_tuple_entry_count = int(
-                                        external_proof_request.get("tuple_entry_count")
+                                tuple_entry_count_value = external_proof_request.get("tuple_entry_count")
+                                if isinstance(tuple_entry_count_value, bool) or not isinstance(tuple_entry_count_value, int):
+                                    support_packet_contract_violations.append(
+                                        "support packet "
+                                        f"{packet_id} is missing integer install_diagnosis.external_proof_request.tuple_entry_count."
                                     )
-                                except (TypeError, ValueError):
                                     actual_tuple_entry_count = -1
+                                else:
+                                    actual_tuple_entry_count = int(tuple_entry_count_value)
                                 expected_tuple_entry_count = int(expected_request.get("tuple_entry_count") or 0)
                                 if actual_tuple_entry_count != expected_tuple_entry_count:
                                     support_packet_contract_violations.append(
