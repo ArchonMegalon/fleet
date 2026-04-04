@@ -51,6 +51,37 @@
 - Exact blocker:
   - none for implementation or verification; push auth blocker still expected when attempting `git push`.
 
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close split/hyphen `de-brief` recap shorthand across prep-query canonicalization, workspace aftermath matching, and unresolved-domain routing
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign continuity recap language to stay one governed lane across prep-library search canonicalization, workspace aftermath packet/category signals, and GM unresolved routing.
+  - compact `debrief*` recap variants were governed, but split/hyphen forms (`de brief`, `de-brief`, plus inflections) were not explicitly canonicalized or classified.
+  - this left a drift seam where common table recap wording could bypass governed recap normalization and prep-library unresolved routing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added split-token canonicalization for `de` + `brief|briefs|briefed|briefing|briefings` to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ContainsDeBriefTokenPair(...)`.
+    - wired `ContainsDeBriefTokenPair(...)` into `IsAftermathSignalKind(...)` and `ContainsAftermathRecapToken(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain `prep_library` matching now explicitly includes split/hyphen `de brief*` and `de-brief*` recap variants.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - continuity query matching now asserts split/hyphen `de brief*` and `de-brief*` variants.
+      - recap shelf category theory now includes `de-briefing`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - unresolved routing now includes `de-briefing` event evidence.
+      - prep-library query coverage now includes split/hyphen `de brief*` and `de-brief*` forms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`15` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+- Commits landed:
+  - `chummer.run-services`: `c5b4ba0a` (`fix(w3): fail-close de-brief recap continuity across workspace and gm ops`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-2 registry verifier now fail-closes unexpected `releaseProof` and `releaseProof.uiLocalizationReleaseGate` key drift, with active verify mutation coverage
 
 - Trigger:
