@@ -1,3 +1,41 @@
+## 2026-04-04: milestone-9/16 media-factory now projects explicit local release + artifact publication proofs and boundary-pure fallback posture
+
+- Trigger:
+  - frontier `build_explain_publish` journey was still blocked on `media-factory` minimum stage `boundary_pure` even after runtime verification slices, because fallback status-plane inference only allowed `hub-registry` to self-promote to `boundary_pure`.
+  - media-factory lacked published `MEDIA_LOCAL_RELEASE_PROOF.generated.json` and `ARTIFACT_PUBLICATION_CERTIFICATION.generated.json` artifacts in the active workspace path (`/docker/fleet/repos/chummer-media-factory`).
+- Landed:
+  - patched Fleet fallback stage inference in both scripts:
+    - `/docker/fleet/scripts/materialize_status_plane.py`
+    - `/docker/fleet/scripts/verify_status_plane_semantics.py`
+    - `media-factory` now resolves to `boundary_pure` only when both proof artifacts exist and publish pass/ready status.
+  - patched Fleet readiness proof candidate order:
+    - `/docker/fleet/scripts/materialize_flagship_product_readiness.py`
+    - media proof lookup now includes active repo path candidates under `/docker/fleet/repos/chummer-media-factory/.codex-studio/published/*` before legacy paths.
+  - added Fleet regression coverage:
+    - `/docker/fleet/tests/test_materialize_status_plane.py`
+    - added fail-close tests for media-factory fallback promotion when both proof receipts pass, and fallback retention when either receipt fails.
+  - added media-factory proof materializer and verify-lane integration:
+    - `/docker/fleet/repos/chummer-media-factory/scripts/ai/materialize_media_release_proof.py`
+    - `/docker/fleet/repos/chummer-media-factory/scripts/ai/verify.sh`
+    - verify lane now emits:
+      - `.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json`
+      - `.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json`
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_status_plane.py scripts/verify_status_plane_semantics.py scripts/materialize_flagship_product_readiness.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_materialize_status_plane.py -k "media_factory_fallback_stage or hub_registry_fallback_stage"` -> FAIL (`pytest: command not found` in this environment).
+  - `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh` -> PASS (`Media factory runtime verification passed.` and both proof artifacts written).
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS.
+  - evidence check:
+    - `STATUS_PLANE.generated.yaml` now reports `media-factory.readiness_stage: boundary_pure`.
+    - `JOURNEY_GATES.generated.json` now reports `build_explain_publish` as `warning` with no blocking reasons (target-stage warnings remain for `core`, `ui`, and `hub`).
+
 ## 2026-04-04: milestone-12 public progress active-wave status now reads from the Next-12 active registry constant (not retired wave alias)
 
 - Trigger:

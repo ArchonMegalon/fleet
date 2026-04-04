@@ -109,6 +109,8 @@ RULES_CERTIFICATION_CANDIDATES = (
     Path("/docker/chummercomplete/chummer-core-engine/.codex-studio/published/ORACLE_IMPORT_CERTIFICATION.generated.json"),
 )
 MEDIA_PROOF_CANDIDATES = (
+    Path("/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json"),
+    Path("/docker/fleet/repos/chummer-media-factory/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json"),
     Path("/docker/chummercomplete/chummer6-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json"),
     Path("/docker/chummercomplete/chummer6-media-factory/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json"),
     Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json"),

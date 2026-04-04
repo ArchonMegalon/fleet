@@ -1,53 +1,53 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:04:43Z",
+  "generated_at": "2026-04-04T18:11:35Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
     "ready_count": 0,
-    "warning_count": 3,
-    "blocked_count": 3,
-    "blocked_external_only_count": 0,
-    "blocked_with_local_count": 3,
+    "warning_count": 4,
+    "blocked_count": 2,
+    "blocked_external_only_count": 1,
+    "blocked_with_local_count": 1,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:04:35Z",
+      "at": "2026-04-04T18:11:30Z",
       "state": "fresh",
-      "age_seconds": 8
+      "age_seconds": 4
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-04T17:18:48Z",
+      "at": "2026-04-04T18:11:14Z",
       "state": "fresh",
-      "age_seconds": 2755
+      "age_seconds": 20
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2801
+      "age_seconds": 3212
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2801
+      "age_seconds": 3212
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 2800
+      "age_seconds": 3211
     }
   },
   "journeys": [
@@ -56,23 +56,19 @@
       "title": "Install, claim, restore, continue",
       "user_promise": "A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.",
       "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "recommended_action": "Run the missing platform-host proof lane (for example Windows/macOS startup smoke) and ingest receipts before widening promotion or trust claims.",
       "blocking_reasons": [
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'blocking_findings_count' expected 0 but was 44."
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows']."
       ],
-      "external_blocking_reasons": [],
-      "local_blocking_reasons": [
+      "external_blocking_reasons": [
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'blocking_findings_count' expected 0 but was 44."
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows']."
       ],
-      "blocked_by_external_constraints_only": false,
+      "local_blocking_reasons": [],
+      "blocked_by_external_constraints_only": true,
       "warning_reasons": [
         "ui is at repo_local_complete below target stage publicly_promoted.",
         "hub is at repo_local_complete below target stage publicly_promoted."
@@ -177,8 +173,7 @@
             "repo": "chummer6-ui",
             "path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
             "json_must_equal": {
-              "status": "pass",
-              "blocking_findings_count": 0,
+              "local_blocking_findings_count": 0,
               "evidence.hub_registry_root_trusted_for_startup_smoke_proof": true,
               "evidence.flagship_status": "pass",
               "evidence.visual_familiarity_status": "pass",
@@ -192,7 +187,7 @@
             },
             "must_contain": [
               "\"contract_name\": \"chummer6-ui.desktop_executable_exit_gate\"",
-              "\"status\": \"pass\"",
+              "\"local_blocking_findings_count\": 0",
               "\"windows_gate:avalonia:win-x64\"",
               "\"windows_gate:blazor-desktop:win-x64\"",
               "\"linux_gate:avalonia:linux-x64\"",
@@ -259,7 +254,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 5,
+        "blocking_reason_count": 3,
         "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -268,24 +263,20 @@
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
-        "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 5,
-        "blocked_by_external_constraints_only": false
+        "external_blocking_reason_count": 3,
+        "local_blocking_reason_count": 0,
+        "blocked_by_external_constraints_only": true
       }
     },
     {
       "id": "build_explain_publish",
       "title": "Build, explain, publish",
       "user_promise": "A runner can be built, understood with receipts, and handed off into grounded publication without head-local shadow truth.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blocking_reasons": [
-        "media-factory is at repo_local_complete below minimum stage boundary_pure."
-      ],
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [
-        "media-factory is at repo_local_complete below minimum stage boundary_pure."
-      ],
+      "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "core is at repo_local_complete below target stage boundary_pure.",
@@ -458,6 +449,32 @@
               "Decision rail",
               "buildLab.SupportClosureSummary"
             ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Presentation/Overview/DesktopDialogFactory.cs",
+            "must_contain": [
+              "new DesktopDialogField(\"masterIndexSourceSelectionReceipt\"",
+              "new DesktopDialogField(\"masterIndexCustomDataAuthoringReceipt\"",
+              "new DesktopDialogField(\"masterIndexImportOracleReceipt\"",
+              "new DesktopDialogField(\"masterIndexAdjacentSr6OracleLane\"",
+              "new DesktopDialogField(\"masterIndexOnlineStorageLane\"",
+              "new DesktopDialogField(\"masterIndexOnlineStorageReceipt\"",
+              "new DesktopDialogField(\"masterIndexSr6SuccessorReceipt\""
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs",
+            "must_contain": [
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexSourceSelectionReceipt\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexCustomDataAuthoringReceipt\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexImportOracleReceipt\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexAdjacentSr6OracleLane\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexOnlineStorageLane\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexOnlineStorageReceipt\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexSr6SuccessorReceipt\")"
+            ]
           }
         ],
         "required_project_posture": [
@@ -500,7 +517,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 1,
+        "blocking_reason_count": 0,
         "warning_reason_count": 3,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -510,7 +527,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 1,
+        "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": false
       }
     },

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T17:19:38Z",
+  "generated_at": "2026-04-04T18:11:45Z",
   "status": "fail",
   "summary": {
     "ready_count": 0,
@@ -91,8 +91,8 @@
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
         "Release channel does not publish any promoted Windows installer media.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:macos, blazor-desktop:windows.",
-        "Install/claim/restore journey is blocked, not ready.",
-        "Build/explain/publish journey is blocked, not ready.",
+        "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts.",
+        "Build/explain/publish journey is warning, not ready.",
         "UI project posture is repo_local_complete / public, below flagship desktop promotion."
       ],
       "evidence": {
@@ -150,14 +150,14 @@
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 12677,
-          "desktop workflow execution gate proof_age_seconds": 237,
-          "desktop visual familiarity gate proof_age_seconds": 237
+          "flagship UI release gate proof_age_seconds": 17106,
+          "desktop workflow execution gate proof_age_seconds": 1056,
+          "desktop visual familiarity gate proof_age_seconds": 1056
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-04T16:57:14.377499Z",
-        "ui_executable_gate_age_seconds": 1344,
+        "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
+        "ui_executable_gate_age_seconds": 41,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -258,7 +258,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T12:27:07Z",
-        "release_channel_age_seconds": 17551,
+        "release_channel_age_seconds": 20678,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -420,7 +420,13 @@
           "blazor-desktop:osx-arm64"
         ],
         "install_claim_restore_continue": "blocked",
-        "build_explain_publish": "blocked"
+        "build_explain_publish": "warning",
+        "install_claim_restore_continue_external_blocking_reason_count": 3,
+        "install_claim_restore_continue_local_blocking_reason_count": 0,
+        "install_claim_restore_continue_blocked_by_external_constraints_only": true,
+        "build_explain_publish_external_blocking_reason_count": 0,
+        "build_explain_publish_local_blocking_reason_count": 0,
+        "build_explain_publish_blocked_by_external_constraints_only": false
       }
     },
     "rules_engine_and_import": {
@@ -428,11 +434,11 @@
       "summary": "Rules and import flagship proof is still incomplete.",
       "reasons": [
         "Core project readiness is repo_local_complete, below boundary-pure rules posture.",
-        "Build/explain/publish journey is blocked, not ready."
+        "Build/explain/publish journey is warning, not ready."
       ],
       "evidence": {
         "core_stage": "repo_local_complete",
-        "build_explain_publish": "blocked",
+        "build_explain_publish": "warning",
         "rules_certification_path": "/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json",
         "rules_certification_status": "passed"
       }
@@ -477,7 +483,7 @@
       "summary": "Shared UI and flagship polish proof is still incomplete.",
       "reasons": [
         "UI kit readiness is repo_local_complete, below boundary-pure shared-surface posture.",
-        "Build/explain/publish journey is blocked, not ready.",
+        "Build/explain/publish journey is warning, not ready.",
         "Campaign/recover/recap journey is warning, not ready.",
         "Workbench and mobile promoted posture is not yet jointly proven."
       ],
@@ -485,7 +491,7 @@
         "ui_kit_stage": "repo_local_complete",
         "ui_stage": "repo_local_complete",
         "mobile_stage": "repo_local_complete",
-        "build_explain_publish": "blocked",
+        "build_explain_publish": "warning",
         "campaign_session_recover_recap": "warning"
       }
     },
@@ -493,13 +499,12 @@
       "status": "warning",
       "summary": "Media and artifact flagship proof is still incomplete.",
       "reasons": [
-        "Media-factory readiness is repo_local_complete, below boundary-pure publication posture.",
-        "Build/explain/publish journey is blocked, not ready."
+        "Build/explain/publish journey is warning, not ready."
       ],
       "evidence": {
-        "media_stage": "repo_local_complete",
-        "build_explain_publish": "blocked",
-        "media_proof_path": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json",
+        "media_stage": "boundary_pure",
+        "build_explain_publish": "warning",
+        "media_proof_path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
         "media_proof_status": "passed"
       }
     },
@@ -535,7 +540,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T17:19:35Z",
+        "supervisor_updated_at": "2026-04-04T18:11:41Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -565,7 +570,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-5/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260404T163340Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",

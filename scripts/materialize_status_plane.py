@@ -72,6 +72,9 @@ def _infer_fallback_readiness_stage(project_id: str, project_root: Path) -> str:
     if not published_dir.is_dir():
         return "pre_repo_local_complete"
 
+    def _proof_passed(payload: Dict[str, Any]) -> bool:
+        return str(payload.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+
     if project_id == "hub-registry":
         release_channel = _load_json_file(published_dir / "RELEASE_CHANNEL.generated.json")
         if release_channel:
@@ -79,6 +82,11 @@ def _infer_fallback_readiness_stage(project_id: str, project_root: Path) -> str:
             release_proof_status = str(((release_channel.get("releaseProof") or {}).get("status") or "")).strip().lower()
             if release_status in {"published", "publishable"} and release_proof_status in {"pass", "passed"}:
                 return "boundary_pure"
+    elif project_id == "media-factory":
+        media_local_release_proof = _load_json_file(published_dir / "MEDIA_LOCAL_RELEASE_PROOF.generated.json")
+        artifact_publication_certification = _load_json_file(published_dir / "ARTIFACT_PUBLICATION_CERTIFICATION.generated.json")
+        if _proof_passed(media_local_release_proof) and _proof_passed(artifact_publication_certification):
+            return "boundary_pure"
 
     generated_artifacts = list(glob(str(published_dir / "*.generated.*")))
     if generated_artifacts:
