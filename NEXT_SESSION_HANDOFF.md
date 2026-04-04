@@ -1,3 +1,19 @@
+## 2026-04-04: milestone-4/6 continuity unresolved-lane now recognizes explicit "still active" unresolved wording
+
+- Trigger:
+  - W3 milestones `4` and `6` require continuity/offline return-loop drift to stay in one governed unresolved lane.
+  - `LooksUnresolved(...)` did not treat explicit "still active" wording as unresolved, which dropped continuity signals when payloads omitted `open|pending|unresolved`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `LooksUnresolved(...)` now treats `still active` as unresolved-language input.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatTravelCacheUnsyncedSignalsAsContinuityReturnDomainWithoutCampaignOrOpenKeywords|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatOfflineSyncDriftSignalsAsContinuityReturnDomainWithoutOpenKeyword|FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompact|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapses" -v minimal` -> PASS (`10 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreat" -v minimal` -> PASS (`36 passed` on both target frameworks).
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 install proof classifier now treats Linux host-capability blockers as external-only
 
 - Trigger:
