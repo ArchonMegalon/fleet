@@ -408,12 +408,22 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
                         "release_channel.generated.json field "
                         f"'desktopTupleCoverage.{row_id}.requiredProofs' must include at least one token."
                     )
+    reported_missing_tuples = coverage.get("missingRequiredPlatformHeadRidTuples")
     reported_complete = coverage.get("complete")
+    if reported_missing_tuples is not None and not isinstance(raw_external_proof_requests, list):
+        reasons.append(
+            "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests' "
+            "must be an explicit list (empty when complete) whenever missingRequiredPlatformHeadRidTuples are declared."
+        )
+    if isinstance(reported_complete, bool) and not reported_complete and not isinstance(raw_external_proof_requests, list):
+        reasons.append(
+            "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests' "
+            "must be an explicit list whenever desktopTupleCoverage.complete is false."
+        )
     if not isinstance(reported_complete, bool):
         reasons.append(
             "release_channel.generated.json field 'desktopTupleCoverage.complete' must be an explicit boolean."
         )
-    reported_missing_tuples = coverage.get("missingRequiredPlatformHeadRidTuples")
     if requests and not isinstance(reported_missing_tuples, list):
         reasons.append(
             "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "

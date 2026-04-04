@@ -204,6 +204,30 @@ def test_external_proof_reasons_fail_close_malformed_external_proof_rows() -> No
     )
 
 
+def test_external_proof_reasons_fail_close_missing_external_proof_rows_when_tuples_are_missing() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.externalProofRequests' must be an explicit list (empty when complete) whenever missingRequiredPlatformHeadRidTuples are declared."
+        in reason
+        for reason in reasons
+    )
+    assert any(
+        "desktopTupleCoverage.externalProofRequests' must be an explicit list whenever desktopTupleCoverage.complete is false."
+        in reason
+        for reason in reasons
+    )
+
+
 def test_external_proof_reasons_fail_close_empty_provided_smoke_contract_and_commands() -> None:
     payload = {
         "status": "published",
