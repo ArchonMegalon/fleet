@@ -220,6 +220,9 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         if not proof_tokens:
             continue
         head, rid, platform = _parse_tuple_identity(tuple_id)
+        tuple_identity_valid = bool(head and rid and platform)
+        required_host_matches_tuple_platform = not bool(required_host) or not tuple_identity_valid or required_host == platform
+        effective_required_host = required_host or platform
         provided_smoke_contract = item.get("startupSmokeReceiptContract")
         provided_smoke_contract_normalized = (
             {
@@ -249,11 +252,13 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             {
                 "tuple_id": tuple_id,
                 "channel_id": release_channel_id,
-                "required_host": required_host or "required",
+                "required_host": effective_required_host or "required",
                 "required_proofs": sorted(set(proof_tokens)),
                 "head_id": head,
                 "rid": rid,
                 "platform": platform,
+                "tuple_identity_valid": tuple_identity_valid,
+                "required_host_matches_tuple_platform": required_host_matches_tuple_platform,
                 "expected_artifact_id": str(item.get("expectedArtifactId") or "").strip(),
                 "expected_installer_file_name": str(item.get("expectedInstallerFileName") or "").strip(),
                 "expected_public_install_route": str(item.get("expectedPublicInstallRoute") or "").strip(),
@@ -265,7 +270,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                         head=head,
                         rid=rid,
                         platform=platform,
-                        required_host=required_host,
+                        required_host=effective_required_host,
                     )
                 ),
                 "proof_capture_commands": (
@@ -276,7 +281,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                         rid=rid,
                         platform=platform,
                         installer_file_name=str(item.get("expectedInstallerFileName") or "").strip(),
-                        required_host=required_host,
+                        required_host=effective_required_host,
                     )
                 ),
             }
@@ -297,6 +302,18 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
         required_host = str(item.get("required_host") or "").strip().lower()
         proof_tokens = item.get("required_proofs")
         if not tuple_id or not isinstance(proof_tokens, list) or not proof_tokens:
+            continue
+        if not bool(item.get("tuple_identity_valid")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
+                f"must be canonical 'head:rid:platform' but was {tuple_id!r}."
+            )
+            continue
+        if not bool(item.get("required_host_matches_tuple_platform")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredHost' "
+                f"must match tuple platform for {tuple_id} but was {required_host!r}."
+            )
             continue
         expected_artifact_id = str(item.get("expected_artifact_id") or "").strip()
         expected_installer = str(item.get("expected_installer_file_name") or "").strip()
@@ -1214,13 +1231,29 @@ def evaluate_journey(
 
     external_blocking_reasons, local_blocking_reasons = classify_blocking_reasons(blocking_reasons)
     blocked_by_external_constraints_only = bool(external_blocking_reasons) and not local_blocking_reasons
+    external_proof_hosts = sorted(
+        {
+            str(item.get("required_host") or "").strip().lower()
+            for item in external_proof_requests
+            if str(item.get("required_host") or "").strip()
+        }
+    )
+    external_proof_host_label = ", ".join(external_proof_hosts) if external_proof_hosts else "required platform"
+    external_proof_tuple_count = len(
+        {
+            str(item.get("tuple_id") or "").strip()
+            for item in external_proof_requests
+            if str(item.get("tuple_id") or "").strip()
+        }
+    )
 
     recommended_action = "Keep the journey under routine weekly proof."
     if blocking_reasons:
         if blocked_by_external_constraints_only:
             recommended_action = (
-                "Run the missing platform-host proof lane (for example Windows/macOS startup smoke) "
-                "and ingest receipts before widening promotion or trust claims."
+                f"Run the missing {external_proof_host_label} host proof lane for "
+                f"{external_proof_tuple_count or len(external_proof_requests) or 1} desktop tuple(s) and ingest "
+                "receipts before widening promotion or trust claims."
             )
         else:
             recommended_action = "Resolve the blocking artifact or posture gap before widening promotion or trust claims."
@@ -1329,6 +1362,22 @@ def build_payload(
     warnings = [row for row in rows if row["state"] == "warning"]
     blocked_external_only = [row for row in blocked if row.get("blocked_by_external_constraints_only")]
     blocked_with_local = [row for row in blocked if not row.get("blocked_by_external_constraints_only")]
+    blocked_external_only_requests = [
+        dict(item)
+        for row in blocked_external_only
+        for item in (row.get("external_proof_requests") or [])
+        if isinstance(item, dict)
+    ]
+    blocked_external_only_host_counts: Dict[str, int] = {}
+    blocked_external_only_tuples: List[str] = []
+    for item in blocked_external_only_requests:
+        host = str(item.get("required_host") or "").strip().lower()
+        tuple_id = str(item.get("tuple_id") or "").strip()
+        if host:
+            blocked_external_only_host_counts[host] = blocked_external_only_host_counts.get(host, 0) + 1
+        if tuple_id and tuple_id not in blocked_external_only_tuples:
+            blocked_external_only_tuples.append(tuple_id)
+    blocked_external_only_hosts = sorted(blocked_external_only_host_counts.keys())
     overall_state = "ready"
     if blocked:
         overall_state = "blocked"
@@ -1342,8 +1391,19 @@ def build_payload(
     ]
     generated_at = iso(max(generated_candidates + [utc_now()]))
     recommended_action = "Journey proof is steady on current published evidence."
+    blocking_mode = "none"
     if blocked:
-        recommended_action = "Resolve the blocking golden-journey gaps before widening publish claims."
+        if blocked_external_only and len(blocked_external_only) == len(blocked):
+            blocking_mode = "external_only"
+            host_label = ", ".join(blocked_external_only_hosts) if blocked_external_only_hosts else "required platform"
+            tuple_count = len(blocked_external_only_tuples) or len(blocked_external_only_requests) or len(blocked_external_only)
+            recommended_action = (
+                f"Only external host-proof gaps remain: run the missing {host_label} proof lane for "
+                f"{tuple_count} desktop tuple(s), ingest receipts, and then republish release truth."
+            )
+        elif blocked_with_local:
+            blocking_mode = "mixed" if blocked_external_only else "local"
+            recommended_action = "Resolve the blocking golden-journey gaps before widening publish claims."
     elif warnings:
         warning_text = "\n".join(
             reason
@@ -1371,6 +1431,10 @@ def build_payload(
             "blocked_count": len(blocked),
             "blocked_external_only_count": len(blocked_external_only),
             "blocked_with_local_count": len(blocked_with_local),
+            "blocking_mode": blocking_mode,
+            "blocked_external_only_hosts": blocked_external_only_hosts,
+            "blocked_external_only_host_counts": blocked_external_only_host_counts,
+            "blocked_external_only_tuples": blocked_external_only_tuples,
             "recommended_action": recommended_action,
         },
         "artifact_freshness": artifacts,

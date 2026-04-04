@@ -69,6 +69,44 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
     ]
 
 
+def test_release_channel_external_proof_reasons_reject_malformed_tuple_identity() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia-win-x64-windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                }
+            ]
+        }
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert len(reasons) == 1
+    assert "must be canonical 'head:rid:platform'" in reasons[0]
+
+
+def test_release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "macos",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                }
+            ]
+        }
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert len(reasons) == 1
+    assert "requiredHost' must match tuple platform" in reasons[0]
+
+
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"

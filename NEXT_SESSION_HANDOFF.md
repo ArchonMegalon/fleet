@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-1/3 install proof backlog now fail-closes malformed or host-mismatched external-proof tuple rows
+
+- Trigger:
+  - W1 milestones `1` and `3` require release-channel external proof requests to be canonical and non-ambiguous so packaged-binary proof receipts cannot lie.
+  - `materialize_journey_gates` accepted malformed `externalProofRequests.tupleId` values and `requiredHost` values that disagreed with tuple platform, which could produce ambiguous backlog truth before host proof capture.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - external-proof requests now carry tuple-identity validity and host/platform agreement markers.
+    - fail-closed release-channel reasons now emit blockers when tuple id is not canonical `head:rid:platform`.
+    - fail-closed release-channel reasons now emit blockers when `requiredHost` conflicts with tuple platform.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_release_channel_external_proof_reasons_reject_malformed_tuple_identity`.
+    - added `test_release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch`.
+  - refreshed completion-review frontier mirrors:
+    - `/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+    - `/docker/fleet/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "release_channel_external_proof_requests_normalize_and_dedupe or release_channel_external_proof_reasons_reject_malformed_tuple_identity or release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch"` -> PASS (`3 passed`, `26 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py -k "external_proof_requests_include_startup_smoke_contract_fields or install_journey_blocks_when_support_external_proof_backlog_summary_drifts"` -> PASS (`2 passed`, `5 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized; active blocker remains external Windows/macOS host proof capture).
+- Commits landed:
+  - `fleet`: pending
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 completion-review executable gate now fail-closes negative blocker counts
 
 - Trigger:
