@@ -90,6 +90,44 @@
 - Current trusted state:
   - milestone-2 parity script-lock now exercises strict integer-type enforcement for all localization count fields (`defaultKeyCount`, `blockingFindingsCount`, `translationBacklogFindingsCount`).
 
+## 2026-04-04: follow-up on macOS startup-smoke blocker alias normalization for milestone-3 per-head receipts (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: pending in this slice (scoped files only; see landed section below).
+- Push attempts:
+  - pending in this slice after commit; expected to remain blocked by missing GitHub HTTPS credentials in this environment.
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so pushes fail with `fatal: could not read Username for 'https://github.com': No such device or address`.
+
+## 2026-04-04: milestone-3 macOS per-head gate receipts now publish deterministic `checks.startup_smoke_external_blocker` alias and executable gate consumes either blocker path
+
+- Trigger:
+  - Windows per-head desktop exit receipts already emitted top-level `checks.startup_smoke_external_blocker`, but macOS only emitted nested `startup_smoke.external_blocker`.
+  - that asymmetry left a contract seam for control-plane consumers reading per-head gate `checks` envelopes directly instead of nested startup payloads.
+- Landed:
+  - patched macOS gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`
+    - now computes `startup_smoke_receipt_found` explicitly and writes:
+      - `checks.startup_smoke_external_blocker`
+      - `checks.startup_smoke_receipt_found`
+      - `checks.startup_smoke_receipt_path`
+    - keeps nested `startup_smoke.external_blocker` intact for compatibility.
+  - patched executable gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - macOS validator now resolves blocker from:
+      - `startup_smoke.external_blocker` **or**
+      - `checks.startup_smoke_external_blocker`.
+  - patched compliance script-lock:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - asserts new macOS script markers and executable gate alias fallback marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Windows_and_macos_exit_gate_materializers_do_not_resolve_proof_from_legacy_chummer5a_paths|FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`2` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_MACOS_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_MACOS_DESKTOP_EXIT_GATE_RID=osx-arm64 CHUMMER_UI_MACOS_DESKTOP_EXIT_GATE_PATH=.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL as expected for missing promoted macOS artifact/host, but receipt now includes `checks.startup_smoke_external_blocker=missing_macos_host_capability`.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected on real promoted Windows/macOS artifact/smoke gaps; machine-readable `evidence.external_blockers` remains populated per tuple.
+- Current trusted state:
+  - milestone-3 per-head macOS receipt contract now exposes host-capability blockers in both nested and `checks` alias form, matching Windows contract shape.
+  - remaining blocker is still real promoted Windows/macOS installer publication plus host-capable startup-smoke evidence, not blocker-field ambiguity.
+
 ## 2026-04-04: follow-up on milestone-3 external-host blocker truth commit and push status
 
 - Commits landed:
