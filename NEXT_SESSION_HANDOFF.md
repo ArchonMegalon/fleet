@@ -44,8 +44,10 @@
   - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
 - Commits landed:
   - `chummer.run-services`: `449c994c` (`fix(w3): classify aar and retro recap kinds on aftermath shelf`).
+  - `fleet`: `771fb40` (`docs(handoff): record w3 aar and retro recap shelf closure`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
