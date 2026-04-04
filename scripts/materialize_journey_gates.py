@@ -228,6 +228,35 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         tuple_identity_valid = bool(head and rid and platform)
         required_host_matches_tuple_platform = not bool(required_host) or not tuple_identity_valid or required_host == platform
         effective_required_host = required_host or platform
+        canonical_expected_artifact_id = f"{head}-{rid}-installer" if head and rid else ""
+        canonical_expected_installer_file_name = _default_installer_file_name(head=head, rid=rid, platform=platform)
+        canonical_expected_public_install_route = (
+            f"/downloads/install/{head}-{rid}-installer"
+            if head and rid
+            else ""
+        )
+        canonical_expected_startup_smoke_receipt_path = (
+            f"startup-smoke/startup-smoke-{head}-{rid}.receipt.json"
+            if head and rid
+            else ""
+        )
+        canonical_startup_smoke_receipt_contract = _required_receipt_contract(
+            head=head,
+            rid=rid,
+            platform=platform,
+            required_host=effective_required_host,
+        )
+        canonical_proof_capture_commands = _proof_capture_commands(
+            head=head,
+            rid=rid,
+            platform=platform,
+            installer_file_name=canonical_expected_installer_file_name,
+            required_host=effective_required_host,
+        )
+        provided_expected_artifact_id = str(item.get("expectedArtifactId") or "").strip()
+        provided_expected_installer_file_name = str(item.get("expectedInstallerFileName") or "").strip()
+        provided_expected_public_install_route = str(item.get("expectedPublicInstallRoute") or "").strip()
+        provided_expected_startup_smoke_receipt_path = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
         provided_smoke_contract = item.get("startupSmokeReceiptContract")
         provided_smoke_contract_normalized = (
             {
@@ -264,30 +293,31 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "platform": platform,
                 "tuple_identity_valid": tuple_identity_valid,
                 "required_host_matches_tuple_platform": required_host_matches_tuple_platform,
-                "expected_artifact_id": str(item.get("expectedArtifactId") or "").strip(),
-                "expected_installer_file_name": str(item.get("expectedInstallerFileName") or "").strip(),
-                "expected_public_install_route": str(item.get("expectedPublicInstallRoute") or "").strip(),
-                "expected_startup_smoke_receipt_path": str(item.get("expectedStartupSmokeReceiptPath") or "").strip(),
+                "expected_artifact_id": provided_expected_artifact_id or canonical_expected_artifact_id,
+                "expected_installer_file_name": provided_expected_installer_file_name or canonical_expected_installer_file_name,
+                "expected_public_install_route": provided_expected_public_install_route or canonical_expected_public_install_route,
+                "expected_startup_smoke_receipt_path": provided_expected_startup_smoke_receipt_path or canonical_expected_startup_smoke_receipt_path,
+                "expected_artifact_id_provided": bool(provided_expected_artifact_id),
+                "expected_installer_file_name_provided": bool(provided_expected_installer_file_name),
+                "expected_public_install_route_provided": bool(provided_expected_public_install_route),
+                "expected_startup_smoke_receipt_path_provided": bool(provided_expected_startup_smoke_receipt_path),
+                "startup_smoke_receipt_contract_provided": isinstance(provided_smoke_contract, dict),
+                "proof_capture_commands_provided": isinstance(provided_commands, list),
+                "canonical_expected_artifact_id": canonical_expected_artifact_id,
+                "canonical_expected_installer_file_name": canonical_expected_installer_file_name,
+                "canonical_expected_public_install_route": canonical_expected_public_install_route,
+                "canonical_expected_startup_smoke_receipt_path": canonical_expected_startup_smoke_receipt_path,
+                "canonical_startup_smoke_receipt_contract": canonical_startup_smoke_receipt_contract,
+                "canonical_proof_capture_commands": canonical_proof_capture_commands,
                 "startup_smoke_receipt_contract": (
                     provided_smoke_contract_normalized
                     if provided_smoke_contract_normalized
-                    else _required_receipt_contract(
-                        head=head,
-                        rid=rid,
-                        platform=platform,
-                        required_host=effective_required_host,
-                    )
+                    else canonical_startup_smoke_receipt_contract
                 ),
                 "proof_capture_commands": (
                     provided_commands_normalized
                     if provided_commands_normalized
-                    else _proof_capture_commands(
-                        head=head,
-                        rid=rid,
-                        platform=platform,
-                        installer_file_name=str(item.get("expectedInstallerFileName") or "").strip(),
-                        required_host=effective_required_host,
-                    )
+                    else canonical_proof_capture_commands
                 ),
             }
         )
@@ -304,6 +334,35 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         item["tuple_entry_count"] = tuple_occurrence_counts.get(tuple_id, 0)
         item["tuple_unique"] = tuple_occurrence_counts.get(tuple_id, 0) <= 1
     return deduped_requests
+
+
+EXTERNAL_PROOF_REQUEST_PUBLIC_KEYS: Tuple[str, ...] = (
+    "tuple_id",
+    "channel_id",
+    "required_host",
+    "required_proofs",
+    "head_id",
+    "rid",
+    "platform",
+    "tuple_identity_valid",
+    "required_host_matches_tuple_platform",
+    "expected_artifact_id",
+    "expected_installer_file_name",
+    "expected_public_install_route",
+    "expected_startup_smoke_receipt_path",
+    "startup_smoke_receipt_contract",
+    "proof_capture_commands",
+    "tuple_entry_count",
+    "tuple_unique",
+)
+
+
+def _public_external_proof_request(item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: item.get(key)
+        for key in EXTERNAL_PROOF_REQUEST_PUBLIC_KEYS
+        if key in item
+    }
 
 
 def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
@@ -445,6 +504,69 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
         expected_installer = str(item.get("expected_installer_file_name") or "").strip()
         expected_route = str(item.get("expected_public_install_route") or "").strip()
         expected_receipt = str(item.get("expected_startup_smoke_receipt_path") or "").strip()
+        if not bool(item.get("expected_artifact_id_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedArtifactId' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+        if not bool(item.get("expected_installer_file_name_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedInstallerFileName' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+        if not bool(item.get("expected_public_install_route_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedPublicInstallRoute' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+        if not bool(item.get("expected_startup_smoke_receipt_path_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedStartupSmokeReceiptPath' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+        if not bool(item.get("startup_smoke_receipt_contract_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.startupSmokeReceiptContract' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+        if not bool(item.get("proof_capture_commands_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+        if expected_artifact_id != str(item.get("canonical_expected_artifact_id") or "").strip():
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedArtifactId' "
+                f"must match tuple-derived canonical value for {tuple_id}."
+            )
+        if expected_installer != str(item.get("canonical_expected_installer_file_name") or "").strip():
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedInstallerFileName' "
+                f"must match tuple-derived canonical value for {tuple_id}."
+            )
+        if expected_route != str(item.get("canonical_expected_public_install_route") or "").strip():
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedPublicInstallRoute' "
+                f"must match tuple-derived canonical value for {tuple_id}."
+            )
+        if expected_receipt != str(item.get("canonical_expected_startup_smoke_receipt_path") or "").strip():
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.expectedStartupSmokeReceiptPath' "
+                f"must match tuple-derived canonical value for {tuple_id}."
+            )
+        if (
+            dict(item.get("startup_smoke_receipt_contract") or {})
+            != dict(item.get("canonical_startup_smoke_receipt_contract") or {})
+        ):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.startupSmokeReceiptContract' "
+                f"must match tuple-derived canonical value for {tuple_id}."
+            )
+        if list(item.get("proof_capture_commands") or []) != list(item.get("canonical_proof_capture_commands") or []):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' "
+                f"must match tuple-derived canonical command sequence for {tuple_id}."
+            )
         detail_parts: List[str] = []
         if expected_artifact_id:
             detail_parts.append(f"artifactId {expected_artifact_id}")
@@ -1421,12 +1543,18 @@ def evaluate_journey(
     elif warning_reasons:
         recommended_action = "Close the remaining target-stage or evidence-depth gap before calling the journey boring."
 
+    external_proof_requests_public = [
+        _public_external_proof_request(item)
+        for item in external_proof_requests
+        if isinstance(item, dict)
+    ]
+
     evidence = {
         "history_snapshot_count": history_count,
         "support_packets_generated_at": support_generated_at,
         "required_artifacts": [str(item) for item in (fleet_gate.get("required_artifacts") or []) if str(item).strip()],
         "canonical_journeys": [str(item) for item in (row.get("canonical_journeys") or []) if str(item).strip()],
-        "external_proof_requests": external_proof_requests,
+        "external_proof_requests": external_proof_requests_public,
     }
     signals = {
         "blocking_reason_count": len(blocking_reasons),
@@ -1463,7 +1591,7 @@ def evaluate_journey(
         "external_blocking_reasons": external_blocking_reasons,
         "local_blocking_reasons": local_blocking_reasons,
         "blocked_by_external_constraints_only": blocked_by_external_constraints_only,
-        "external_proof_requests": external_proof_requests,
+        "external_proof_requests": external_proof_requests_public,
         "warning_reasons": warning_reasons,
         "owner_repos": [str(item) for item in (row.get("owner_repos") or []) if str(item).strip()],
         "canonical_journeys": [str(item) for item in (row.get("canonical_journeys") or []) if str(item).strip()],

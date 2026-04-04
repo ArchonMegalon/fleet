@@ -143,6 +143,45 @@ groups: []
     ]
 
 
+def test_external_proof_reasons_reject_noncanonical_tuple_spec_fields() -> None:
+    payload = {
+        "channelId": "stable",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "wrong-artifact",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/not-canonical",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/not-canonical.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "linux",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any("expectedArtifactId' must match tuple-derived canonical value" in reason for reason in reasons)
+    assert any("expectedPublicInstallRoute' must match tuple-derived canonical value" in reason for reason in reasons)
+    assert any("expectedStartupSmokeReceiptPath' must match tuple-derived canonical value" in reason for reason in reasons)
+    assert any("startupSmokeReceiptContract' must match tuple-derived canonical value" in reason for reason in reasons)
+    assert any("proofCaptureCommands' must match tuple-derived canonical command sequence" in reason for reason in reasons)
+
+
 def test_install_journey_blocks_when_support_external_proof_backlog_summary_drifts(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -677,8 +716,17 @@ groups: []
             JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-hub-registry"] = original_roots
 
     journey = payload["journeys"][0]
-    assert journey["state"] == "ready"
-    assert journey["blocking_reasons"] == []
+    assert journey["state"] == "blocked"
+    assert any(
+        "externalProofRequests.expectedArtifactId' must be explicit for tuple avalonia:win-x64:windows"
+        in reason
+        for reason in journey["blocking_reasons"]
+    )
+    assert any(
+        "externalProofRequests.proofCaptureCommands' must be explicit for tuple avalonia:win-x64:windows"
+        in reason
+        for reason in journey["blocking_reasons"]
+    )
 
 
 def test_install_journey_blocks_when_support_external_proof_tuple_fields_drift_from_release_channel(
