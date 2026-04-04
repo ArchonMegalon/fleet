@@ -2905,6 +2905,7 @@ groups: []
                     "external_proof_required_case_count": 1,
                     "external_proof_required_host_counts": {"windows": 1},
                     "external_proof_required_tuple_counts": {"avalonia:win-x64:windows": 1},
+                    "unresolved_external_proof_request_count": 0,
                 },
                 "packets": [
                     {

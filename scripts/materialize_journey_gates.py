@@ -927,6 +927,14 @@ def evaluate_journey(
                     normalized[token] = count
             return {key: normalized[key] for key in sorted(normalized)}
 
+        def _normalized_summary_count(value: Any, *, field_name: str) -> int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                support_packet_contract_violations.append(
+                    f"support packet summary {field_name} is missing integer count."
+                )
+                return -1
+            return int(value)
+
         def _normalized_summary_tokens(value: Any, *, lower: bool) -> List[str]:
             if not isinstance(value, list):
                 return []
@@ -1447,8 +1455,9 @@ def evaluate_journey(
                 blocking_reasons.append(
                     f"support packet install-truth contract has {len(support_packet_contract_violations) - 5} additional violations."
                 )
-        reported_external_proof_required_case_count = int(
-            support_summary.get("external_proof_required_case_count") or 0
+        reported_external_proof_required_case_count = _normalized_summary_count(
+            support_summary.get("external_proof_required_case_count"),
+            field_name="external_proof_required_case_count",
         )
         if support_external_proof_required_count != reported_external_proof_required_case_count:
             blocking_reasons.append(
@@ -1489,8 +1498,9 @@ def evaluate_journey(
                 "support packet summary external_proof_required_tuple_counts does not match packet install_diagnosis facts."
             )
         expected_external_proof_backlog_count = len(external_proof_requests)
-        reported_external_proof_backlog_count = int(
-            support_summary.get("unresolved_external_proof_request_count") or 0
+        reported_external_proof_backlog_count = _normalized_summary_count(
+            support_summary.get("unresolved_external_proof_request_count"),
+            field_name="unresolved_external_proof_request_count",
         )
         if expected_external_proof_backlog_count != reported_external_proof_backlog_count:
             blocking_reasons.append(
