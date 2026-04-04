@@ -37915,3 +37915,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` -> FAIL (`No module named pytest`).
 - Exact blocker:
   - `pytest` is unavailable in the current environment, so Fleet tests cannot run beyond compile/materialize/jq verification in this session.
+
+## 2026-04-04: handoff append commit + push status for milestone-7/8/9/16 build/explain gate hardening
+
+- Commits landed:
+  - `chummer6-design`: `cb80f6a` (`docs(w4-7-8-9-16): gate build lab rule-diff and exchange parity anchors`).
+  - `fleet`: `1d83b31` (`feat(w4-7-8-9-16): fail-close build/explain gate on rule-diff and exchange anchors`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
