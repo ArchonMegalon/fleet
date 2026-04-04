@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-2 release materializer now fail-closes missing `releaseProof` and missing `uiLocalizationReleaseGate` before channel projection
+
+- Trigger:
+  - frontier milestone `2` shelf provenance must fail at projection time when release proof artifacts are absent, not only at verifier time.
+  - `materialize_public_release_channel.py` still synthesized placeholder-missing proof (`status: missing`) when `releaseProof` or nested `uiLocalizationReleaseGate` was absent.
+  - this left a drift path where incomplete proof could still be projected into generated release-channel artifacts before downstream verification rejected it.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - fail-closes when top-level `releaseProof` is missing.
+    - fail-closes when `releaseProof.uiLocalizationReleaseGate` is missing.
+    - removed fallback insertion of placeholder `uiLocalizationReleaseGate` during release-proof normalization.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - startup-smoke filter materialization fixtures now pass canonical proof + localization gate payloads.
+    - added mutations proving materializer fail-close when `releaseProof` is missing.
+    - added mutations proving materializer fail-close when `uiLocalizationReleaseGate` is missing.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented projection-time requirement for both `releaseProof` and `releaseProof.uiLocalizationReleaseGate`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - release-channel materialization can no longer emit promoted artifacts from missing-proof payloads; missing top-level proof or missing localization proof now fails before projection.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 opposition fallback prep retrieval now fail-closes `opfor` and `opforce` query variants across API and workspace route journeys
 
 - Trigger:
