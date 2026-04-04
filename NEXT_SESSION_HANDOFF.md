@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-4 campaign return lane now treats contact-connection mutations as first-class relationship signals
+
+- Trigger:
+  - frontier milestone `4` requires downtime, diary, contacts, heat, aftermath, and return to stay one governed lane without dropping common contact-relationship wording.
+  - `CampaignWorkspaceServerPlaneService` relationship token detection covered contact/heat/favor/loyalty/reputation/faction, but did not recognize `connection` phrasing used in real-table contact updates.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded `CampaignRelationshipWordTokens` with `connection` and `connections`.
+    - campaign-return packet relationship detection now treats contact connection-rating mutations as governed relationship signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketCountsRelationshipSignalsFromConnectionMutations`.
+    - added fixture helper `BuildWorkspaceWithConnectionRelationshipSignalsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketCountsRelationshipSignalsFromConnectionMutations|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`345` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return relationship detection no longer misses connection-based contact mutations when consequence receipts are sparse.
+  - milestone-4 continuity projection remains aligned with contact/heat/relationship vocabulary used in live campaign notes.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 UI parity gate now audits active parity-oracle catalogs instead of retired legacy-shell files
 
 - Trigger:
@@ -140,6 +161,43 @@
 - Push status:
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/b15-localization-release-gate.sh`, `.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`; credential-dependent).
   - `fleet`: readiness mirrors and handoff updated locally in this follow-on slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-1/3 Linux startup-smoke receipts now emit explicit `rid`/`releaseVersion`, and Linux gate fail-closes those identity gaps
+
+- Trigger:
+  - frontier milestones `1` and `3` require per-head packaged installer/startup proof to stay bound to release-head identity, not just loose channel/status checks.
+  - Linux startup-smoke receipts could pass with missing `rid` and missing `releaseVersion`, which left room for stale/ambiguous receipt identity even when `channelId` and checkpoint were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Desktop.Runtime/DesktopStartupSmokeRuntime.cs`:
+    - added startup-smoke env inputs `CHUMMER_DESKTOP_STARTUP_SMOKE_RELEASE_VERSION` and `CHUMMER_DESKTOP_STARTUP_SMOKE_RID`.
+    - receipt contract now emits `releaseVersion` and `rid` alongside existing `version`/platform identity fields.
+    - runtime resolves `releaseVersion` deterministically (metadata + override aware) and carries `rid` into emitted receipts.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/run-desktop-startup-smoke.sh`:
+    - now forwards version and RID hints to runtime via:
+      - `CHUMMER_DESKTOP_STARTUP_SMOKE_RELEASE_VERSION="$VERSION_HINT"`
+      - `CHUMMER_DESKTOP_STARTUP_SMOKE_RID="$RID"`
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - startup-smoke integrity checks now parse and validate receipt `rid` and `releaseVersion`.
+    - added fail-close reasons for missing/mismatched `rid` and missing/mismatched `releaseVersion` vs release-channel `version`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/DesktopStartupSmokeRuntimeTests.cs` now asserts runtime receipt emits `releaseVersion` and `rid` when smoke env hints are set.
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs` now locks new Linux gate parser tokens and fail-close reason strings for `rid`/`releaseVersion`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/run-desktop-startup-smoke.sh scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Desktop.Runtime.Tests/Chummer.Desktop.Runtime.Tests.csproj --filter "FullyQualifiedName~DesktopStartupSmokeRuntimeTests" --nologo -v minimal` -> PASS (`5` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_USE_PROMOTED_INSTALLER=0 bash scripts/materialize-linux-desktop-exit-gate.sh` -> expected FAIL in promoted-installer integrity stage due existing release-channel artifact byte drift, but fresh run receipt now emits `rid=linux-x64` and `releaseVersion=local-docker`:
+    - `.codex-studio/out/linux-desktop-exit-gate/run.OZZTYV/startup-smoke-installer/startup-smoke-avalonia-linux-x64.receipt.json`.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_RELEASE_CHANNEL=docker bash scripts/run-desktop-startup-smoke.sh Docker/Downloads/files/chummer-avalonia-linux-x64-installer.deb avalonia linux-x64 Chummer.Avalonia Docker/Downloads/startup-smoke local-docker` -> PASS; repo-local promoted receipt now carries `rid` + `releaseVersion`.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> expected FAIL with byte-drift reasons only (`size/sha/artifactDigest` mismatch vs release-channel), while new `rid/releaseVersion` checks stay satisfied.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_RELEASE_REQUIRE_COMPLETE_DESKTOP_COVERAGE=0 RELEASE_VERSION=local-docker RELEASE_CHANNEL=docker bash scripts/generate-releases-manifest.sh` -> FAIL (`releaseProof.uiLocalizationReleaseGate.status must be pass/passed/ready`), so local release-channel rematerialization is currently blocked by localization proof posture.
+- Current trusted state:
+  - Linux startup-smoke receipt identity now carries explicit release-head tuple fields (`channelId + releaseVersion + rid`) instead of implicit inference.
+  - Linux gate can no longer silently accept startup-smoke receipts with missing RID/releaseVersion identity.
+  - remaining Linux promoted-installer blocker is still byte-level drift between repo-local promoted installer shelf and release-channel artifact truth; rematerializing release-channel truth is presently blocked by a failing localization release-proof gate.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`DesktopStartupSmokeRuntime.cs`, Linux gate/startup-smoke scripts, runtime/compliance tests, local avalonia linux installer + startup-smoke receipt updates; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-5 GM unresolved triage now treats prep-launch and travel-prefetch pressure as event-control domain signals
 
