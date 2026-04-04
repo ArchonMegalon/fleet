@@ -1,3 +1,49 @@
+## 2026-04-04: milestone-5 prep search now recognizes compact `eventctrl` shorthand across campaign packets and GM assets
+
+- Trigger:
+  - frontier milestone `5` requires GM event-control operations and prep-library retrieval to remain first-class on the same governed lane even when operators use compact shorthand.
+  - domain classifiers already recognized `eventctrl`, but prep-library query matching in `CampaignWorkspaceServerPlaneService` and `GmOpsBoardService` did not canonically rewrite that token for all-token matching.
+  - `eventctrl` queries could therefore return false-empty packet/asset results despite governed event-control evidence being present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - query-token alias rewrite now canonicalizes `eventctrl` -> `eventcontrol` in prep-library token synthesis.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - prep-asset query tokenization now canonicalizes `eventctrl` -> `eventcontrol` before all-token matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded compact shorthand regression to assert `eventctrl` query hits governed event-control assets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~PrepLibraryQueryMatchingSupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`365` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact `eventctrl` operator shorthand now resolves to governed event-control prep content consistently across campaign packet search and GM prep asset search.
+  - milestone-5 event-control lane no longer drops this shorthand into false-empty lookup behavior.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-2 parity audit now fail-closes on canonical visual screenshot and theme-proof drift
+
+- Trigger:
+  - frontier milestone `2` requires executable visual familiarity proof to remain tied to canonical flagship screenshot and theme/readability evidence, not only interaction-key/test-list status.
+  - `scripts/audit-ui-parity.sh` already checked interaction keys and missing visual tests, but did not fail-close on missing/invalid/stale screenshot evidence or missing legacy theme-token/readability proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - requires `evidence.required_tests` and fail-closes if core milestone-2 visual tests are absent.
+    - requires `evidence.required_screenshots` and fail-closes if canonical 15 screenshot slots are missing.
+    - fail-closes on non-empty `missing_screenshots`, `invalid_screenshots`, `undersized_screenshots`, `stale_screenshots`, and `screenshots_older_than_flagship_receipt`.
+    - fail-closes on non-empty `missing_theme_tokens` and non-pass `flagship_theme_readability_contrast`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock new visual screenshot/theme fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity proof now fails if canonical flagship screenshot evidence or legacy theme/readability proof drifts, instead of allowing interaction-only status to pass.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes when workflow-family proof is missing required audit tests
 
 - Trigger:
