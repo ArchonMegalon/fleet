@@ -12,6 +12,7 @@
     - test locks ordering so opposition/event-control/roster unresolved rows stay ahead of newer general unresolved rows when severity is equal.
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`16` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`339` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - GM unresolved board projection now reflects milestone-5 operator priority by domain, not recency luck, while preserving severity-first ordering.
   - opposition/event-control/roster blockers remain surfaced first in unresolved triage unless a higher-severity row exists.
