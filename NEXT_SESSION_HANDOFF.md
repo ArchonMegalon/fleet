@@ -1,3 +1,104 @@
+## 2026-04-04: follow-up on W3 GM ops singular `ctl` shorthand fail-close slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `3d5b64d4` (`fix(w3): fail-close gmctl prep-query and gm domain shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 GM operations lane now fail-closes compact and split singular `gmctl` shorthand across prep-query matching and unresolved-domain routing
+
+- Trigger:
+  - milestone-4/5 prep-query and GM unresolved-domain shorthand coverage already fail-closed plural `gmctls` forms, but singular `gmctl`/`gm ctl` forms were still outside canonical alias and unresolved-domain phrase rails.
+  - this left a wording seam where operator shorthand could drift from governed event-control retrieval and unresolved-item prioritization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact `gmctl` canonicalization to governed event-control tokens (`eventcontrol + season + operation`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `ResolveGmOpsDomain(...)` now treats singular GM `ctl` phrasing as event-control domain cues:
+      - `gmctl`
+      - `gm ctl`
+      - `gm-ctl`
+      - `gm_ctl`
+  - expanded unit coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - GM prep-query shorthand matching now asserts compact `gmctl` and split/hyphen `gm ctl` / `gm-ctl` forms.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - added unresolved-domain regression for compact `gmctl` prioritization.
+      - `ListPrepAssets_QuerySupportsCtlShorthand` now asserts `gmctl`, `gm ctl`, and `gm-ctl` matching.
+  - patched live journey script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added governed API/workspace checks for:
+      - `queryText=gmctl`
+      - `queryText=gm%20ctl`
+      - `prepQuery=gmctl`
+      - `prepQuery=gm%20ctl`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs` script-lock markers for all newly added audit and Playwright strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsGmOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatCompactGmCtlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCtlShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 GM operations shorthand now fail-closes singular `gmctl` forms through the same canonicalization, unresolved-domain routing, and API/browser journey proof rails already enforcing plural `gmctls` paths.
+
+## 2026-04-04: follow-up on W3 split-plural `ctls` prep-query and GM domain parity slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `127def4b` (`fix(w3): fail-close split ctls prep-query and gm domain aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 event and season controls lane now fail-closes split-plural `ctls` shorthand across canonicalization, GM unresolved-domain routing, and live script-lock journeys
+
+- Trigger:
+  - campaign workspace and GM ops already fail-closed compact `eventctls`/`seasonctls` and compact `gmctrl`, but split-plural operator phrasing (`event ctls`, `season ctls`, `gm ctls`) still sat outside shared alias canonicalization and unresolved-domain phrase cues.
+  - this left a residual wording seam where natural operator search and unresolved-item cues could drift from governed prep packet retrieval without parity failure.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - split token rewrites now include plural abbreviated control forms across event/season/gm and league/community control lanes:
+      - `event + ctls/ctrls`
+      - `season + ctls/ctrls`
+      - `gm + ctl/ctls/ctrls`
+      - `league/community + ctls/ctrls`
+    - added compact GM plural aliases:
+      - `gmctls`
+      - `gmctrls`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `ResolveGmOpsDomain(...)` now treats split/hyphen and compact plural shorthand as event-control domain cues:
+      - `event ctls`, `event-ctls`, `event ctrls`, `event-ctrls`, `eventctls`, `eventctrls`
+      - `season ctls`, `season-ctls`, `season ctrls`, `season-ctrls`, `seasonctls`, `seasonctrls`
+      - `gm ctls`, `gm-ctls`, `gm ctrls`, `gm-ctrls`, `gmctls`, `gmctrls`
+  - expanded unit coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - split/hyphen `event/season/gm` plural control abbreviations now asserted in prep-query matching.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - unresolved-domain regression now asserts `eventctls`, `seasonctls`, and `gmctls` prioritization.
+      - prep-asset query regression now asserts `event ctls`, `event-ctls`, `season ctls`, `season-ctls`, `gmctls`, `gm ctls`, and `gm-ctls`.
+  - patched live journey script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added governed API/workspace and browser checks for:
+      - `queryText=season%20ctls`
+      - `queryText=event%20ctls`
+      - `queryText=gmctls`
+      - `queryText=gm%20ctls`
+      - `prepQuery=season%20ctls`
+      - `prepQuery=event%20ctls`
+      - `prepQuery=gmctls`
+      - `prepQuery=gm%20ctls`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs` script-lock markers for all newly added audit and Playwright strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatCtlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCtlShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> FAIL (pre-existing parity evidence drift in milestone-2 audit lane: `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` `generated_at` does not match nested `CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json` `generatedAt`).
+- Current trusted state:
+  - milestone-4/5 event and season controls lane now fail-closes split-plural abbreviated control wording in both prep-query search and GM unresolved-domain routing, with runtime API and browser journey proof script-locked for these forms.
+
 ## 2026-04-04: follow-up on W3 compact plural `ctls` prep-query parity slice (commit and push status)
 
 - Commits landed:
