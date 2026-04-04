@@ -24,9 +24,11 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --no-build --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL with one pre-existing non-slice failure: `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` (expected build-lab outputs not present).
   - full project-reference build remains blocked by pre-existing unrelated compile errors in `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs` (`IReadOnlyList<PublicationSafeProjection>` uses `.Length` instead of `.Count`).
 - Commits landed:
-  - pending local commit in `chummer.run-services` (to be created in this session).
+  - `chummer.run-services`: `22fe0954` (`fix(w3): collapse travel offline readiness shorthand in prep queries`).
+  - `fleet`: `b3d9829` (`docs: refresh next session handoff for w3 prep query slice`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - unrelated existing repo state currently prevents clean full `Chummer.Tests` build with project references (`CampaignSpineService` compile errors) and full class filter still carries one pre-existing failing build-lab handoff assertion.
 
