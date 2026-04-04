@@ -27,6 +27,39 @@
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close `relationships` alias across canonicalization plus live API/UI journeys
+
+- Trigger:
+  - continuity prep search already fail-closed `contact(s)` and `connection(s)` wording, but adjacent relationship phrasing still lacked explicit `relationships -> relationship` canonicalization and journey lock coverage.
+  - this left a retrieval seam where campaign workspace and GM prep search could drift on common plural relationship wording.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrite:
+      - `relationships -> relationship`
+  - expanded unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - continuity plural shorthand test now asserts `relationship` and `relationships`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - continuity plural shorthand test now asserts `relationship` and `relationships`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=relationship` and `queryText=relationships`.
+      - added signed-in workspace route checks for `prepQuery=relationship` and `prepQuery=relationships`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `prepQuery=relationship` and `prepQuery=relationships` with route/copy/non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for `queryText/prepQuery=relationship` and `queryText/prepQuery=relationships`.
+      - expanded Playwright marker assertions for `?prepQuery=relationship` and `?prepQuery=relationships` plus continuity copy markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> FAIL due unrelated pre-existing `Chummer.Run.AI` compile break (`Chummer.Media.Contracts` unresolved and downstream missing `Chummer.Media.*` symbols); not caused by this slice.
+- Push status:
+  - pending commit/push attempt in this environment (credential-dependent).
+
 ## 2026-04-04: follow-up on `debriefing` continuity lock commit and push status
 
 - Commits landed:
