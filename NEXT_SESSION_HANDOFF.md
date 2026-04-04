@@ -1,3 +1,41 @@
+## 2026-04-04: milestone-2 registry release-channel truth now fail-closes localization source-quality drift beyond untranslated-count checks
+
+- Trigger:
+  - active frontier milestone 2 remains blocked by flagship localization proof quality (`BLK-009`), and release-channel verification still accepted minimal localization gate payloads when only `untranslatedKeyCount` was zero.
+  - this left a promotion-honesty seam where fallback/runtime quality and release-seed completeness drift could pass through registry shelf verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - release-channel projection now carries stronger UI localization gate evidence:
+      - `explicitFallbackRuntime`
+      - `acceptanceGates`
+      - `blockingFindingsCount`
+      - `translationBacklogFindingsCount`
+      - per-locale `minimumOverrideCount`, `missingReleaseSeedKeys`, `legacyXmlPresent`, and `legacyDataXmlPresent`
+    - default missing-gate projection now explicitly sets these fields to fail-honest missing values.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate.explicitFallbackRuntime` to be passing.
+    - verifier now requires key localization acceptance-gate markers (`missing_key_fail_fast`, locale smoke lanes).
+    - verifier now fail-closes non-zero localization blocker/backlog finding counts.
+    - verifier now fail-closes locale summary drift where non-default locales are missing:
+      - `overrideCount >= defaultKeyCount`
+      - `minimumOverrideCount`
+      - empty `missingReleaseSeedKeys`
+      - `legacyXmlPresent=true` and `legacyDataXmlPresent=true`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture localization payload now includes the stronger source-quality fields.
+    - added negative verification proving fail-close on missing `explicitFallbackRuntime` pass state.
+    - updated assertions to lock all new localization proof fields in canonical output.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel pipeline contract now documents source-quality localization proof requirements, not only untranslated-count checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes positive and negative release-channel verifier checks for the new localization-proof contract).
+- Current trusted state:
+  - milestone-2 localization proof carried by registry-owned release-channel truth now fail-closes fallback/runtime, acceptance-gate, and release-seed completeness drift instead of trusting untranslated-count-only evidence.
+  - BLK-009 remains open globally, but this registry seam now enforces source-quality proof shape required for honest desktop shelf promotion.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign return + GM ops packet synthesis now deduplicates semantically identical consequence and objective rows when projection ids drift
 
 - Trigger:
