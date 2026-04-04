@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-9 Build Lab portability pillar now explicitly includes dossier exchange on hub handoff rails
+
+- Trigger:
+  - frontier milestone `9` requires portable dossier and campaign exchange to stand as a first-class product pillar alongside replay/recap/module artifacts.
+  - hub Build Lab portability pillar summary/lines only enumerated JSON, Foundry, replay, recap, and run-module lanes, leaving dossier exchange implicit.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `ResolveBuildLabPortabilityPillar(...)` now includes `Dossier exchange` lane keyed to the governed `character_template` output.
+    - portability summary wording now explicitly states `dossier/exchange/replay/recap/module portability lanes`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - updated portability summary assertion wording.
+    - added fail-close assertion for `Dossier exchange:` lane presence in `PortabilityPillarLines`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`389 passed` on `net10.0` and `389 passed` on `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `742e3d27` (`feat(w4-9): include dossier exchange in build-lab portability pillar`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
+
 ## 2026-04-04: milestone-1 install journey stale-proof seam closed for hub/mobile local release receipts
 
 - Trigger:
@@ -38075,3 +38096,29 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-6 live journey checks now fail-close compact mobile offline/travel/safehouse readiness shorthand
+
+- Trigger:
+  - frontier milestone `6` requires travel/offline/mobile continuity language to remain first-class across governed API search and signed-in workspace journey checks.
+  - compact continuity aliases (for example `mobileofflinereadiness`, `mobiletravelcache`, `mobilesafehousereadiness`) were canonicalized in prep-query logic but not fail-closed in live audit/browser evidence scripts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - extended prep-library query loop assertions to require governed packet results for compact continuity aliases:
+      - `offlinereadiness`, `offlinereadinesses`
+      - `travelreadiness`, `travelreadinesses`
+      - `safehousereadiness`, `safehousereadinesses`
+      - `mobileofflinereadiness`, `mobileofflinereadinesses`
+      - `mobiletravelcache`, `mobiletravelcaches`
+      - `mobilesafehousereadiness`, `mobilesafehousereadinesses`
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added `assertWorkspacePrepQuerySearch(...)` journey checks for the same compact continuity aliases so signed-in workspace route preservation and non-empty governed packet evidence fail-close.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - locked new `queryText=` markers in `hub-live-audit.py` assertions.
+    - locked new Playwright helper-call markers for compact mobile/offline/travel/safehouse continuity queries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`23` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-6 compact continuity shorthand is now enforced end-to-end in live API query audit and signed-in workspace browser journey proof, not only at local alias-canonicalizer unit level.
