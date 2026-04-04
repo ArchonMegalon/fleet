@@ -93,6 +93,37 @@
   - `chummer.run-services`: push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `fleet`: pending (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing, non-passing, or unexpected localization domain coverage in registry verification
+
+- Trigger:
+  - frontier milestone `2` remains blocked by `BLK-009`, and release-channel localization verification still lacked explicit parity-matrix domain coverage checks.
+  - this left a fail-open seam where `releaseProof.uiLocalizationReleaseGate` could pass without proving trust-critical localization domains (`app_chrome`, `install_update_support`, `explain_receipts`, `data_rules_names`, `generated_artifacts`) were all present and passing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - normalized `uiLocalizationReleaseGate.domainCoverage` from both object and list payload forms.
+    - canonical release proof defaults now always include `domainCoverage`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate.domainCoverage` to be an object.
+    - verifier now fail-closes missing required localization domains, unexpected domains, and non-passing domain statuses.
+    - required domain set is now explicit and verifier-bound: `app_chrome`, `install_update_support`, `explain_receipts`, `data_rules_names`, `generated_artifacts`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - canonical fixture now includes passing `domain_coverage`.
+    - added negative regressions for missing required domain, non-passing domain status, and unexpected domain id.
+    - canonical assertions now verify materialized `domainCoverage` exactness.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel localization contract now documents required passing domain coverage as release-proof truth.
+  - committed and pushed in `chummer-hub-registry`:
+    - `6df5047` — `Fail-close localization domain coverage in release proof`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new domain-coverage negative regressions).
+- Current trusted state:
+  - registry localization proof now fail-closes domain-coverage drift against the canonical localization parity matrix domains instead of relying only on locale counts and acceptance-gate ids.
+  - milestone-2 `BLK-009` remains globally open pending real cross-surface locale-quality completion, but domain-level shelf-truth honesty is now tighter.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `6df5047`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 recap publication linkage now normalizes whitespace-padded ids across workspace and campaign-spine projection lanes
 
 - Trigger:
