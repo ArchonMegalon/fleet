@@ -30,6 +30,7 @@
   - `chummer6-core`: `9b58f416` (`feat(w2-13): govern site snapshot sources in master index`).
   - `chummer6-design`: `d5b56be` (`docs(w2-13): record snapshot-governed sourcebook references`).
   - `fleet`: `85cccd5` (`docs(w2-13): sync snapshot reference parity and handoff`).
+  - `fleet`: `cb47cda` (`docs(handoff): record w2-13 commit and push outcomes`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `9b58f416`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
