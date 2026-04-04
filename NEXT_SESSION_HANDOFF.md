@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-9 Build Lab now exposes explicit replay/recap/run-module portability rails on core intake projection
+
+- Trigger:
+  - frontier milestone `9` requires exchange, replay, recap, and module artifacts to behave like one governed second pillar instead of sidecar publication lore.
+  - `chummer6-core` Build Lab intake already projected JSON/Foundry/viewer/print workflow rails, but replay timeline, session recap, and run-module rails were not explicit on the same projection lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs`:
+    - added Build Lab export actions:
+      - `open-replay-timeline` -> `target.replay-timeline`
+      - `open-session-recap` -> `target.session-recap`
+      - `open-run-module` -> `target.run-module`
+    - added governed workflow targets:
+      - `target.replay-timeline` (`workflow.replay.timeline`)
+      - `target.session-recap` (`workflow.recap.session`)
+      - `target.run-module` (`workflow.module.run`)
+    - each new target now carries explicit governed portability badges so replay/recap/module posture is projected from the same Build Lab handoff payload used by exchange/export lanes.
+  - patched regression coverage:
+    - `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/Program.cs`
+      - `BuildLabWorkspaceProjectionFactoryProjectsIntakeState` now fail-proves all three new actions and workflow targets.
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/WorkspaceServiceTests.cs`
+      - `Import_get_build_lab_projection_from_sr5_workspace` now asserts replay/recap/run-module action and workflow-target projection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Application/Chummer.Application.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~WorkspaceServiceTests.Import_get_build_lab_projection_from_sr5_workspace" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered test execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in current baseline).
+- Commits landed:
+  - pending local commits in `chummer6-core` and `fleet`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local implementation blocker for this milestone-9 Build Lab portability-rails slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: milestone-12 governor validation now aligns with Next-12 active-wave truth and guide manifest no longer hardcodes retired successor registry
 
 - Trigger:
