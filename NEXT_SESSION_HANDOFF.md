@@ -15,7 +15,7 @@
 - Commits landed:
   - `fleet`: `e3b5f6f` (`fix(w1-1-3): keep all external tuple proof requests in completion frontier`).
 - Push attempts:
-  - not attempted in this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
