@@ -38,9 +38,11 @@
 - Commits landed:
   - `chummer6-media-factory`: `9c01e8f` (`feat(w4-9-16): materialize media publication proof receipts`).
   - `fleet`: `4b7cbab` (`feat(w4-9-16): infer media boundary from publication proofs`).
+  - `fleet`: `934756f` (`docs(handoff): record w4 media boundary-proof commit and push results`).
 - Push attempts:
   - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `c36b571..9c01e8f`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after handoff docs commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
@@ -66,6 +68,42 @@
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-1 install lane now fail-closes on local desktop-executable blockers while classifying missing Windows/macOS tuple proof as external-only constraints
+
+- Trigger:
+  - W1 milestone `1` stayed blocked, but install-lane evidence mixed host/platform proof gaps with repo-local defects because desktop executable gate output was flat (`blocking_findings_count` only) and Fleet contract checks hard-required `status: pass`.
+  - this prevented honest separation of external host constraints from local breakage in the install journey even when Linux proof was healthy and Windows/macOS proof was missing due host-capability limits.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - gate payload now emits explicit blocker partition fields:
+      - `external_blocking_findings`, `external_blocking_findings_count`
+      - `local_blocking_findings`, `local_blocking_findings_count`
+      - `blocked_by_external_constraints_only`
+    - expanded external-classification markers so missing Windows/macOS promoted installer + startup-smoke proof on this Linux host is categorized as external blocker evidence.
+  - patched install journey gate contracts:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - install-lane desktop executable proof now fail-closes on `local_blocking_findings_count: 0` rather than hard-requiring global `status: pass`.
+  - patched Fleet journey classification `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - release-channel tuple coverage mismatches (`desktopTupleCoverage.missingRequired*`) now classify as external blockers when Linux tuple coverage is present and missing proof is Windows/macOS-only.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - updated canonical install-gate contract assertion to require `local_blocking_findings_count: 0` marker semantics.
+  - regenerated:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with refreshed receipt output.
+  - `cd /docker/chummercomplete/chummer6-ui && jq '{external_blocking_findings_count,local_blocking_findings_count,blocked_by_external_constraints_only}' .codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` -> PASS (`44`, `0`, `true`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,blocked_by_external_constraints_only,external_blocking_reasons,local_blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: blocked`, `blocked_by_external_constraints_only: true`, `local_blocking_reasons: []`).
+  - `cd /docker/fleet && python3 - <<'PY' ... test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof() ... PY` -> PASS.
+- Exact blocker:
+  - promoted Windows/macOS install tuples remain blocked by missing native startup-smoke receipts for shipped bytes; current host is Linux-only and cannot execute native Windows/macOS installer smoke.
 
 ## 2026-04-04: milestone-3 readiness evidence now carries journey external-vs-local blocker counts
 
