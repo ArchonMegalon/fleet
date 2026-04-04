@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 release verifier now fail-closes missing top-level `releaseProof` payloads
+
+- Trigger:
+  - frontier milestone `2` requires release shelf provenance to remain explicit, machine-verifiable proof rather than optional metadata.
+  - `verify_public_release_channel.py` enforced deep `releaseProof.*` constraints when present, but still allowed payloads with the entire top-level `releaseProof` object omitted.
+  - this left a drift path where malformed or stripped release-channel manifests could bypass milestone-2 proof checks by dropping `releaseProof` altogether.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - `releaseProof` is now required; verifier fail-closes immediately when top-level `releaseProof` is missing.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving verifier fail-close when `RELEASE_CHANNEL.generated.json` omits top-level `releaseProof`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented that `releaseProof` itself is required (not only nested status/timestamp fields).
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - promoted release-channel verification now rejects manifests missing `releaseProof`, closing the omission bypass and keeping milestone-2 shelf proof mandatory.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release materializer now fail-closes incomplete baseline golden journey coverage before channel projection
 
 - Trigger:
