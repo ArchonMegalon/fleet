@@ -37,14 +37,17 @@
     - added `visual_familiarity_screenshots_newer_than_receipt` evidence capture.
     - fail-closes when required screenshot file mtimes are newer than visual familiarity receipt `generated_at` beyond configured skew tolerance.
     - emits explicit reason: `Desktop visual familiarity screenshot evidence is newer than the visual familiarity receipt generation time: ...`.
+    - added `linux_artifacts_missing_rid_by_head` evidence capture.
+    - fail-closes when Linux desktop install media publishes a head without explicit RID tuple metadata via reason `Release channel publishes Linux desktop media for head '...' without explicit head/rid tuple metadata.`.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
     - locked new fail-close marker and evidence key in executable-gate script assertions.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Desktop_executable_exit_gate_requires_explicit_host_capability_blockers_when_startup_smoke_receipts_are_missing" --nologo -v minimal` -> PASS (`2 passed`).
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_requires_explicit_host_capability_blockers_when_startup_smoke_receipts_are_missing" --nologo -v minimal` -> PASS (`1 passed`).
-  - note: broader paired compliance filter remains red in this workspace due pre-existing script-lock expectation drift (`Release channel publishes Linux desktop media for head`) unrelated to this slice.
 - Current trusted state:
   - milestone-3 visual proof now rejects both stale-before-receipt and post-receipt-mutated screenshot evidence; aggregate executable receipts fail honest when screenshot mtimes and visual receipt generation timestamp diverge in either direction.
+  - aggregate executable gate now also fails honest when Linux published desktop media omits explicit per-head RID tuple metadata, closing mixed-validity tuple drift.
 - Push status:
   - `chummer6-ui`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
