@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-2/3 registry materialize+verify now fail-close conflicting alias payloads for `generatedAt/generated_at`, `journeysPassed/journeys_passed`, `proofRoutes/proof_routes`, and nested localization gate timestamps
+
+- Trigger:
+  - registry fail-close already covered `releaseProof.baseUrl/base_url` alias drift, but materialization and verification still accepted conflicting aliases for other release-proof families by first-present fallback.
+  - this left a false-green seam where contradictory alias payloads could pass depending on key precedence, weakening milestone-2 flagship proof exactness and milestone-3 release truth integrity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added `resolve_alias_value(...)` helper for explicit alias-drift rejection.
+    - switched release-proof parsing to alias-validated resolution for:
+      - `generatedAt/generated_at`
+      - `journeysPassed/journeys_passed`
+      - `proofRoutes/proof_routes`
+      - `baseUrl/base_url`
+      - `uiLocalizationReleaseGate/ui_localization_release_gate`
+    - switched nested localization gate timestamp parsing to alias-validated `generatedAt/generated_at`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - switched verifier parsing to alias-validated resolution for:
+      - `releaseProof.generatedAt/generated_at`
+      - `releaseProof.journeysPassed/journeys_passed`
+      - `releaseProof.proofRoutes/proof_routes`
+      - `releaseProof.uiLocalizationReleaseGate.generatedAt/generated_at`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added explicit negative mutations asserting verifier rejection for each conflicting alias pair above.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - targeted negative check: conflicting `generatedAt/generated_at` in proof input now fails materialization with `alias values drift` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - registry release-proof alias handling now fail-closes conflicting alias payloads across both projection and verification seams instead of silently selecting first-present keys.
+  - milestone-2/3 release-proof identity and provenance checks are less vulnerable to key-order-dependent drift.
+- Push status:
+  - `chummer-hub-registry`: local changes landed in this slice (`scripts/materialize_public_release_channel.py`, `scripts/verify_public_release_channel.py`, `scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: hub-registry release-channel pipeline canon now explicitly states `baseUrl/base_url` alias-drift fail-close
 
 - Trigger:
