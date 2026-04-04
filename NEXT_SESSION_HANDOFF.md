@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `postsession` / `post-run` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath/return continuity and GM operations to remain one governed lane across prep-library query canonicalization, GM unresolved routing, and signed-in proof rails.
+  - existing shorthand coverage handled `debrief`, `postmortem`, `afteraction`, and compact roster/event variants, but did not canonicalize common table shorthand (`postsession`, `post session`, `post-session`, `postrun`, `post run`, `post-run`).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `postsession(s)` and `postrun(s)` plus split/hyphen `post session` and `post run` variants to governed `recap` semantics.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `postsession` and `postrun` to aftermath/recap token vocabulary so generated workspace prep search terms stay aligned with canonical aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats `postsession`/`postrun` shorthand as `prep_library` signals.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended continuity shorthand matching to cover compact/split/hyphen `postsession` and `postrun` variants and matrix-prefixed negatives.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - extended prep-asset continuity query coverage for `postsession`/`postrun` variants.
+      - added unresolved-domain regression proving `postsession` and `post-run` route to governed prep-library domain.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded script-lock assertions so audit and Playwright proof rails fail-close if `postsession`/`postrun` coverage drifts.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API and workspace probes for `postsession`, `post session`, `post-session`, `postrun`, `post run`, and `post-run`, each fail-closing on non-`200`, empty governed result, or missing route/snippet evidence.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added signed-in browser continuity journey checks for the same `postsession`/`postrun` variants with route-preservation and governed-result assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPostSessionAndPostRunSignalsAsPrepLibraryDomain|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `44a6a93b` (`fix(w3): canonicalize postsession/postrun continuity prep aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `44a6a93b` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes the complete legacy workspace-action and desktop-control token set from parity oracle
 
 - Trigger:
