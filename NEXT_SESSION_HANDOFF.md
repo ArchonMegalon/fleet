@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-5 roster movement continuity lane now canonicalizes compact singular `rostertransfer` and `rosterhandoff` query forms
+
+- Trigger:
+  - W3 milestone `5` requires roster movement and prep library search continuity to stay on one governed lane across compact operator shorthand.
+  - compact singular forms (`rostertransfer`, `rosterhandoff`) were actively exercised by live audit and Playwright probes but were not explicitly canonicalized into unified roster movement tokens in `PrepLibraryQueryAliasCanonicalizer`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added explicit compact singular collapse for:
+      - `rostertransfer` -> `roster`, `move`
+      - `rosterhandoff` -> `roster`, `handoff`
+    - aligned compact plural `rostertransfers` collapse onto the same unified `roster`, `move` token lane.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` to fail-close both singular and plural roster transfer/handoff compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries` with compact `rostertransfer`, `rostertransfers`, `rosterhandoff`, and `rosterhandoffs` matching assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries" -v minimal` -> PASS (`2 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: pending in this slice.
+  - `fleet`: pending in this slice.
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-6 mobile companion continuity lane now fail-closes compact return-lane and companions-return-loop forms across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
