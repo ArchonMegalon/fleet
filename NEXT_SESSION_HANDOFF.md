@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes future-skewed generatedAt values and unexpected localeSummary locale rows in registry verification
+
+- Trigger:
+  - frontier milestone 2 remains blocked by `BLK-009`, and localization gate freshness checks accepted far-future `generatedAt` values by clamping negative age to zero.
+  - registry verification also allowed unexpected `localeSummary` locale rows outside declared `shippingLocales`, creating room for ambiguous proof payloads.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added fail-close for excessive future skew on `releaseProof.uiLocalizationReleaseGate.generatedAt`.
+    - default future-skew allowance is now bounded to `300` seconds.
+    - added env overrides:
+      - `CHUMMER_VERIFY_LOCALIZATION_GATE_MAX_FUTURE_SKEW_SECONDS`
+      - `CHUMMER_UI_LOCALIZATION_GATE_MAX_FUTURE_SKEW_SECONDS`
+    - verifier now rejects `localeSummary` rows whose locale is not present in declared shipping locales.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that mutates `generatedAt` to a far-future timestamp and asserts verifier failure.
+    - added negative regression that injects `es-es` into `localeSummary` and asserts verifier failure.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel localization contract now explicitly requires bounded future-skew for `generatedAt` and forbids extra locale-summary rows outside shipping locales.
+  - committed and pushed in `chummer-hub-registry`:
+    - `ffeb522` — `Fail-close future-skewed and unexpected localization proof locales`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes the new future-skew and unexpected-locale negative checks).
+- Current trusted state:
+  - localization proof freshness is now bounded on both stale and future-skewed timestamps, reducing clock-skew bypass risk in BLK-009 release-truth gating.
+  - localization `localeSummary` now fail-closes ambiguous non-shipping locale rows and keeps release proof constrained to declared shipping locales.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `ffeb522`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 campaign spine publication posture now fail-closes duplicate creator publication ids and keeps latest trust state
 
 - Trigger:
