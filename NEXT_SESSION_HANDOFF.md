@@ -32,6 +32,35 @@
 - Exact blocker:
   - release closure still requires external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
 
+## 2026-04-04: milestone-6 travel/offline continuity lane now fail-closes compact `...brief(s)` shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `6` requires safehouse/travel/offline/mobile continuity proof to stay fail-closed for compact packet and brief forms that operators type in prep search.
+  - compact `travelofflinebrief(s)`, `mobileofflinebrief(s)`, and `safehousetravelbrief(s)` forms were not canonicalized or live-audited, leaving a false-negative seam outside existing `...packet(s)` coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact continuity alias rewrites for `travelofflinebrief(s)`, `mobileofflinebrief(s)`, and `safehousetravelbrief(s)` into canonical packet tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with the new compact brief variants and negative-token assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` so compact travel/offline/safehouse brief queries match governed continuity packets.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for all three new compact brief families.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same compact brief forms.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for the added compact brief probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer.run-services`: `7cb9e8e7` (`feat(w3-6): fail-close travel offline brief shorthand continuity`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes compact `diaries/contacts/heats return*` shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
