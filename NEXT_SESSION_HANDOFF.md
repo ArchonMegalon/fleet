@@ -183,6 +183,42 @@
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-9/16 recap shelf receipts now carry compatibility + lineage truth through Account/Home rails
+
+- Trigger:
+  - frontier milestone `9` requires replay/recap/publication artifact truth to survive return and audit without hidden drift.
+  - milestone `16` requires viewer/export-adjacent rails to expose the same portability/provenance posture users rely on in Build Lab and publication decisions.
+  - recap shelf surfaces already projected publication/provenance/audit cues, but compatibility + lineage cues were missing from server-plane recap shelf entries and therefore absent from key Account/Home artifact rails.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - `RecapShelfEntry` now includes:
+      - `CompatibilitySummary`
+      - `LineageSummary`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - recap shelf projection now populates compatibility + lineage summaries with explicit fallback behavior for linked and unlinked creator-publication cases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - workspace recap-shelf enrichment now also stamps compatibility + lineage summaries directly onto recap projections before downstream projection/use.
+  - patched views:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`
+      - recap shelf rows now render `Compatibility` and `Lineage` cues from recap shelf entries.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`
+      - signed-in Home aftermath/recap rail now renders recap-shelf `Compatibility` and `Lineage` cues.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - creator-publication attachment + unlinked fallback tests now fail-prove recap compatibility/lineage summaries are present and grounded.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - added recap-shelf compatibility/lineage rendering guard for Account view.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - added signed-in Home recap-shelf compatibility/lineage rendering guard.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenPublicationIdsRepeat|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignSpineAttachCreatorPublicationPostureNormalizesUnlinkedWhitespaceArtifactIdsWhenPublicationListIsPresent|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`7` tests on `net10.0` + `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `4334f4ee` (`feat(w4-9-16): carry recap shelf compatibility and lineage receipts through account/home`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push remains blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-8/9 Build Lab governed outputs now include source-hint tokens in publication/audit receipts
 
 - Trigger:
