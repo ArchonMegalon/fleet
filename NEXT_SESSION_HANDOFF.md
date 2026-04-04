@@ -22,6 +22,38 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes missing architecture tuple coverage for required platform/head pairs
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, installer truth, and architecture truth to stay aligned by `head × platform × arch × channel`.
+  - executable gate previously accepted `desktopTupleCoverage.requiredDesktopPlatformHeadRidTuples` without proving that every required desktop `head:platform` pair had at least one architecture tuple declared.
+  - this allowed architecture coverage declarations to omit required windows/macos pair rows while still satisfying list-shape checks, weakening fail-honest tuple proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - derived required `head:platform` coverage from `requiredDesktopPlatformHeadRidTuples`.
+    - compared tuple-derived pair coverage against the required desktop pair matrix.
+    - fail-closed when tuple declarations are missing required platform/head pair coverage.
+    - added evidence keys:
+      - `release_channel_required_platform_head_pairs_for_matrix`
+      - `release_channel_required_platform_head_pairs_from_required_rid_tuples`
+      - `release_channel_missing_required_platform_head_pairs_from_required_rid_tuples`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock the new architecture pair-coverage fail-close reason and evidence markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers plus new strictness marker:
+    - missing required desktop install media for `windows`.
+    - missing required desktop install media for `macos`.
+    - missing required architecture tuple pair coverage in `requiredDesktopPlatformHeadRidTuples` for `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+    - missing required platform/head tuples `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+- Current trusted state:
+  - executable gate now fail-closes architecture tuple declarations that omit required platform/head pair coverage, so release tuple coverage cannot appear architecture-aware while silently omitting required desktop pair rows.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/MigrationComplianceTests.cs`).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment.
+
 ## 2026-04-04: milestone-4 workspace change-packet projection now keeps downtime and after-action packets visible together when both exist
 
 - Trigger:
