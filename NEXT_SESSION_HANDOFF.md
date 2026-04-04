@@ -23,6 +23,35 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes non-canonical or duplicate-normalized per-head proof status-map keys
+
+- Trigger:
+  - frontier milestone `3` requires per-head proof receipts that cannot silently coerce map-key collisions in visual/workflow proof status payloads.
+  - executable gate `normalize_required_status_map(...)` still normalized status-map keys without fail-closing non-canonical casing drift and duplicate-normalized key collisions.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - hardened `normalize_required_status_map(...)` to fail-close when a status-map key:
+      - is non-canonical after normalization.
+      - collides with an already-seen normalized key.
+    - added evidence fields:
+      - `<field>_non_canonical_keys`
+      - `<field>_duplicate_normalized_keys`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock the new status-map key strictness markers and evidence keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only:
+    - missing required desktop install media for `windows`.
+    - missing required desktop install media for `macos`.
+    - missing required platform/head tuples `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+- Current trusted state:
+  - per-head proof status maps now fail-close key canonicalization/collision drift instead of silently overwriting normalized head keys.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes non-canonical promotedPlatformHeads platform keys (whitespace/casing drift)
 
 - Trigger:
