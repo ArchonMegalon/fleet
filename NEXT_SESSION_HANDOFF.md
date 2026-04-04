@@ -77,6 +77,38 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-13 sourcebook/master-index lane now emits governed sourcebook metadata plus rule snippets from books catalog content
+
+- Trigger:
+  - frontier milestone `13` requires sourcebook metadata and rules-reference snippets to be first-class product lanes, not empty placeholders behind `MasterIndex`.
+  - `MasterIndexResponse` gained `ReferenceLanePosture`, `SourcebookCount`, and `Sourcebooks`, but `XmlToolCatalogService.GetMasterIndex()` still returned hardcoded empty values.
+  - result: callers could not distinguish missing reference posture from governed sourcebook catalogs even when `books.xml` carried real metadata and snippet anchors.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added sourcebook extraction from effective `books.xml` into:
+      - `MasterIndexSourcebookEntry` (`id`, `code`, `name`, `permanent`, `referencePosture`)
+      - `MasterIndexRuleSnippetEntry` (`language`, `page`, `snippet`, `provenance`)
+    - `GetMasterIndex()` now computes:
+      - `ReferenceLanePosture: "governed"` when sourcebooks are present, otherwise `"missing"`
+      - `SourcebookCount`
+      - `Sourcebooks`
+    - kept graceful fail posture for missing/invalid `books.xml` while preserving existing file-index behavior.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - extended baseline master-index test to assert missing posture/zero sourcebooks when no catalog exists.
+    - added `Master_index_projects_sourcebook_metadata_and_rule_snippets_from_books_catalog` to lock:
+      - governed posture
+      - sourcebook counts and permanent flags
+      - snippet page/language/text/provenance projection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL in this environment due pre-existing cross-target build instability (`MSB4181` on `TargetFramework=net10.0-windows`) and existing broad test-project dependency churn unrelated to this slice.
+- Commits landed:
+  - `chummer6-core`: `b255ce32` (`feat(w13): project sourcebook metadata and snippets in master index`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `43462a3f..b255ce32`).
+- Exact blocker:
+  - full `Chummer.Tests` filtered execution is currently blocked by pre-existing multi-target build instability in this environment (`MSB4181` on the windows target path), so lane verification remains anchored to the core-engine harness here.
+
 ## 2026-04-04: milestone-17 import-oracle lane now preserves Hero Lab Online metadata provenance when exports drift between metadata, root, and nested game shapes
 
 - Trigger:
@@ -132,6 +164,37 @@
   - `chummer-hub-registry`: `b41b66e` (`test(w1): lock startup-smoke mismatch and stale fail-close branches`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `def5389..b41b66e`).
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: milestone-4/5/6 prep-library query lane now collapses mobile+travel/offline shorthand into governed continuity tokens
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` keep campaign/GM prep discovery dependent on token-intersection matching.
+  - the prior shorthand collapse covered travel/offline/safehouse cache-readiness forms, but mobile-companion phrasing (`mobile offline readiness`, `mobile travel cache`, compact forms like `mobileofflinereadiness`) could still over-constrain lookup.
+  - this left a false-negative seam in continuity and GM prep retrieval when users described safehouse/travel readiness through mobile wording.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact mobile continuity aliases:
+      - `mobileofflinereadiness`
+      - `mobiletravelreadiness`
+      - `mobileofflinecache`
+      - `mobiletravelcache`
+      - `mobiletravel`
+      - `mobileoffline`
+    - added mobile scope collapse for travel/offline/safehouse/prefetch queries so `mobile` stops over-constraining governed travel/offline matches.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand` with mobile positive/negative assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended `ListPrepAssets_QueryCollapsesTravelOfflineReadinessShorthand` with mobile positive/negative assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~ListPrepAssets_QueryCollapsesTravelOfflineReadinessShorthand" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`435` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
 - Exact blocker:
   - none for this slice.
 
