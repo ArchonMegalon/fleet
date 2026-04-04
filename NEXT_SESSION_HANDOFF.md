@@ -218,6 +218,27 @@
   - `chummer6-hub`: local mirror changes reflect same landed slice; commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-3 executable proof now script-locks macOS tuple-specific gate receipt routing
+
+- Trigger:
+  - milestone-3 per-head packaged-binary proof requires macOS receipt routing to stay tuple-specific across promoted `head × rid` combinations.
+  - compliance locks did not explicitly pin macOS receipt-path wiring in both bash and Python resolver logic.
+- Landed:
+  - patched compliance script-lock test:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - added `Desktop_executable_gate_materializer_uses_tuple_specific_macos_receipt_paths`.
+    - new assertions now lock:
+      - bash tuple-path construction for `UI_MACOS_${head_token}_${rid_token}_DESKTOP_EXIT_GATE.generated.json`,
+      - explicit `CHUMMER_UI_MACOS_DESKTOP_EXIT_GATE_PATH="$macos_gate_tuple_path"` wiring,
+      - Python resolver contract in `macos_gate_path_for_head(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`10` tests on `net10.0`).
+- Current trusted state:
+  - milestone-3 desktop executable gate path contracts are now explicitly script-locked for Windows, Linux, and macOS tuple-specific receipt routing.
+- Push status:
+  - `chummer6-ui`: local change landed in this slice (`Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable proof now script-locks Linux head-specific receipt routing for Avalonia and Blazor promoted tuples
 
 - Trigger:
