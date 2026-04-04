@@ -20,6 +20,35 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity audit now fail-closes on flagship head-contract marker drift and prefers canonical `chummer6-ui` receipts
+
+- Trigger:
+  - frontier milestone `2` requires executable workbench familiarity proof that cannot pass if flagship head contract markers drift or if parity reads stale receipt roots.
+  - Hub parity audit already enforced status/test/screenshot checks, but it did not validate `flagship_head_contract_marker_statuses`, canonical head-marker drift fields, or release-channel receipt-existence fields from UI gate evidence.
+  - default receipt lookup favored legacy `chummer-presentation` receipt paths even when canonical `chummer6-ui` receipts were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - receipt resolution now prefers `/docker/chummercomplete/chummer6-ui/.codex-studio/published` and only falls back to legacy `chummer-presentation` when `CHUMMER_UI_PUBLISHED_DIR` is not explicitly set and the canonical receipt is missing.
+    - fail-closes on non-empty `flagship_missing_canonical_required_desktop_heads`.
+    - fail-closes when per-head marker evidence reports missing contract markers.
+    - fail-closes when any `flagship_head_contract_marker_statuses` marker is not `pass`.
+    - fail-closes if `release_channel_receipt_exists` is not explicitly true for workflow or visual receipts.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock canonical receipt-root preference and new head-marker/release-channel fail-close markers.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`:
+    - refreshed workflow gate evidence consumed by Hub parity audit from the canonical UI lane.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now blocks pass-ready status when flagship desktop head contract markers drift or when parity evidence detaches from release-channel truth.
+  - Hub verification now consumes canonical `chummer6-ui` gate receipts by default, reducing stale legacy-path false-pass risk.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `chummer6-ui`: local receipt update pending in this environment (`.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep search now canonicalizes compact `seasonops`/`seasonop` shorthand across campaign workspace and GM assets
 
 - Trigger:
