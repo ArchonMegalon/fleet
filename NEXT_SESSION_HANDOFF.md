@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes unrecognized registry rollout/supportability state tokens for desktop install media
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth to stay aligned with registry-owned channel/head posture instead of free-form state strings.
+  - executable gate already enforced missing/incomplete/publishable guardrails, but did not reject unknown `rolloutState` or `supportabilityState` values.
+  - this left a drift seam where typoed or invented state tokens could pass executable proof while no longer matching registry contract vocabulary.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added explicit allowed state vocab evidence keys for `release_channel_allowed_rollout_states` and `release_channel_allowed_supportability_states`.
+    - added invalid-state evidence keys `release_channel_rollout_state_invalid` and `release_channel_supportability_state_invalid`.
+    - gate now fail-closes desktop install media proof when either state token is outside recognized registry posture vocab.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded marker assertions for the new state-vocabulary evidence keys and fail-close reason text.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded migration/compliance marker assertions for the same state-vocabulary fail-close contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable proof now rejects unrecognized release-channel rollout/supportability tokens, so desktop install/update truth cannot silently drift away from registry-owned state vocabulary.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`, `Chummer.Tests/Compliance/MigrationComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-5 GM operations lane now fail-closes `gm operation(s)` compact/split/hyphen aliases across prep tokenization, GM prep search, and live API/UI journeys
 
 - Trigger:
