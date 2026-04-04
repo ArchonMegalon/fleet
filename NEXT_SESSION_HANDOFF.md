@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes nested localization-gate alias drift in source gate payloads
+
+- Trigger:
+  - frontier milestone `2` requires projection-time release-proof determinism, including fail-close alias reconciliation inside localization-gate source payloads.
+  - `scripts/materialize_public_release_channel.py` already rejected nested alias drift through `resolve_alias_value(...)`, but `scripts/ai/verify.sh` only mutated top-level release-proof alias seams for the materializer path.
+  - this left a regression seam where nested localization alias drift in `ui-localization-release-gate.json` could weaken without active materializer mutation coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active materializer mutations that inject conflicting alias values between:
+      - `shipping_locales` and `shippingLocales`
+      - `acceptance_gates` and `acceptanceGates`
+      - `domain_coverage` and `domainCoverage`
+      - `locale_domain_coverage` and `localeDomainCoverage`
+      - `translation_backlog_findings` and `translationBacklogFindings`
+    - each mutation now requires materializer failure and enforces the corresponding alias-drift fail-close marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected materializer fail-close mutation runs for all newly-added nested localization alias seams).
+- Commits landed:
+  - `chummer-hub-registry`: `2caeae2` (`fix(w1): mutation-test materializer localization alias drift fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `59728a6..2caeae2`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-2 registry verifier now active-mutation fail-closes nested localization-gate alias drift across shipping, gates, domain, locale-domain, and backlog lists
 
 - Trigger:
