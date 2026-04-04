@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-12 status-plane governance now self-heals stale snapshot readiness stages from repo-local compile evidence
+
+- Trigger:
+  - frontier milestone `12` requires pulse/governor automation to align with active repo truth, but status-plane materialization trusted stale snapshot project stages when live `admin-status` was unavailable.
+  - this left `fleet` pinned at `repo_local_complete` in `STATUS_PLANE.generated.yaml` even when local compile evidence was package-canonical, causing false local blockers in `organize_community_and_close_loop`.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_status_plane.py`:
+    - fallback stage inference now promotes repos to `package_canonical` when local compile-health evidence is `ready`/`not_required`.
+    - project config stage inference now uses lifecycle + design_doc context.
+    - `_ensure_project_inventory(...)` now upgrades stale snapshot stages to stronger local fallback evidence and recomputes readiness counts.
+    - added root-path import fallback for `admin.readiness` when script-runtime `sys.path` excludes `/docker/fleet`.
+  - patched `/docker/fleet/scripts/verify_status_plane_semantics.py` with the same fallback stage and stale-snapshot upgrade semantics so verifier/materializer stay in lockstep.
+  - patched `/docker/fleet/tests/test_materialize_status_plane.py`:
+    - added `test_ensure_project_inventory_upgrades_snapshot_stage_from_local_compile_evidence`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/state/status-plane.verify.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_status_plane.py scripts/verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml --status-json-out state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="organize_community_and_close_loop") | {state,blocking_reasons,warning_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: warning`; local blocker removed; only target-stage warnings remain).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_status_plane.py -k "upgrades_snapshot_stage_from_local_compile_evidence"` -> FAIL (`No module named pytest`).
+- Exact blocker:
+  - `pytest` is unavailable in this execution environment.
+  - `install_claim_restore_continue` remains externally blocked on missing promoted Windows/macOS tuple proof receipts (`blocked_by_external_constraints_only: true`).
+
 ## 2026-04-04: milestone-3 readiness now downgrades desktop external-only install blockers from missing to warning when local executable blockers are zero
 
 - Trigger:
@@ -57,10 +88,11 @@
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
 - Commits landed:
   - `chummer6-media-factory`: `26201f5` (`feat(w4-9-16): retain exchange and portability lane evidence in creator packets`).
-  - `fleet`: `696973b` (`docs(handoff): record w4 exchange and portability evidence retention slice`).
+  - `fleet`: `696973b` (`docs(handoff): record w4 exchange and portability evidence retention slice`), `695a14e` (`docs(handoff): append commit and push outcomes for w4 evidence retention slice`).
 - Push attempts:
   - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `9c01e8f..26201f5`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after handoff outcome append commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
