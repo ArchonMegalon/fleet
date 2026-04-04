@@ -1,3 +1,63 @@
+## 2026-04-04: milestone-5 roster movement packet synthesis now deduplicates identical run-pressure objective versions to prevent inflated GM ops counts
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires roster packet counts to stay on unique governed movement truth.
+  - `CampaignWorkspaceServerPlaneService.BuildRosterMovementPrepPacket(...)` still counted repeated identical `ObjectiveProjection` run-pressure rows separately.
+  - repeated identical objective rows could overstate bounded roster movement signal totals when transfer receipts lag.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - roster movement objective intake now deduplicates identical run-pressure objective versions with `DeduplicateIdenticalObjectiveVersions(...)` before bounded `Take(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RosterMovementPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RosterMovementPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~OppositionPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`253` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 roster movement packet counts now resist duplicate-row inflation for identical run-pressure objective versions.
+  - milestone-4/5 campaign workspace and GM-ops packet synthesis now dedupe identical versions across change, consequence, recap, aftermath-package, objective, roster, prep-launch, and travel receipt families.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-2 visual familiarity gate now requires explicit SR5 codex orientation alongside SR4/SR6 in runtime-backed ruleset switching
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models`) requires explicit familiarity proof across all three mental models.
+  - the runtime-backed ruleset-switch familiarity contract only enforced SR4 and SR6 codex landmarks, so SR5/Chummer5a orientation was implied but not gate-blocking.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - renamed and widened the ruleset-switch test to `Runtime_backed_ruleset_switch_preserves_sr4_sr5_and_sr6_codex_landmarks`.
+    - runtime-backed switch loop now verifies codex headings and landmark ordering for `RulesetDefaults.Sr4`, `RulesetDefaults.Sr5`, and `RulesetDefaults.Sr6`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - required visual familiarity test inventory now references the SR4/SR5/SR6 method name.
+    - ruleset orientation marker contract now requires `RulesetDefaults.Sr5` in addition to SR4/SR6.
+    - failure and summary text now reports SR4/SR5/SR6 codex orientation explicitly.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - required runtime-backed Avalonia test inventory now references the SR4/SR5/SR6 method name.
+    - `interactionProof` now emits `runtimeBackedSr5CodexOrientationModel: pass` alongside existing SR4/SR6 keys.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract markers for the new SR4/SR5/SR6 method name and the new SR5 interaction-proof key.
+  - refreshed generated UI receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runtime_backed_ruleset_switch_preserves_sr4_sr5_and_sr6_codex_landmarks|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external blockers only:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - milestone-2 visual familiarity proof is now explicitly triply grounded across SR4, SR5 (Chummer5a mental model), and SR6 for runtime-backed codex orientation.
+  - W1 executable blockers remain external tuple publication gaps, not milestone-2 familiarity contract drift.
+- Push status:
+  - pending in this environment (credential-dependent).
 ## 2026-04-04: milestone-4 continuity packet synthesis now deduplicates identical recap versions to prevent inflated continuity counts
 
 - Trigger:
