@@ -1,3 +1,12 @@
+## 2026-04-04: follow-up on fleet handoff sync for contact continuity alias canonicalization
+
+- Commits landed:
+  - `fleet`: `d697749` (`docs(handoff): record contact continuity alias canonicalization slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: follow-up on contact continuity alias canonicalization commit and push status
 
 - Commits landed:
