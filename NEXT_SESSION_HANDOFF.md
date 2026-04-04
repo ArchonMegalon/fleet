@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-1/3 aggregate executable gate now fail-closes missing Windows/macOS host-capability blocker markers when startup-smoke receipts are absent
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-binary proof to fail honest not only on missing startup-smoke receipts, but also on whether the host was capable of running those smokes.
+  - per-platform Windows/macOS gate materializers already emit host-capability signals and blocker markers (`missing_windows_host_capability`, `missing_macos_host_capability`) when startup smoke is impossible.
+  - aggregate `materialize-desktop-executable-exit-gate.sh` validated receipt presence/content but did not require those blocker semantics, leaving a drift path where host-incapability could be reported ambiguously.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Windows validation now reads `host_supports_windows_startup_smoke` and `startup_smoke_external_blocker` from per-tuple gate checks.
+    - fail-closes when Windows startup smoke receipt is missing on a non-Windows-capable host but blocker marker is not `missing_windows_host_capability`.
+    - fail-closes when Windows startup smoke receipt is missing on a Windows-capable host but blocker marker is non-blank.
+    - macOS validation now reads `host_supports_macos_startup_smoke` plus startup-smoke `external_blocker`.
+    - fail-closes when macOS startup smoke receipt is missing on a non-macOS-capable host but blocker marker is not `missing_macos_host_capability`.
+    - fail-closes when macOS startup smoke receipt is missing on a macOS-capable host but blocker marker is non-blank.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended script-lock assertions in existing executable-gate coverage.
+    - added focused regression `Desktop_executable_exit_gate_requires_explicit_host_capability_blockers_when_startup_smoke_receipts_are_missing`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_requires_explicit_host_capability_blockers_when_startup_smoke_receipts_are_missing" --nologo -v minimal` -> PASS (`1 passed`).
+  - note: pre-existing broad migration compliance filter remains red on unrelated baseline drift in this workspace and was not used as acceptance for this slice.
+- Current trusted state:
+  - milestone-1/3 aggregate desktop executable proof now enforces host-capability blocker semantics for missing Windows/macOS startup-smoke receipts instead of accepting ambiguous absence-only failure.
+  - control-plane triage can distinguish capability blockers from evidence regression consistently across per-platform and aggregate executable gates.
+- Push status:
+  - `chummer6-ui`: committed locally (`627c3e88`); push pending/credential-dependent in this environment.
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment.
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes free-form `releaseProof.journeysPassed` placeholders
 
 - Trigger:
