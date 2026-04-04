@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-5 prep query canon now fail-closes compact `leagueoperations` and `communityoperations` aliases across GM prep search and live API/UI journeys
+
+- Trigger:
+  - frontier milestone `5` already fail-closed compact/split/hyphen `league/community ops` and `league/community control` shorthand, but compact `leagueoperations` and `communityoperations` variants were still unproven in both prep-library token rewrite and live signed-in journey audits.
+  - this left an operator-language drift seam where organizer queries using compact `*operations` forms could miss governed prep packets without tripping closeout evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added compact token canon for `leagueoperation(s)` and `communityoperation(s)` in event-control compact token sets.
+    - expanded prep-library alias rewrite so split (`league operations`, `community operations`) and compact (`leagueoperations`, `communityoperations`) forms normalize to governed `eventcontrol + season + operation` tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded GM prep query tokenization with the same split/compact `league/community operation(s)` normalization.
+    - expanded unresolved-domain event-control shorthand detection with compact/split/hyphen `league/community operation(s)` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=leagueoperations` and `queryText=communityoperations`.
+    - added signed-in workspace route checks for `prepQuery=leagueoperations` and `prepQuery=communityoperations`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertions for compact `leagueoperations` and `communityoperations` queries with encoded-route preservation and non-empty governed packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded prep-library token matching assertions for compact/split `league/community operation(s)` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded GM prep asset query coverage for compact/split/hyphen `league/community operation(s)` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and e2e script-marker assertions to lock new `queryText` and `prepQuery` compact `*operations` checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`382` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 prep retrieval and signed-in workspace journey audits now fail-close compact/split/hyphen operator-language drift for `league/community operation(s)` along the same governed event-control lane as prior `ops/control` shorthand.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes macOS release artifact `arch` drift against promoted RID in both release-channel and embedded gate evidence
 
 - Trigger:
