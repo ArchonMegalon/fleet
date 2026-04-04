@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes nested release-channel receipt drift, staleness, and spoofed metadata
+
+- Trigger:
+  - frontier milestone `2` requires workflow and visual flagship parity receipts to stay bound to real release-channel truth, not self-reported metadata.
+  - `chummer6-hub` parity audit required non-empty `release_channel_*` fields but did not open and validate the nested `release_channel_path` receipt.
+  - this left a drift/tamper path where workflow/visual receipts could claim channel id/version/generated time values that diverged from the actual release-channel artifact, or pass with stale/future nested release-channel timestamps.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added `read_release_channel_status(...)` allowing canonical release-channel statuses (`pass|passed|ready|published`) for nested release-channel receipts.
+    - `validate_workflow_contract(...)` now resolves `evidence.release_channel_path`, loads the nested receipt, and fail-closes on:
+      - missing/invalid nested channel id or version,
+      - workflow receipt `release_channel_channel_id` / `release_channel_version` drift against nested receipt values,
+      - workflow `release_channel_generated_at` drift against nested receipt `generatedAt`,
+      - stale/future nested release-channel `generatedAt` beyond proof freshness ceilings.
+    - `validate_visual_contract(...)` now applies the same nested release-channel path/value/timestamp/freshness checks for the visual receipt.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock the new release-channel nested-receipt fail-close markers.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now treats release-channel evidence as executable nested truth: workflow/visual receipts must match the actual release-channel artifact for id/version/generated time and freshness.
+  - spoofed or stale nested release-channel metadata no longer passes milestone-2 parity closure.
+- Push status:
+  - `chummer6-hub`: local commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes empty/placeholder release-proof journey and route evidence
 
 - Trigger:
