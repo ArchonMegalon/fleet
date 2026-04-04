@@ -237,6 +237,40 @@
 - Current trusted state:
   - campaign workspace and GM ops prep search now treat roster-movement wording as first-class canonical query vocabulary in the same shared contracts utility, reducing W3 misses for natural-language GM/organizer movement phrasing.
 
+## 2026-04-04: follow-up on milestone-3 Windows/macOS startup-smoke checks-alias fail-close parity (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `c29e0dc4` (`fix(milestone-3): fail-close windows/macos startup-smoke checks aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-3 executable gate now fail-closes Windows/macOS `checks.startup_smoke_*` alias drift against startup-smoke proof presence/path
+
+- Trigger:
+  - Linux executable-gate validation already rejects `checks.startup_smoke_receipt_found/path` alias drift, but Windows and macOS validation did not enforce those alias consistency paths.
+  - that left a control-plane seam where per-head receipts could present inconsistent `checks` startup-smoke metadata without failing executable-proof gating.
+- Landed:
+  - patched executable gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - Windows validation now:
+      - reads `checks.startup_smoke_receipt_found` and `checks.startup_smoke_receipt_path` explicitly.
+      - rejects drift when `checks.startup_smoke_receipt_found` disagrees with actual startup-smoke receipt file presence.
+      - rejects drift when `checks.startup_smoke_receipt_path` disagrees with the resolved startup-smoke receipt path.
+    - macOS validation now:
+      - reads `checks.startup_smoke_receipt_found` and `checks.startup_smoke_receipt_path` explicitly.
+      - rejects drift when `checks.startup_smoke_receipt_found` disagrees with `startup_smoke.receipt_path` file presence.
+      - rejects drift when `checks.startup_smoke_receipt_path` disagrees with `startup_smoke.receipt_path`.
+  - patched compliance script-lock:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - asserts new Windows/macOS alias-read markers and both new fail-close reason markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`10` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-3 per-head executable proof now enforces startup-smoke alias consistency across Linux, Windows, and macOS instead of leaving Windows/macOS `checks` alias drift unenforced.
+
 ## 2026-04-04: follow-up on fleet handoff sync for milestone-3 Linux startup-smoke checks-alias parity slice
 
 - Commits landed:
