@@ -37018,3 +37018,44 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push status:
   - `chummer6-ui`: local change landed in working tree for this slice; commit/push not attempted in this pass due heavy concurrent in-flight repo-local modifications.
   - `fleet`: handoff updated locally in this slice; commit/push not attempted in this pass.
+
+## 2026-04-04: W1 install lane status-plane fallback now infers hub-registry boundary posture from release-channel evidence
+
+- Trigger:
+  - frontier milestone `1` install lane remained blocked by a fallback artifact gap: `hub-registry` was always downgraded to `pre_repo_local_complete` when live admin-status inventory was empty.
+  - this obscured real W1 blockers and kept journey gate truth noisier than necessary.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_status_plane.py`:
+    - empty-inventory fallback now infers repo-local readiness stage from published evidence.
+    - added explicit hub-registry promotion to `boundary_pure` when `RELEASE_CHANNEL.generated.json` is `published|publishable` with `releaseProof.status` pass.
+    - retains conservative fallback (`repo_local_complete` when generated artifacts exist, otherwise `pre_repo_local_complete`).
+  - patched `/docker/fleet/scripts/verify_status_plane_semantics.py`:
+    - verification path now applies the same empty-inventory hydration/inference logic as materialization.
+    - status-plane drift checks no longer false-fail when default snapshot has `projects: []`.
+  - patched `/docker/fleet/tests/test_materialize_status_plane.py`:
+    - strengthened hydration-count assertion to verify count coherence against hydrated inventory size.
+    - added deterministic regression coverage (monkeypatched config root) for hub-registry fallback stage inference:
+      - boundary-pure when release-channel + releaseProof pass
+      - repo-local-complete when release proof is not passing
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_status_plane.py scripts/verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py` -> PASS (still fail overall as expected from remaining blockers).
+  - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py` -> PASS.
+  - `cd /docker/fleet && ./.venv/bin/python -m pytest -q tests/test_materialize_status_plane.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Outcome shift:
+  - install journey (`install_claim_restore_continue`) no longer blocks on hub-registry project posture.
+  - remaining hard blocker for milestone-1 install lane is now singular and honest:
+    - `chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` has `status: fail` (missing promoted Windows/macOS tuple proof).
+- Commits landed:
+  - pending local commit in `fleet`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - packaged desktop executable gate in `chummer6-ui` still fails due missing promoted Windows/macOS installer+startup-smoke proof tuples; environment also lacks `pytest` for Python test execution.

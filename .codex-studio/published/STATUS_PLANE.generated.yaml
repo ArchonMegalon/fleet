@@ -1,6 +1,6 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-04T17:14:12Z'
+generated_at: '2026-04-04T17:18:48Z'
 source_public_status_generated_at: '2026-04-04T00:00:00Z'
 mission_snapshot: {}
 queue_forecast: {}
@@ -11,10 +11,10 @@ deployment_posture:
   access_posture: protected_preview
 readiness_summary:
   counts:
-    pre_repo_local_complete: 11
-    repo_local_complete: 0
+    pre_repo_local_complete: 1
+    repo_local_complete: 9
     package_canonical: 0
-    boundary_pure: 0
+    boundary_pure: 1
     publicly_promoted: 0
   warning_count: 0
   final_claim_ready: 0
@@ -30,7 +30,7 @@ projects:
 - id: core
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -40,7 +40,7 @@ projects:
 - id: design
   lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -50,7 +50,7 @@ projects:
 - id: ea
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -60,7 +60,7 @@ projects:
 - id: fleet
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -80,7 +80,7 @@ projects:
 - id: hub
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -90,7 +90,7 @@ projects:
 - id: hub-registry
   lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: boundary_pure
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -100,7 +100,7 @@ projects:
 - id: media-factory
   lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -110,7 +110,7 @@ projects:
 - id: mobile
   lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -120,7 +120,7 @@ projects:
 - id: ui
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -130,7 +130,7 @@ projects:
 - id: ui-kit
   lifecycle: scaffold
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
+  readiness_stage: repo_local_complete
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0

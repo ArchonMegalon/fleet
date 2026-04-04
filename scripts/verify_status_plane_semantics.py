@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+from glob import glob
 import json
 import os
 import subprocess
@@ -13,6 +14,7 @@ from typing import Any, Dict, List
 import yaml
 
 ROOT = Path("/docker/fleet")
+PROJECT_CONFIG_DIR = ROOT / "config" / "projects"
 DEFAULT_STATUS_PLANE_PATH = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEPLOY_SCRIPT_PATH = ROOT / "scripts" / "deploy.sh"
 DEFAULT_STATUS_JSON_SNAPSHOT_PATH = ROOT / "state" / "status-plane.verify.json"
@@ -21,10 +23,120 @@ UTC = dt.timezone.utc
 REBUILDER_STATE_DIR = Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
+STAGE_ORDER = (
+    "pre_repo_local_complete",
+    "repo_local_complete",
+    "package_canonical",
+    "boundary_pure",
+    "publicly_promoted",
+)
 
 
 class StatusPlaneDriftError(RuntimeError):
     pass
+
+
+def _load_project_config_rows() -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not PROJECT_CONFIG_DIR.is_dir():
+        return rows
+    for path in sorted(PROJECT_CONFIG_DIR.glob("*.yaml")):
+        if path.name == "_index.yaml":
+            continue
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("enabled") is False:
+            continue
+        project_id = str(payload.get("id") or "").strip()
+        if not project_id:
+            continue
+        project_root = Path(str(payload.get("path") or "").strip())
+        lifecycle = str(payload.get("lifecycle") or "dispatchable").strip() or "dispatchable"
+        deployment = dict(payload.get("deployment") or {})
+        rows.append(
+            {
+                "id": project_id,
+                "lifecycle": lifecycle,
+                "runtime_status": "dispatch_pending",
+                "readiness": {
+                    "stage": _infer_fallback_readiness_stage(project_id, project_root) if project_root else "pre_repo_local_complete",
+                    "terminal_stage": "publicly_promoted",
+                    "final_claim_allowed": False,
+                    "warning_count": 0,
+                },
+                "deployment": {
+                    "status": str(deployment.get("status") or ""),
+                    "promotion_stage": str(deployment.get("promotion_stage") or ""),
+                    "access_posture": str(deployment.get("access_posture") or deployment.get("visibility") or ""),
+                },
+            }
+        )
+    return rows
+
+
+def _load_json_file(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _infer_fallback_readiness_stage(project_id: str, project_root: Path) -> str:
+    published_dir = project_root / ".codex-studio" / "published"
+    if not published_dir.is_dir():
+        return "pre_repo_local_complete"
+
+    if project_id == "hub-registry":
+        release_channel = _load_json_file(published_dir / "RELEASE_CHANNEL.generated.json")
+        if release_channel:
+            release_status = str(release_channel.get("status") or "").strip().lower()
+            release_proof_status = str(((release_channel.get("releaseProof") or {}).get("status") or "")).strip().lower()
+            if release_status in {"published", "publishable"} and release_proof_status in {"pass", "passed"}:
+                return "boundary_pure"
+
+    generated_artifacts = list(glob(str(published_dir / "*.generated.*")))
+    if generated_artifacts:
+        return "repo_local_complete"
+    return "pre_repo_local_complete"
+
+
+def _recompute_readiness_counts(projects: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {key: 0 for key in STAGE_ORDER}
+    for project in projects:
+        readiness = dict(project.get("readiness") or {})
+        stage = str(readiness.get("stage") or "pre_repo_local_complete").strip() or "pre_repo_local_complete"
+        if stage not in counts:
+            stage = "pre_repo_local_complete"
+        counts[stage] += 1
+    return counts
+
+
+def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(admin_status or {})
+    projects = list(normalized.get("projects") or [])
+    if projects:
+        return normalized
+
+    fallback_projects = _load_project_config_rows()
+    if not fallback_projects:
+        return normalized
+
+    normalized["projects"] = fallback_projects
+    public_status = dict(normalized.get("public_status") or {})
+    readiness_summary = dict(public_status.get("readiness_summary") or {})
+    readiness_summary["counts"] = _recompute_readiness_counts(fallback_projects)
+    readiness_summary["warning_count"] = int(readiness_summary.get("warning_count") or 0)
+    readiness_summary["final_claim_ready"] = int(
+        readiness_summary.get("final_claim_ready")
+        or sum(1 for project in fallback_projects if bool(dict(project.get("readiness") or {}).get("final_claim_allowed")))
+    )
+    public_status["readiness_summary"] = readiness_summary
+    normalized["public_status"] = public_status
+    return normalized
 
 
 def _normalize_stage(stage: Any) -> str:
@@ -365,6 +477,7 @@ def load_admin_status(status_json_path: Path | None, *, use_default_snapshot: bo
 def run_verification(status_plane_path: Path, status_json_path: Path | None) -> None:
     actual = load_status_plane(status_plane_path)
     admin_status = load_admin_status(status_json_path, use_default_snapshot=True)
+    admin_status = _ensure_project_inventory(admin_status)
     expected = build_expected_status_plane(admin_status)
     errors = compare_status_plane(expected, actual)
     if errors:

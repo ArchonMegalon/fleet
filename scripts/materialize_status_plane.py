@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import json
 import sys
+from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -56,6 +57,35 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _load_json_file(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _infer_fallback_readiness_stage(project_id: str, project_root: Path) -> str:
+    published_dir = project_root / ".codex-studio" / "published"
+    if not published_dir.is_dir():
+        return "pre_repo_local_complete"
+
+    if project_id == "hub-registry":
+        release_channel = _load_json_file(published_dir / "RELEASE_CHANNEL.generated.json")
+        if release_channel:
+            release_status = str(release_channel.get("status") or "").strip().lower()
+            release_proof_status = str(((release_channel.get("releaseProof") or {}).get("status") or "")).strip().lower()
+            if release_status in {"published", "publishable"} and release_proof_status in {"pass", "passed"}:
+                return "boundary_pure"
+
+    generated_artifacts = list(glob(str(published_dir / "*.generated.*")))
+    if generated_artifacts:
+        return "repo_local_complete"
+    return "pre_repo_local_complete"
+
+
 def _load_project_config_rows() -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     if not PROJECT_CONFIG_DIR.is_dir():
@@ -71,15 +101,17 @@ def _load_project_config_rows() -> List[Dict[str, Any]]:
         project_id = str(payload.get("id") or "").strip()
         if not project_id:
             continue
+        project_root = Path(str(payload.get("path") or "").strip())
         lifecycle = str(payload.get("lifecycle") or "dispatchable").strip() or "dispatchable"
         deployment = dict(payload.get("deployment") or {})
+        fallback_stage = _infer_fallback_readiness_stage(project_id, project_root) if project_root else "pre_repo_local_complete"
         rows.append(
             {
                 "id": project_id,
                 "lifecycle": lifecycle,
                 "runtime_status": "dispatch_pending",
                 "readiness": {
-                    "stage": "pre_repo_local_complete",
+                    "stage": fallback_stage,
                     "terminal_stage": "publicly_promoted",
                     "final_claim_allowed": False,
                     "warning_count": 0,

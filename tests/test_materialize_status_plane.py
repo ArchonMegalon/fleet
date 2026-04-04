@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from scripts import materialize_status_plane as materialize_status_plane_module
+
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_status_plane.py")
 
@@ -341,7 +343,77 @@ def test_materialize_status_plane_hydrates_projects_from_config_when_status_snap
     assert "ui" in ids
     assert "hub" in ids
     assert "hub-registry" in ids
-    assert payload["readiness_summary"]["counts"]["pre_repo_local_complete"] >= 3
+    assert sum(int(v) for v in payload["readiness_summary"]["counts"].values()) == len(ids)
+
+
+def test_hub_registry_fallback_stage_uses_release_channel_evidence(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "hub-registry" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "hub-registry.yaml").write_text(
+        f"""
+id: hub-registry
+enabled: true
+lifecycle: dispatchable
+path: {tmp_path / "hub-registry"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "RELEASE_CHANNEL.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "releaseProof": {
+                    "status": "passed",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "hub-registry"
+    assert rows[0]["readiness"]["stage"] == "boundary_pure"
+
+
+def test_hub_registry_fallback_stage_stays_pre_repo_without_release_proof(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "hub-registry" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "hub-registry.yaml").write_text(
+        f"""
+id: hub-registry
+enabled: true
+lifecycle: dispatchable
+path: {tmp_path / "hub-registry"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "RELEASE_CHANNEL.generated.json").write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "releaseProof": {
+                    "status": "failed",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "hub-registry"
+    assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
 def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_path: Path) -> None:
