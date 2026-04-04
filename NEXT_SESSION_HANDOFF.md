@@ -38,6 +38,7 @@
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`) after handoff commit `1e4fce6`.
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for push; full design verify still has a pre-existing non-slice failing gate in `validate_next20_repo_evidence`; public-guide check additionally needs `ffmpeg` installed.
 
