@@ -1,3 +1,34 @@
+## 2026-04-04: follow-up on W3 workflow-parity generatedAt drift gate refresh (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `0bf80b34` (`fix(w3): refresh workflow parity receipts to clear generatedAt drift gate`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: W3 campaign/GM parity verification now clears workflow nested receipt generatedAt drift
+
+- Trigger:
+  - run-services verify failed in the parity-audit workflow lane with:
+    - `workflow receipt sr4 workflow parity evidence generated_at drifts from nested receipt generatedAt`
+  - this blocked milestone-4/5 continuity and GM-ops verification even though prep-query behavior and workflow proofs were otherwise passing.
+- Landed:
+  - regenerated workflow parity receipt family in `chummer6-ui` via:
+    - `bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+  - refreshed six coupled published receipts so `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` and nested workflow parity/generated-at evidence re-align:
+    - `.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json`
+    - `.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json`
+    - `.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupports|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupports" --nologo -v minimal` -> PASS (`17` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (`run-services in-process smoke passed`; initial workflow generatedAt drift is resolved and script-lock mutation rejects still execute as expected).
+- Current trusted state:
+  - W3 campaign workspace and GM-ops verification no longer fails on workflow nested-receipt generatedAt drift; parity gate passes with synchronized workflow proof receipts.
+
 ## 2026-04-04: follow-up on fleet handoff sync for contact continuity alias canonicalization
 
 - Commits landed:
