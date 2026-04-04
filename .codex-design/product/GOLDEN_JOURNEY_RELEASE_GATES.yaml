@@ -195,6 +195,7 @@ journey_gates:
             - 'response["sr6SuccessorLaneReceipt"]'
             - 'response["onlineStorageLanePosture"]'
             - 'response["onlineStorageReceiptPosture"]'
+            - 'response["onlineStorageLaneReceipt"]'
             - 'firstSourcebook["referenceSnapshotPosture"]'
         - repo: chummer6-core
           path: Chummer.Infrastructure/Xml/XmlToolCatalogService.cs
@@ -210,6 +211,7 @@ journey_gates:
             - ResolveAdjacentSr6OracleCoverage
             - BuildSr6SuccessorLaneReceipt
             - BuildOnlineStorageSummary
+            - BuildOnlineStorageLaneReceipt
             - ResolveReferenceSnapshotPosture
         - repo: chummer6-core
           path: Chummer.CoreEngine.Tests/Program.cs
