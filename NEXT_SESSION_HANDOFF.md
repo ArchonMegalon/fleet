@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes plural `diaries` unresolved signals into continuity-return domain routing
+
+- Trigger:
+  - W3 milestone `4` requires diary/contact/heat continuity and return-loop work to stay on one governed lane in GM operations unresolved-item prioritization.
+  - `ResolveGmOpsDomain(...)` handled `diary` but not explicit plural `diaries`, leaving a compact plural wording seam where campaign continuity alerts could downgrade to `general`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added explicit `diaries` continuity keyword support in continuity-return domain detection.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatDiaryPluralSignalsAsContinuityReturnDomain` to fail-close unresolved ordering for plural diary payload wording.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatDiaryPluralSignalsAsContinuityReturnDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGameMasterPacketShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatDiaryContactsDowntimeReturnSignalsAsContinuityReturnDomain" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `f4bfaab2` (`feat(w3-4): route diary plurals into continuity return gm-ops domain`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-5 gm operations lane now fail-closes compact and split game-master packet shorthand into event-control unresolved domain routing
 
 - Trigger:
