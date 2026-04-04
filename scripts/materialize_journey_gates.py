@@ -165,6 +165,7 @@ def evaluate_journey(
     row: Dict[str, Any],
     *,
     projects_by_id: Dict[str, Dict[str, Any]],
+    status_plane_projects_present: bool,
     artifacts: Dict[str, Dict[str, Any]],
     progress_report: Dict[str, Any],
     progress_history: Dict[str, Any],
@@ -193,9 +194,16 @@ def evaluate_journey(
             f"progress history depth {history_count} is still below the boring target of {target_history}."
         )
 
-    for posture in fleet_gate.get("required_project_posture") or []:
-        posture_row = dict(posture or {})
+    required_project_posture = [dict(item or {}) for item in (fleet_gate.get("required_project_posture") or [])]
+    if required_project_posture and not status_plane_projects_present:
+        blocking_reasons.append(
+            "status-plane project inventory is empty; cannot evaluate required project posture gates."
+        )
+
+    for posture_row in required_project_posture:
         project_id = str(posture_row.get("project_id") or "").strip()
+        if not status_plane_projects_present:
+            continue
         project = dict(projects_by_id.get(project_id) or {})
         if not project:
             blocking_reasons.append(f"required project {project_id} is missing from status-plane truth.")
@@ -409,6 +417,7 @@ def build_payload(
         for item in (status_plane.get("projects") or [])
         if isinstance(item, dict) and str(item.get("id") or "").strip()
     }
+    status_plane_projects_present = bool(projects_by_id)
 
     rows = []
     for row in registry.get("journey_gates") or []:
@@ -418,6 +427,7 @@ def build_payload(
             evaluate_journey(
                 dict(row),
                 projects_by_id=projects_by_id,
+                status_plane_projects_present=status_plane_projects_present,
                 artifacts=artifacts,
                 progress_report=progress_report,
                 progress_history=progress_history,

@@ -90,6 +90,34 @@
 - Exact blocker:
   - no product blocker for the milestone-14 translator projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
 
+## 2026-04-04: journey-gate project posture checks now fail-close honestly when status-plane project inventory is empty
+
+- Trigger:
+  - active W1 gate runs were emitting misleading per-project blockers (`required project ui/hub/... is missing from status-plane truth`) when the status plane had an empty `projects` list.
+  - this masked the real control-plane issue (missing status-plane project inventory) and created noisy, low-signal journey blockers across all lanes.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added explicit fail-close blocker when a journey requires project posture checks but `STATUS_PLANE.generated.yaml` has no projects:
+      - `status-plane project inventory is empty; cannot evaluate required project posture gates.`
+    - suppresses synthetic per-project `required project ... is missing` noise in that empty-inventory condition.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_blocks_on_empty_status_plane_inventory`.
+    - fail-proves the new blocker appears and per-project missing noise does not.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - install journey blockers now show the real root blocker plus real desktop tuple proof failure:
+      - empty status-plane inventory
+      - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` `status != pass`
+- Verification:
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - pending local commit in this slice.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - full pytest execution remains unavailable in this environment because `pytest` is not installed.
+
 ## 2026-04-04: follow-up on W3-6 EA continuity contracts now fail-proves all four new builtin keys in planner coverage
 
 - Trigger:
