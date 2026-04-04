@@ -61,6 +61,25 @@
 - Exact blocker:
   - none for this landed slice; push is blocked in this environment by missing GitHub credential material.
 
+## 2026-04-04: milestone-18 parity canon now marks SR6 supplement/designer/house-rule family as partial after tool-catalog successor posture landing
+
+- Trigger:
+  - after landing milestone-18 posture fields in `chummer6-core`, design parity canon still marked SR6 supplement/designer/house-rule parity as `missing`.
+  - this created avoidable drift between executable receipts and design registry status.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`:
+    - family `sr6_supplements_designers_and_house_rules` status now `partial` (from `missing`).
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`:
+    - matrix row now states that supplement/designer/house-rule lanes have explicit tool-catalog posture, while online-storage and full authored-designer UX closure remain open.
+- Verification:
+  - source-level consistency check only (design-canon docs/registry update; no runtime binary path touched).
+- Commits landed:
+  - `chummer6-design`: `6967f4b` (`docs(w18): mark sr6 successor family partial after tool-catalog posture lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment currently lacks GitHub HTTPS credentials for `chummer6-design` push.
+
 ## 2026-04-04: milestone-18 tool catalog now emits explicit SR6 supplement/designer and house-rule successor posture
 
 - Trigger:
