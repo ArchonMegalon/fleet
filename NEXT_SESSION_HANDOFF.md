@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-1/3 desktop executable gate now fail-closes malformed desktopTupleCoverage token metadata
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-head proof that cannot silently normalize malformed release-channel tuple metadata.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` used permissive list normalization for `desktopTupleCoverage` lists/maps, which could drop malformed values and hide duplicate/blank tuple tokens.
+  - this left a fail-open seam where malformed tuple coverage metadata could be sanitized before inventory mismatch checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added strict tuple-coverage normalizers:
+      - `normalize_required_token_list(...)`
+      - `normalize_required_tuple_list(...)`
+      - `normalize_promoted_platform_heads(...)`.
+    - `desktopTupleCoverage` token fields now fail-close on non-list/non-object shape drift, non-string items, blank tokens, duplicate tokens, blank platform keys, and malformed tuple token shape.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added compliance guards proving strict token/tuple normalization and fail-close reason-text coverage remain present in the executable gate script.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_RELEASE_CHANNEL_PATH=<temp malformed release-channel fixture> CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected with explicit malformed token reasons (blank/duplicate/malformed tuple entries).
+- Current trusted state:
+  - desktop executable gate no longer silently dedupes or drops malformed tuple metadata before evaluating promoted platform/head/rid coverage.
+  - release-channel `desktopTupleCoverage` shape drift is now surfaced as explicit fail-close evidence.
+- Push status:
+  - `chummer6-ui`: pending (commit staged locally in this environment).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 campaign-spine aftermath package identity now normalizes whitespace-padded package ids across memory and change-packet routing
 
 - Trigger:
