@@ -28,11 +28,15 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
 - Commits landed:
-  - pending (recorded after commit step below).
+  - `chummer6-hub`: `6e5824e3` (`feat(w3-4-5-6): canonicalize compact mobile companion return-loop prep queries`).
+  - `chummer6-design`: `5f39a14` (`feat(w3-4-5-6): gate compact mobile companion return-loop query markers`).
+  - `fleet`: `c734c01` (`feat(w3-4-5-6): gate compact mobile companion return-loop query markers`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for repo-local implementation and verification; push remains blocked by missing GitHub HTTPS credentials.
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: milestone-4/5/6 hub prep-query lane now fail-closes compact mobile-companion return-loop shorthand into governed continuity truth
 
