@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-2 release-channel canonical proof now fail-closes unexpected journey and route supersets at registry materialization and verification
+
+- Trigger:
+  - milestone-2 hub parity audit now rejects unexpected nested `releaseProof` journeys/routes, but registry projection/verification still accepted supersets as long as baseline required members were present.
+  - this left a cross-repo drift path where release-channel canon could widen in registry truth while hub consumed stricter exactness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `normalize_release_proof_payload(...)` now rejects unexpected `journeys_passed` ids outside the canonical baseline set.
+    - `normalize_release_proof_payload(...)` now rejects unexpected `proof_routes` outside canonical flagship route set.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now rejects unexpected `releaseProof.journeysPassed` ids outside canonical baseline journey set.
+    - verifier now rejects unexpected `releaseProof.proofRoutes` ids outside canonical flagship route set.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer mutation proving fail-close on unexpected `journeys_passed`.
+    - added materializer mutation proving fail-close on unexpected `proof_routes`.
+    - added verifier mutation proving fail-close on unexpected `releaseProof.journeysPassed`.
+    - added verifier mutation proving fail-close on unexpected `releaseProof.proofRoutes`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - registry materialization/verification and hub parity audit now align on canonical exactness for `releaseProof` journey/route inventories, closing a cross-seam superset drift window.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes unexpected nested release-proof journey and route ids
 
 - Trigger:
