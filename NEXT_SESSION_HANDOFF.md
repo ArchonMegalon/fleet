@@ -1,3 +1,40 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity aliases `recaps` and `returns` across canonicalization plus live API/UI journeys
+
+- Trigger:
+  - continuity script-locks covered `recap` and `return`, but plural user phrasing `recaps` and `returns` was not canonicalized in workspace or GM prep tokenization.
+  - this left a retrieval seam where campaign workspace and GM prep search could drift on common plural continuity wording.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrites:
+      - `recaps -> recap`
+      - `returns -> return`
+  - expanded unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation` now asserts `recaps` and `returns`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - `ListPrepAssets_QuerySupportsContinuityPluralShorthand` now asserts `recaps` and `returns`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=recaps` and `queryText=returns`.
+      - added signed-in workspace route checks for `prepQuery=recaps` and `prepQuery=returns`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `prepQuery=recaps` and `prepQuery=returns` with route/copy/non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for `queryText/prepQuery=recaps` and `queryText/prepQuery=returns`.
+      - expanded Playwright marker assertions for `?prepQuery=recaps`, `?prepQuery=returns`, and the related continuity copy markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity and milestone-5 GM prep search now treat singular/plural recap and return phrasing as one governed lane across workspace/GM canonicalization, API/workspace audits, browser journey proof, and script-lock assertions.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (`CampaignWorkspaceServerPlaneService.cs`, `GmOpsBoardService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`, `GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity alias `factions` across canonicalization and live API/UI journeys
 
 - Trigger:
