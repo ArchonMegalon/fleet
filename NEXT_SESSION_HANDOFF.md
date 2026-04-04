@@ -1,3 +1,12 @@
+## 2026-04-04: follow-up on W1 release-proof/publish-state install-gate hardening (handoff commit + push status)
+
+- Commits landed:
+  - `fleet`: `a0f73d0` (`docs(handoff): append commit and push outcomes for w1-1 release-proof gate`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: milestone-1 install journey now also fail-closes on release-channel publish state and release-proof pass status
 
 - Trigger:
