@@ -33,11 +33,12 @@
 - Commits landed:
   - `chummer6-core`: `64afeeaa` (`feat(w2-13-14-17-18): add explicit master-index parity lane receipts`).
   - `chummer6-design`: `537a79c` (`docs(w2-13-14-17-18): note explicit master-index parity lane receipts`).
-  - `fleet`: `a647848` (`docs(handoff): record master-index parity lane receipts slice`).
+  - `fleet`: `a647848` (`docs(handoff): record master-index parity lane receipts slice`), `cbc33b8` (`docs(handoff): append commit and push outcomes for parity receipts slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `64afeeaa`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`) after commit `cbc33b8`.
 - Exact blocker:
   - no product blocker for this lane-receipt projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and `chummer6-design`/`fleet` pushes remain credential-gated.
 
