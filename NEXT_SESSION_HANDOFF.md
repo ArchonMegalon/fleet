@@ -42,6 +42,15 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
 
+## 2026-04-04: follow-up handoff accuracy commit for W1 proof-backed quarantine promotion slice
+
+- Commits landed:
+  - `fleet`: `30b37d1` (`docs(handoff): capture commit and push outcomes for w1 promotion slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `fleet` push.
+
 ## 2026-04-04: milestone-1 install lane now has proof-backed quarantine promotion + release-manifest sanitizer bridge (unblocks truthful tuple promotion once external Windows/macOS smoke receipts arrive)
 
 - Trigger:
