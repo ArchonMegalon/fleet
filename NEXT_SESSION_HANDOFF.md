@@ -94,6 +94,46 @@
   - `chummer6-ui`: committed locally (`0fad2e53`); push pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 per-head visual/workflow proof receipts now bind to release-channel identity before executable gate acceptance
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, installer truth, and per-head proof truth to align on the same promoted channel.
+  - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE` and `DESKTOP_WORKFLOW_EXECUTION_GATE` receipts were channel-agnostic, so executable gate could accept passing proof artifacts that were generated from a different channel context.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - resolves canonical/fallback release-channel path using hub-registry precedence.
+    - emits `channelId` plus release-channel evidence markers (`release_channel_path`, `release_channel_channel_id`, `release_channel_generated_at`).
+    - fail-closes when release-channel receipt cannot be read or is missing channel identity/timestamp.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - same release-channel resolution and evidence publication as visual gate.
+    - emits `channelId` and fail-closes missing/unreadable channel identity proof.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - requires `visual_familiarity.release_channel_channel_id` and `workflow_execution.release_channel_channel_id`.
+    - fail-closes when either per-head proof receipt channel identity is missing or mismatched against canonical release-channel `channelId`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity`.
+    - locks new executable/materializer channel-binding markers and mismatch-fail reasons.
+  - regenerated:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0` in this run filter).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers:
+    - missing required desktop install media for `windows` and `macos`.
+    - missing required `head:platform` tuples for windows/macos.
+    - missing required `head:rid:platform` tuples for windows/macos.
+- Current trusted state:
+  - per-head visual/workflow proof receipts now carry explicit release-channel identity and freshness anchors.
+  - executable gate now fails honest when per-head proof receipts are channel-missing or channel-mismatched against promoted release truth.
+  - remaining milestone-1/3 blockers are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment.
+
 ## 2026-04-04: milestone-4/5 return-loop synthesis now survives sparse run hydration when scene/objective projections arrive first
 
 - Trigger:
