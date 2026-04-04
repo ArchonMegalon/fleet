@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 group season-board and operator watchouts now prioritize highest-severity readiness cues
+
+- Trigger:
+  - frontier milestones `4` and `5` require GM/operator watchout surfaces to highlight the most urgent governed blocker, not whichever cue appears first.
+  - `CampaignSpineService.BuildGroupSeasonBoardEntries(...)` and `BuildGroupOperatorWatchouts(...)` still emitted readiness watchouts in list-order terms (`FirstOrDefault`/flat select + `Take(4)`), so earlier `review` cues could mask later `warning`/`attention` cues.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `BuildGroupSeasonBoardEntries(...)` now orders non-ready readiness cues by explicit severity priority (`attention` > `warning` > `review` > other non-ready) before selecting the watchout summary.
+    - `BuildGroupOperatorWatchouts(...)` now ranks watchouts by severity priority first, then workspace freshness, before distinct/`Take(4)` curation.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineGroupSeasonBoardEntryWatchoutPrefersAttentionCueOverEarlierReviewCue`.
+    - added `CampaignSpineGroupSeasonBoardEntryWatchoutPrefersWarningCueOverEarlierReviewCue`.
+    - added `CampaignSpineGroupOperatorWatchoutsPrioritizeAttentionBeforeReviewWhenLimited`.
+    - added reflection helpers `InvokeCampaignSpineBuildGroupSeasonBoardEntries(...)` and `InvokeCampaignSpineBuildGroupOperatorWatchouts(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineGroupSeasonBoardEntryWatchoutPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineGroupSeasonBoardEntryWatchoutPrefersWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineGroupOperatorWatchoutsPrioritizeAttentionBeforeReviewWhenLimited" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`327` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - season-board `WatchoutSummary` and group-level operator watchouts now surface urgent readiness blockers deterministically under stale cue ordering.
+  - milestone-4 campaign return and milestone-5 GM operations watchout surfaces now share the same severity-priority contract used by next-safe-action and workspace-summary lanes.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignSpineService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 server-plane campaign summary and roster highlights now prioritize highest-severity readiness cues
 
 - Trigger:
