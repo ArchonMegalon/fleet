@@ -104,6 +104,15 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="report_cluster_release_notify") | {state,signals,fleet_gate:.fleet_gate.require_support_install_truth_contract}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`fleet_gate: true`, violation count `0` on current packets).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_packet_install_truth_contract or update_required_cases_are_not_proven_routed_to_downloads or report_cluster_release_notify_requires_support_install_truth_contract"` -> FAIL (`No module named pytest`).
 
+## 2026-04-04: handoff append commit + fleet push status for milestone-10 support install-truth contract gate
+
+- Commits landed:
+  - `fleet`: `ebdae69` (`feat(w5-10): enforce support install-truth packet contract in journey gates`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: milestone-1/3 install journey now fail-closes on desktop executable gate evidence scope (per-head receipt roots + zero blocking findings)
 
 - Trigger:
