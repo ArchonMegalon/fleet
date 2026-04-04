@@ -103,6 +103,8 @@
 - Commits landed:
   - `chummer6-core`: `c744d3be` (`feat(w4-16): add explicit build-lab json and print export workflow rails`).
   - `chummer6-design`: `cbaff3c` (`docs(w2-16): note build-lab json foundry viewer print workflow lane coverage`).
+  - `fleet`: `bc3c601` (`docs(handoff): record milestone-16 build-lab json and print workflow rails`).
+  - `fleet`: `de0cdea` (`docs(handoff): append push outcomes for milestone-16 build-lab rails`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` advanced to `c744d3be`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
