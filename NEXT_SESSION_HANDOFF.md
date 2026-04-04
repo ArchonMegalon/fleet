@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-4/5 continuity and GM prep search now normalize compact next-session return-loop shorthand end to end
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return-loop truth to stay one governed lane across workspace packet matching and GM prep-library search.
+  - query alias normalization already covered split/hyphen forms (`next session return`, `next-session-return`, `return loop`) and compact partial forms (`nextsessionreturn`, `returnloop`), but not compact combined forms such as `nextsessionreturnloop` and `nextsessionloop`.
+  - this left a false-negative seam where valid compact continuity shorthand could miss return-loop packets in prep search and workspace matching.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `nextsessionreturnloop` / `nextsessionreturnloops`
+      - `nextsessionloop` / `nextsessionloops`
+    - both now canonicalize to `next` + `session` + `return` + `loop`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation` with compact combined shorthand assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended `ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation` with compact combined shorthand assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`534` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `b2b5ca07` (`fix(w3): normalize compact next-session return-loop prep aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-4/5 parity rail now carries explicit localization-gate alias drift marker in audit script so verify mutation coverage and script-contract tests stay fail-closed
 
 - Trigger:
