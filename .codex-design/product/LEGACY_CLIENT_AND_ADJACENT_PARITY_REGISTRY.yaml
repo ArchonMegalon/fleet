@@ -196,6 +196,7 @@ families:
       - FLAGSHIP_RELEASE_ACCEPTANCE.yaml
       - INTEROP_AND_PORTABILITY_MODEL.md
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
     status: partial
     milestone_ids:
       - 17
@@ -214,6 +215,6 @@ families:
     current_design_equivalents:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
-    status: missing
+    status: partial
     milestone_ids:
       - 18

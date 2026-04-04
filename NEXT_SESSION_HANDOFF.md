@@ -109,16 +109,22 @@
       - `Master_index_endpoint_returns_data` now asserts presence of all new import-oracle API fields.
   - canon sync:
     - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
     - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
     - milestone-17 parity row now cites explicit master-index import-oracle projection evidence while keeping first-class import UX closure open.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
   - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` missing namespace graph in current baseline).
 - Commits landed:
-  - pending in current workspace for `chummer6-core`, `chummer6-design`, and `fleet` (safe isolation and push attempts recorded after commit staging).
+  - `chummer6-core`: `47a4948e` (`feat(w17): project import-oracle posture in master index`).
+  - `chummer6-design`: `aa33ee5` (`docs(w17): cite master-index import-oracle evidence`).
+  - `chummer6-design`: `f21e939` (`docs(w17): sync import-oracle parity registry evidence`).
+  - `fleet`: pending local follow-on commit for mirror registry + handoff refresh.
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `6731fa91..47a4948e`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - no blocker for the landed core implementation itself; full `Chummer.Tests` lane remains blocked by existing compile/reference instability, and remote pushes for design/fleet remain credential-gated in this environment.
 
