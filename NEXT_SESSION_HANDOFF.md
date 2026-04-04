@@ -98,6 +98,37 @@
 - Exact blocker:
   - no blocker for landed core/design slice; remote push for design/fleet remains blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-7/8 Build Lab planner coverage now enumerates required output lanes with ready/review/missing posture
+
+- Trigger:
+  - planner coverage lines in Build Lab handoffs reported aggregate output counts but did not explicitly show required lane readiness per governed output kind.
+  - milestones `7/8` require grounded creation-to-advancement-to-crew-fit decisions with explain/rule-diff posture visible where follow-through lane choice happens.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added required Build Lab output lane checklist for:
+      - `character_template`
+      - `json_exchange`
+      - `foundry_exchange`
+      - `sheet_viewer`
+      - `print_pdf_export`
+      - `replay_timeline`
+      - `session_recap`
+      - `run_module`
+    - planner coverage lines now include `Output lane coverage: ...` with per-lane status (`ready`, `review`, `missing`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves:
+      - planner lines include `Output lane coverage:`
+      - lane checklist includes `foundry-exchange=ready` and `print-pdf-export=ready`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services` for this planner-coverage lane checklist slice.
+  - pending local Fleet handoff refresh commit for this entry.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for this repo-local milestone `7/8` planner-coverage slice.
+
 ## 2026-04-04: milestone-7/8 home and account Build Lab rails now expose planner-lane cues for grounded crew-fit follow-through
 
 - Trigger:
