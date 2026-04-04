@@ -1023,26 +1023,44 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     )
     proofs = build_explain_publish.get("fleet_gate", {}).get("repo_source_proof") or []
 
-    def proof_for(path: str) -> dict:
+    def proof_for(repo: str, path: str) -> dict:
         return next(
             row
             for row in proofs
             if isinstance(row, dict)
-            and row.get("repo") == "chummer6-ui"
+            and row.get("repo") == repo
             and row.get("path") == path
         )
 
-    boundary = proof_for("Chummer.Presentation/UiKit/ChummerPatternBoundary.cs")
+    core_api = proof_for("chummer6-core", "Chummer.Tests/ApiIntegrationTests.cs")
+    assert 'response["settingsLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["sourceToggleLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["customDataLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["translatorLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["importOracleLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["sr6SuccessorLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'firstSourcebook["referenceSnapshotPosture"]' in core_api.get("must_contain", [])
+
+    core_tool_catalog = proof_for("chummer6-core", "Chummer.Infrastructure/Xml/XmlToolCatalogService.cs")
+    assert "BuildSettingsLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildSourceToggleLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildCustomDataLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildTranslatorLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildImportOracleLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildSr6SuccessorLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "ResolveReferenceSnapshotPosture" in core_tool_catalog.get("must_contain", [])
+
+    boundary = proof_for("chummer6-ui", "Chummer.Presentation/UiKit/ChummerPatternBoundary.cs")
     assert "BlazorUiKitAdapter.AdaptDenseTableHeader" in boundary.get("must_contain", [])
     assert "BlazorUiKitAdapter.AdaptExplainChip" in boundary.get("must_contain", [])
     assert "BlazorUiKitAdapter.AdaptSpiderStatusCard" in boundary.get("must_contain", [])
     assert "BlazorUiKitAdapter.AdaptArtifactStatusCard" in boundary.get("must_contain", [])
 
-    handoff = proof_for("Chummer.Blazor/Components/Shared/BuildLabHandoffPanel.razor")
+    handoff = proof_for("chummer6-ui", "Chummer.Blazor/Components/Shared/BuildLabHandoffPanel.razor")
     assert "ChummerPatternBoundary.ExplainChipClass" in handoff.get("must_contain", [])
     assert "ChummerPatternBoundary.ArtifactStatusCardClass" in handoff.get("must_contain", [])
 
-    rules = proof_for("Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor")
+    rules = proof_for("chummer6-ui", "Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor")
     assert "ChummerPatternBoundary.ExplainChipClass" in rules.get("must_contain", [])
 
 
@@ -1060,7 +1078,20 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
         and row.get("repo") == "chummer6-ui"
         and row.get("path") == ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
     )
-    assert desktop_exit_proof.get("json_must_equal") == {"status": "pass"}
+    assert desktop_exit_proof.get("json_must_equal") == {
+        "status": "pass",
+        "blocking_findings_count": 0,
+        "evidence.hub_registry_root_trusted_for_startup_smoke_proof": True,
+        "evidence.flagship_status": "pass",
+        "evidence.visual_familiarity_status": "pass",
+        "evidence.workflow_execution_status": "pass",
+        "evidence.receipt_scope.windows_gate:avalonia:win-x64.within_repo_root": True,
+        "evidence.receipt_scope.windows_gate:blazor-desktop:win-x64.within_repo_root": True,
+        "evidence.receipt_scope.linux_gate:avalonia:linux-x64.within_repo_root": True,
+        "evidence.receipt_scope.linux_gate:blazor-desktop:linux-x64.within_repo_root": True,
+        "evidence.receipt_scope.macos_gate:avalonia:osx-arm64.within_repo_root": True,
+        "evidence.receipt_scope.macos_gate:blazor-desktop:osx-arm64.within_repo_root": True,
+    }
     assert desktop_exit_proof.get("max_age_hours") == 48
     assert desktop_exit_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
     required_markers = desktop_exit_proof.get("must_contain", [])

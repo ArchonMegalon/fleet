@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:27:19Z",
+  "generated_at": "2026-04-04T17:31:19Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:23:55Z",
+      "at": "2026-04-04T17:30:33Z",
       "state": "fresh",
-      "age_seconds": 204
+      "age_seconds": 46
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 511
+      "age_seconds": 751
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 557
+      "age_seconds": 797
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 557
+      "age_seconds": 797
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 556
+      "age_seconds": 796
     }
   },
   "journeys": [
@@ -59,7 +59,8 @@
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'."
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'.",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'blocking_findings_count' expected 0 but was 44."
       ],
       "warning_reasons": [
         "ui is at repo_local_complete below target stage publicly_promoted.",
@@ -147,7 +148,18 @@
             "repo": "chummer6-ui",
             "path": ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
             "json_must_equal": {
-              "status": "pass"
+              "status": "pass",
+              "blocking_findings_count": 0,
+              "evidence.hub_registry_root_trusted_for_startup_smoke_proof": true,
+              "evidence.flagship_status": "pass",
+              "evidence.visual_familiarity_status": "pass",
+              "evidence.workflow_execution_status": "pass",
+              "evidence.receipt_scope.windows_gate:avalonia:win-x64.within_repo_root": true,
+              "evidence.receipt_scope.windows_gate:blazor-desktop:win-x64.within_repo_root": true,
+              "evidence.receipt_scope.linux_gate:avalonia:linux-x64.within_repo_root": true,
+              "evidence.receipt_scope.linux_gate:blazor-desktop:linux-x64.within_repo_root": true,
+              "evidence.receipt_scope.macos_gate:avalonia:osx-arm64.within_repo_root": true,
+              "evidence.receipt_scope.macos_gate:blazor-desktop:osx-arm64.within_repo_root": true
             },
             "must_contain": [
               "\"contract_name\": \"chummer6-ui.desktop_executable_exit_gate\"",
@@ -213,7 +225,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 4,
+        "blocking_reason_count": 5,
         "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -287,6 +299,32 @@
             "must_contain": [
               "Next safe action:",
               "Closure:"
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.Tests/ApiIntegrationTests.cs",
+            "must_contain": [
+              "response[\"settingsLaneReceipt\"]",
+              "response[\"sourceToggleLaneReceipt\"]",
+              "response[\"customDataLaneReceipt\"]",
+              "response[\"translatorLaneReceipt\"]",
+              "response[\"importOracleLaneReceipt\"]",
+              "response[\"sr6SuccessorLaneReceipt\"]",
+              "firstSourcebook[\"referenceSnapshotPosture\"]"
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.Infrastructure/Xml/XmlToolCatalogService.cs",
+            "must_contain": [
+              "BuildSettingsLaneReceipt",
+              "BuildSourceToggleLaneReceipt",
+              "BuildCustomDataLaneReceipt",
+              "BuildTranslatorLaneReceipt",
+              "BuildImportOracleLaneReceipt",
+              "BuildSr6SuccessorLaneReceipt",
+              "ResolveReferenceSnapshotPosture"
             ]
           },
           {
