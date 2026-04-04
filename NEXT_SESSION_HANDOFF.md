@@ -39062,3 +39062,47 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-6 campaign continuity gate now fail-closes explicit mobile cached/stale/offline-truth markers
+
+- Trigger:
+  - frontier milestone `6` requires continuity proof to make cached state, stale state, and offline-action boundaries explicit on mobile instead of only proving generic campaign-journey presence.
+  - `campaign_session_recover_recap` gate only required mobile proof contract/journey id markers, so stale/cached/offline semantics could regress without tripping the governed release gate.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/scripts/materialize_mobile_local_release_proof.py`:
+    - expanded `campaign_session_recover_recap` required markers to include explicit stale/cached/offline-truth assertions and shell ids:
+      - stale offline-truth summary marker.
+      - cached/stale/offline-actions travel companion markers.
+      - workspace/restore offline-truth and travel-companion element ids.
+  - regenerated mobile proof:
+    - `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`.
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - mobile repo-source proof now requires escaped marker rows for:
+      - stale offline truth summary assertion.
+      - cached/offline-actions travel companion assertions.
+      - `workspace-offline-truth`, `restore-offline-truth`, and `restore-travel-companion` ids.
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same marker contract.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` now fail-closes the new escaped mobile marker requirements.
+  - regenerated Fleet journey gate artifact:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 -m py_compile scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/fleet && python3 -m py_compile tests/test_materialize_journey_gates.py scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() ... PY` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | {state, blocking_reasons, local_blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: warning`, zero local blockers for this gate contract).
+- Commits landed:
+  - `chummer6-mobile`: `1681053` (`test(w3-6): fail-close mobile cached-stale-offline proof markers`).
+  - `chummer6-design`: `9457f56` (`feat(w3-6): require mobile cached-stale continuity markers in campaign journey gate`).
+  - `fleet`: `67e4fa1` (`feat(w3-6): enforce mobile cached-stale continuity markers in journey gates`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push from `chummer6-mobile`, `chummer6-design`, and `fleet`.
+
+- Current open milestone ids: 4, 5, 6
+- Frontier milestone ids to prioritize first: 4, 5, 6
