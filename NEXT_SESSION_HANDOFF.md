@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 linux packaged-head gate now auto-prunes stale run roots to keep proof lanes bounded and trustworthy
+
+- Trigger:
+  - frontier milestones `1` and `3` depend on repeatable packaged-binary proof lanes; the Linux gate runner had no retention policy for `.codex-studio/out/linux-desktop-exit-gate/run.*`, which caused uncontrolled local artifact growth and made proof hygiene harder to sustain across repeated runs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added `RUN_RETENTION_COUNT="${CHUMMER_LINUX_DESKTOP_EXIT_GATE_RUN_RETENTION_COUNT:-40}"`.
+    - added `prune_old_run_roots()` cleanup step invoked on exit after build-lock release.
+    - retention cleanup now removes old `run.*` directories while preserving:
+      - the current run root
+      - the current `latest` symlink target
+      - the newest N runs (`N=40` default, env-tunable).
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing` assertions to lock retention env + prune markers so cleanup behavior cannot silently regress.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`1` test on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+- Current trusted state:
+  - linux packaged-head exit-gate runs now include bounded retention, reducing unbounded run-root buildup while keeping the active and latest proof roots intact.
+  - milestone-1/3 packaged proof cadence is more sustainable locally without weakening fail-honest receipt behavior.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/materialize-linux-desktop-exit-gate.sh`, `Chummer.Tests/Compliance/MigrationComplianceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace-state conflict and rule cues now prioritize highest-severity blockers
 
 - Trigger:
