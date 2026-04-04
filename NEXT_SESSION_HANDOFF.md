@@ -152,6 +152,31 @@
   - campaign workspace and GM ops prep search now treats `after action` wording as canonical recap intent in the same shared alias utility used by existing continuity terms.
   - live API/browser journey locks now fail-close this continuity wording so milestone-4/5 recap-return proof cannot silently regress.
 
+## 2026-04-04: follow-up on W1 verifier honesty wiring for packaged desktop exit gate (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: pending local commit in this slice (`scripts/ai/verify.sh`).
+- Push attempts:
+  - pending after commit in this slice.
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so new commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-3 verifier now hard-fails when packaged desktop executable exit proof is red
+
+- Trigger:
+  - `scripts/ai/verify.sh` exited `PASS` even while `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` was `status: fail`, allowing a false-green path for milestone-3 packaged-binary install/update/recovery proof.
+- Landed:
+  - patched verifier lane:
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh`
+    - added mandatory execution of `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` immediately after B14 flagship UI gate materialization.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/verify.sh` -> FAIL (expected honest fail, exit `43`) at `desktop-executable-exit-gate`.
+  - published fail receipt is explicit and current:
+    - `/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - top blockers include missing promoted Windows/macOS install media, missing Windows/macOS startup-smoke receipts, and quarantine-only installer bytes for required tuples.
+- Current trusted state:
+  - UI verification can no longer report global green while packaged desktop install/update/recovery proof is red, which closes a direct milestone-3 honesty seam in the default control-plane verifier.
+
 ## 2026-04-04: follow-up on W3 compact `eventctrls` prep-query parity script-lock slice (commit and push status)
 
 - Commits landed:
