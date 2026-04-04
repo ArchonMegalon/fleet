@@ -311,12 +311,12 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "canonical_proof_capture_commands": canonical_proof_capture_commands,
                 "startup_smoke_receipt_contract": (
                     provided_smoke_contract_normalized
-                    if provided_smoke_contract_normalized
+                    if isinstance(provided_smoke_contract, dict)
                     else canonical_startup_smoke_receipt_contract
                 ),
                 "proof_capture_commands": (
                     provided_commands_normalized
-                    if provided_commands_normalized
+                    if isinstance(provided_commands, list)
                     else canonical_proof_capture_commands
                 ),
             }

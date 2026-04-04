@@ -204,6 +204,33 @@ def test_external_proof_reasons_fail_close_malformed_external_proof_rows() -> No
     )
 
 
+def test_external_proof_reasons_fail_close_empty_provided_smoke_contract_and_commands() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {},
+                    "proofCaptureCommands": [],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any("startupSmokeReceiptContract' must match tuple-derived canonical value" in reason for reason in reasons)
+    assert any("proofCaptureCommands' must match tuple-derived canonical command sequence" in reason for reason in reasons)
+
+
 def test_install_journey_blocks_when_support_external_proof_backlog_summary_drifts(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
