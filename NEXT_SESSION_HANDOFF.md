@@ -29,6 +29,7 @@
   - `fleet`: `7d81f8e` (`feat(w5-12): self-heal stale status-plane stages from local compile evidence`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after handoff commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - `pytest` is unavailable in this execution environment.
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
