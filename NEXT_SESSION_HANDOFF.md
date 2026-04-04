@@ -1,3 +1,31 @@
+## 2026-04-04: follow-up on strict integer localization parity lock commit and push status
+
+- Commits landed:
+  - `chummer6-hub`: `5173390c` (`fix(milestone-2): fail-close numeric-string localization key counts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 Hub parity audit now fail-closes numeric-string localization key counts and script-locks that branch
+
+- Trigger:
+  - milestone-2 parity audit exposed `releaseProof.uiLocalizationReleaseGate.defaultKeyCount must be an integer`, but helper coercion accepted numeric strings.
+  - verify mutation coverage did not execute this path, so JSON type drift on localization key counts could pass as valid evidence.
+- Landed:
+  - patched strict integer validation in `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - `require_int(...)` now rejects non-`int` JSON types (including numeric strings and booleans).
+    - `require_int_at_least(...)` now reuses strict integer validation instead of coercing.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that sets both `defaultKeyCount` and `default_key_count` to numeric strings and asserts parity-audit rejection.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock markers for `defaultKeyCount must be an integer` and the new verify mutation rejection marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (new default-key-count numeric-string mutation executes and fail-closes).
+- Current trusted state:
+  - milestone-2 parity evidence now enforces true JSON integer typing for localization count fields and cannot be satisfied via numeric-string coercion.
+
 ## 2026-04-04: follow-up on blocking-findings fail-close commit and push status
 
 - Commits landed:
