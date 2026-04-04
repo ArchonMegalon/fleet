@@ -27,6 +27,31 @@
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 parity audit now fail-closes malformed/duplicate visual test, interaction-key, and screenshot requirement lists
+
+- Trigger:
+  - milestone `2` visual parity proof relies on receipt-declared `required_tests`, `required_legacy_interaction_keys`, and `required_screenshots` contract lists.
+  - hub parity audit validated missing required members but did not fail-close whitespace-padded, blank, or duplicate list entries in those visual contract arrays.
+  - this left a drift path where malformed visual requirement lists could still pass if expected members were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added `require_canonical_unique_string_list(...)` helper.
+    - visual contract validation now fail-closes leading/trailing whitespace, blank entries, and duplicate ids in:
+      - `required_tests`
+      - `required_legacy_interaction_keys`
+      - `required_screenshots`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-marker assertions for the new malformed-list fail-close guards (`whitespace`, `blank`, `duplicate ids`) so audit drift fails tests.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 visual contract enforcement now rejects malformed/duplicate requirement lists before downstream missing-member checks, reducing false-green evidence receipts caused by sloppy list payloads.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes drift between UI visual-gate required test canon and hub-enforced visual test coverage
 
 - Trigger:
@@ -157,8 +182,8 @@
 - Current trusted state:
   - all promoted desktop platform exit gates (Linux/Windows/macOS) now fail-close startup-smoke receipt provenance when artifact paths are missing, legacy-rooted, or detached from promoted shelf installer bytes.
 - Push status:
-  - `chummer6-ui`: local changes staged in this slice; commit/push pending.
-  - `fleet`: handoff updated locally in this slice; commit/push pending.
+  - `chummer6-ui`: committed locally (`693fe186`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: committed locally (`91adc65`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-1/3 linux desktop exit gate now fail-closes startup-smoke host provenance and artifactPath shelf drift
 
