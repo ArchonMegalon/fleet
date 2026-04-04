@@ -35,6 +35,27 @@
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/materialize-linux-desktop-exit-gate.sh`, `Chummer.Tests/Compliance/MigrationComplianceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4/5 workspace digest watchouts now prioritize highest-severity readiness cues before list-order review notes
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign-return and GM-ops watchout surfaces to foreground the most urgent governed blocker.
+  - `CampaignSpineService.BuildWorkspaceDigest(...)` still appended readiness watchouts in source-list order, so earlier `review` cues could stay first in digest watchouts and downstream notice projection.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - workspace digest readiness watchouts now order by explicit severity priority (`attention` > `warning` > `review` > other non-ready) and stable cue title before projection.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineWorkspaceDigestWatchoutsPreferAttentionCueOverEarlierReviewCue`.
+    - added `CampaignSpineWorkspaceDigestWatchoutsPreferWarningCueOverEarlierReviewCue`.
+    - added reflection helper `InvokeCampaignSpineBuildWorkspaceDigest(...)` for direct private-method coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceDigestWatchoutsPreferAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineWorkspaceDigestWatchoutsPreferWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineGroupSeasonBoardEntryWatchoutPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineGroupOperatorWatchoutsPrioritizeAttentionBeforeReviewWhenLimited|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`317` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - workspace digest watchouts now stay severity-faithful under stale cue ordering and align with the same readiness-priority contract already enforced in season-board/operator/workspace-state synthesis.
+  - milestone-4 return-loop and milestone-5 GM-ops notice lanes no longer depend on cue insertion order for first watchout urgency.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignSpineService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace-state conflict and rule cues now prioritize highest-severity blockers
 
 - Trigger:
