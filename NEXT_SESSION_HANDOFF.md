@@ -23,6 +23,7 @@
 - Commits landed:
   - `chummer6-hub`: `e46bbb3a` (`feat(w3-5): fail-close compact pkt shorthand for governed prep packets`).
   - `fleet`: `cbdb388` (`docs(handoff): record w3-5 compact pkt shorthand closure`).
+  - `fleet`: `b408777` (`docs(handoff): capture w3-5 push blocker details`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
