@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock plural `postgames` / `post-games` recap shorthand across API/workspace and browser journey proofs
+
+- Trigger:
+  - the prior milestone-4/5 slice canonicalized `postgame` / `post-game` recap shorthand across contracts, workspace matching, and unresolved-domain routing.
+  - canonical rewrite also covers plural forms (`postgames`, `post games`, `post-games`), but live API/workspace/browser proofs only locked singular forms.
+  - this left a proof drift seam where plural post-game recap wording could regress unnoticed despite canonicalization support.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API and signed-in workspace checks for `postgames`, `post games`, and `post-games` query variants.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added signed-in browser prep journey checks for compact/split/hyphen plural post-game variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - script-lock assertions now require plural post-game query markers in audit and Playwright proof rails.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPostGameContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `dccda194` (`test(w3): script-lock plural post-games recap shorthand journeys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
+
 ## 2026-04-04: milestone-1/3 release-channel artifact manifests now stamp and normalize per-artifact `generated_at` / `generatedAt` so executable gate no longer fails on missing Linux installer tuple timestamps
 
 - Trigger:
