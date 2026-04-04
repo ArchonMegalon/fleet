@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests missing and malformed desktopTupleCoverage shape fail-close
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/recovery release truth to fail honest not only on tuple inventory drift, but also when desktop tuple coverage metadata is missing or structurally malformed.
+  - `scripts/verify_public_release_channel.py` already fail-closed these seams:
+    - `is missing desktopTupleCoverage`
+    - `desktopTupleCoverage.missingRequiredPlatforms must be a string list`
+    - `desktopTupleCoverage.promotedInstallerTuples must be a list`
+  - `scripts/ai/verify.sh` did not run active mutations for these shape-validation branches, leaving regression room where the fail-close checks could weaken silently while verify stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active mutation that removes `desktopTupleCoverage` entirely and asserts the missing-metadata fail-close marker.
+    - added active mutation that changes `desktopTupleCoverage.missingRequiredPlatforms` from list -> scalar and asserts the string-list fail-close marker.
+    - added active mutation that changes `desktopTupleCoverage.promotedInstallerTuples` from list -> object and asserts the list-shape fail-close marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close marker emissions for all three new shape mutations).
+- Commits landed:
+  - `chummer-hub-registry`: `caf5716` (`test(w1): mutate desktop tuple coverage shape fail-close in verify lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `7e8ec15..caf5716`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: fleet W1 shard refresh now preserves per-shard pinned frontier ids from active shard-group env during live status aggregation
 
 - Trigger:
