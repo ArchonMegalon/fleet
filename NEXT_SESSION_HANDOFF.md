@@ -32,27 +32,26 @@
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
-## 2026-04-04: milestone-1/3 executable gate now fail-closes macOS release artifact `arch` drift against promoted RID in both release-channel and embedded gate evidence
+## 2026-04-04: milestone-1/3 executable gate now fail-closes release artifact `arch` drift against promoted RID across Linux, Windows, and macOS
 
 - Trigger:
   - frontier milestones `1` and `3` require installer truth to stay aligned by head/platform/architecture (`rid`) across release-channel metadata and packaged-head gate evidence.
-  - macOS executable-gate checks validated `rid`, bytes, startup smoke, and embedded artifact shape, but did not fail-close when macOS artifact `arch` metadata disagreed with promoted `rid`.
-  - this left an architecture-truth drift seam where macOS `rid` and `arch` could diverge without tripping executable promotion proof.
+  - executable-gate checks validated `rid`, bytes, and startup smoke, but did not uniformly fail-close when promoted artifact `arch` metadata disagreed with promoted `rid`.
+  - this left an architecture-truth drift seam where release-channel metadata could carry inconsistent `rid`/`arch` values without tripping milestone-1/3 promotion proof.
 - Landed:
   - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
-    - added `expected_artifact_arch` evidence capture for promoted macOS release artifacts.
-    - gate now fail-closes when release-channel macOS artifact `arch` disagrees with promoted `rid`.
-    - added `release_channel_macos_artifact_arch` evidence capture for embedded gate payloads.
-    - gate now fail-closes when embedded `release_channel_macos_artifact.arch` disagrees with promoted `rid`.
+    - added `expected_artifact_arch` evidence capture and fail-close checks when promoted Linux/Windows/macOS artifact `arch` disagrees with promoted `rid`.
+    - added `release_channel_windows_artifact_arch` and `release_channel_macos_artifact_arch` evidence capture for embedded gate payload artifacts.
+    - gate now fail-closes when embedded Windows/macOS `release_channel_*_artifact.arch` disagrees with promoted `rid`.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
-    - expanded marker assertions for new macOS `rid`/`arch` fail-close reasons and evidence keys.
+    - expanded marker assertions for Linux/Windows/macOS `rid`/`arch` fail-close reasons and embedded artifact arch evidence keys.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
-    - expanded executable-gate marker assertions for the two macOS `rid`/`arch` fail-close reason strings.
+    - expanded executable-gate marker assertions for Linux/Windows/macOS `rid`/`arch` fail-close reason strings.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
 - Current trusted state:
-  - milestone-1/3 executable tuple proof now rejects macOS artifact architecture metadata drift (`arch` vs promoted `rid`) in both release-channel artifact truth and embedded per-head gate evidence.
+  - milestone-1/3 executable tuple proof now rejects promoted artifact architecture metadata drift (`arch` vs promoted `rid`) across Linux/Windows/macOS release-channel truth and embedded Windows/macOS per-head gate artifact evidence.
 - Push status:
   - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
