@@ -70,10 +70,13 @@
     - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/QUARANTINED_INSTALLER_PROMOTION.generated.json`
     - macOS/Windows candidate installers skipped because matching startup-smoke receipts are missing.
 - Commits landed:
-  - `chummer6-ui`: _pending local commit in this session_ (`feat(w1-1): add proof-backed quarantine installer promotion and manifest payload sanitizers`).
-  - `chummer6-hub-registry`: _pending local commit in this session_ (`docs(w1-1): document proof-backed quarantine promotion in release pipeline`).
+  - `chummer6-ui`: `cb9b03fb` (`feat(w1-1): gate quarantine installer promotion on startup-smoke proof`).
+  - `chummer6-hub-registry`: `6988081` (`docs(w1-1): document proof-backed quarantine promotion`).
+  - `fleet`: `b602621` (`docs(handoff): record w1 proof-backed quarantine promotion slice`).
 - Push attempts:
-  - not attempted yet in this session.
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6278a47..6988081`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - truthful W1 tuple completion still requires real Windows/macOS startup-smoke receipts for promoted bytes; current host is Linux-only and cannot execute native Windows/macOS installer smoke locally.
 
