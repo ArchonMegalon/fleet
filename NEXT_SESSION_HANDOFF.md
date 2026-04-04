@@ -9,15 +9,19 @@
     - rewired the gate to the active parity-oracle pipeline by invoking `scripts/generate-parity-checklist.sh`.
     - added explicit runtime prerequisites checks (`rg`, `python3`), generated checklist existence checks, and summary extraction from `docs/PARITY_CHECKLIST.md`.
     - gate now fails only on real parity drift/generation failures and prints current tabs/actions/desktop-controls coverage summary.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles`.
+    - regression coverage now locks `audit-ui-parity.sh` to the active parity generator/checklist contract and forbids fallback to retired `Chummer.Web`/WinForms probes.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
   - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && RUNBOOK_MODE=parity-checklist bash scripts/runbook.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-2 parity gate no longer false-fails on removed compatibility assets.
   - required PR-gate command `bash scripts/audit-ui-parity.sh` now audits the active parity-oracle contract and surfaces real coverage drift.
 - Push status:
-  - `chummer6-hub` (repo root maps to `/docker/chummercomplete/chummer.run-services` in this workspace): local changes pending commit/push in this environment (`scripts/audit-ui-parity.sh`; credential-dependent).
+  - `chummer6-hub` (repo root maps to `/docker/chummercomplete/chummer.run-services` in this workspace): local changes pending commit/push in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-5 GM unresolved triage now classifies season-schedule pressure as event-control domain signals
