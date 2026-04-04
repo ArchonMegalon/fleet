@@ -86,12 +86,13 @@
     - `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs(64,56): error CS1736: Default parameter value for 'ImportOracleMissingSources' must be a compile-time constant`.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter \"FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale\" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> FAIL with the same pre-existing compile break.
 - Commits landed:
-  - `chummer6-hub`: pending.
-  - `fleet`: pending.
+  - `chummer6-hub`: `6e8f3d94` (`feat(w3-6): mark offline lanes degraded when travel caches are stale`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - cross-repo baseline compile instability in `chummer-core-engine` currently prevents `chummer6-hub` test execution in this workspace until the `ToolCatalogModels.cs` default-parameter compile break is fixed.
+  - environment lacks GitHub HTTPS credentials, so push remains blocked.
 
 ## 2026-04-04: follow-up on W1 release-proof/publish-state install-gate hardening (handoff commit + push status)
 
