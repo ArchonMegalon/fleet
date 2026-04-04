@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-6 mobile companion continuity lane now fail-closes compact return-lane and companions-return-loop forms across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `6` requires mobile companion continuity and return-loop posture to remain governed across compact query forms used in workspace search and live journey probes.
+  - compact forms (`mobilecompanionreturnlanes`, `mobilecompanionsreturnloop(s)`, `campaignmobilecompanionreturnlane(s)`, `campaignmobilecompanionsreturnloop(s)`) were canonicalized but not fail-closed in live audit/Playwright proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactMobileCompanionReturnLoopFormsIntoContinuityTokens` with the missing compact return-lane and companions-return-loop variants.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms` with matching assertions for all new compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` and workspace `prepQuery=` probes for the new compact mobile companion return-lane/companions-return-loop variants.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same compact variants.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed marker assertions for the added live-audit tuple/query markers and Playwright checks.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactMobileCompanionReturnLoopFormsIntoContinuityTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms|FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactMobileCompanionReturnLoopFormsIntoContinuityTokens" -v minimal` -> PASS (`2 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `c9005c1d` (`feat(w3-6): fail-close compact mobile companion return-lane query forms`).
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff follow-up for W3 compact return/prep query fail-close plus push status
 
 - Trigger:
