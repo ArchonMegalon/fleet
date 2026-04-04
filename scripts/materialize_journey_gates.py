@@ -988,6 +988,87 @@ def evaluate_journey(
                 }
             return {key: normalized[key] for key in sorted(normalized)}
 
+        def _normalized_external_proof_execution_plan(value: Any) -> Dict[str, Any]:
+            if not isinstance(value, dict):
+                return {"request_count": 0, "hosts": [], "host_groups": {}}
+
+            host_groups_value = value.get("host_groups")
+            host_groups_raw = host_groups_value if isinstance(host_groups_value, dict) else {}
+            normalized_host_groups: Dict[str, Any] = {}
+            for raw_host, raw_group in host_groups_raw.items():
+                host = str(raw_host or "").strip().lower()
+                if not host or not isinstance(raw_group, dict):
+                    continue
+                group_requests = raw_group.get("requests")
+                request_rows = group_requests if isinstance(group_requests, list) else []
+                normalized_requests = []
+                for raw_request in request_rows:
+                    if not isinstance(raw_request, dict):
+                        continue
+                    required_proofs = sorted(
+                        {
+                            str(token or "").strip().lower()
+                            for token in (raw_request.get("required_proofs") or [])
+                            if str(token or "").strip()
+                        }
+                    )
+                    proof_capture_commands = [
+                        str(token or "").strip()
+                        for token in (raw_request.get("proof_capture_commands") or [])
+                        if str(token or "").strip()
+                    ]
+                    normalized_requests.append(
+                        {
+                            "tuple_id": str(raw_request.get("tuple_id") or "").strip(),
+                            "head_id": str(raw_request.get("head_id") or "").strip().lower(),
+                            "platform": str(raw_request.get("platform") or "").strip().lower(),
+                            "rid": str(raw_request.get("rid") or "").strip().lower(),
+                            "expected_artifact_id": str(raw_request.get("expected_artifact_id") or "").strip(),
+                            "expected_installer_file_name": str(
+                                raw_request.get("expected_installer_file_name") or ""
+                            ).strip(),
+                            "expected_public_install_route": str(
+                                raw_request.get("expected_public_install_route") or ""
+                            ).strip(),
+                            "expected_startup_smoke_receipt_path": str(
+                                raw_request.get("expected_startup_smoke_receipt_path") or ""
+                            ).strip(),
+                            "required_proofs": required_proofs,
+                            "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                                raw_request.get("startup_smoke_receipt_contract")
+                            ),
+                            "proof_capture_commands": proof_capture_commands,
+                        }
+                    )
+                normalized_requests = sorted(
+                    normalized_requests,
+                    key=lambda item: str(item.get("tuple_id") or "").strip(),
+                )
+                normalized_host_groups[host] = {
+                    "request_count": int(raw_group.get("request_count") or 0),
+                    "tuples": sorted(
+                        {
+                            str(token or "").strip()
+                            for token in (raw_group.get("tuples") or [])
+                            if str(token or "").strip()
+                        }
+                    ),
+                    "requests": normalized_requests,
+                }
+            request_count = int(value.get("request_count") or 0)
+            hosts = sorted(
+                {
+                    str(token or "").strip().lower()
+                    for token in (value.get("hosts") or [])
+                    if str(token or "").strip()
+                }
+            )
+            return {
+                "request_count": request_count,
+                "hosts": hosts,
+                "host_groups": {key: normalized_host_groups[key] for key in sorted(normalized_host_groups)},
+            }
+
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         support_external_proof_required_count = 0
         expected_external_proof_request_by_tuple = {
@@ -1432,6 +1513,77 @@ def evaluate_journey(
         if expected_external_proof_backlog_specs != reported_external_proof_backlog_specs:
             blocking_reasons.append(
                 "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
+            )
+        expected_external_proof_execution_plan_host_groups: Dict[str, Any] = {}
+        grouped_external_proof_requests: Dict[str, List[Dict[str, Any]]] = {}
+        for item in external_proof_requests:
+            host = str(item.get("required_host") or "").strip().lower()
+            if not host:
+                continue
+            grouped_external_proof_requests.setdefault(host, []).append(dict(item))
+        for host in sorted(grouped_external_proof_requests):
+            rows = sorted(
+                grouped_external_proof_requests[host],
+                key=lambda row: str(row.get("tuple_id") or "").strip(),
+            )
+            normalized_requests = []
+            for row in rows:
+                required_proofs = sorted(
+                    {
+                        str(token or "").strip().lower()
+                        for token in (row.get("required_proofs") or [])
+                        if str(token or "").strip()
+                    }
+                )
+                proof_capture_commands = [
+                    str(token or "").strip()
+                    for token in (row.get("proof_capture_commands") or [])
+                    if str(token or "").strip()
+                ]
+                normalized_requests.append(
+                    {
+                        "tuple_id": str(row.get("tuple_id") or "").strip(),
+                        "head_id": str(row.get("head_id") or row.get("head") or "").strip().lower(),
+                        "platform": str(row.get("platform") or "").strip().lower(),
+                        "rid": str(row.get("rid") or "").strip().lower(),
+                        "expected_artifact_id": str(row.get("expected_artifact_id") or "").strip(),
+                        "expected_installer_file_name": str(
+                            row.get("expected_installer_file_name") or ""
+                        ).strip(),
+                        "expected_public_install_route": str(
+                            row.get("expected_public_install_route") or ""
+                        ).strip(),
+                        "expected_startup_smoke_receipt_path": str(
+                            row.get("expected_startup_smoke_receipt_path") or ""
+                        ).strip(),
+                        "required_proofs": required_proofs,
+                        "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                            row.get("startup_smoke_receipt_contract")
+                        ),
+                        "proof_capture_commands": proof_capture_commands,
+                    }
+                )
+            expected_external_proof_execution_plan_host_groups[host] = {
+                "request_count": len(normalized_requests),
+                "tuples": sorted(
+                    [str(item.get("tuple_id") or "").strip() for item in normalized_requests if str(item.get("tuple_id") or "").strip()]
+                ),
+                "requests": normalized_requests,
+            }
+        expected_external_proof_execution_plan = {
+            "request_count": len(external_proof_requests),
+            "hosts": sorted(expected_external_proof_execution_plan_host_groups.keys()),
+            "host_groups": {
+                key: expected_external_proof_execution_plan_host_groups[key]
+                for key in sorted(expected_external_proof_execution_plan_host_groups)
+            },
+        }
+        reported_external_proof_execution_plan = _normalized_external_proof_execution_plan(
+            support_packets.get("unresolved_external_proof_execution_plan")
+        )
+        if expected_external_proof_execution_plan != reported_external_proof_execution_plan:
+            blocking_reasons.append(
+                "support packet unresolved_external_proof_execution_plan does not match release-channel external proof backlog."
             )
     if bool(fleet_gate.get("require_support_recovery_path_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
