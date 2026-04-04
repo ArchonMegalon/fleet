@@ -83,6 +83,41 @@
 - Exact blocker:
   - local environment lacks GitHub HTTPS credentials for Fleet remote push.
 
+## 2026-04-04: milestone-10 fleet support packets now carry install-specific registry diagnosis plus fix-confirmation posture, and emit closure/human-response summary counters for governor and journey gates
+
+- Trigger:
+  - frontier milestone `10` requires support packets to prove install-specific truth (`build/channel/fix/recovery`) in the same vocabulary as installer/update surfaces.
+  - `scripts/materialize_support_case_packets.py` only emitted coarse case routing metadata and omitted:
+    - registry-backed install truth posture per case,
+    - fix-confirmation posture per case,
+    - summary counters `closure_waiting_on_release_truth` and `needs_human_response` that downstream journey/governor gating consumes.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - added optional `--release-channel` input (default: hub-registry `RELEASE_CHANNEL.generated.json`) for install-truth enrichment.
+    - added release-channel tuple indexing against `desktopTupleCoverage.promotedInstallerTuples`.
+    - added per-packet install diagnostics:
+      - `install_truth_state`
+      - `install_diagnosis` (registry channel/version/rollout/supportability + promoted tuple/artifact match)
+      - `fix_confirmation` (including reporter verification state)
+      - `recovery_path` (account-access/downloads/support routing guidance)
+    - added packet-safe `installation_id` carry-through for install-specific support follow-through.
+    - added summary counters:
+      - `closure_waiting_on_release_truth`
+      - `needs_human_response`
+      - `install_truth_state_counts`
+  - patched `/docker/fleet/tests/test_materialize_support_case_packets.py`:
+    - updated baseline assertions for new summary keys and packet install/fix/recovery objects.
+    - added coverage that validates registry-backed promoted tuple matching and fix-confirmation state transitions (`awaiting_reporter_verification` vs `confirmed_fixed`).
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py` -> FAIL in this environment (`No module named pytest`).
+- Commits landed:
+  - pending local commit in `fleet` (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - local environment does not have `pytest` installed, so runtime test execution could not be completed beyond syntax validation.
+
 ## 2026-04-04: milestone-1/3 registry lane now fail-closes tuple coverage coherence drift and localization signoff status alias contradictions
 
 - Trigger:
@@ -129,6 +164,34 @@
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `acd75790..2079ab04`).
 - Exact blocker:
   - none for this slice.
+
+## 2026-04-04: milestone-7/8/9/16 account build-handoff detail now shows per-output next-safe/provenance follow-through for template/foundry/sheet lanes
+
+- Trigger:
+  - after grounding Build Lab handoff outputs, the signed-in account detail view still compressed outputs to a single comma-separated label line.
+  - frontier milestones `7`, `8`, `9`, and `16` require exchange/viewer/export lanes to stay explicit where users make decisions, including output-level next-safe and provenance cues.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - selected build-handoff detail now renders a bounded per-output list (`Take(3)`) with:
+      - output label
+      - `NextSafeAction`
+      - `ProvenanceSummary`
+  - patched `/docker/chummercomplete/chummer6-hub/tests/RunServicesSmoke/Program.cs`:
+    - added source-level smoke assertions that account detail references:
+      - `selectedBuildLabHandoff.Outputs.Take(3)`
+      - `@output.NextSafeAction`
+      - `@output.ProvenanceSummary`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - follow-up compile fix after output-list refactor: switched `outputs.Length` to `outputs.Count`.
+- Verification:
+  - `dotnet build /docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Chummer.Run.Api.csproj --no-restore -p:BuildProjectReferences=false -v minimal` -> PASS.
+  - `dotnet build /docker/chummercomplete/chummer6-hub/Chummer.Tests/Chummer.Tests.csproj --no-restore -p:BuildProjectReferences=false -v minimal` -> FAIL in this environment due pre-existing ref-assembly path instability (`CS0006` missing `/obj/Debug/net10.0/ref/Chummer.Run.Api.dll`).
+- Commits landed:
+  - `chummer6-hub`: `861e42ea` (`feat(w4): surface per-output build handoff follow-through in account view`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no GitHub HTTPS credentials in this environment; full test verification remains constrained by existing cross-repo ref-assembly instability.
 
 ## 2026-04-04: milestone-7/8/9/16 build handoff now emits governed template/foundry/sheet outputs plus explicit rule-environment diff and explain-receipt continuity
 
