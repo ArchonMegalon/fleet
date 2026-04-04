@@ -39,6 +39,16 @@
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
   - readiness check:
     - `JOURNEY_GATES.generated.json`: `campaign_session_recover_recap.state=ready` with `blocking_reasons=[]` and `warning_reasons=[]`.
+- Commits landed:
+  - `chummer6-mobile`: `2532b1d` (`feat(w3-4-5-6): refresh mobile local proof markers for continuity and gm lanes`).
+  - `chummer6-design`: `394f268` (`feat(w3-4-5-6): fail-close continuity and gm markers in campaign gate`).
+  - `fleet`: `d6b3c3c` (`feat(w3-4-5-6): enforce continuity and gm proof markers in journey gate`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: milestone-6 offline continuity gate now fail-closes mobile can-do-now vs needs-online proof markers
 
