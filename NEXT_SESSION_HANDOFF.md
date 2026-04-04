@@ -155,9 +155,11 @@
 ## 2026-04-04: follow-up on W1 verifier honesty wiring for packaged desktop exit gate (commit and push status)
 
 - Commits landed:
-  - `chummer6-ui`: pending local commit in this slice (`scripts/ai/verify.sh`).
+  - `chummer6-ui`: `fdbeef8b` (`fix(w1): gate verify on packaged desktop executable proof`).
+  - `fleet`: `7356d25` (`docs(handoff): record w1 verifier honesty slice`).
 - Push attempts:
-  - pending after commit in this slice.
+  - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment has no configured GitHub credentials for HTTPS remotes, so new commits remain local-only until auth is restored.
 
