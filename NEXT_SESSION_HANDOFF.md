@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-3 visual familiarity materializer now supports non-blocking lock posture under concurrent B14 runs
+
+- Trigger:
+  - frontier milestone 3 requires per-head proof materializers to stay runnable under concurrent activity so aggregate executable checks can remain honest and fast.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` still had a fixed `150 x 2s` wait on the `b14` lock, forcing avoidable delay for read-only proof evaluation during parallel runs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - added `CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT` (default `0`) to bypass lock wait when explicit non-blocking materialization is desired.
+    - added `CHUMMER_DESKTOP_VISUAL_RELEASE_GATE_LOCK_WAIT_SECONDS` (default `300`) and `CHUMMER_DESKTOP_VISUAL_RELEASE_GATE_LOCK_POLL_SECONDS` (default `2`) for tunable wait posture.
+    - added numeric validation and minimum poll guard for lock-wait env parsing.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked visual-materializer lock contract markers for skip/tuning env vars and computed loop behavior.
+  - refreshed generated visual familiarity receipt:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+- Current trusted state:
+  - both executable and visual milestone-3 materializers now have explicit lock-wait skip/tuning controls for concurrent operator use.
+  - W1 blocker output remains unchanged in substance: missing promoted Windows/macOS tuples.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable gate adds concurrency-safe lock-wait controls so tuple blockers surface immediately under parallel runs
 
 - Trigger:
