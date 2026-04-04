@@ -22,6 +22,26 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity audit now fail-closes missing SR6 workflow parity status evidence
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar workflow parity across SR4, SR6, and Chummer5a mental models.
+  - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` already emitted `sr6_workflow_parity_status`, but Hub parity audit only fail-closed `sr4_workflow_parity_status`, `chummer5a_workflow_parity_status`, and `sr4_sr6_frontier_status`.
+  - this left a drift path where SR6 parity-specific status could regress while the top-level milestone-2 parity audit still passed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added explicit fail-close `require_pass_status(...)` check for `evidence.sr6_workflow_parity_status`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock `sr6_workflow_parity_status` marker presence in the parity audit script.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now requires SR4, SR6, Chummer5a, and SR4/SR6 frontier parity status markers together, reducing single-edition drift false-pass risk.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `diary` prep retrieval across API and workspace route
 
 - Trigger:
