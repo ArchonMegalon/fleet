@@ -1267,7 +1267,13 @@ def evaluate_journey(
                                         f"must match release-channel tuple truth {expected_tuple_entry_count!r} but was {actual_tuple_entry_count!r}."
                                     )
 
-                                actual_tuple_unique = bool(external_proof_request.get("tuple_unique"))
+                                tuple_unique_value = external_proof_request.get("tuple_unique")
+                                if not isinstance(tuple_unique_value, bool):
+                                    support_packet_contract_violations.append(
+                                        "support packet "
+                                        f"{packet_id} is missing boolean install_diagnosis.external_proof_request.tuple_unique."
+                                    )
+                                actual_tuple_unique = bool(tuple_unique_value)
                                 expected_tuple_unique = bool(expected_request.get("tuple_unique"))
                                 if actual_tuple_unique != expected_tuple_unique:
                                     support_packet_contract_violations.append(
