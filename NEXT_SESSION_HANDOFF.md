@@ -15,9 +15,10 @@
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`57 passed` on both target frameworks).
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`453 passed` on both target frameworks).
 - Commits landed:
-  - none yet (repo contains heavy concurrent edits in the same files; this slice is currently carried as working-tree deltas pending safe isolation/commit split).
+  - `fleet`: `586651a` (`docs(handoff): record w3 continuity-return gm ops prioritization slice`).
+  - no isolated `chummer6-hub` commit yet (repo contains heavy concurrent edits in the same files; this slice is currently carried as working-tree deltas pending safe isolation/commit split).
 - Push attempts:
-  - none (no new isolated commit created yet for this slice).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - overlapping pre-existing edits in the same files (`GmOpsBoardService.cs`, `GmOpsBoardServiceTests.cs`) make non-interactive, safe, isolated commit slicing non-trivial without risking inclusion of unrelated concurrent changes.
 
