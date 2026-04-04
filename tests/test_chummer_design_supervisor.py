@@ -1496,9 +1496,14 @@ def test_prepare_direct_worker_environment_preserves_host_git_and_gh_auth(monkey
 
         assert str(env.get("CODEX_HOME") or "").endswith("/direct-core")
         assert env.get("HOME") == env.get("CODEX_HOME")
-        assert env.get("GIT_CONFIG_GLOBAL") == str(host_home / ".gitconfig")
-        assert env.get("XDG_CONFIG_HOME") == str(host_home / ".config")
-        assert env.get("GH_CONFIG_DIR") == str(gh_dir)
+        worker_home = Path(str(env["HOME"]))
+        assert env.get("GIT_CONFIG_GLOBAL") == str(worker_home / ".gitconfig")
+        assert env.get("XDG_CONFIG_HOME") == str(worker_home / ".config")
+        assert env.get("GH_CONFIG_DIR") == str(worker_home / ".config" / "gh")
+        assert (worker_home / ".gitconfig").read_text(encoding="utf-8") == (host_home / ".gitconfig").read_text(encoding="utf-8")
+        assert (worker_home / ".config" / "gh" / "hosts.yml").read_text(encoding="utf-8") == (
+            gh_dir / "hosts.yml"
+        ).read_text(encoding="utf-8")
 
 
 def test_prepare_account_environment_preserves_host_git_and_gh_auth(monkeypatch) -> None:
@@ -1539,9 +1544,16 @@ def test_prepare_account_environment_preserves_host_git_and_gh_auth(monkeypatch)
 
         assert str(env.get("CODEX_HOME") or "").endswith("/acct-test")
         assert env.get("HOME") == env.get("CODEX_HOME")
-        assert env.get("GIT_CONFIG_GLOBAL") == str(host_home / ".gitconfig")
-        assert env.get("XDG_CONFIG_HOME") == str(host_home / ".config")
-        assert env.get("GH_CONFIG_DIR") == str(gh_dir)
+        worker_home = Path(str(env["HOME"]))
+        assert env.get("GIT_CONFIG_GLOBAL") == str(worker_home / ".gitconfig")
+        assert env.get("XDG_CONFIG_HOME") == str(worker_home / ".config")
+        assert env.get("GH_CONFIG_DIR") == str(worker_home / ".config" / "gh")
+        assert (worker_home / ".gitconfig").read_text(encoding="utf-8") == (
+            host_home / ".gitconfig"
+        ).read_text(encoding="utf-8")
+        assert (worker_home / ".config" / "gh" / "hosts.yml").read_text(encoding="utf-8") == (
+            gh_dir / "hosts.yml"
+        ).read_text(encoding="utf-8")
         assert env.get("CODEX_API_KEY") == "secret"
 
 
@@ -1570,9 +1582,116 @@ def test_prepare_direct_worker_environment_falls_back_to_passwd_home_for_git_aut
         )
 
         assert env.get("HOME") == env.get("CODEX_HOME")
-        assert env.get("GIT_CONFIG_GLOBAL") == str(host_home / ".gitconfig")
-        assert env.get("XDG_CONFIG_HOME") == str(host_home / ".config")
-        assert env.get("GH_CONFIG_DIR") == str(gh_dir)
+        worker_home = Path(str(env["HOME"]))
+        assert env.get("GIT_CONFIG_GLOBAL") == str(worker_home / ".gitconfig")
+        assert env.get("XDG_CONFIG_HOME") == str(worker_home / ".config")
+        assert env.get("GH_CONFIG_DIR") == str(worker_home / ".config" / "gh")
+        assert (worker_home / ".gitconfig").read_text(encoding="utf-8") == (host_home / ".gitconfig").read_text(encoding="utf-8")
+        assert (worker_home / ".config" / "gh" / "hosts.yml").read_text(encoding="utf-8") == (
+            gh_dir / "hosts.yml"
+        ).read_text(encoding="utf-8")
+
+
+def test_prepare_account_environment_falls_back_to_workspace_secret_mirror_for_auth_json(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        host_home = root / "host-home"
+        gh_dir = host_home / ".config" / "gh"
+        gh_dir.mkdir(parents=True, exist_ok=True)
+        (host_home / ".gitconfig").write_text(
+            "[credential \"https://github.com\"]\n\thelper = !/usr/bin/gh auth git-credential\n",
+            encoding="utf-8",
+        )
+        (gh_dir / "hosts.yml").write_text("github.com:\n  user: test\n", encoding="utf-8")
+        monkeypatch.setenv("HOME", str(host_home))
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        secrets_dir = root / "secrets"
+        secrets_dir.mkdir(parents=True, exist_ok=True)
+        mirrored_auth = secrets_dir / "acct-chatgpt-b.auth.json"
+        mirrored_auth.write_text('{"access_token":"token"}\n', encoding="utf-8")
+
+        account = module.WorkerAccount(
+            alias="acct-chatgpt-b",
+            owner_id="owner",
+            auth_kind="chatgpt_auth_json",
+            auth_json_file="/run/secrets/acct-chatgpt-b.auth.json",
+            api_key_env="",
+            api_key_file="",
+            allowed_models=[],
+            health_state="ready",
+            spark_enabled=False,
+            bridge_priority=0,
+            forced_login_method="",
+            forced_chatgpt_workspace_id="",
+            openai_base_url="",
+            home_dir="",
+            max_parallel_runs=1,
+        )
+
+        env = module._prepare_account_environment(root / "state", root, account)
+
+        worker_home = Path(str(env["HOME"]))
+        assert (worker_home / "auth.json").read_text(encoding="utf-8") == mirrored_auth.read_text(encoding="utf-8")
+
+
+def test_worker_reported_git_push_repos_parses_unique_repos() -> None:
+    module = _load_module()
+    stderr_text = """
+exec
+/usr/bin/bash -lc 'cd /docker/chummercomplete/chummer.run-services && git push' in /docker/fleet exited 128 in 11ms:
+fatal: could not read Username for 'https://github.com': No such device or address
+exec
+/usr/bin/bash -lc 'cd /docker/fleet && git push' in /docker/fleet exited 128 in 14ms:
+fatal: could not read Username for 'https://github.com': No such device or address
+exec
+/usr/bin/bash -lc 'cd /docker/fleet && git push' in /docker/fleet exited 128 in 14ms:
+fatal: could not read Username for 'https://github.com': No such device or address
+"""
+    repos = module._worker_reported_git_push_repos(stderr_text)
+    assert repos == [Path("/docker/chummercomplete/chummer.run-services"), Path("/docker/fleet")]
+
+
+def test_retry_worker_reported_git_pushes_uses_host_git_auth(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        host_home = root / "host-home"
+        gh_dir = host_home / ".config" / "gh"
+        gh_dir.mkdir(parents=True, exist_ok=True)
+        (host_home / ".gitconfig").write_text(
+            "[credential \"https://github.com\"]\n\thelper = !/usr/bin/gh auth git-credential\n",
+            encoding="utf-8",
+        )
+        (gh_dir / "hosts.yml").write_text("github.com:\n  user: test\n", encoding="utf-8")
+        monkeypatch.setenv("HOME", "/")
+
+        class _PwdEntry:
+            pw_dir = str(host_home)
+
+        monkeypatch.setattr(module.pwd, "getpwuid", lambda _uid: _PwdEntry())
+
+        calls: list[tuple[list[str], dict[str, str]]] = []
+
+        def fake_run(command, *, text, capture_output, check, env=None):
+            assert env is not None
+            calls.append((list(command), dict(env)))
+            return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        result = module._retry_worker_reported_git_pushes(
+            "exec\n/usr/bin/bash -lc 'cd /docker/fleet && git push' in /docker/fleet exited 128 in 14ms:\n"
+        )
+
+        assert result["attempted"] == ["/docker/fleet"]
+        assert result["succeeded"] == ["/docker/fleet"]
+        assert result["failed"] == {}
+        assert calls[0][0] == ["git", "-C", "/docker/fleet", "push"]
+        assert calls[0][1]["HOME"] == str(host_home)
+        assert calls[0][1]["GIT_CONFIG_GLOBAL"] == str(host_home / ".gitconfig")
+        assert calls[0][1]["XDG_CONFIG_HOME"] == str(host_home / ".config")
+        assert calls[0][1]["GH_CONFIG_DIR"] == str(gh_dir)
 
 
 def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_account(monkeypatch) -> None:

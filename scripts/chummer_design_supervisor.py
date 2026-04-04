@@ -3247,6 +3247,77 @@ def _parse_final_message_sections(text: str) -> Dict[str, str]:
     return parsed
 
 
+def _compose_final_message_sections(sections: Dict[str, str]) -> str:
+    shipped = str((sections or {}).get("shipped") or "").strip()
+    remains = str((sections or {}).get("remains") or "").strip()
+    blocker = str((sections or {}).get("blocker") or "").strip()
+    return (
+        f"What shipped: {shipped}\n\n"
+        f"What remains: {remains}\n\n"
+        f"Exact blocker: {blocker}\n"
+    )
+
+
+def _is_missing_github_push_blocker(text: str) -> bool:
+    compact = str(text or "").strip().lower()
+    return "git push" in compact and "could not read username for 'https://github.com'" in compact
+
+
+def _worker_reported_git_push_repos(stderr_text: str) -> List[Path]:
+    seen: Set[str] = set()
+    rows: List[Path] = []
+    for match in re.finditer(r"cd (?P<repo>/[^'\n]+) && git push(?:\s+[^'\n]+)?'", str(stderr_text or "")):
+        repo_text = str(match.group("repo") or "").strip()
+        if not repo_text or repo_text in seen:
+            continue
+        seen.add(repo_text)
+        rows.append(Path(repo_text))
+    return rows
+
+
+def _prepare_host_git_push_environment() -> Dict[str, str]:
+    env = os.environ.copy()
+    host_home_raw = str(os.environ.get("HOME", "") or "").strip()
+    host_xdg_config_home_raw = str(os.environ.get("XDG_CONFIG_HOME", "") or "").strip()
+    host_home = _resolve_host_home_path(host_home_raw)
+    if host_home is None:
+        return env
+    env["HOME"] = str(host_home)
+    _inherit_host_git_auth_environment(
+        env,
+        host_home_raw=str(host_home),
+        host_xdg_config_home_raw=host_xdg_config_home_raw,
+    )
+    return env
+
+
+def _retry_worker_reported_git_pushes(stderr_text: str) -> Dict[str, Any]:
+    repos = _worker_reported_git_push_repos(stderr_text)
+    if not repos:
+        return {"attempted": [], "succeeded": [], "failed": {}}
+    env = _prepare_host_git_push_environment()
+    attempted: List[str] = []
+    succeeded: List[str] = []
+    failed: Dict[str, str] = {}
+    for repo in repos:
+        attempted.append(str(repo))
+        completed = subprocess.run(
+            ["git", "-C", str(repo), "push"],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+        combined = "\n".join(
+            item for item in (str(completed.stdout or "").strip(), str(completed.stderr or "").strip()) if item
+        ).strip()
+        if completed.returncode == 0:
+            succeeded.append(str(repo))
+            continue
+        failed[str(repo)] = combined or f"git push exited {completed.returncode}"
+    return {"attempted": attempted, "succeeded": succeeded, "failed": failed}
+
+
 def _final_message_text_candidates(text: str) -> List[str]:
     raw = str(text or "").replace("\r\n", "\n").strip()
     if not raw:
@@ -5054,7 +5125,7 @@ def _credential_source_key(account: WorkerAccount) -> str:
 def _credential_source_fingerprint(account: WorkerAccount, workspace_root: Path) -> str:
     try:
         if account.auth_kind in CHATGPT_AUTH_KINDS:
-            path = Path(account.auth_json_file).expanduser()
+            path = _fallback_auth_json_path(Path(account.auth_json_file).expanduser(), workspace_root)
             if not path.exists() or not path.is_file():
                 return f"missing:{path}"
             return hashlib.sha256(path.read_bytes()).hexdigest()[:24]
@@ -5189,11 +5260,24 @@ def _prepare_direct_worker_environment(
     env = os.environ.copy()
     env["CODEX_HOME"] = str(home)
     env["HOME"] = str(home)
+    _seed_worker_home_git_auth(
+        home,
+        host_home_raw=host_home_raw,
+        host_xdg_config_home_raw=host_xdg_config_home_raw,
+    )
     _inherit_host_git_auth_environment(
         env,
         host_home_raw=host_home_raw,
         host_xdg_config_home_raw=host_xdg_config_home_raw,
     )
+    worker_gitconfig = home / ".gitconfig"
+    worker_xdg_config_home = home / ".config"
+    worker_gh_config_dir = worker_xdg_config_home / "gh"
+    if worker_gitconfig.exists():
+        env["GIT_CONFIG_GLOBAL"] = str(worker_gitconfig)
+    if (worker_gh_config_dir / "hosts.yml").exists():
+        env["XDG_CONFIG_HOME"] = str(worker_xdg_config_home)
+        env["GH_CONFIG_DIR"] = str(worker_gh_config_dir)
     clean_lane = str(worker_lane or "").strip().lower()
     if _worker_bin_uses_codexea(worker_bin) and clean_lane in _direct_codexea_stream_lanes():
         stream_idle_ms = _resolve_any_env_secret(
@@ -5263,6 +5347,56 @@ def _inherit_host_git_auth_environment(
     if (gh_config_dir / "hosts.yml").exists():
         env.setdefault("XDG_CONFIG_HOME", str(xdg_config_home))
         env.setdefault("GH_CONFIG_DIR", str(gh_config_dir))
+
+
+def _copy_file_if_changed(source: Path, target: Path) -> None:
+    if not source.exists() or not source.is_file():
+        return
+    _ensure_dir(target.parent)
+    source_bytes = source.read_bytes()
+    if target.exists():
+        try:
+            if target.read_bytes() == source_bytes:
+                return
+        except Exception:
+            pass
+    target.write_bytes(source_bytes)
+
+
+def _seed_worker_home_git_auth(
+    home: Path,
+    *,
+    host_home_raw: str,
+    host_xdg_config_home_raw: str,
+) -> None:
+    host_home = _resolve_host_home_path(host_home_raw)
+    if host_home is None:
+        return
+    host_gitconfig = host_home / ".gitconfig"
+    if host_gitconfig.exists():
+        _copy_file_if_changed(host_gitconfig, home / ".gitconfig")
+    xdg_config_home_text = str(host_xdg_config_home_raw or "").strip()
+    host_xdg_config_home = (
+        Path(xdg_config_home_text).expanduser() if xdg_config_home_text else (host_home / ".config")
+    )
+    if not host_xdg_config_home.exists() and (host_home / ".config").exists():
+        host_xdg_config_home = host_home / ".config"
+    host_gh_dir = host_xdg_config_home / "gh"
+    worker_gh_dir = home / ".config" / "gh"
+    if host_gh_dir.exists():
+        for filename in ("hosts.yml", "config.yml"):
+            _copy_file_if_changed(host_gh_dir / filename, worker_gh_dir / filename)
+
+
+def _fallback_auth_json_path(source_path: Path, workspace_root: Path) -> Path:
+    if source_path.exists():
+        return source_path
+    source_text = str(source_path)
+    if source_text.startswith("/run/secrets/"):
+        mirrored = workspace_root / "secrets" / source_path.name
+        if mirrored.exists():
+            return mirrored
+    return source_path
 
 
 def _seed_auth_json(home: Path, source_path: Path) -> None:
@@ -5336,13 +5470,26 @@ def _prepare_account_environment(state_root: Path, workspace_root: Path, account
     env = os.environ.copy()
     env["CODEX_HOME"] = str(home)
     env["HOME"] = str(home)
+    _seed_worker_home_git_auth(
+        home,
+        host_home_raw=host_home_raw,
+        host_xdg_config_home_raw=host_xdg_config_home_raw,
+    )
     _inherit_host_git_auth_environment(
         env,
         host_home_raw=host_home_raw,
         host_xdg_config_home_raw=host_xdg_config_home_raw,
     )
+    worker_gitconfig = home / ".gitconfig"
+    worker_xdg_config_home = home / ".config"
+    worker_gh_config_dir = worker_xdg_config_home / "gh"
+    if worker_gitconfig.exists():
+        env["GIT_CONFIG_GLOBAL"] = str(worker_gitconfig)
+    if (worker_gh_config_dir / "hosts.yml").exists():
+        env["XDG_CONFIG_HOME"] = str(worker_xdg_config_home)
+        env["GH_CONFIG_DIR"] = str(worker_gh_config_dir)
     if account.auth_kind in CHATGPT_AUTH_KINDS:
-        _seed_auth_json(home, Path(account.auth_json_file).expanduser())
+        _seed_auth_json(home, _fallback_auth_json_path(Path(account.auth_json_file).expanduser(), workspace_root))
     elif account.auth_kind == "api_key":
         env["CODEX_API_KEY"] = _read_api_key(account, workspace_root)
     else:
@@ -6120,6 +6267,23 @@ def launch_worker(
         parsed = _parse_final_message_sections(final_message)
     if completed is not None:
         accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+        if accepted and _is_missing_github_push_blocker(parsed.get("blocker", "")):
+            push_recovery = _retry_worker_reported_git_pushes(completed.stderr)
+            if push_recovery.get("attempted") and not push_recovery.get("failed"):
+                parsed["blocker"] = "none"
+                final_message = _compose_final_message_sections(parsed)
+                last_message_path.write_text(final_message, encoding="utf-8")
+            elif push_recovery.get("failed"):
+                failure_bits = [
+                    f"{repo}: {_summarize_trace_value(message, max_len=120)}"
+                    for repo, message in sorted((push_recovery.get("failed") or {}).items())
+                ]
+                parsed["blocker"] = (
+                    "host-side git push recovery failed after worker credential error: "
+                    + "; ".join(failure_bits)
+                )
+                final_message = _compose_final_message_sections(parsed)
+                last_message_path.write_text(final_message, encoding="utf-8")
     elif preflight_failure_reason:
         if not final_message:
             final_message = preflight_failure_reason

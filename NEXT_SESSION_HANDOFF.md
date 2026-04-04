@@ -218,6 +218,30 @@
 - Push attempts:
   - pending below in this slice.
 
+## 2026-04-04: fleet supervisor now auto-recovers worker-reported GitHub HTTPS push failures by replaying the exact repo pushes from the host lane
+
+- Trigger:
+  - even after worker-home git/gh seeding, a fresh shard run (`20260404T114630Z`) still reported `git push` failure text for `/docker/chummercomplete/chummer.run-services` and `/docker/fleet`, despite isolated account-backed Codex probes proving `git push --dry-run` succeeded in both repos.
+  - the failure was therefore narrower than missing account credentials: the Codex child shell could still fail a real `git push`, while the host lane could authenticate and push the same repos successfully.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - added closeout composition helper so the supervisor can rewrite structured worker closeouts safely.
+    - added parser for repos referenced in worker-reported `cd /repo && git push` failure lines.
+    - added host-side git push recovery that replays the exact repos the worker attempted, using host-lane GitHub auth.
+    - accepted runs that only report the known GitHub credential blocker now auto-retry the reported pushes; when all host-side retries succeed, the supervisor rewrites `Exact blocker: none` before persisting the run.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added regression coverage for repo extraction from worker stderr.
+    - added regression coverage for host-side git push recovery inheriting host git/gh auth.
+- Verification:
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "prepare_direct_worker_environment_preserves_host_git_and_gh_auth or prepare_account_environment_preserves_host_git_and_gh_auth or prepare_direct_worker_environment_falls_back_to_passwd_home_for_git_auth or prepare_account_environment_falls_back_to_workspace_secret_mirror_for_auth_json or worker_reported_git_push_repos_parses_unique_repos or retry_worker_reported_git_pushes_uses_host_git_auth"` -> PASS (`6 passed`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - replayed recovery directly against the real failed shard stderr at `/docker/fleet/state/chummer_design_supervisor/shard-2/runs/20260404T114630Z/worker.stderr.log`:
+    - attempted repos: `/docker/chummercomplete/chummer.run-services`, `/docker/fleet`
+    - succeeded: both
+    - failed: none
+- Current status:
+  - the next fresh completed shard run should clear the stale GitHub push blocker from live Fleet status instead of carrying it forward.
+
 ## 2026-04-04: fleet supervisor now seeds worker-local GitHub auth and auto-falls back from `/run/secrets` to repo-local ChatGPT auth mirrors
 
 - Trigger:
