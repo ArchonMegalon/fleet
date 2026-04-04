@@ -18,8 +18,8 @@
   - milestone-2 parity proof now requires fresh receipts in addition to pass status and schema completeness.
   - stale/future receipt drift cannot silently pass the canonical Hub verify lane.
 - Push status:
-  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
-  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+  - `chummer6-hub`: committed locally as `24d64e36`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: committed locally as `8c5fe4c`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-5 GM prep asset search now keeps compact shorthand (`preplibrary`, `eventcontrol`, `rostermove`) on governed packet lanes
 
