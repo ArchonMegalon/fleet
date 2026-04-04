@@ -1,8 +1,32 @@
-## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting release-channel alias values for generated timestamp and desktop install artifact identity fields
+## 2026-04-04: milestone-5 live journeys now fail-close compact plural organizer-control aliases (`leaguecontrols`, `communitycontrols`) across prep-library API and signed-in workspace prep search
+
+- Trigger:
+  - frontier milestone `5` keeps organizer event-control phrasing on one governed prep-library lane across API retrieval, signed-in workspace routes, and browser proof.
+  - service-level query normalization and unit tests already covered compact plural aliases (`leaguecontrols`, `communitycontrols`), but live journey audits did not execute those variants.
+  - this left a route-level drift seam where compact plural organizer-control wording could regress without failing closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=leaguecontrols` and `queryText=communitycontrols`.
+    - added signed-in workspace route checks for `prepQuery=leaguecontrols` and `prepQuery=communitycontrols` with governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey search checks for `leaguecontrols` and `communitycontrols` with route-preservation, non-empty packet assertions, and existing UI guardrails.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-lock assertions for the new `queryText`/`prepQuery` markers and Playwright route/label markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`; first attempt hit transient `runtimeconfig.json` file lock, immediate retry passed).
+- Current trusted state:
+  - milestone-5 live API/workspace/browser proof now fail-closes compact plural organizer-control aliases on the same governed event-control lane as existing compact/split/hyphen organizer shorthand.
+- Push status:
+  - `chummer.run-services`: local follow-on changes landed in this slice; commit/push not attempted in this step.
+  - `fleet`: handoff updated locally in this slice.
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting alias-key release truth across channel timestamps, installer artifacts, and per-head visual/workflow identity
 
 - Trigger:
   - frontier milestones `1` and `3` require release-channel, installer, and proof receipts to stay one non-contradictory truth surface.
-  - executable gate already validated field presence and mismatches against promoted channel/version, but still accepted contradictory alias-key payloads by preferring one value (`generated_at/generatedAt`, `channelId/channel`, `version/releaseVersion`) via fallback order.
+  - executable gate already validated field presence and mismatches against promoted channel/version, but still accepted contradictory alias-key payloads by preferring one value (`generated_at/generatedAt`, `channelId/channel`, `version/releaseVersion`, and visual/workflow `release_channel_channel_id`/`release_channel_id` plus gate envelope channel aliases) via fallback order.
   - this left a drift seam where conflicting alias values could pass executable proof while artifacts and channel truth silently diverged.
 - Landed:
   - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
@@ -11,16 +35,18 @@
     - desktop install artifact normalization now tracks primary/fallback alias fields separately.
     - added evidence keys `release_channel_desktop_install_artifacts_channel_alias_conflict` and `release_channel_desktop_install_artifacts_version_alias_conflict`.
     - gate now fail-closes when desktop install artifacts carry conflicting `channelId/channel` or `version/releaseVersion` values.
+    - added evidence keys `visual_familiarity_release_channel_id_alias_conflict` and `workflow_execution_release_channel_id_alias_conflict`.
+    - gate now fail-closes when visual/workflow gate evidence and envelope aliases disagree on release-channel identity.
   - patched tests:
     - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
-      - expanded marker assertions for the new release-channel generated-at alias conflict and desktop artifact alias-conflict evidence/reason strings.
+      - expanded marker assertions for release-channel generated-at alias conflict, desktop artifact alias conflicts, and visual/workflow channel-identity alias conflicts.
     - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
-      - expanded migration/compliance marker assertions for the same alias-conflict fail-close contract.
+      - expanded migration/compliance marker assertions for the same alias-conflict fail-close contract, including visual/workflow release-channel identity aliases.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
 - Current trusted state:
-  - milestone-1/3 executable proof no longer accepts contradictory alias-key release truth for generated timestamp or desktop installer identity fields, so release-channel and per-artifact identity cannot silently diverge behind fallback precedence.
+  - milestone-1/3 executable proof no longer accepts contradictory alias-key release truth for channel timestamps, desktop installer identity, or per-head visual/workflow release-channel identity, so fallback precedence cannot hide drift across release receipts.
 - Push status:
   - `chummer6-ui`: local changes landed in this slice; commit/push not attempted in this step.
   - `fleet`: handoff updated locally in this slice.
