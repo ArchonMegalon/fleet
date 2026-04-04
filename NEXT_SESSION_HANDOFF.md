@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-5 prep-library GM lane now fail-closes compact `rostermovepacket(s)` forms across canonicalization and live journey audits
+
+- Trigger:
+  - W3 milestone `5` requires roster movement packet operations to stay on one governed prep-library lane for GM operations and event controls.
+  - compact roster move packet shorthand (`rostermovepacket`, `rostermovepackets`) was not canonicalized or journey-audited, leaving a compact-query seam outside existing `rostermovementpacket(s)` proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `rostermovepacket`
+      - `rostermovepackets`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens` with both compact roster move packet forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms` with matching assertions for both compact roster move packet forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` tuple probes for both compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for both compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new live-audit and Playwright marker assertions for both compact forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `b96c423a` (`feat(w3-5): fail-close compact roster move packet prep queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-6 compact stale-cache continuity slice
 
 - Commits landed:
@@ -41796,3 +41827,31 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `chummer6-ui` push.
+
+## 2026-04-04: false-complete recovery pass reopened W1 install/proof milestone truth and re-derived shard-1 completion-review frontier
+
+- Trigger:
+  - completion-review stayed failed on frontier `3194227093` while Next-12 registry still marked milestone `1` (install/update/recovery lane) and milestone `3` (packaged-binary per-head proof) as complete.
+  - repo-local release-channel evidence still showed required Windows/macOS desktop tuple coverage gaps, so those milestone completion claims were no longer trustworthy.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml`:
+    - milestone `1` status: `complete` -> `planned`
+    - milestone `3` status: `complete` -> `planned`
+  - regenerated `/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json` from current repo-local evidence.
+  - re-ran supervisor recovery derive for frontier `3194227093`, rematerializing:
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+- Verification:
+  - `python3 - <<'PY' ...` against `NEXT_12_BIGGEST_WINS_REGISTRY.yaml` confirms milestone statuses now read `1=planned`, `2=complete`, `3=planned`.
+  - `jq '.supporting_signals.automation_alignment.active_open_milestone_ids' /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json` now includes `1` and `3` in the open set.
+  - `sed -n '1,140p' /docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml` confirms:
+    - `completion_audit.status: fail`
+    - `journey_gate_audit.blocked_journey_count: 1`
+    - frontier still pinned to `3194227093` with tuple-coverage exit failures.
+- Exact blocker:
+  - missing promoted installer artifact + startup-smoke receipt capture on native hosts for required release-channel tuples:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+  - until those Windows/macOS host proofs exist and are promoted into `chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`, `install_claim_restore_continue` remains blocked and completion is untrusted.
