@@ -1,3 +1,42 @@
+## 2026-04-04: milestone-1/3 support closure journey gate now fail-closes against release-channel tuple backlog without `json_must_equal` coupling
+
+- Trigger:
+  - frontier milestone `1` + `3` install/update/recovery and packaged-proof lanes were still locally blocked in Fleet after support packet backlog hardening landed.
+  - `report_cluster_release_notify` enforced `require_support_install_truth_contract`, but `materialize_journey_gates.py` only projected release-channel external-proof backlog when the gate row used `json_must_equal`.
+  - the support journey used `json_must_be_one_of` (`published|publishable`) and therefore silently compared support unresolved-backlog summary against an empty expected backlog, causing false local blocking.
+- Landed:
+  - canonical and mirrored gate contract hardening:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `report_cluster_release_notify` now requires `chummer6-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` freshness and markers (`desktopTupleCoverage`, `externalProofRequests`).
+  - Fleet materializer fix:
+    - `/docker/fleet/scripts/materialize_journey_gates.py`
+    - release-channel `externalProofRequests` are now projected whenever release-channel JSON is parsed for a gate row, even when only `json_must_be_one_of` is configured.
+    - tuple-missing reason emission remains tied to the install journey’s stricter `json_must_equal` contract, avoiding support-lane duplication.
+  - Fleet regression hardening:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+      - `test_report_cluster_release_notify_requires_support_install_truth_contract` now asserts release-channel proof contract rows.
+    - `/docker/fleet/tests/test_materialize_journey_gates_external_proof_contract.py`
+      - added `test_report_journey_projects_release_channel_external_backlog_without_json_must_equal`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --registry .codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && jq '.summary, (.journeys[] | {id,state,blocked_by_external_constraints_only})' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`ready_count=5`, `blocked_count=1`, `blocked_with_local_count=0`; only `install_claim_restore_continue` remains blocked and external-only).
+- Commits landed:
+  - `chummer6-design`: `1f0a7c4` (`feat(w1-1-3): require release-channel proof in support closure journey gate`).
+  - `fleet`: `4e47538` (`feat(w1-1-3): unblock support closure gate with release backlog projection`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - remaining W1 gate block is external-only platform proof capture: missing promoted Windows/macOS installer + startup-smoke receipts for tuples `avalonia:win-x64`, `blazor-desktop:win-x64`, `avalonia:osx-arm64`, `blazor-desktop:osx-arm64` on native hosts.
+
 ## 2026-04-04: milestone-4/5/6 campaign gate now fail-closes compact mobile-companion return-loop prep-query shorthand markers
 
 - Trigger:
