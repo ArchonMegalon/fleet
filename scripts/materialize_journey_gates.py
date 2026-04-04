@@ -252,8 +252,13 @@ def evaluate_journey(
                     f"repo proof {repo_name}:{relative_path} is missing required marker '{snippet_text}'."
                 )
         json_required = dict(proof_row.get("json_must_equal") or {})
+        json_required_one_of = dict(proof_row.get("json_must_be_one_of") or {})
         max_age_hours_raw = proof_row.get("max_age_hours")
-        enforce_json_parsing = bool(json_required) or (max_age_hours_raw is not None and str(max_age_hours_raw).strip())
+        enforce_json_parsing = (
+            bool(json_required)
+            or bool(json_required_one_of)
+            or (max_age_hours_raw is not None and str(max_age_hours_raw).strip())
+        )
         proof_payload: Dict[str, Any] | None = None
         if enforce_json_parsing:
             try:
@@ -277,6 +282,19 @@ def evaluate_journey(
                 if actual != expected:
                     blocking_reasons.append(
                         f"repo proof {repo_name}:{relative_path} field '{field_path}' expected {expected!r} but was {actual!r}."
+                    )
+
+        if json_required_one_of:
+            assert proof_payload is not None
+            for field_path, allowed_values in json_required_one_of.items():
+                if isinstance(allowed_values, list):
+                    normalized_allowed = list(allowed_values)
+                else:
+                    normalized_allowed = [allowed_values]
+                actual = _resolve_json_path(proof_payload, str(field_path))
+                if actual not in normalized_allowed:
+                    blocking_reasons.append(
+                        f"repo proof {repo_name}:{relative_path} field '{field_path}' expected one of {normalized_allowed!r} but was {actual!r}."
                     )
 
         if max_age_hours_raw is not None and str(max_age_hours_raw).strip():

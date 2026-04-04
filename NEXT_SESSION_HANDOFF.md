@@ -1,8 +1,39 @@
+## 2026-04-04: milestone-1 install journey now also fail-closes on release-channel publish state and release-proof pass status
+
+- Trigger:
+  - frontier milestone `1` requires installer truth and public shelf truth to stay aligned, but install journey proof only fail-closed on tuple-gap arrays in `RELEASE_CHANNEL.generated.json`.
+  - that left a seam where tuple fields could look complete while release proof or publish posture drifted.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added generic `json_must_be_one_of` support in repo-source-proof evaluation for structured allow-list checks.
+  - patched `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` install journey proof for `chummer6-hub-registry`:
+    - now requires `releaseProof.status: passed`.
+    - now requires release-channel top-level `status` to be one of `published|publishable`.
+    - now requires `releaseProof` markers in addition to tuple-coverage markers.
+  - patched canonical design mirror source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same install-gate hardening.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added regression `test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_not_in_allowed_set` for `json_must_be_one_of` fail-close behavior.
+    - updated install-gate canon assertions to require `releaseProof.status` plus allowed publish states.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "repo_source_proof_json_field_mismatches or json_field_not_in_allowed_set or install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof"` -> FAIL (`No module named pytest`).
+  - `cd /docker/fleet && .venv/bin/python -m pytest ...` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - pending local commit in `chummer6-design` for canonical gate hardening.
+  - pending local commit in `fleet` for evaluator/test/handoff/gate mirror updates.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - `pytest` is unavailable in the current environment, so Python unit tests cannot run until test tooling is installed; push remains credential-gated in this workspace.
+
 ## 2026-04-04: milestone-13/14 parity lane receipts now end-to-end visible in presentation API suite
 
 - Trigger:
   - with milestone `13` and `14` moving from planned to executable, parity-lane evidence on `master-index` still needed test assertion parity in the presentation test surface.
-  - `chummer-complete/chummer-core-engine` already validated these fields, but `chummer-complete/chummer-presentation` API integration remained at legacy minimum checks.
+  - `chummercomplete/chummer-core-engine` already validated these fields, but `chummercomplete/chummer-presentation` API integration remained at legacy minimum checks.
 - Landed:
   - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/ApiIntegrationTests.cs`:
     - expanded `Master_index_endpoint_returns_data` to assert the same parity lane receipt surface as core:
