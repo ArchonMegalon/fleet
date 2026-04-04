@@ -37,15 +37,18 @@
       - `next-variants` -> `target.build-idea-card`
       - `save-template` -> `target.character-template`
       - `open-foundry-export` -> `target.foundry-export`
+      - `open-sheet-viewer` -> `target.sheet-viewer`
     - Build Lab export payload now includes deterministic handoff fields:
       - `rule-environment` (runtime compatibility summary)
       - `explain-receipt` (top variant/timeline explain entry id fallback)
     - Build Lab export targets now include:
       - `target.character-template` (`BuildLabExportTargetKinds.CharacterTemplate`, `workflow.templates.character`)
       - `target.foundry-export` (`BuildLabExportTargetKinds.Workflow`, `workflow.exchange.foundry`)
+      - `target.sheet-viewer` (`BuildLabExportTargetKinds.Workflow`, `workflow.viewer.sheet`)
   - patched `/docker/chummercomplete/chummer-core-engine/Chummer.CoreEngine.Tests/Program.cs`:
     - extended `BuildLabWorkspaceProjectionFactoryProjectsIntakeState` assertions to lock:
       - template and Foundry export actions/targets
+      - sheet-viewer export action/target workflow wiring
       - `rule-environment` export-field presence
       - `explain-receipt` export-field presence
 - Verification:
