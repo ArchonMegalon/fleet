@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-5 live audits now fail-close hyphen `league-control` and `community-control` shorthand across prep-library API and signed-in workspace prep journeys
+
+- Trigger:
+  - frontier milestone `5` keeps GM/organizer prep and event-control language on one governed lane, but live API/UI journey audits still only asserted compact/split `league/community control` forms.
+  - tokenizer matching already tolerates punctuation splits, so missing hyphen assertions left a drift seam where `league-control` or `community-control` regressions could escape closeout proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=league-control` and `queryText=community-control` with non-empty governed packet assertions.
+    - added signed-in workspace route checks for `prepQuery=league-control` and `prepQuery=community-control` with route/body proof and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library searches for hyphen `league-control` and `community-control` queries with encoded-route preservation and non-empty governed packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-marker assertions to lock new hyphen `queryText`/`prepQuery` coverage in live audit and Playwright scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`382` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 live API and signed-in workspace audits now fail-close compact, split, and hyphen `league/community control` shorthand so operator-language punctuation drift cannot silently bypass governed prep packet proof.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now proves parity-audit fail-close on malformed `releaseProof.proofRoutes` (`%` and `\\`) before smoke
 
 - Trigger:
