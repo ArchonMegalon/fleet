@@ -81,6 +81,22 @@ DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS = (
     "Contacts_diary_and_support_routes_execute_with_public_path_visibility",
     "Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
 )
+DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS = (
+    ("Runtime_backed_shell_chrome_stays_enabled_after_runner_load",),
+    ("Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture",),
+    ("Loaded_runner_header_stays_tab_panel_only_without_metric_cards",),
+    ("Character_creation_preserves_familiar_dense_builder_rhythm",),
+    ("Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm",),
+    ("Gear_builder_preserves_familiar_browse_detail_confirm_rhythm",),
+    ("Vehicles_and_drones_builder_preserves_familiar_browse_detail_confirm_rhythm",),
+    ("Cyberware_and_cyberlimb_builder_preserve_legacy_dialog_familiarity_cues",),
+    ("Contacts_diary_and_support_routes_execute_with_public_path_visibility",),
+    (
+        "Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
+        "Magic_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
+        "Matrix_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
+    ),
+)
 
 RULES_CERTIFICATION_CANDIDATES = (
     Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/RULES_IMPORT_CERTIFICATION.generated.json"),
@@ -367,6 +383,30 @@ def _as_string_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _milestone2_visual_requirement_satisfied(required_tests: set[str], group: tuple[str, ...]) -> bool:
+    canonical, *split_variants = group
+    if canonical in required_tests:
+        return True
+    if not split_variants:
+        return False
+    return all(variant in required_tests for variant in split_variants)
+
+
+def _milestone2_visual_requirement_reported_missing(
+    required_tests: set[str],
+    missing_tests: set[str],
+    group: tuple[str, ...],
+) -> bool:
+    canonical, *split_variants = group
+    if canonical in missing_tests:
+        return True
+    if not split_variants:
+        return False
+    if canonical in required_tests:
+        return False
+    return any(variant in missing_tests for variant in split_variants)
 
 
 def _normalized_token_list(value: Any) -> List[str]:
@@ -691,17 +731,23 @@ def build_flagship_product_readiness_payload(
         visual_missing_legacy_interaction_keys = _as_string_list(
             visual_evidence.get("missing_required_legacy_interaction_keys")
         )
+        visual_required_tests_set = set(visual_required_tests)
+        visual_missing_tests_set = set(visual_missing_tests)
         visual_missing_required_milestone2_tests_from_inventory: List[str] = []
-        if visual_required_tests:
+        if visual_required_tests_set:
             visual_missing_required_milestone2_tests_from_inventory = sorted(
-                test_name
-                for test_name in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS
-                if test_name not in visual_required_tests
+                group[0]
+                for group in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS
+                if not _milestone2_visual_requirement_satisfied(visual_required_tests_set, group)
             )
         visual_reported_missing_milestone2_tests = sorted(
-            test_name
-            for test_name in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS
-            if test_name in set(visual_missing_tests)
+            group[0]
+            for group in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS
+            if _milestone2_visual_requirement_reported_missing(
+                visual_required_tests_set,
+                visual_missing_tests_set,
+                group,
+            )
         )
         visual_milestone2_integrity_gap = False
         if visual_missing_required_milestone2_tests_from_inventory:
@@ -736,8 +782,24 @@ def build_flagship_product_readiness_payload(
         )
         visual_required_tests = _as_string_list(visual_evidence.get("required_tests"))
         visual_missing_tests = _as_string_list(visual_evidence.get("missing_tests"))
+        visual_required_tests_set = set(visual_required_tests)
+        visual_missing_tests_set = set(visual_missing_tests)
         visual_missing_required_milestone2_tests_from_inventory = []
-        visual_reported_missing_milestone2_tests = []
+        if visual_required_tests_set:
+            visual_missing_required_milestone2_tests_from_inventory = sorted(
+                group[0]
+                for group in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS
+                if not _milestone2_visual_requirement_satisfied(visual_required_tests_set, group)
+            )
+        visual_reported_missing_milestone2_tests = sorted(
+            group[0]
+            for group in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS
+            if _milestone2_visual_requirement_reported_missing(
+                visual_required_tests_set,
+                visual_missing_tests_set,
+                group,
+            )
+        )
         visual_missing_legacy_interaction_keys = _as_string_list(
             visual_evidence.get("missing_required_legacy_interaction_keys")
         )
@@ -1458,6 +1520,9 @@ def build_flagship_product_readiness_payload(
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
             "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
             "ui_visual_familiarity_required_milestone2_tests": list(DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS),
+            "ui_visual_familiarity_required_milestone2_test_variant_groups": [
+                list(group) for group in DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS
+            ],
             "ui_visual_familiarity_required_test_inventory_count": len(visual_required_tests),
             "ui_visual_familiarity_missing_test_inventory_count": len(visual_missing_tests),
             "ui_visual_familiarity_missing_required_milestone2_test_inventory_count": len(

@@ -47,6 +47,38 @@
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 flagship readiness now accepts split magic+matrix visual test inventory as equivalent proof to legacy combined token
+
+- Trigger:
+  - frontier milestone `2` readiness in Fleet was fail-closing on a stale canonical test token (`Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions`) even when the upstream visual gate had already split that coverage into explicit `Magic_workflows...` and `Matrix_workflows...` tests.
+  - this produced a false blocker in `FLAGSHIP_PRODUCT_READINESS.generated.json` that obscured the real remaining blockers (missing promoted Windows/macOS installer tuples).
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added milestone-2 visual test variant groups (`DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS`).
+    - added `_milestone2_visual_requirement_satisfied(...)` and `_milestone2_visual_requirement_reported_missing(...)` to treat either:
+      - legacy combined token, or
+      - split magic+matrix tokens together
+      as equivalent coverage for the same milestone-2 requirement.
+    - published `ui_visual_familiarity_required_milestone2_test_variant_groups` in readiness evidence for explicit operator visibility.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added `test_materialize_flagship_product_readiness_accepts_split_magic_and_matrix_visual_inventory_variants`.
+    - updated deterministic tuple-platform expectation in `test_materialize_flagship_product_readiness_fail_closes_missing_required_platform_head_pairs` to match sorted canonical ordering.
+  - rematerialized:
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest tests/test_materialize_flagship_product_readiness.py -k "milestone2_inventory_is_incomplete or accepts_split_magic_and_matrix_visual_inventory_variants or localization_gate_reports_untranslated_shipping_locale_keys" -q` -> PASS (`3` tests).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`status=fail; ready=1, warning=6, missing=1`).
+  - readiness probe confirms false blocker removal:
+    - `ui_visual_familiarity_missing_required_milestone2_test_inventory_count=0`
+    - `ui_visual_familiarity_missing_required_milestone2_test_inventory=[]`
+- Current trusted state:
+  - flagship readiness no longer fails milestone-2 visual inventory integrity solely because upstream gate inventory uses split magic/matrix test IDs.
+  - remaining desktop readiness blockers stay real and unchanged: missing promoted Windows/macOS installer tuple coverage and corresponding executable gate proof.
+- Push status:
+  - `fleet`: local changes pending commit/push in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 desktopTupleCoverage now fail-closes under-declared required platforms/heads against policy and canonical head inventory
 
 - Trigger:
