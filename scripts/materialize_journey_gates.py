@@ -975,6 +975,8 @@ def evaluate_journey(
                 ]
                 normalized[tuple_id] = {
                     "channel_id": str(raw_spec.get("channel_id") or "").strip().lower(),
+                    "tuple_entry_count": int(raw_spec.get("tuple_entry_count") or 0),
+                    "tuple_unique": bool(raw_spec.get("tuple_unique")),
                     "required_host": str(raw_spec.get("required_host") or "").strip().lower(),
                     "required_proofs": required_proofs,
                     "expected_artifact_id": str(raw_spec.get("expected_artifact_id") or "").strip(),
@@ -1483,6 +1485,8 @@ def evaluate_journey(
         expected_external_proof_backlog_specs = {
             tuple_id: {
                 "channel_id": str(item.get("channel_id") or "").strip().lower(),
+                "tuple_entry_count": int(item.get("tuple_entry_count") or 0),
+                "tuple_unique": bool(item.get("tuple_unique")),
                 "required_host": str(item.get("required_host") or "").strip().lower(),
                 "required_proofs": sorted(
                     set(str(token or "").strip() for token in (item.get("required_proofs") or []) if str(token or "").strip())
