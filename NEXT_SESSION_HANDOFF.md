@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-8/9 Build Lab governed outputs now include source-hint tokens in publication/audit receipts
+
+- Trigger:
+  - milestone `8` requires explain/rule-environment receipts to stay explicit, and milestone `9` depends on portable artifact lineage that survives exchange/replay/publication audit.
+  - Build Lab outputs already carried lane/rule/runtime/explain tokens, but source-pack and house-rule hint posture was not encoded inside publication/audit receipt strings.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab output projection now derives a deterministic source-hint audit token from the active rule environment.
+    - governed output receipt fields now include source-hint token evidence:
+      - `PublicationSummary`
+      - `AuditSummary`
+      - `CompatibilitySummary`
+    - token format: `sources:<...>|house-rules:<...>`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves source-hint token inclusion in publication and audit summaries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `6e782fa1` (`feat(w4-8-9): stamp source-hint tokens into build output receipts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push remains blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-8 Build Lab handoffs now project source-linked rule-environment hints across account and signed-in home decision rails
 
 - Trigger:
@@ -104,7 +128,9 @@
       - `Master_index_endpoint_returns_data` now asserts presence of online-storage API fields.
   - canon sync:
     - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
     - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
     - milestone-18 SR6 successor row now cites explicit online-storage continuity projection evidence while keeping full authored-designer/storage UX closure open.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
