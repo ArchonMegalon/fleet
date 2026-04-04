@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-5 organizer-control search now fail-closes split plural aliases (`league controls`, `community controls`) across campaign prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-5 already covered compact organizer-control aliases (`leaguecontrols`, `communitycontrols`) in service logic and live proof, but split plural wording remained an uncovered retrieval seam.
+  - query tokenization handled split singular (`league/community control`) and compact plural, yet did not rewrite split plural (`league/community controls`) to governed event-control tokens.
+  - this left a natural-language drift window where operator queries using split plural wording could miss governed event-control packets.
+- Landed:
+  - patched service canonicalization:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - both now normalize split plural `league/community + controls` onto the same governed event-control lane as singular/control/ctrl aliases.
+  - patched service tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added split plural assertions for `league controls` and `community controls`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added API checks for `queryText=league%20controls` and `queryText=community%20controls`.
+      - added workspace route checks for `prepQuery=league%20controls` and `prepQuery=community%20controls`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for split plural aliases with route-preservation and non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded `queryText`, `prepQuery`, and Playwright marker assertions for split plural organizer-control variants.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`; one transient `MSB3026` copy-lock warning auto-retried by build and completed pass).
+- Current trusted state:
+  - milestone-5 organizer-control prep retrieval now fail-closes compact and split plural control wording across service canonicalization, API/workspace live audits, and browser journey proof.
+- Push status:
+  - `chummer.run-services`: local follow-on changes landed in this slice; commit/push not attempted in this step.
+  - `fleet`: handoff updated locally in this slice.
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.uiLocalizationReleaseGate.generatedAt` timestamps
 
 - Trigger:
