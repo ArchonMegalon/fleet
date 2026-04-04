@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-5 live audits now fail-close singular compact `leagueoperation` and `communityoperation` aliases across prep-library API and signed-in workspace prep journeys
+
+- Trigger:
+  - frontier milestone `5` already fail-closed compact/split/hyphen `league/community ops` and compact `league/community operations` aliases across prep-library matching and journey audits.
+  - singular compact `leagueoperation` and `communityoperation` aliases were covered in service-level token matching but still unproven in live API and signed-in browser journey evidence.
+  - this left a residual operator-language drift seam where singular compact `*operation` prep queries could regress without tripping closeout checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=leagueoperation` and `queryText=communityoperation` with non-empty governed packet assertions.
+    - added signed-in workspace route checks for `prepQuery=leagueoperation` and `prepQuery=communityoperation` with route/body proof and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertions for compact singular `leagueoperation` and `communityoperation` queries with encoded-route preservation and non-empty governed packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and Playwright marker assertions to lock new singular compact `queryText`/`prepQuery` coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --no-build --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - note: build-backed reruns of the final filter hit transient runtimeconfig file-lock collisions from concurrent local build activity in this environment; `--no-build` execution completed cleanly against the just-built binaries.
+- Current trusted state:
+  - milestone-5 live API and signed-in workspace prep journey audits now fail-close singular compact `league/community operation` aliases on the same governed event-control lane as existing compact/split/hyphen ops/control variants.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for `releaseProof.proofRoutes` query/fragment and dot-segment traversal
 
 - Trigger:
