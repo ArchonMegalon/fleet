@@ -403,6 +403,20 @@ journey_gates:
             - 'AdditionalTags: ["opposition", "packet"]'
             - 'AdditionalTags: ["opposition", "roster"]'
         - repo: chummer6-hub
+          path: Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs
+          must_contain:
+            - 'return "continuity_return";'
+            - '"sync drift",'
+            - '"out-of-sync",'
+            - '"safehouse",'
+            - '"cache stale",'
+        - repo: chummer6-hub
+          path: Chummer.Tests/GmOpsBoardServiceTests.cs
+          must_contain:
+            - "GetProjection_UnresolvedItemsTreatOfflineSafehouseTravelCacheStaleSignalsAsContinuityReturnDomain"
+            - "GetProjection_UnresolvedItemsTreatOfflineSyncDriftSignalsAsContinuityReturnDomainWithoutOpenKeyword"
+            - "ListPrepAssets_QuerySupportsGameMasterOpsShorthandAcrossWhitespaceAndPunctuation"
+        - repo: chummer6-hub
           path: tests/RunServicesVerification/OfflineSyncVerification.cs
           must_contain:
             - "offline_sync_snapshot_v1"

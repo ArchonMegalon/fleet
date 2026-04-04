@@ -1966,6 +1966,27 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'AdditionalTags: ["opposition", "packet"]' in hub_gm_ops_verify.get("must_contain", [])
     assert 'AdditionalTags: ["opposition", "roster"]' in hub_gm_ops_verify.get("must_contain", [])
 
+    hub_gm_ops_service = proof_for("chummer6-hub", "Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs")
+    assert 'return "continuity_return";' in hub_gm_ops_service.get("must_contain", [])
+    assert '"sync drift",' in hub_gm_ops_service.get("must_contain", [])
+    assert '"out-of-sync",' in hub_gm_ops_service.get("must_contain", [])
+    assert '"safehouse",' in hub_gm_ops_service.get("must_contain", [])
+    assert '"cache stale",' in hub_gm_ops_service.get("must_contain", [])
+
+    hub_gm_ops_tests = proof_for("chummer6-hub", "Chummer.Tests/GmOpsBoardServiceTests.cs")
+    assert (
+        "GetProjection_UnresolvedItemsTreatOfflineSafehouseTravelCacheStaleSignalsAsContinuityReturnDomain"
+        in hub_gm_ops_tests.get("must_contain", [])
+    )
+    assert (
+        "GetProjection_UnresolvedItemsTreatOfflineSyncDriftSignalsAsContinuityReturnDomainWithoutOpenKeyword"
+        in hub_gm_ops_tests.get("must_contain", [])
+    )
+    assert (
+        "ListPrepAssets_QuerySupportsGameMasterOpsShorthandAcrossWhitespaceAndPunctuation"
+        in hub_gm_ops_tests.get("must_contain", [])
+    )
+
     hub_offline_verify = proof_for("chummer6-hub", "tests/RunServicesVerification/OfflineSyncVerification.cs")
     assert "offline_sync_snapshot_v1" in hub_offline_verify.get("must_contain", [])
     assert (

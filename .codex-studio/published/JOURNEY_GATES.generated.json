@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:55:03Z",
+  "generated_at": "2026-04-04T18:59:32Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:54:38Z",
+      "at": "2026-04-04T18:56:50Z",
       "state": "fresh",
-      "age_seconds": 25
+      "age_seconds": 162
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 95
+      "age_seconds": 364
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 1770
+      "age_seconds": 2039
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 1770
+      "age_seconds": 2039
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-04T18:45:44Z",
+      "at": "2026-04-04T18:56:50Z",
       "state": "fresh",
-      "age_seconds": 559
+      "age_seconds": 162
     }
   },
   "journeys": [
@@ -356,7 +356,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T18:45:44Z",
+        "support_packets_generated_at": "2026-04-04T18:56:50Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -779,7 +779,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T18:45:44Z",
+        "support_packets_generated_at": "2026-04-04T18:56:50Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -892,6 +892,26 @@
               "EventType: \"heat.alert\"",
               "AdditionalTags: [\"opposition\", \"packet\"]",
               "AdditionalTags: [\"opposition\", \"roster\"]"
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs",
+            "must_contain": [
+              "return \"continuity_return\";",
+              "\"sync drift\",",
+              "\"out-of-sync\",",
+              "\"safehouse\",",
+              "\"cache stale\","
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Tests/GmOpsBoardServiceTests.cs",
+            "must_contain": [
+              "GetProjection_UnresolvedItemsTreatOfflineSafehouseTravelCacheStaleSignalsAsContinuityReturnDomain",
+              "GetProjection_UnresolvedItemsTreatOfflineSyncDriftSignalsAsContinuityReturnDomainWithoutOpenKeyword",
+              "ListPrepAssets_QuerySupportsGameMasterOpsShorthandAcrossWhitespaceAndPunctuation"
             ]
           },
           {
@@ -1084,7 +1104,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T18:45:44Z",
+        "support_packets_generated_at": "2026-04-04T18:56:50Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1195,7 +1215,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T18:45:44Z",
+        "support_packets_generated_at": "2026-04-04T18:56:50Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1311,7 +1331,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T18:45:44Z",
+        "support_packets_generated_at": "2026-04-04T18:56:50Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1404,7 +1424,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T18:45:44Z",
+        "support_packets_generated_at": "2026-04-04T18:56:50Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
