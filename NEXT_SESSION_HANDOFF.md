@@ -37926,3 +37926,12 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: handoff follow-up commit + push status for W4 gate hardening entry
+
+- Commits landed:
+  - `fleet`: `f5f5740` (`docs(handoff): record w4 build/explain gate hardening commit and blockers`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
