@@ -79,6 +79,15 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: follow-up on W2-18 online-storage receipt handoff commit (push status)
+
+- Commits landed:
+  - `fleet`: `2539e11` (`docs(handoff): record w2-18 online-storage receipt closure`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials, so fleet handoff commit remains local-only.
+
 ## 2026-04-04: milestone-18 online-storage successor lane now emits explicit continuity receipts and build-explain gate fail-closes on receipt markers
 
 - Trigger:
