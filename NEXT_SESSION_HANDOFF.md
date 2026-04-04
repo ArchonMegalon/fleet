@@ -26,6 +26,29 @@
   - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-3 executable proof now fail-closes screenshot tamper drift when visual screenshots are newer than their receipt
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary visual proof that cannot lie.
+  - aggregate executable gate already fail-closed stale/missing screenshots and screenshot files older than the visual familiarity receipt timestamp.
+  - it did not fail-close the inverse drift path (screenshots modified after receipt generation), which could let post-receipt screenshot tampering pass.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `visual_familiarity_screenshots_newer_than_receipt` evidence capture.
+    - fail-closes when required screenshot file mtimes are newer than visual familiarity receipt `generated_at` beyond configured skew tolerance.
+    - emits explicit reason: `Desktop visual familiarity screenshot evidence is newer than the visual familiarity receipt generation time: ...`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked new fail-close marker and evidence key in executable-gate script assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_requires_explicit_host_capability_blockers_when_startup_smoke_receipts_are_missing" --nologo -v minimal` -> PASS (`1 passed`).
+  - note: broader paired compliance filter remains red in this workspace due pre-existing script-lock expectation drift (`Release channel publishes Linux desktop media for head`) unrelated to this slice.
+- Current trusted state:
+  - milestone-3 visual proof now rejects both stale-before-receipt and post-receipt-mutated screenshot evidence; aggregate executable receipts fail honest when screenshot mtimes and visual receipt generation timestamp diverge in either direction.
+- Push status:
+  - `chummer6-ui`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes incomplete baseline golden journey coverage in `releaseProof.journeysPassed`
 
 - Trigger:
