@@ -118,6 +118,11 @@ def _infer_fallback_readiness_stage(
         mobile_local_release_proof = _load_json_file(published_dir / "MOBILE_LOCAL_RELEASE_PROOF.generated.json")
         if _is_public_deployment(deployment_row) and _proof_passed(mobile_local_release_proof):
             return "publicly_promoted"
+    elif project_id == "ui":
+        ui_flagship_release_gate = _load_json_file(published_dir / "UI_FLAGSHIP_RELEASE_GATE.generated.json")
+        ui_local_release_proof = _load_json_file(published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json")
+        if _is_public_deployment(deployment_row) and _proof_passed(ui_flagship_release_gate) and _proof_passed(ui_local_release_proof):
+            return "publicly_promoted"
     try:
         from admin import readiness as readiness_module
     except Exception:

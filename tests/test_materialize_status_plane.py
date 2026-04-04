@@ -625,6 +625,76 @@ deployment:
     assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
+def test_ui_fallback_stage_uses_flagship_release_gate_when_public(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "ui.yaml").write_text(
+        f"""
+id: ui
+enabled: true
+lifecycle: live
+path: {tmp_path / "ui"}
+deployment:
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_FLAGSHIP_RELEASE_GATE.generated.json").write_text(
+        json.dumps({"status": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "ui"
+    assert rows[0]["readiness"]["stage"] == "publicly_promoted"
+
+
+def test_ui_fallback_stage_stays_repo_local_when_flagship_gate_fails(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "ui" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "ui.yaml").write_text(
+        f"""
+id: ui
+enabled: true
+lifecycle: live
+path: {tmp_path / "ui"}
+deployment:
+  status: public
+  promotion_stage: promoted_preview
+  access_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_FLAGSHIP_RELEASE_GATE.generated.json").write_text(
+        json.dumps({"status": "fail"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "ui"
+    assert rows[0]["readiness"]["stage"] == "repo_local_complete"
+
+
 def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_path: Path) -> None:
     status_json = tmp_path / "admin_status.json"
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"
