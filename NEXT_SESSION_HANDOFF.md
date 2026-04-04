@@ -88,12 +88,10 @@
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
 - Commits landed:
   - `chummer6-media-factory`: `26201f5` (`feat(w4-9-16): retain exchange and portability lane evidence in creator packets`).
-  - `fleet`: `696973b` (`docs(handoff): record w4 exchange and portability evidence retention slice`), `695a14e` (`docs(handoff): append commit and push outcomes for w4 evidence retention slice`), `2c34fb9` (`docs(handoff): capture final fleet push attempt for w4 evidence retention`).
+  - `fleet`: `696973b` (`docs(handoff): record w4 exchange and portability evidence retention slice`) plus follow-up handoff metadata commits that captured push-attempt outcomes for this slice.
 - Push attempts:
   - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `9c01e8f..26201f5`).
-  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
-  - `cd /docker/fleet && git push` (after handoff outcome append commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
-  - `cd /docker/fleet && git push` (after final handoff push-attempt capture commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`) across repeated post-handoff retry attempts in this environment.
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
