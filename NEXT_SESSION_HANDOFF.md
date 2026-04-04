@@ -26,6 +26,32 @@
 - Exact blocker:
   - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
 
+## 2026-04-04: milestone-13 reference-lane governance now emits explicit stale posture when sourcebook snippet coverage is incomplete
+
+- Trigger:
+  - frontier milestone `13` requires governed rules-reference lanes to communicate explicit stale/missing posture instead of collapsing partial-source coverage into a generic success state.
+  - after sourcebook/snippet projection landed, `GetMasterIndex()` still marked `ReferenceLanePosture` as `governed` whenever any sourcebooks existed, even when one or more books had `no-snippets`.
+  - result: callers could not distinguish fully-backed reference lanes from partial/stale source coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added `ResolveReferenceLanePosture(...)` with deterministic posture mapping:
+      - `missing` when no sourcebooks are present
+      - `stale` when any sourcebook has `ReferencePosture == "no-snippets"`
+      - `governed` only when all sourcebooks have snippet matches.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - updated mixed-snippet master-index test to assert `ReferenceLanePosture == "stale"`.
+    - added `Master_index_reports_governed_reference_lane_when_all_sourcebooks_have_snippets` to lock full-coverage `governed` posture.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL due pre-existing `Chummer.Tests` compile/reference churn unrelated to this slice (missing `Chummer.Presentation`/desktop/blazor symbols in current baseline).
+- Commits landed:
+  - `chummer6-core`: `8db7ae0b` (`feat(w13): mark reference lane stale when snippet coverage is incomplete`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `ce59984f..8db7ae0b`).
+- Exact blocker:
+  - none for landed milestone-13 reference-lane logic; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in workspace baseline.
+
 ## 2026-04-04: milestone-14 xml/translator successor lane now exposes governed bridge posture and enabled-overlay counts in tool catalog responses
 
 - Trigger:
