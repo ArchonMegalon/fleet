@@ -1,3 +1,60 @@
+## 2026-04-04: milestone-2 release-proof route grammar now fail-closes percent-encoded and escaped path characters across hub parity and registry materialize/verify gates
+
+- Trigger:
+  - frontier milestone `2` route proof already fail-closed casing/query/fragment/dot-segment/duplicate drift, but still allowed percent-encoded (`%`) or escaped (`\\`) path characters inside `releaseProof.proofRoutes`.
+  - this left a route-intent ambiguity seam where encoded traversal-like tokens could bypass canonical visible route grammar while still passing shape checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - release-proof route normalization now fail-closes `%` and `\\` characters with explicit parity-audit failure messaging.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-marker lock coverage to require the new percent/escaped route fail-close guard text.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - release-proof route normalization now rejects percent-encoded or escaped path characters at projection/materialization time.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now enforces the same `%`/`\\` route guardrail for promoted channel payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving verifier fail-close for percent-encoded route entries (`/home/%2e%2e/access`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented `%`/`\\` prohibition in canonical `releaseProof.proofRoutes` grammar.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh` -> PASS.
+  - `bash -n /docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 release proof route grammar now rejects encoded or escaped path characters consistently across hub parity audit and registry materialize/verify gates, reducing canonical route-intent ambiguity for flagship proof routes.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
+## 2026-04-04: milestone-1/3 desktop tuple coverage state now fail-closes stale `coverage_incomplete/review_required` release-channel posture after tuple coverage is complete
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth and installer/proof truth to stay aligned by platform/head/rid/channel in both fail-open and fail-close directions.
+  - executable gate already required `rolloutState=coverage_incomplete` and `supportabilityState=review_required` when required desktop tuple coverage was incomplete.
+  - reverse drift remained possible: once tuple coverage became complete, release-channel state could stay on `coverage_incomplete/review_required` and still pass executable proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `release_channel_desktop_tuple_coverage_complete` evidence key.
+    - executable gate now fail-closes when `rolloutState` remains `coverage_incomplete` after required desktop tuple coverage is complete.
+    - executable gate now fail-closes when `supportabilityState` remains `review_required` after required desktop tuple coverage is complete.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - extended marker assertions for the new evidence key and reverse fail-close reason strings.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate marker assertions to lock the reverse state-alignment guard strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable tuple proof now fail-closes stale release-channel tuple-coverage state flags after coverage completion, keeping rollout/supportability posture synchronized with actual per-platform tuple truth.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 league/community operations shorthand now fail-closes compact and split `league ops` and `community ops` aliases across campaign prep retrieval, GM unresolved-domain triage, and live API/UI journey audits
 
 - Trigger:
