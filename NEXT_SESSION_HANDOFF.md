@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests promotedPlatformHeadRidTuples inventory drift fail-close
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary per-head proof that cannot lie when release-channel tuple inventories drift from promoted installer truth.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` already fail-closed `desktopTupleCoverage.promotedPlatformHeadRidTuples` inventory drift, but `scripts/ai/verify.sh` did not run an active mutation for this seam.
+  - without an active mutation, this fail-close branch could regress silently while verifier runs remained green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/verify.sh`:
+    - added a new fail-close mutation that tampers `desktopTupleCoverage.promotedPlatformHeadRidTuples` (`tampered-head:tampered-rid:windows`) and requires non-zero exit from `materialize-desktop-executable-exit-gate.sh`.
+    - added explicit marker assertion for:
+      - `Release channel desktopTupleCoverage promotedPlatformHeadRidTuples inventory does not match promoted installer tuples.`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Verify_entrypoint_runs_active_mutation_for_promoted_platform_head_rid_tuple_inventory_drift` to keep this mutation lane contractually enforced.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`20` tests on `net10.0`).
+- Commits landed:
+  - `chummer6-ui`: `2b4f5d87` (`fix(w1): mutation-test promoted tuple inventory drift in executable gate verify`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-2 registry verify lane now mutation-tests untranslated/override locale-summary alias drift and fixes minimum-override verifier mutation marker text
 
 - Trigger:
@@ -33314,6 +33337,33 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commits `d709779c` and `4e70cf76` remain local-only until auth is restored.
+
+## 2026-04-04: Fleet shard-scaling audit says keep the live wave at 3 shards for now; launcher now supports per-shard EA overrides and skips empty or duplicate shard frontiers
+
+- Trigger:
+  - operator asked whether a fourth shard is safe now and whether a fifth shard could run as an EA-only lane without creating overlap mess.
+  - current live frontier is still pinned to milestones `1,3,4,5,2`, so naive shard-count growth risks idle shards or cross-repo contention instead of net throughput.
+- Landed:
+  - patched `/docker/fleet/scripts/run_chummer_design_supervisor.sh`:
+    - added per-shard overrides for focus text, worker bin, worker lane, and worker model via:
+      - `CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS`
+      - `CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_BINS`
+      - `CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES`
+      - `CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_MODELS`
+    - launcher now derives each shard frontier before boot and skips shards whose frontier is empty.
+    - launcher also skips shards whose derived frontier duplicates a previously-started shard, preventing accidental duplicate loops.
+    - codexea stream/profile env now exports from supervisor env even when only a shard-local worker override uses `codexea`.
+  - patched `/docker/fleet/runtime.env.example`:
+    - documented the new per-shard override knobs and added a future EA-only fifth-shard example.
+- Verification:
+  - simulated 4-shard layout with a fleet/EA/product-governor shard using temp state roots:
+    - shard-4 derived `frontier_ids=[]`, so a fourth shard is currently idle under the pinned live wave.
+  - simulated 5-shard layout confirms milestone splitting is possible, but current active milestone pairs still share repos heavily:
+    - overlap matrix for active frontier `1,3,4,5,2` shows every pair shares at least one owner, with strongest overlap on `1/3` and `4/5`.
+  - `bash -n /docker/fleet/scripts/run_chummer_design_supervisor.sh` -> PASS.
+- Current trusted state:
+  - do not raise live `CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS` above `3` yet.
+  - a future EA-only fifth shard is now supported by launcher config, but it should wait until the active frontier widens beyond the tightly-coupled `1-5` tranche.
 
 ## 2026-04-04: milestone-1/3 flagship gate now includes explicit startup-smoke lifecycle receipt test coverage (`TryHandleAsync_writes_receipt_when_requested`) and closes b14 fail-honest regression
 
