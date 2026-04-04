@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 UI parity generator now fail-closes missing legacy tabs/workspace actions
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar workbench proof to fail closed when canonical legacy tab/action ids drop out of active catalogs.
+  - `chummer6-ui/scripts/generate-parity-checklist.sh` already fail-closed unacknowledged catalog-only drift, but it did not fail-close missing legacy tab/workspace-action ids, allowing silent under-coverage of legacy surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-parity-checklist.sh`:
+    - added `fail_on_missing_required_legacy_ids(...)`.
+    - fail-closed missing legacy tab ids and missing legacy workspace-action ids from catalog coverage.
+  - added `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/ParityChecklistComplianceTests.cs`:
+    - added `Parity_generator_fail_closes_missing_legacy_tabs_and_workspace_actions`.
+    - locks required fail-close markers in parity generator script.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Parity_generator_fail_closes_missing_legacy_tabs_and_workspace_actions|FullyQualifiedName~Runbook_supports_download_manifest_generation_mode|FullyQualifiedName~Legacy_ui_control_dialog_templates_cover_legacy_shell_controls" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+- Current trusted state:
+  - milestone-2 parity evidence in flagship UI now fail-closes both directions for tab/action coverage: unacknowledged catalog-only drift and missing legacy id regressions.
+  - legacy-familiar tab/workspace-action coverage cannot silently degrade while still producing a passing parity checklist artifact.
+- Push status:
+  - `chummer6-ui`: committed locally (`0fad2e53`); push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 return-loop synthesis now survives sparse run hydration when scene/objective projections arrive first
 
 - Trigger:
