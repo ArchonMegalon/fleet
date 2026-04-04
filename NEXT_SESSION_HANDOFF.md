@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for alias-only whitespace-padded `releaseProof.base_url` origins
+
+- Trigger:
+  - frontier milestone `2` parity audit resolves `releaseProof.baseUrl|base_url` aliases to one canonical origin contract and already fail-closed whitespace-padded `baseUrl` payloads.
+  - verify mutations did not explicitly execute the alias-only path (`baseUrl` absent, `base_url` present), leaving a regression seam where alias-only origin canonicalization could drift without script-lock coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that removes `releaseProof.baseUrl`, sets `releaseProof.base_url=" https://chummer.run"`, and asserts parity-audit rejection.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `VerifyEntrypointRunsUiParityAudit` script-lock assertions to require the new alias-only whitespace mutation marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now explicitly executes alias-only `releaseProof.base_url` whitespace fail-close).
+- Current trusted state:
+  - Hub verify now proves whitespace canonicalization fail-close through both release-proof base origin alias paths, not only camelCase `baseUrl`.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-5 organizer event-control lane now fail-closes compact `eventoperation` and `eventoperations` aliases across prep canonicalization and live API/UI journeys
 
 - Trigger:
