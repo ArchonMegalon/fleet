@@ -1,3 +1,13 @@
+## 2026-04-04: handoff second push retry for milestone-4/5/6 full mobile continuity+gm marker hardening slice
+
+- Commits pending push:
+  - `fleet`: `2555e5e` (`feat(w3-4-5-6): harden campaign gate mobile continuity gm proof markers`).
+  - `fleet`: `7d441d8` (`docs(handoff): record commits and push status for full mobile continuity marker slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-4/5/6 full mobile continuity+gm marker hardening slice
 
 - Commits landed:
