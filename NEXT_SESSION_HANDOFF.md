@@ -22,6 +22,8 @@
   - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected verifier/materializer alias-drift fail-close mutation runs for both newly-added locale-summary row seams).
 - Commits landed:
   - `chummer-hub-registry`: `1c5b1e4` (`fix(w1): mutation-test locale row alias drift fail-close seams`).
+  - `fleet`: `11dd2d4` (`docs(handoff): record w1 locale row alias drift mutation coverage`).
+  - `fleet`: `3ef43d7` (`docs(handoff): add push receipt and blocker for w1 locale alias slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6e81ed1..1c5b1e4`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
