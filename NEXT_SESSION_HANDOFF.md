@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-13/14 parity lane receipts now end-to-end visible in presentation API suite
+
+- Trigger:
+  - with milestone `13` and `14` moving from planned to executable, parity-lane evidence on `master-index` still needed test assertion parity in the presentation test surface.
+  - `chummer-complete/chummer-core-engine` already validated these fields, but `chummer-complete/chummer-presentation` API integration remained at legacy minimum checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/ApiIntegrationTests.cs`:
+    - expanded `Master_index_endpoint_returns_data` to assert the same parity lane receipt surface as core:
+      - sourcebook/reference lane posture and receipt
+      - settings/source-toggle/custom-data lane receipts
+      - translator lane posture/receipt and bridge posture
+      - SR6 successor lane posture plus supplement/designer/house-rule/online-storage coverage counters
+      - import-oracle lane posture/receipt plus legacy + adjacent source counters
+      - `sr6SuccessorLaneReceipt` and `importOracleLaneReceipt`
+      - first-sourcebook `referenceSnapshot` and `referenceSnapshotPosture` presence when sourcebooks are present
+- Next:
+  - continue validating the same parity-lane lane completeness in any remaining Chummer6 web/API surfaces that still expose `master-index` assertions.
+- Exact blocker:
+  - no repo-local blocker for this slice; the same Git push credential restriction remains for authenticated remote mirrors.
+
 ## 2026-04-04: milestone-9 Build Lab now exposes explicit replay/recap/run-module portability rails on core intake projection
 
 - Trigger:
@@ -25,7 +45,7 @@
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~WorkspaceServiceTests.Import_get_build_lab_projection_from_sr5_workspace" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered test execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in current baseline).
 - Commits landed:
   - `chummer6-core`: `ca6f8c20` (`feat(w4-9): project replay recap and run-module rails from build-lab intake`).
-  - `fleet`: `6286932` (`docs(handoff): record milestone-9 build-lab replay recap module rails`).
+  - `fleet`: `6286932` (`docs(handoff): record milestone-9 build-lab replay recap module rails`), `bae1dac` (`docs(handoff): append commit and push outcomes for milestone-9 rails`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `ca6f8c20`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
