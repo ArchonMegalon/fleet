@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid `releaseProof.baseUrl` scheme, non-origin path/query shape, and userinfo credentials
+
+- Trigger:
+  - parity audit already fail-closed invalid `releaseProof.baseUrl` grammar (non-http(s) schemes, non-origin path/query/fragment shape, and userinfo credentials), but Hub verify mutation coverage did not execute those branches.
+  - this left canonical release-origin grammar enforcement partially unproven in Hub’s end-to-end verify harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.baseUrl="ftp://chummer.run"` and asserted `audit-ui-parity.sh` fails for non-http(s) scheme.
+    - added mutation `releaseProof.baseUrl="https://chummer.run/home?preview=1"` and asserted `audit-ui-parity.sh` fails for non-origin path/query shape.
+    - added mutation `releaseProof.baseUrl="https://operator@chummer.run"` and asserted `audit-ui-parity.sh` fails for userinfo credentials.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for non-http(s) scheme, non-origin path/query shape, and userinfo-credential `releaseProof.baseUrl` mutations, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves all currently enforced release-origin grammar fail-close branches for nested `releaseProof.baseUrl` inside the same mutation lane as route/journey grammar and freshness checks.
+- Push status:
+  - `chummer6-hub`: committed (`f6e544a8`); push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes promoted desktop install-media artifacts missing/invalid explicit arch metadata
 
 - Trigger:
