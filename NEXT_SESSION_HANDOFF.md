@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `debriefed` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to stay one governed lane across canonical query rewrite, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand already fail-closed `debrief` / `debriefs` / `debriefing` / `debriefings`, but `debriefed` phrasing was outside canonical recap aliasing and live journey script-lock checks.
+  - this left a continuity drift seam where common table recap wording could miss governed prep packets or route unresolved GM signals outside `prep_library`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `debriefed` to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded recap token coverage to include `debriefed` for workspace prep matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats `debriefed` wording as governed `prep_library`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - widened continuity matching and unresolved-domain ranking coverage for `debriefed`.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added prep-library API/workspace/browser checks for compact `debriefed` continuity queries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: pending in this slice.
+  - `fleet`: pending in this slice.
+- Push attempts:
+  - pending in this slice.
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes unexpected per-locale domain keys in nested `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage`, with active verify mutation coverage
 
 - Trigger:
