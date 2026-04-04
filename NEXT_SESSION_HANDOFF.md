@@ -135,6 +135,41 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials, so push remains blocked.
 
+## 2026-04-04: milestone-8 Build Lab now carries explicit rule-environment before/after diff receipts on governed export payloads
+
+- Trigger:
+  - frontier milestone `8` requires explain receipts and rule-environment diffs wherever real decisions are made.
+  - Build Lab intake in `chummer6-core` already stamped rule-environment and explain receipt fields, but it did not stamp explicit before/after rule-environment diff receipts on the same governed export lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs`:
+    - Build Lab export payload generation now derives a deterministic rule-environment diff receipt (`status`, `before`, `after`, `summary`) from intake ruleset/settings posture.
+    - Build Lab governed payload now includes:
+      - `rule-environment-diff` (`before -> after (status)`)
+      - `rule-environment-diff-summary` (explicit operator-safe diff summary line)
+  - patched regression coverage:
+    - `/docker/chummercomplete/chummer-core-engine/Chummer.CoreEngine.Tests/Program.cs`
+      - `BuildLabWorkspaceProjectionFactoryProjectsIntakeState` now fail-proves both new diff receipt fields on governed export payloads.
+  - patched build baseline compile blocker discovered during this slice:
+    - `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs`
+      - changed `ImportOracleMissingSources` optional default from non-constant `Array.Empty<string>()` to nullable optional default `null` to unblock contract builds in the current workspace baseline.
+  - patched shared presentation contract in hosted run-services lane:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/CompatCore/Presentation/BuildLabWorkspaceContracts.cs`
+      - `BuildLabConceptIntakeProjection` now exposes optional `RuleEnvironmentDiff`.
+      - added `BuildLabRuleEnvironmentDiffProjection` record contract for parity with hosted Build Lab handoff surfaces.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Run.Contracts/Chummer.Run.Contracts.csproj -c Release -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Application/Chummer.Application.csproj -c Release -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence" -c Release -nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS.
+- Commits landed:
+  - `chummer6-core`: `a1acc0b1` (`feat(w4-8): stamp build-lab rule-environment diff receipts on export rails`).
+  - `chummer6-hub`/`chummer.run-services`: `f0665353` (`feat(w4-8): add build-lab rule-environment diff projection contract`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-core-engine && git push` -> PASS (`fleet/core` updated to `a1acc0b1`).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local implementation blocker for this milestone-8 diff-receipt slice; remote push for `chummer.run-services` remains blocked by missing GitHub HTTPS credentials in this environment.
+
 ## 2026-04-04: follow-up on W1 release-proof/publish-state install-gate hardening (handoff commit + push status)
 
 - Commits landed:
