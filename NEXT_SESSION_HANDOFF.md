@@ -1,3 +1,47 @@
+## 2026-04-04: milestone-9/16 interop export now auto-pins session-bound portability receipts when continuity evidence is unambiguous
+
+- Trigger:
+  - frontier milestones `9` and `16` require portable dossier/campaign exchange to preserve lineage and trust proof without forcing users into avoidable warning-only receipts when the exported package already carries one clear session continuity spine.
+  - `InteropExportService` treated all campaign-scope exports (`sessionId` omitted) as warning-state (`session-binding-required-for-replace`) even when exported assets were already single-session scoped.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Interop/InteropExportService.cs`:
+    - added session-binding resolution that infers a pinned session only when:
+      - no explicit request session is provided,
+      - exported assets converge on one session id, and
+      - session-evidence asset kinds (`Session`/`Encounter`/`Prep`) are present.
+    - campaign exports now auto-promote to `chummer.portable-campaign-session.v1` + `compatible` when inferred binding is valid.
+    - provenance pointers now include explicit `session` continuity pointers when available.
+    - compatibility notes now emit `session-binding-inferred` for inferred bindings while preserving `session-binding-required-for-replace` when binding remains unpinned.
+  - added `/docker/chummercomplete/chummer6-hub/Chummer.Tests/InteropExportServiceTests.cs`:
+    - `Export_campaign_scope_infers_session_binding_from_session_assets`.
+    - `Export_character_only_campaign_scope_keeps_unpinned_session_warning`.
+  - patched canonical and Fleet mirror journey-gate contracts:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `build_explain_publish` now fail-closes on inferred-session portability markers in both service and test sources.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~InteropExportServiceTests" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`2 passed` on `net10.0` and `net10.0-windows`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() ... PY` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - readiness check:
+    - `JOURNEY_GATES.generated.json`: `build_explain_publish.state=ready` with `warning_reasons=[]` and `blocking_reasons=[]`.
+- Commits landed:
+  - `chummer6-hub`: `c4775227` (`feat(w4-9-16): infer session-bound portability receipts from export evidence`).
+  - `chummer6-design`: `f2f032e` (`feat(w4-9-16): fail-close inferred session portability exchange proofs`).
+  - `fleet`: `b032342` (`feat(w4-9-16): gate inferred session-bound exchange portability proofs`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4/5 continuity-return cues are now first-class unresolved signals in GM ops board prioritization
 
 - Trigger:
