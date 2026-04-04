@@ -1,51 +1,51 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:12:19Z",
+  "generated_at": "2026-04-04T17:14:27Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
     "ready_count": 0,
-    "warning_count": 0,
-    "blocked_count": 6,
+    "warning_count": 2,
+    "blocked_count": 4,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:08:51Z",
+      "at": "2026-04-04T17:14:12Z",
       "state": "fresh",
-      "age_seconds": 208
+      "age_seconds": 15
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-04T16:40:25Z",
+      "at": "2026-04-04T17:14:12Z",
       "state": "fresh",
-      "age_seconds": 1914
+      "age_seconds": 15
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-03T15:29:59Z",
       "state": "fresh",
-      "age_seconds": 92540
+      "age_seconds": 92668
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-03T15:29:59Z",
       "state": "fresh",
-      "age_seconds": 92540
+      "age_seconds": 92668
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:01:12Z",
       "state": "fresh",
-      "age_seconds": 667
+      "age_seconds": 795
     }
   },
   "journeys": [
@@ -56,10 +56,13 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blocking_reasons": [
-        "status-plane project inventory is empty; cannot evaluate required project posture gates.",
+        "hub-registry is at pre_repo_local_complete below minimum stage boundary_pure.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'."
       ],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-ui",
         "chummer6-hub",
@@ -185,7 +188,7 @@
       },
       "signals": {
         "blocking_reason_count": 2,
-        "warning_reason_count": 0,
+        "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -200,9 +203,13 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blocking_reasons": [
-        "status-plane project inventory is empty; cannot evaluate required project posture gates."
+        "media-factory is at pre_repo_local_complete below minimum stage boundary_pure."
       ],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "core is at pre_repo_local_complete below target stage boundary_pure.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted.",
+        "hub is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-core",
         "chummer6-ui",
@@ -331,7 +338,7 @@
       },
       "signals": {
         "blocking_reason_count": 1,
-        "warning_reason_count": 0,
+        "warning_reason_count": 3,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -343,12 +350,14 @@
       "id": "campaign_session_recover_recap",
       "title": "Campaign, session, recover, recap",
       "user_promise": "A table can prepare, run, reconnect, recover, and return without rebuilding campaign truth from memory.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blocking_reasons": [
-        "status-plane project inventory is empty; cannot evaluate required project posture gates."
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "mobile is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
       ],
-      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-mobile",
@@ -437,8 +446,8 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 1,
-        "warning_reason_count": 0,
+        "blocking_reason_count": 0,
+        "warning_reason_count": 3,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -450,12 +459,14 @@
       "id": "recover_from_sync_conflict",
       "title": "Recover from sync conflict",
       "user_promise": "Conflict and drift remain visible, branchable, and repairable instead of collapsing into silent last-write-wins.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blocking_reasons": [
-        "status-plane project inventory is empty; cannot evaluate required project posture gates."
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
+      "warning_reasons": [
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "mobile is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
       ],
-      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-mobile",
@@ -538,8 +549,8 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 1,
-        "warning_reason_count": 0,
+        "blocking_reason_count": 0,
+        "warning_reason_count": 3,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -554,9 +565,12 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blocking_reasons": [
-        "status-plane project inventory is empty; cannot evaluate required project posture gates."
+        "hub-registry is at pre_repo_local_complete below minimum stage boundary_pure."
       ],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "hub is at pre_repo_local_complete below target stage publicly_promoted.",
+        "ui is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-hub",
         "chummer6-ui",
@@ -644,7 +658,7 @@
       },
       "signals": {
         "blocking_reason_count": 1,
-        "warning_reason_count": 0,
+        "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -659,9 +673,11 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blocking_reasons": [
-        "status-plane project inventory is empty; cannot evaluate required project posture gates."
+        "fleet is at pre_repo_local_complete below minimum stage package_canonical."
       ],
-      "warning_reasons": [],
+      "warning_reasons": [
+        "hub is at pre_repo_local_complete below target stage publicly_promoted."
+      ],
       "owner_repos": [
         "chummer6-hub",
         "fleet",
@@ -727,7 +743,7 @@
       },
       "signals": {
         "blocking_reason_count": 1,
-        "warning_reason_count": 0,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,

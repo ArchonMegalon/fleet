@@ -90,6 +90,36 @@
 - Exact blocker:
   - no product blocker for the milestone-14 translator projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
 
+## 2026-04-04: status-plane materialization now self-heals empty project inventory via project-config fallback
+
+- Trigger:
+  - W1 journey gates were blocked by `status-plane project inventory is empty` because live `deploy.sh admin-status` was unavailable in this environment and the default status snapshot also carried `projects: []`.
+  - this prevented posture checks from running against real project IDs and buried the real blocking work behind control-plane inventory loss.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_status_plane.py`:
+    - when live admin status cannot be fetched, materialization now falls back to the default snapshot if present instead of hard-failing immediately.
+    - when admin/snapshot project inventory is empty, status-plane now hydrates project rows from `/docker/fleet/config/projects/*.yaml` (excluding disabled configs) with deterministic baseline readiness/deployment fields.
+    - recomputes `readiness_summary.counts` from synthesized project readiness stages so status-plane stage inventory is internally coherent.
+  - patched `/docker/fleet/tests/test_materialize_status_plane.py`:
+    - added `test_materialize_status_plane_hydrates_projects_from_config_when_status_snapshot_is_empty`.
+    - fail-proves empty snapshot input now yields real project IDs (`ui`, `hub`, `hub-registry`) and non-zero readiness counts.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - W1 install journey blockers now resolve to actionable gates:
+      - `hub-registry` below minimum stage `boundary_pure`
+      - desktop executable gate proof status mismatch (`status != pass`)
+- Verification:
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_status_plane.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - pending local commit in this slice.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - full pytest execution remains unavailable in this environment because `pytest` is not installed.
+
 ## 2026-04-04: journey-gate project posture checks now fail-close honestly when status-plane project inventory is empty
 
 - Trigger:

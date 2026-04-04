@@ -279,6 +279,71 @@ def test_materialize_status_plane_can_emit_snapshot_json_for_verification(tmp_pa
     assert snapshot_payload["public_status"]["generated_at"] == "2026-03-23T00:00:00Z"
 
 
+def test_materialize_status_plane_hydrates_projects_from_config_when_status_snapshot_is_empty(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-03-23T00:00:00Z",
+  "public_status": {
+    "generated_at": "2026-03-23T00:00:00Z",
+    "deployment_posture": {
+      "promotion_stage": "protected_preview",
+      "access_posture": "protected_preview"
+    },
+    "readiness_summary": {
+      "counts": {
+        "pre_repo_local_complete": 0,
+        "repo_local_complete": 0,
+        "package_canonical": 0,
+        "boundary_pure": 0,
+        "publicly_promoted": 0
+      },
+      "warning_count": 0,
+      "final_claim_ready": 0
+    },
+    "runtime_healing": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "summary": {
+        "alert_state": "healthy"
+      },
+      "services": []
+    }
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_script_env(tmp_path),
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    ids = {str(item.get("id") or "").strip() for item in payload.get("projects") or []}
+    assert "ui" in ids
+    assert "hub" in ids
+    assert "hub-registry" in ids
+    assert payload["readiness_summary"]["counts"]["pre_repo_local_complete"] >= 3
+
+
 def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_path: Path) -> None:
     status_json = tmp_path / "admin_status.json"
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"

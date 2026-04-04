@@ -1,271 +1,118 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-03-31T14:34:22Z'
-source_public_status_generated_at: '2026-03-31T14:34:21Z'
+generated_at: '2026-04-04T17:14:12Z'
+source_public_status_generated_at: '2026-04-04T00:00:00Z'
+mission_snapshot: {}
+queue_forecast: {}
+capacity_forecast: {}
+blocker_forecast: {}
 deployment_posture:
-  operator_auth_required: true
-  login_path: /admin/login
-  dashboard_path: /
-  mission_bridge_path: /
-  ops_path: /ops/
-  command_deck_path: /admin
-  explorer_path: /admin/details
-  studio_path: /studio
-  public_target_count: 11
-  public_targets:
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run
-    display: Public Chummer portal is live at chummer.run as a promoted preview release
-      shell for the split heads.
-    surface: public portal shell
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run/hub/
-    display: hub
-    surface: hosted hub head
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run/blazor/
-    display: workbench
-    surface: browser workbench preview
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run/session
-    display: play
-    surface: player and GM shell preview
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: chummer-vnext
-    target_url: https://chummer.run/coach/
-    display: coach
-    surface: coach preview
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: group
-    scope_id: control-plane
-    target_url: http://127.0.0.1:18090
-    display: Fleet control-plane services and the governed EA runtime substrate are
-      internal-only operator surfaces.
-    surface: local operator dashboard
-    status: internal
-    promotion_stage: internal
-    release_gate: ''
-  - scope_type: group
-    scope_id: control-plane
-    target_url: http://127.0.0.1:18090/admin
-    display: admin
-    surface: local operator admin
-    status: internal
-    promotion_stage: internal
-    release_gate: ''
-  - scope_type: group
-    scope_id: control-plane
-    target_url: http://127.0.0.1:18090/studio
-    display: studio
-    surface: local fleet studio
-    status: internal
-    promotion_stage: internal
-    release_gate: ''
-  - scope_type: project
-    scope_id: ui
-    target_url: https://chummer.run/blazor/
-    display: Public browser workbench is live at /blazor/ on chummer.run as a promoted
-      preview deployment.
-    surface: browser workbench on the public Chummer portal
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: project
-    scope_id: hub
-    target_url: https://chummer.run/hub/
-    display: Public hub is live at /hub/ on chummer.run as a promoted preview deployment
-      for account-aware continuity, support closure, and coordination.
-    surface: hosted hub on the public Chummer portal
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
-  - scope_type: project
-    scope_id: mobile
-    target_url: https://chummer.run/session
-    display: Public session shell is live at /session/ on chummer.run as a promoted
-      preview deployment with rejoin and resume guarantees.
-    surface: play shell on the public Chummer portal
-    status: public
-    promotion_stage: promoted_preview
-    release_gate: ''
+  promotion_stage: protected_preview
+  access_posture: protected_preview
 readiness_summary:
   counts:
-    pre_repo_local_complete: 2
-    repo_local_complete: 1
+    pre_repo_local_complete: 11
+    repo_local_complete: 0
     package_canonical: 0
-    boundary_pure: 5
-    publicly_promoted: 3
-  warning_count: 1
-  final_claim_ready: 8
-dispatch_policy:
-  participant_dispatch_canary_count: 2
-  participant_dispatch_canaries:
-  - project_id: core
-    review_mode: github
-    eligible_task_classes:
-    - bounded_fix
-    - multi_file_impl
-    landing_lane: jury
-    require_jury_before_land: true
-    participant_first_dispatch: true
-  - project_id: hub
-    review_mode: github
-    eligible_task_classes:
-    - bounded_fix
-    - multi_file_impl
-    landing_lane: jury
-    require_jury_before_land: true
-    participant_first_dispatch: true
-  operator_only_projects:
-  - fleet
+    boundary_pure: 0
+    publicly_promoted: 0
+  warning_count: 0
+  final_claim_ready: 0
+dispatch_policy: {}
+support_summary: {}
+publish_readiness: {}
 runtime_healing:
   enabled: true
   summary:
-    service_count: 2
-    degraded_service_count: 0
-    cooldown_active_count: 0
-    escalated_service_count: 0
-    recent_restart_count: 0
     alert_state: healthy
-    alert_reason: No runtime healing drift is currently recorded.
-    recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
-      healer history.
-    last_event_at: '2026-03-31T11:41:14Z'
-    last_event_service: fleet-controller
-    last_event_kind: escalation_required
-    last_event_detail: ''
-    last_recovered_service: ''
-    last_recovered_at: ''
-  services:
-  - service: fleet-controller
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
-    cooldown_active: false
-    cooldown_remaining_seconds: 0
-    last_restart_at: ''
-    last_result: manual_review_required
-    last_detail: ''
-    total_restarts: 357
-    restart_window_count: 0
-    escalation_threshold: 3
-  - service: fleet-dashboard
-    current_state: healthy
-    observed_status: healthy
-    consecutive_failures: 0
-    cooldown_active: false
-    cooldown_remaining_seconds: 0
-    last_restart_at: ''
-    last_result: ''
-    last_detail: ''
-    total_restarts: 0
-    restart_window_count: 0
-    escalation_threshold: 3
+  services: []
 projects:
 - id: core
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: boundary_pure
-  readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
   runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
-  readiness_terminal_stage: boundary_pure
+  readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
-  readiness_warning_count: 1
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  readiness_warning_count: 0
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: ea
   lifecycle: live
   runtime_status: dispatch_pending
   readiness_stage: pre_repo_local_complete
-  readiness_terminal_stage: boundary_pure
+  readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
-  runtime_status: queue_exhausted
-  readiness_stage: boundary_pure
-  readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
+  runtime_status: dispatch_pending
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: guide
   lifecycle: signoff_only
-  runtime_status: signoff_only
-  readiness_stage: repo_local_complete
-  readiness_terminal_stage: boundary_pure
+  runtime_status: dispatch_pending
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
-  runtime_status: healing
-  readiness_stage: publicly_promoted
+  runtime_status: dispatch_pending
+  readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
-  readiness_final_claim_allowed: true
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
   deployment_status: public
   deployment_promotion_stage: promoted_preview
   deployment_access_posture: public
 - id: hub-registry
-  lifecycle: scaffold
+  lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: boundary_pure
-  readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: media-factory
-  lifecycle: scaffold
+  lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: boundary_pure
-  readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
-  runtime_status: healing
-  readiness_stage: publicly_promoted
+  runtime_status: dispatch_pending
+  readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
-  readiness_final_claim_allowed: true
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
   deployment_status: public
   deployment_promotion_stage: promoted_preview
@@ -273,9 +120,9 @@ projects:
 - id: ui
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: publicly_promoted
+  readiness_stage: pre_repo_local_complete
   readiness_terminal_stage: publicly_promoted
-  readiness_final_claim_allowed: true
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
   deployment_status: public
   deployment_promotion_stage: promoted_preview
@@ -283,27 +130,11 @@ projects:
 - id: ui-kit
   lifecycle: scaffold
   runtime_status: dispatch_pending
-  readiness_stage: boundary_pure
-  readiness_terminal_stage: boundary_pure
-  readiness_final_claim_allowed: true
+  readiness_stage: pre_repo_local_complete
+  readiness_terminal_stage: publicly_promoted
+  readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: undeclared
-  deployment_promotion_stage: undeclared
+  deployment_status: ''
+  deployment_promotion_stage: ''
   deployment_access_posture: ''
-groups:
-- id: chummer-vnext
-  lifecycle: live
-  phase: audit_required
-  deployment_status: public
-  deployment_promotion_stage: promoted_preview
-  deployment_access_posture: ''
-  publicly_promoted: true
-  blocking_owner_projects: []
-- id: control-plane
-  lifecycle: live
-  phase: audit_required
-  deployment_status: internal
-  deployment_promotion_stage: internal
-  deployment_access_posture: ''
-  publicly_promoted: false
-  blocking_owner_projects: []
+groups: []

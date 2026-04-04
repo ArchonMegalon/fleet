@@ -6,7 +6,7 @@ import datetime as dt
 import json
 import sys
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 import yaml
 from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
@@ -19,6 +19,15 @@ from verify_status_plane_semantics import (
 )
 
 UTC = dt.timezone.utc
+ROOT = Path("/docker/fleet")
+PROJECT_CONFIG_DIR = ROOT / "config" / "projects"
+STAGE_ORDER = (
+    "pre_repo_local_complete",
+    "repo_local_complete",
+    "package_canonical",
+    "boundary_pure",
+    "publicly_promoted",
+)
 
 
 def iso_now() -> str:
@@ -47,6 +56,80 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _load_project_config_rows() -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not PROJECT_CONFIG_DIR.is_dir():
+        return rows
+    for path in sorted(PROJECT_CONFIG_DIR.glob("*.yaml")):
+        if path.name == "_index.yaml":
+            continue
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("enabled") is False:
+            continue
+        project_id = str(payload.get("id") or "").strip()
+        if not project_id:
+            continue
+        lifecycle = str(payload.get("lifecycle") or "dispatchable").strip() or "dispatchable"
+        deployment = dict(payload.get("deployment") or {})
+        rows.append(
+            {
+                "id": project_id,
+                "lifecycle": lifecycle,
+                "runtime_status": "dispatch_pending",
+                "readiness": {
+                    "stage": "pre_repo_local_complete",
+                    "terminal_stage": "publicly_promoted",
+                    "final_claim_allowed": False,
+                    "warning_count": 0,
+                },
+                "deployment": {
+                    "status": str(deployment.get("status") or ""),
+                    "promotion_stage": str(deployment.get("promotion_stage") or ""),
+                    "access_posture": str(deployment.get("access_posture") or deployment.get("visibility") or ""),
+                },
+            }
+        )
+    return rows
+
+
+def _recompute_readiness_counts(projects: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {key: 0 for key in STAGE_ORDER}
+    for project in projects:
+        readiness = dict(project.get("readiness") or {})
+        stage = str(readiness.get("stage") or "pre_repo_local_complete").strip() or "pre_repo_local_complete"
+        if stage not in counts:
+            stage = "pre_repo_local_complete"
+        counts[stage] += 1
+    return counts
+
+
+def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(admin_status or {})
+    projects = list(normalized.get("projects") or [])
+    if projects:
+        return normalized
+
+    fallback_projects = _load_project_config_rows()
+    if not fallback_projects:
+        return normalized
+
+    normalized["projects"] = fallback_projects
+    public_status = dict(normalized.get("public_status") or {})
+    readiness_summary = dict(public_status.get("readiness_summary") or {})
+    counts = _recompute_readiness_counts(fallback_projects)
+    readiness_summary["counts"] = counts
+    readiness_summary["warning_count"] = int(readiness_summary.get("warning_count") or 0)
+    readiness_summary["final_claim_ready"] = int(
+        readiness_summary.get("final_claim_ready")
+        or sum(1 for project in fallback_projects if bool(dict(project.get("readiness") or {}).get("final_claim_allowed")))
+    )
+    public_status["readiness_summary"] = readiness_summary
+    normalized["public_status"] = public_status
+    return normalized
+
+
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     output_path = Path(args.out).resolve()
@@ -56,8 +139,15 @@ def main(argv: List[str] | None = None) -> int:
     try:
         admin_status = load_admin_status(status_json_path, use_default_snapshot=False)
     except StatusPlaneDriftError as exc:
-        print(f"status-plane materialization failed: {exc}", file=sys.stderr)
-        return 1
+        if status_json_path is not None:
+            print(f"status-plane materialization failed: {exc}", file=sys.stderr)
+            return 1
+        try:
+            admin_status = load_admin_status(None, use_default_snapshot=True)
+        except StatusPlaneDriftError:
+            print(f"status-plane materialization failed: {exc}", file=sys.stderr)
+            return 1
+    admin_status = _ensure_project_inventory(admin_status)
     payload = build_expected_status_plane(admin_status)
     payload["generated_at"] = iso_now()
 
