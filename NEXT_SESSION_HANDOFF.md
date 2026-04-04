@@ -1,3 +1,39 @@
+## 2026-04-04: follow-up on W3 league/community `ctrls` shorthand script-lock closure (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `d287f9b3` (`fix(w3): script-lock league and community ctrls shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 GM operations lane now script-locks compact `league/community ctrls` shorthand across live API and workspace prep journeys
+
+- Trigger:
+  - canonical prep alias handling already supports `league/community ctrls`, but live audit and browser journey script-lock rails only covered `ctrl`, `ctl`, and `ctls` forms.
+  - this left a compact plural shorthand seam (`leaguectrls`, `communityctrls`) outside runtime and route proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added governed prep-library API checks for:
+      - `queryText=leaguectrls`
+      - `queryText=communityctrls`
+    - added workspace prep-query checks for:
+      - `prepQuery=leaguectrls`
+      - `prepQuery=communityctrls`
+    - each probe requires HTTP `200`, search-result markers, and non-empty governed packet presence.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added compact workspace search journey checks for:
+      - `prepQuery=leaguectrls`
+      - `prepQuery=communityctrls`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock marker assertions for the new API, workspace, and Playwright shorthand strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 league/community event-control shorthand now includes compact plural `ctrls` script-lock coverage across API and workspace prep flows.
+
 ## 2026-04-04: follow-up on W3 GM ops `gmctrls` shorthand script-lock closure (commit and push status)
 
 - Commits landed:
