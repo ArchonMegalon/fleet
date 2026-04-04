@@ -21,6 +21,8 @@
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer.run-services && git push` (post-handoff-refresh retry) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (post-handoff-refresh retry) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
