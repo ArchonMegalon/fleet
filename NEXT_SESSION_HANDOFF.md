@@ -82,6 +82,29 @@
   - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-1/3 linux desktop exit gate now fail-closes startup-smoke host provenance and artifactPath shelf drift
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged installer startup-smoke proof to be trustworthy per platform/head and fail honest on stale or ambiguous provenance.
+  - linux gate validation already enforced release-channel + digest + RID/channel/time checks, but did not fail-close missing/invalid startup-smoke host provenance (`hostClass`, `operatingSystem`) or receipt `artifactPath` drift from promoted shelf bytes.
+  - this left a drift path where linux startup-smoke receipts could pass despite host identity gaps or non-promoted artifact path provenance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added canonical host-platform helpers (`expected_host_class_platform_token`, `host_class_matches_platform`) and legacy-root detector (`path_uses_legacy_chummer5a_root`).
+    - added fail-close check when linux startup-smoke receipt path resolves under legacy `chummer5a`.
+    - added fail-close checks for missing `hostClass`, hostClass not matching Linux platform token, and missing `operatingSystem`.
+    - added fail-close checks for missing startup-smoke `artifactPath`, `artifactPath` resolving under legacy `chummer5a`, and promoted-shelf mismatch / unresolvable path when promoted-installer mode is required.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing` assertions to lock the new host provenance and artifactPath fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing" --nologo -v minimal` -> PASS (`1` test).
+- Current trusted state:
+  - linux packaged-binary exit proof now rejects startup-smoke receipts that omit host provenance or detach artifact path provenance from promoted shelf installer truth, improving milestone-1/3 per-platform proof integrity.
+- Push status:
+  - `chummer6-ui`: committed locally (`ea35f875`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: handoff updated locally in this slice; commit/push pending.
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes missing nested release-proof journey and route coverage in release-channel receipts
 
 - Trigger:
