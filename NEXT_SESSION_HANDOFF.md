@@ -115,6 +115,33 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 live audits now fail-close hyphen `season/event-operation(s)` aliases across prep-library API and signed-in workspace prep journeys
+
+- Trigger:
+  - milestone `5` live API/UI coverage already proved compact/split `season/event ops` and compact `season/event op`, but did not explicitly assert hyphen `season-operation`, `season-operations`, `event-operation`, or `event-operations`.
+  - service-level query matching handled these phrases by token normalization, yet missing live journey assertions left punctuation-form drift unproven in closeout evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=season-operation`, `queryText=season-operations`, `queryText=event-operation`, and `queryText=event-operations`.
+    - added signed-in workspace route checks for `prepQuery=season-operation`, `prepQuery=season-operations`, `prepQuery=event-operation`, and `prepQuery=event-operations` with route/body proof and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertions for the same four hyphen `season/event-operation(s)` variants with encoded-route preservation and non-empty governed packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded split/hyphen shorthand token-matching coverage to include `event operation(s)` and `season operation(s)` split + hyphen forms.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded GM prep asset query coverage for `event/season operation(s)` split + hyphen variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and Playwright marker assertions to lock new `queryText`/`prepQuery` and UI-route checks for hyphen `season/event-operation(s)` variants.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 live API and signed-in workspace prep journeys now fail-close hyphen `season/event-operation(s)` aliases alongside existing compact/split/hyphen `ops/control` and `league/community operation(s)` coverage.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 live audits now fail-close hyphen `league/community-operation(s)` aliases across prep-library API and signed-in workspace prep journeys
 
 - Trigger:
