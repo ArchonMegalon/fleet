@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-4/6 prep-library query lane now collapses travel/offline readiness + stale-cache shorthand to governed safehouse/travel continuity tokens
+
+- Trigger:
+  - frontier milestones `4` and `6` require campaign continuity, safehouse/travel, and offline readiness to read like one governed lane instead of brittle wording-specific search behavior.
+  - prep-library query matching is token-intersection based, so user phrasing like `offline readiness`, `travel cache`, `safehouse stale cache`, and compact forms (`offlinereadiness`, `travelcache`, `safehousereadiness`) could over-constrain lookup despite governed packets already carrying stable travel/offline/safehouse continuity nouns.
+  - this left a false-negative seam in campaign and GM prep discovery for milestone-6 continuity language while preserving no-shadow-model search posture.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias expansion for travel/offline readiness-cache shorthand (`offlinereadiness`, `travelreadiness`, `safehousereadiness`, `offlinecache`, `travelcache`, `safehousecache`, `stalecache`, `staleofflinecache`).
+    - added travel/offline scope-aware descriptor collapse so non-semantic modifiers (`readiness`, `ready`, `stale`, `cache`, plural/tense variants) stop over-constraining governed travel/offline query matches.
+    - normalized `sessionlog*` query variants into diary-lane semantics (`session` + `diary`) so continuity shorthand remains matchable without requiring literal `log` tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand`.
+    - fixed an adjacent syntax typo in existing test setup (`ClaimedDevices = ...`) so test compile can proceed.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ListPrepAssets_QueryCollapsesTravelOfflineReadinessShorthand`.
+    - hardened existing mutation-shorthand assertions with compact variants (`contactupdates`, `heatchanges`, `diaryupdates`, `sessionlogupdates`, and compact negative marker).
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Run.Contracts/Chummer.Run.Contracts.csproj --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Control.Contracts/Chummer.Control.Contracts.csproj --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Campaign.Contracts/Chummer.Campaign.Contracts.csproj --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal -p:BuildProjectReferences=false` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --no-build --filter "FullyQualifiedName~PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~ListPrepAssets_QueryCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~PrepLibraryQueryMatchingCollapsesContactHeatAndDiaryMutationShorthand|FullyQualifiedName~ListPrepAssets_QueryCollapsesContactHeatAndDiaryMutationShorthand" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --no-build --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL with one pre-existing non-slice failure: `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` (expected build-lab outputs not present).
+  - full project-reference build remains blocked by pre-existing unrelated compile errors in `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs` (`IReadOnlyList<PublicationSafeProjection>` uses `.Length` instead of `.Count`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` (to be created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - unrelated existing repo state currently prevents clean full `Chummer.Tests` build with project references (`CampaignSpineService` compile errors) and full class filter still carries one pre-existing failing build-lab handoff assertion.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests the remaining desktopTupleCoverage missing-key, string-list, and object-row shape fail-close guards
 
 - Trigger:
