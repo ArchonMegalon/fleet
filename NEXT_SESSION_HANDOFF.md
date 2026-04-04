@@ -1,3 +1,12 @@
+## 2026-04-04: follow-up on W1 trust-summary gate hardening (handoff commit + push status)
+
+- Commits landed:
+  - `fleet`: `99d5931` (`docs(handoff): record w1 trust-summary gate hardening commits and blockers`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: milestone-1 install journey now fail-closes on release-channel trust-surface text fields (non-empty known-issue/fix/rollout/support summaries)
 
 - Trigger:
