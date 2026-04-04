@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-6 mobile workspace-lite now marks cache-pressure continuity lanes as degraded (travel/offline/heat)
+
+- Trigger:
+  - frontier milestone `6` requires explicit continuity proof showing what is cached, stale, and still actionable offline across desktop/travel/mobile contexts.
+  - `chummer6-hub` now emits degraded travel/offline lane semantics when stale cache posture exists, but `chummer6-mobile` workspace-lite wording still surfaced stale posture as warning-only without explicit degraded lane language.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs`:
+    - cache-pressure travel posture now states bounded offline prefetch is `degraded`.
+    - continuity rail heat posture now states `degraded warning` mode.
+    - continuity rail heat label now states `degraded warning-only`.
+    - offline truth stale summary now states `degraded warning posture`.
+    - offline truth stale label now states `degraded warning-only`.
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - strengthened `VerifyCachePressureDecisionNoticeUsesSupportNextActionCopy` to fail-close on degraded wording in:
+      - `TravelPosture`
+      - `ContinuityRailSummary`
+      - `ContinuityRailLabels`
+      - `OfflineTruthSummary`
+      - `OfflineTruthLabels`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj -c Release` -> FAIL (`NU1101` missing private package feeds: `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, `Chummer.Ui.Kit` not resolvable from `nuget.org` in this environment).
+- Commits landed:
+  - `chummer6-mobile`: `af2c2c0` (`feat(w3-6): mark cache-pressure offline continuity as degraded in mobile shell`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for push.
+  - local environment is missing configured private package feeds required to restore Chummer contract/ui packages, so mobile regression checks cannot execute end-to-end here.
+
 ## 2026-04-04: follow-up on W1 trust-summary gate hardening (handoff commit + push status)
 
 - Commits landed:
@@ -39,6 +68,39 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for push.
   - `pytest` is unavailable in the current environment, so unit tests cannot run beyond compile/materialize checks.
+
+## 2026-04-04: milestone-10 support loop now fail-closes on per-packet install-truth contract completeness (build + channel + fix + recovery)
+
+- Trigger:
+  - frontier milestone `10` requires support to prove the exact build/channel/fix/recovery truth for each affected install, but journey gate `report_cluster_release_notify` only fail-closed on freshness plus update-route counts.
+  - that left a seam where support packets could be structurally incomplete per case while the trust/support journey still passed.
+- Landed:
+  - patched Fleet journey-gate evaluator `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added `require_support_install_truth_contract` gate support.
+    - fail-closes on missing per-packet install-truth contract fields when enabled:
+      - `install_truth_state`
+      - `install_diagnosis.registry_channel_id`
+      - `install_diagnosis.registry_release_version`
+      - `fix_confirmation.state`
+      - `recovery_path.action_id`
+      - `recovery_path.href`
+    - emits `signals.support_install_truth_contract_violation_count`.
+  - patched release-gate canon mirrors:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - both now enable `require_support_install_truth_contract: true` for `report_cluster_release_notify`.
+    - both now carry `last_reviewed: 2026-04-04`.
+  - patched Fleet regression coverage `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_blocks_when_support_packet_install_truth_contract_is_incomplete`.
+    - added `test_report_cluster_release_notify_requires_support_install_truth_contract`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="report_cluster_release_notify") | {state,signals,fleet_gate:.fleet_gate.require_support_install_truth_contract}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`fleet_gate: true`, violation count `0` on current packets).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_packet_install_truth_contract or update_required_cases_are_not_proven_routed_to_downloads or report_cluster_release_notify_requires_support_install_truth_contract"` -> FAIL (`No module named pytest`).
 
 ## 2026-04-04: milestone-1/3 install journey now fail-closes on desktop executable gate evidence scope (per-head receipt roots + zero blocking findings)
 
@@ -37550,3 +37612,33 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - pending.
 - Exact blocker:
   - packaged desktop executable gate in `chummer6-ui` still fails due missing promoted Windows/macOS installer+startup-smoke proof tuples; environment also lacks `pytest` for Python test execution.
+
+## 2026-04-04: milestone-17 import-oracle lane now emits explicit missing-source receipts and build/explain gate fail-closes on that evidence
+
+- Trigger:
+  - frontier milestone `17` requires bounded-loss/blocked import posture to be explicit, but core `master-index` responses exposed `ImportOracleMissingSources` in contracts without actually populating it.
+  - that left import-oracle parity without machine-readable missing-source evidence even when lane posture was stale or missing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - `ImportOracleSummary` now carries `MissingSources`.
+    - `GetMasterIndex()` now projects `ImportOracleMissingSources` for both empty and normal lanes.
+    - import-oracle receipt text now appends deterministic `Missing sources: ...` when coverage is partial/missing.
+    - missing-source derivation now explicitly tracks `chummer4`, `chummer5a`, `hero-lab-classic`, and `genesis-commlink6`.
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.Tests/ToolCatalogServiceTests.cs` and `/docker/chummercomplete/chummer-core-engine/Chummer.Tests/ApiIntegrationTests.cs`:
+    - fail-proves `importOracleMissingSources` presence in API surface.
+    - fail-proves governed lane emits an empty missing-source list and stale/missing lanes emit explicit missing-source tokens.
+  - patched design + Fleet release-gate mirrors:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - build/explain gate core proof now requires `response["importOracleMissingSources"]` and `ImportOracleMissingSources` marker in `XmlToolCatalogService`.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py` to pin the new gate markers.
+  - regenerated `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet build Chummer.Contracts/Chummer.Contracts.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "...ToolCatalogServiceTests..." -f net10.0 -nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL on pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace resolution failures in current workspace baseline).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+- Exact blocker:
+  - full `Chummer.Tests` execution remains blocked by pre-existing cross-project namespace/reference instability in this workspace baseline.
+  - GitHub HTTPS credentials remain unavailable for push from this environment.
