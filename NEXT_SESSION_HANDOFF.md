@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-4/5/6 hub prep-query lane now canonicalizes compact governed packet forms for prep/opposition/roster/event continuity
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign workspace continuity + GM operations + return/offline travel continuity to remain one governed prep-library search lane.
+  - compact packet-form query tokens (`preplibrarypacket`, `oppositionpackets`, `rostermovementpacket`, `eventcontrolpackets`) were not canonicalized end-to-end in hub alias normalization, leaving under-match risk for compact GM prep shorthand.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact packet-form alias rewrites:
+      - `preplibrarypacket(s)` -> `prep library packet`
+      - `oppositionpacket(s)` -> `opposition packet`
+      - `rostermovementpacket(s)` -> `roster movement packet`
+      - `eventcontrolpacket(s)` -> `event control packet`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - added `RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms` to fail-close matching for compact packet-form query tokens.
+  - Fleet generated artifacts refreshed:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms" -v minimal` -> PASS (`8 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`460 passed` on both target frameworks).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 25 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending (recorded after commit step below).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 support closure backlog projection slice
 
 - Commits landed:
