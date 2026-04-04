@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes when workflow-family proof is missing required audit tests
+
+- Trigger:
+  - frontier milestone `2` requires workflow-family familiarity proof to remain test-backed, not just receipt-backed.
+  - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` already emits `missing_required_workflow_family_audit_tests`, but Hub parity audit did not enforce it.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added fail-close check for non-empty `evidence.missing_required_workflow_family_audit_tests` in workflow receipt validation.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock the new workflow-family-audit-test marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 workflow familiarity proof now fails if required family-audit tests are missing, preventing status-only receipts from passing without full audit-test coverage.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 Windows+macOS exit-gate materializers now forbid legacy chummer5a proof-source fallback
 
 - Trigger:
