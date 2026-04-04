@@ -1,3 +1,14 @@
+## 2026-04-04: follow-up on `recaps`/`returns` continuity lock commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `a92fa7cd` (`fix(campaign-os): fail-close recaps and returns continuity aliases`).
+  - `fleet`: `1f8fad6` (`docs(handoff): record recaps returns continuity lock slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits are local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity aliases `recaps` and `returns` across canonicalization plus live API/UI journeys
 
 - Trigger:
