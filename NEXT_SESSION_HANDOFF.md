@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-1/3 release-channel artifact manifests now stamp and normalize per-artifact `generated_at` / `generatedAt` so executable gate no longer fails on missing Linux installer tuple timestamps
+
+- Trigger:
+  - frontier milestones `1` and `3` require release/install/startup-smoke receipts that cannot lie by partial timestamp metadata.
+  - executable-gate fail-close hardening now requires parse-valid per-artifact `generated_at` on promoted desktop install tuples and embedded platform gate artifacts.
+  - canonical and compatibility release-channel materialization paths were still emitting installer artifacts without `generated_at`/`generatedAt`, creating deterministic false-fail seams (Linux tuple evidence missing timestamp aliases) even when top-level channel timestamps were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - canonical payload generation now stamps each emitted desktop install artifact (`installer`/`dmg`/`pkg`/`msix`) with artifact-level `generated_at` and `generatedAt`, aligned to canonical release-channel generation time.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh`:
+    - `normalize_release_channel_artifact_identity_fields(...)` now fail-closes missing top-level `generated_at`/`generatedAt`.
+    - desktop install artifact normalization now enforces artifact-level `generated_at` and `generatedAt` equality with top-level release-channel timestamp, alongside existing channel/version alias normalization.
+  - patched script-lock coverage:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - added required marker assertions for new generated-at normalization/fail-close strings in `generate-releases-manifest.sh`.
+  - regenerated manifests:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Portal/downloads/releases.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_RELEASE_REQUIRE_STARTUP_SMOKE_PROOF=0 CHUMMER_RELEASE_REQUIRE_COMPLETE_DESKTOP_COVERAGE=0 bash scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL (expected remaining blockers for missing Windows/macOS promoted tuples/startup smoke and Linux startup-smoke alias conflicts), but previously failing timestamp reasons are now absent:
+    - `Release channel desktop install artifact(s) are missing generated_at/generatedAt` count -> `0`.
+    - `Linux gate embedded release_channel_linux_artifact is missing a valid generated_at/generatedAt.` count -> `0`.
+- Commits landed:
+  - `chummer-hub-registry`: `5e0c76c` (`fix(w1): stamp release-channel artifact generated_at aliases`).
+  - `chummer6-ui`: `2c742067` (`fix(w1): normalize artifact generated_at in release manifests`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - `chummer6-ui` remote push remains HTTPS-credential blocked in this environment, and milestone-1/3 still has real tuple-proof blockers (missing promoted Windows/macOS install media and startup-smoke receipts) that are external to this timestamp normalization slice.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `postgame` / `post-game` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
