@@ -1826,6 +1826,63 @@ def _active_shard_manifest_path(aggregate_root: Path) -> Path:
     return aggregate_root / "active_shards.json"
 
 
+def _manifest_text_list(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return _env_split_list(value)
+    if isinstance(value, Sequence):
+        return _text_list(value)
+    return []
+
+
+def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]:
+    manifest_path = _active_shard_manifest_path(aggregate_root)
+    if not manifest_path.exists():
+        return []
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rows = payload.get("active_shards") if isinstance(payload, dict) else []
+    entries: List[Dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, str):
+            token = row.strip()
+            if token.startswith("shard-"):
+                entries.append({"name": token})
+            continue
+        if not isinstance(row, dict):
+            continue
+        token = str(row.get("name") or "").strip()
+        if not token.startswith("shard-"):
+            continue
+        entry: Dict[str, Any] = {"name": token}
+        index = _coerce_int(row.get("index"), 0)
+        if index > 0:
+            entry["index"] = index
+        frontier_ids = [_coerce_int(value, 0) for value in (row.get("frontier_ids") or [])]
+        frontier_ids = [value for value in frontier_ids if value > 0]
+        if frontier_ids:
+            entry["frontier_ids"] = frontier_ids
+        for field in ("focus_owner", "account_alias", "focus_text"):
+            values = _manifest_text_list(row.get(field))
+            if values:
+                entry[field] = values
+        for field in ("worker_bin", "worker_lane", "worker_model", "generated_at", "topology_fingerprint"):
+            text = str(row.get(field) or "").strip()
+            if text:
+                entry[field] = text
+        entries.append(entry)
+    return entries
+
+
+def _active_shard_manifest_entry_map(aggregate_root: Path) -> Dict[str, Dict[str, Any]]:
+    return {
+        str(entry.get("name") or "").strip(): entry
+        for entry in _active_shard_manifest_entries(aggregate_root)
+        if str(entry.get("name") or "").strip()
+    }
+
+
 def _shard_index_from_root(aggregate_root: Path, shard_root: Path) -> Optional[int]:
     try:
         relative = shard_root.resolve().relative_to(aggregate_root.resolve())
@@ -1847,18 +1904,11 @@ def _shard_index_from_root(aggregate_root: Path, shard_root: Path) -> Optional[i
 def _configured_shard_roots(aggregate_root: Path) -> List[Path]:
     if not aggregate_root.exists() or not aggregate_root.is_dir():
         return []
-    manifest_path = _active_shard_manifest_path(aggregate_root)
-    if manifest_path.exists():
-        try:
-            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            payload = {}
-        rows = payload.get("active_shards") if isinstance(payload, dict) else []
+    entries = _active_shard_manifest_entries(aggregate_root)
+    if entries:
         configured_roots: List[Path] = []
-        for name in rows if isinstance(rows, list) else []:
-            token = str(name).strip()
-            if not token or not token.startswith("shard-"):
-                continue
+        for entry in entries:
+            token = str(entry.get("name") or "").strip()
             candidate = aggregate_root / token
             if candidate.exists() and candidate.is_dir():
                 configured_roots.append(candidate)
@@ -3688,6 +3738,24 @@ def _state_open_milestone_ids(state: Dict[str, Any]) -> List[Any]:
     return list(state.get("open_milestone_ids") or [])
 
 
+def _run_matches_manifest_frontier(run: Dict[str, Any], manifest_entry: Dict[str, Any]) -> bool:
+    current_frontier = {
+        _coerce_int(value, 0)
+        for value in (manifest_entry.get("frontier_ids") or [])
+        if _coerce_int(value, 0) > 0
+    }
+    if not current_frontier:
+        return True
+    run_frontier = {
+        _coerce_int(value, 0)
+        for value in (run.get("frontier_ids") or [])
+        if _coerce_int(value, 0) > 0
+    }
+    if not run_frontier:
+        return False
+    return run_frontier.issubset(current_frontier)
+
+
 def _ids_as_text(values: Iterable[Any]) -> List[str]:
     rows: List[str] = []
     for value in values:
@@ -3728,6 +3796,7 @@ def _effective_supervisor_state(
     base_state = _read_state(_state_payload_path(state_root))
     base_history = _read_history(_history_payload_path(state_root), limit=history_limit)
     shard_roots = _shard_state_roots(state_root)
+    manifest_entry_map = _active_shard_manifest_entry_map(state_root)
     if not shard_roots:
         return base_state, base_history
 
@@ -3742,8 +3811,11 @@ def _effective_supervisor_state(
     for shard_root in shard_roots:
         shard_state = _read_state(_state_payload_path(shard_root))
         shard_history = _read_history(_history_payload_path(shard_root), limit=history_limit)
+        manifest_entry = manifest_entry_map.get(shard_root.name, {})
         state_items.append({"name": shard_root.name, "root": shard_root, "state": shard_state})
         for run in shard_history:
+            if not _run_matches_manifest_frontier(dict(run), manifest_entry):
+                continue
             payload = dict(run)
             payload["_shard"] = shard_root.name
             combined_history.append(payload)
@@ -4636,7 +4708,8 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
     pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
     if pinned_frontier_ids:
         by_id = {item.id: item for item in open_milestones}
-        frontier = [by_id[value] for value in pinned_frontier_ids if value in by_id]
+        open_milestones = [by_id[value] for value in pinned_frontier_ids if value in by_id]
+        frontier = list(open_milestones)
         frontier_ids = [item.id for item in frontier]
         handoff_has_explicit_frontier = True
     focus_source = frontier if handoff_has_explicit_frontier else open_milestones
@@ -5175,13 +5248,15 @@ def _live_state_with_current_completion_audit(
 
 def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Dict[str, Any]]:
     aggregate_root = _aggregate_state_root(state_root)
+    manifest_entry_map = _active_shard_manifest_entry_map(aggregate_root)
     summaries: List[Dict[str, Any]] = []
     for shard_root in _shard_state_roots(aggregate_root):
         shard_state = _read_state(_state_payload_path(shard_root))
         shard_history = _read_history(_history_payload_path(shard_root), limit=ETA_HISTORY_LIMIT)
         shard_args = argparse.Namespace(**vars(args))
         shard_args.state_root = str(shard_root.resolve())
-        shard_index = _shard_index_from_root(aggregate_root, shard_root)
+        manifest_entry = manifest_entry_map.get(shard_root.name, {})
+        shard_index = _coerce_int(manifest_entry.get("index"), 0) or _shard_index_from_root(aggregate_root, shard_root)
         if shard_index is not None:
             group_index = shard_index - 1
             shard_args.account_alias = _env_split_list(
@@ -5252,6 +5327,31 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             )
             if shard_worker_model:
                 shard_args.worker_model = shard_worker_model
+        if manifest_entry:
+            shard_account_aliases = _manifest_text_list(manifest_entry.get("account_alias"))
+            if shard_account_aliases:
+                shard_args.account_alias = shard_account_aliases
+            shard_focus_owners = _manifest_text_list(manifest_entry.get("focus_owner"))
+            if shard_focus_owners:
+                shard_args.focus_owner = shard_focus_owners
+            shard_focus_texts = _manifest_text_list(manifest_entry.get("focus_text"))
+            if shard_focus_texts:
+                shard_args.focus_text = shard_focus_texts
+            manifest_frontier_ids = [
+                _coerce_int(value, 0) for value in (manifest_entry.get("frontier_ids") or [])
+            ]
+            manifest_frontier_ids = [value for value in manifest_frontier_ids if value > 0]
+            if manifest_frontier_ids:
+                shard_args.frontier_id = manifest_frontier_ids
+            manifest_worker_bin = str(manifest_entry.get("worker_bin") or "").strip()
+            if manifest_worker_bin:
+                shard_args.worker_bin = manifest_worker_bin
+            manifest_worker_lane = str(manifest_entry.get("worker_lane") or "").strip()
+            if manifest_worker_lane or "worker_lane" in manifest_entry:
+                shard_args.worker_lane = manifest_worker_lane
+            manifest_worker_model = str(manifest_entry.get("worker_model") or "").strip()
+            if manifest_worker_model:
+                shard_args.worker_model = manifest_worker_model
         updated_shard, _ = _live_state_with_current_completion_audit(
             shard_args,
             shard_root,
@@ -8989,7 +9089,14 @@ def main() -> None:
     if args.command == "status":
         state_root = Path(args.state_root).resolve()
         state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
-        state, history = _live_state_with_current_completion_audit(args, state_root, state, history)
+        include_shards = not state_root.name.startswith("shard-")
+        state, history = _live_state_with_current_completion_audit(
+            args,
+            state_root,
+            state,
+            history,
+            include_shards=include_shards,
+        )
         _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps(state, indent=2, sort_keys=True))
@@ -9006,7 +9113,14 @@ def main() -> None:
     if args.command == "trace":
         state_root = Path(args.state_root).resolve()
         state, history = _effective_supervisor_state(state_root, history_limit=max(0, int(args.limit)))
-        state, history = _live_state_with_current_completion_audit(args, state_root, state, history)
+        include_shards = not state_root.name.startswith("shard-")
+        state, history = _live_state_with_current_completion_audit(
+            args,
+            state_root,
+            state,
+            history,
+            include_shards=include_shards,
+        )
         _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps({"state": state, "history": history}, indent=2, sort_keys=True))
