@@ -1,3 +1,54 @@
+## 2026-04-04: follow-up on W3 `afteraction` prep-query continuity parity script-lock slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `7cf41904` (`fix(w3): canonicalize afteraction prep-query continuity aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 continuity lane now fail-closes `afteraction` recap wording across campaign workspace and GM ops prep search plus live script-lock journeys
+
+- Trigger:
+  - W3 milestones `4` and `5` require one continuity lane across aftermath, recap, downtime, and return loops.
+  - compact/split/hyphen `after action` phrasing (`afteraction`, `afteractions`, `after action`, `after-action`) was not canonicalized to recap semantics, leaving a query-miss seam for natural operator wording.
+- Landed:
+  - patched shared prep-query canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrites:
+      - `afteraction -> recap`
+      - `afteractions -> recap`
+      - split/hyphen `after action(s)` -> `recap`
+  - expanded campaign workspace continuity query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation` now asserts compact, split, and hyphen `after action(s)` matching.
+  - expanded GM ops prep query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsContinuityPluralShorthand` now asserts `queryText=afteraction`, `afteractions`, `after action(s)`, and `after-action(s)`.
+  - patched live API/workspace audit script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - added governed checks for:
+      - `queryText=afteraction`
+      - `queryText=afteractions`
+      - `queryText=after%20action`
+      - `queryText=after%20actions`
+      - `queryText=after-action`
+      - `queryText=after-actions`
+      - plus mirrored `prepQuery=` workspace checks.
+  - patched browser e2e journey script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added workspace prep search route, copy, and non-empty-result assertions for compact/split/hyphen `after action(s)` forms.
+  - patched verification script-lock markers:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - added required markers for new live-audit and Playwright `afteraction` query surfaces.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`; transient file-lock copy retries resolved automatically).
+- Current trusted state:
+  - campaign workspace and GM ops prep search now treats `after action` wording as canonical recap intent in the same shared alias utility used by existing continuity terms.
+  - live API/browser journey locks now fail-close this continuity wording so milestone-4/5 recap-return proof cannot silently regress.
+
 ## 2026-04-04: follow-up on W3 compact `eventctrls` prep-query parity script-lock slice (commit and push status)
 
 - Commits landed:
