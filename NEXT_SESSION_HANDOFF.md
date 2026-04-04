@@ -79,6 +79,51 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-14 XML bridge successor lane now emits explicit lane receipts and build-explain gate fail-closes on receipt markers
+
+- Trigger:
+  - frontier milestone `14` requires custom-data + XML bridge + translator successor posture to be explicit release evidence, not implied by posture-only fields.
+  - `master-index` exposed `XmlBridgePosture` and overlay counts, but lacked a deterministic aggregate XML-bridge receipt string and gate marker parity for build-explain proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now exposes `XmlBridgeLaneReceipt`.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added `BuildXmlBridgeLaneReceipt(...)` with deterministic missing/stale/governed messages.
+    - wired `XmlBridgeLaneReceipt` into both empty-catalog and populated `GetMasterIndex()` responses.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now fail-proves `response["xmlBridgeLaneReceipt"]` exists.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - added XML-bridge receipt assertions for missing/governed cases.
+    - added `Master_index_reports_stale_xml_bridge_when_enabled_data_overlay_has_no_xml_payloads`.
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - `build_explain_publish` now requires `response["xmlBridgeLaneReceipt"]` and `BuildXmlBridgeLaneReceipt`.
+  - patched Fleet mirror + parity wording:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py` to require both new markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Contracts/Chummer.Contracts.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_xml_bridge_when_enabled_data_overlay_exists|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_xml_bridge_when_enabled_data_overlay_has_no_xml_payloads|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `response["xmlBridgeLaneReceipt"]`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `BuildXmlBridgeLaneReceipt`).
+- Commits landed:
+  - `chummer6-core`: `874e6abb` (`feat(w2-14): add explicit xml bridge lane receipt`).
+  - `chummer6-design`: `7c27597` (`docs(w2-14): gate and mirror xml bridge lane receipts`).
+  - `fleet`: `ba64eec` (`feat(w2-14): fail-close build-explain on xml bridge receipts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `e886138e..874e6abb`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `chummer6-design` and `fleet` pushes.
+  - `Chummer.Tests` filtered execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: follow-up push status for W1 release-channel contract-identity closure
 
 - Commits landed:
