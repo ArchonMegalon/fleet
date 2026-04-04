@@ -158,7 +158,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         parts = [part.strip() for part in raw.split(":")]
         if len(parts) != 3:
             return "", "", ""
-        return parts[0], parts[1], parts[2]
+        return parts[0].lower(), parts[1].lower(), parts[2].lower()
 
     def _required_receipt_contract(head: str, rid: str, platform: str, required_host: str) -> Dict[str, Any]:
         host_value = required_host.strip().lower() or platform.strip().lower() or "required"
@@ -225,7 +225,9 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         if not proof_tokens:
             continue
         head, rid, platform = _parse_tuple_identity(tuple_id)
+        canonical_tuple_id = f"{head}:{rid}:{platform}" if head and rid and platform else ""
         tuple_identity_valid = bool(head and rid and platform)
+        tuple_identity_canonical = bool(tuple_identity_valid and tuple_id == canonical_tuple_id)
         required_host_matches_tuple_platform = not bool(required_host) or not tuple_identity_valid or required_host == platform
         effective_required_host = required_host or platform
         canonical_expected_artifact_id = f"{head}-{rid}-installer" if head and rid else ""
@@ -292,6 +294,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "rid": rid,
                 "platform": platform,
                 "tuple_identity_valid": tuple_identity_valid,
+                "tuple_identity_canonical": tuple_identity_canonical,
                 "required_host_matches_tuple_platform": required_host_matches_tuple_platform,
                 "expected_artifact_id": provided_expected_artifact_id or canonical_expected_artifact_id,
                 "expected_installer_file_name": provided_expected_installer_file_name or canonical_expected_installer_file_name,
@@ -324,15 +327,15 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
     deduped_by_tuple: Dict[str, Dict[str, Any]] = {}
     tuple_occurrence_counts: Dict[str, int] = {}
     for request in requests:
-        tuple_id = str(request.get("tuple_id") or "").strip()
-        if tuple_id:
-            tuple_occurrence_counts[tuple_id] = tuple_occurrence_counts.get(tuple_id, 0) + 1
-            deduped_by_tuple[tuple_id] = request
+        tuple_id_key = str(request.get("tuple_id") or "").strip().lower()
+        if tuple_id_key:
+            tuple_occurrence_counts[tuple_id_key] = tuple_occurrence_counts.get(tuple_id_key, 0) + 1
+            deduped_by_tuple[tuple_id_key] = request
     deduped_requests = [deduped_by_tuple[key] for key in sorted(deduped_by_tuple.keys())]
     for item in deduped_requests:
-        tuple_id = str(item.get("tuple_id") or "").strip()
-        item["tuple_entry_count"] = tuple_occurrence_counts.get(tuple_id, 0)
-        item["tuple_unique"] = tuple_occurrence_counts.get(tuple_id, 0) <= 1
+        tuple_id_key = str(item.get("tuple_id") or "").strip().lower()
+        item["tuple_entry_count"] = tuple_occurrence_counts.get(tuple_id_key, 0)
+        item["tuple_unique"] = tuple_occurrence_counts.get(tuple_id_key, 0) <= 1
     return deduped_requests
 
 
@@ -431,17 +434,26 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
         )
     request_tuple_ids = sorted(
         {
-            str(item.get("tuple_id") or "").strip()
+            str(item.get("tuple_id") or "").strip().lower()
             for item in requests
             if str(item.get("tuple_id") or "").strip()
         }
     )
     if isinstance(reported_missing_tuples, list):
+        raw_reported_missing_tuples = [
+            str(item or "").strip()
+            for item in reported_missing_tuples
+            if str(item or "").strip()
+        ]
+        if len(raw_reported_missing_tuples) != len(set(raw_reported_missing_tuples)):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' "
+                "must not contain duplicate entries."
+            )
         normalized_reported_missing_tuples = sorted(
             {
-                str(item or "").strip()
-                for item in reported_missing_tuples
-                if str(item or "").strip()
+                token.lower()
+                for token in raw_reported_missing_tuples
             }
         )
         if isinstance(reported_complete, bool):
@@ -521,6 +533,12 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
                 f"must be canonical 'head:rid:platform' but was {tuple_id!r}."
+            )
+            continue
+        if not bool(item.get("tuple_identity_canonical")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
+                f"must be lowercase canonical 'head:rid:platform' but was {tuple_id!r}."
             )
             continue
         if not bool(item.get("tuple_unique")):
