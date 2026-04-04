@@ -10,9 +10,11 @@
     - both paths now fall back to campaign name when run projection is not yet available.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `CampaignSpineNextSessionCarryForwardFallsBackToCampaignNameWhenLeadRunMissing`.
+    - added `CampaignSpineResolveWorkspaceNextSafeActionFallsBackToCampaignNameWhenLeadRunMissing`.
     - extended private reflection helper overload to invoke `BuildNextSessionCarryForward(...)` with explicit `leadRun`/`activeScene`/`leadObjective` fixtures.
+    - added private reflection helper for `ResolveWorkspaceNextSafeAction(...)` so sparse run-hydration regressions stay directly testable.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineNextSessionCarryForwardFallsBackToCampaignNameWhenLeadRunMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`315` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionFallsBackToCampaignNameWhenLeadRunMissing|FullyQualifiedName~CampaignSpineNextSessionCarryForwardFallsBackToCampaignNameWhenLeadRunMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`316` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-4/5 return-loop and GM continuity synthesis no longer crash on sparse scene/objective-first timing; packet summary/evidence now stay queryable through campaign-name fallback until run hydration catches up.
 - Push status:
