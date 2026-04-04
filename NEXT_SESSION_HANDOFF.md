@@ -81,6 +81,21 @@
 - Push status:
   - pending commit/push in this slice (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 GM unresolved triage now treats `debrief` and `postmortem` recap shorthand as governed `prep_library` domain signals
+
+- Trigger:
+  - after landing `afteractionreport` continuity shorthand coverage, GM unresolved-domain routing still special-cased `postsession`/`postrun` but not neighboring recap shorthand families already canonicalized in prep-library alias rewrite (`debrief*`, `postmortem*`).
+  - that left a routing seam where recap continuity shorthand could match governed prep packets in search yet still classify as `general` in unresolved triage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain prep-library keyword set now includes `debrief`, `debriefs`, `debriefing`, `debriefings`, `postmortem`, `postmortems`, plus split/hyphen `post mortem` and `post-mortem`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - widened unresolved-domain regression to include `debriefing` and `postmortem` events alongside `postsession`, `post-run`, and `after-action report`, proving governed prep-library ordering and classification.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `ae11dde7` (`fix(w3): route debrief and postmortem unresolved signals to prep library`).
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `afteractionreport` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
@@ -114,6 +129,8 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPostSessionPostRunAndAfterActionReportSignalsAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-4/5 aftermath continuity search now treats `afteractionreport` shorthand as a first-class governed recap lane across canonical query rewrite, GM unresolved routing, and signed-in API/workspace/browser proof rails.
+- Commits landed:
+  - `chummer.run-services`: `51c76cfc` (`fix(w3): normalize afteractionreport continuity prep aliases`).
 
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `postsession` / `post-run` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
