@@ -29,6 +29,17 @@
   - environment lacks GitHub HTTPS credentials for push.
   - local environment is missing configured private package feeds required to restore Chummer contract/ui packages, so mobile regression checks cannot execute end-to-end here.
 
+## 2026-04-04: follow-up on W1 install-gate contract-identity fail-close (handoff commit + push status)
+
+- Commits landed:
+  - `chummer6-design`: `0cddd57` (`docs(w1-1): gate install lane on release-channel contract identity`).
+  - `fleet`: `c7a82e6` (`feat(w1-1): fail-close install gate on release-channel contract identity`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so both commits are local-only.
+
 ## 2026-04-04: milestone-1 install journey now fail-closes on release-channel contract identity and fresh local-release proof recency
 
 - Trigger:
