@@ -48,6 +48,35 @@
   - `chummer6-hub`: local commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-4/5 campaign-memory prep retrieval now fail-closes canonical memory queries (`memory`, `archive`, `history`, `timeline`, `ledger`) across API and workspace route journeys
+
+- Trigger:
+  - frontier milestones `4` and `5` require long-lived campaign memory to stay a first-class governed lane across prep-library retrieval, not only on summary cards.
+  - campaign-memory token canon already included `memory`, `archive`, `history`, `timeline`, and `ledger`, but synthesized prep search terms only guaranteed `memory/history`, and live audit/browser closeout checks did not assert canonical memory-query retrieval paths.
+  - this left drift windows where canonical memory queries could regress without failing milestone-4/5 closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-memory prep packet search synthesis now explicitly includes canonical memory search terms `archive`, `timeline`, and `ledger` alongside `memory` and `history`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=memory`, `archive`, `history`, `timeline`, and `ledger` with non-empty governed packet assertions.
+    - added signed-in workspace route checks for `prepQuery=memory`, `archive`, `history`, `timeline`, and `ledger`, including search-result markers and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `memory`, `archive`, `history`, `timeline`, and `ledger`, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryIncludesCampaignMemoryPacketWhenWorkspaceMemoryExists` assertions to lock canonical memory search-term coverage.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock API/live-audit and Playwright marker coverage for all five canonical memory queries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 prep-library retrieval now fail-closes canonical campaign-memory query coverage across API, signed-in workspace route, and browser journey proof.
+  - long-lived campaign memory stays governed as one first-class retrieval lane (`memory/archive/history/timeline/ledger`) instead of card-only projection evidence.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes empty/placeholder release-proof journey and route evidence
 
 - Trigger:
