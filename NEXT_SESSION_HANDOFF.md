@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-5 `eventctrl` shorthand now fail-closes across GM unresolved triage and campaign event-control packet fallback
+
+- Trigger:
+  - milestone `5` requires event-control operator shorthand to stay governed consistently across packet synthesis, prep retrieval, and unresolved triage.
+  - `eventctrl` classification existed in service code, but explicit regression coverage was missing for unresolved GM board ordering and campaign event-control packet fallback.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatEventCtrlShorthandAsEventControlDomain`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketFallsBackToCompactEventCtrlSignalWhenEventControlWordIsAbbreviated`.
+    - added fixture helper `BuildWorkspaceWithCompactEventCtrlSignalOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GetProjection_UnresolvedItemsTreatEventCtrlShorthandAsEventControlDomain|FullyQualifiedName~EventControlPacketFallsBackToCompactEventCtrlSignalWhenEventControlWordIsAbbreviated|FullyQualifiedName~PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`367` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact `eventctrl` shorthand is now explicitly locked across all three milestone-5 lanes touched in this slice: campaign prep packet fallback, GM prep search, and GM unresolved-domain triage.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep search now recognizes compact `eventctrl` shorthand across campaign packets and GM assets
 
 - Trigger:
