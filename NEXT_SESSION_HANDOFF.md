@@ -174,6 +174,18 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `BuildSourceSelectionLaneReceipt` and `BuildCustomDataAuthoringLaneReceipt`).
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reads_xml_files_and_tolerates_invalid_documents|FullyQualifiedName~ToolCatalogServiceTests.Master_index_projects_sourcebook_metadata_and_rule_snippets_from_books_catalog|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered execution due existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in this baseline).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` -> FAIL (`No module named pytest` in this environment).
+- Commits landed:
+  - `chummer6-core`: `dc232127` (`feat(w2-13-14): add source-selection and custom-data-authoring lane receipts`).
+  - `chummer6-design`: `176edcf` (`docs(w2-13-14): name source-selection and custom-data-authoring receipts`).
+  - `fleet`: `9ca804c` (`docs(handoff): record milestone-13-14 receipt lane closeout slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `f459c011..dc232127`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `chummer6-design` and `fleet` pushes.
+  - `pytest` is not installed in this execution environment.
+  - `chummer6-core` filtered `Chummer.Tests` execution remains blocked by pre-existing cross-assembly compile/reference instability in this baseline.
 
 ## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
 
