@@ -1,3 +1,42 @@
+## 2026-04-04: milestone-7/8/9/16 build-handoff now carries explicit governed JSON exchange continuity alongside template/foundry/sheet/print lanes
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require exchange and export parity to stay explicit in the same Build Lab handoff surface where users make advancement, viewer, and publication decisions.
+  - handoff outputs already covered `character_template`, `foundry_exchange`, `sheet_viewer`, and `print_pdf_export`, but did not include an explicit governed JSON exchange lane.
+  - result: JSON-class exchange continuity could be implied but not directly surfaced as a first-class governed follow-through target.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added governed `json_exchange` output (`Governed JSON exchange export`) with explicit next-safe action `workflow.exchange.json`.
+    - expanded explain continuity wording so progression outcomes now state JSON exchange alongside template/foundry/sheet/print lanes.
+    - updated governed-output kind guard to reserve the new JSON lane under long carry-forward lists.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves `json_exchange` output presence and JSON exchange wording in progression outcomes.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `d94bbe40` (`feat(w4-9-16): add governed json exchange build-handoff lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
+
+## 2026-04-04: accepted shard receipts now fail closed on stale local-only push residue, and verified remote commit clauses self-heal on read
+
+- Trigger:
+  - widened 5-shard root status was mostly honest again, but one accepted shard-2 receipt still said `Fleet handoff commits are not yet pushed to remote` while `blocker: none`.
+  - the cited Fleet commits (`fbc5b1d`, `370495d`) were already reachable from `origin/main`, so the closeout text had gone stale after later push recovery / follow-through.
+  - that left a false-green seam: structured closeout presence alone was enough for acceptance, even when the closeout still claimed unpublished local commits.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_assess_worker_result(...)` now rejects structured closeouts that still report local-only push residue with `blocker: none`.
+    - `_heal_state_push_blockers(...)` now also repairs accepted receipts whose `shipped` / `remains` sections still mention local commits not yet pushed.
+    - verified local commit clauses such as `local Fleet commits ...` are rewritten to `Fleet commits ...` when those commits are already contained in a remote branch.
+    - stale `What remains: ... not yet pushed to remote` residue is stripped once the referenced commits are proven remote, otherwise the receipt is downgraded to a real blocker (`local commits are not yet pushed to remote`).
+- Verification:
+  - `python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `pytest -q tests/test_chummer_design_supervisor.py -k 'assess_worker_result_rejects_unpublished_remote_work or heal_state_push_blockers_repairs_verified_remote_push_residue or heal_state_push_blockers_repairs_recorded_missing_github_push_blocker or effective_supervisor_state_filters_history_that_does_not_match_current_manifest_pack or live_shard_summaries_ignore_stale_dirs_not_in_manifest'` -> PASS (`5 passed`).
+  - live `python3 scripts/chummer_design_supervisor.py status --json` now shows shard-2 `last_run.remains` without the stale `not yet pushed to remote` clause.
+
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now carries structured rule-environment before/after diff cues across account and signed-in home rails
 
 - Trigger:
