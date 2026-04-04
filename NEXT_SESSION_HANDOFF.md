@@ -98,12 +98,13 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice.
-  - pending local Fleet handoff refresh commit for this entry.
+  - `chummer6-hub` / `chummer.run-services`: `57aeaa46` (`feat(w4-7-8): expose conditional-effect rail in build handoffs`).
+  - `fleet`: `58fb16a` (`docs(handoff): record w4 conditional-state rail build handoff slice`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this repo-local milestone `7/8` conditional-state rail slice.
+  - none for this repo-local milestone `7/8` conditional-state rail slice; remote push is blocked in this environment by missing GitHub HTTPS credentials.
 
 ## 2026-04-04: milestone-10 support packets now prove update-required install truth and route recovery to downloads when a fix exists but reporter build is behind
 
