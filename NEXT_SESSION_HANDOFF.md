@@ -1,3 +1,29 @@
+## 2026-04-04: follow-up on localization finding-count integer script-lock commit and push status
+
+- Commits landed:
+  - `chummer6-hub`: `f25e96ab` (`fix(milestone-2): script-lock localization finding-count integer types`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 Hub verify now fail-closes numeric-string `blockingFindingsCount` and `translationBacklogFindingsCount`
+
+- Trigger:
+  - after strict `require_int(...)` enforcement landed, verify mutation coverage still did not execute integer-type rejection paths for localization finding-count fields.
+  - this left a remaining script-lock gap where these branches could regress without failing `scripts/ai/verify.sh`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation for `releaseProof.uiLocalizationReleaseGate.blockingFindingsCount = "0"` with explicit parity-audit rejection assertion.
+    - added mutation for `releaseProof.uiLocalizationReleaseGate.translationBacklogFindingsCount = "0"` with explicit parity-audit rejection assertion.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock assertions for both new reject markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (both new numeric-string mutations execute and fail-close).
+- Current trusted state:
+  - milestone-2 parity script-lock now exercises strict integer-type enforcement for all localization count fields (`defaultKeyCount`, `blockingFindingsCount`, `translationBacklogFindingsCount`).
+
 ## 2026-04-04: follow-up on milestone-3 external-host blocker truth commit and push status
 
 - Commits landed:
