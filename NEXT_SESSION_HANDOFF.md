@@ -237,6 +237,15 @@
 - Current trusted state:
   - campaign workspace and GM ops prep search now treat roster-movement wording as first-class canonical query vocabulary in the same shared contracts utility, reducing W3 misses for natural-language GM/organizer movement phrasing.
 
+## 2026-04-04: follow-up on fleet push-blocker status for Windows/macOS startup-smoke checks-alias fail-close parity slice
+
+- Commits landed:
+  - `fleet`: `5bd303c` (`docs(handoff): add fleet push-blocker status for windows/macos alias slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: follow-up on fleet handoff sync for Windows/macOS startup-smoke checks-alias fail-close parity slice
 
 - Commits landed:
