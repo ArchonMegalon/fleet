@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes macOS installer artifacts missing explicit head/rid tuple metadata
+
+- Trigger:
+  - frontier milestones `1` and `3` require installer truth alignment by promoted desktop tuple (`head/rid/platform/channel/version`) across Linux, Windows, and macOS.
+  - executable gate explicitly fail-closed missing `rid` tuple metadata for Windows/Linux desktop artifacts, but macOS artifacts missing explicit rid metadata had no parallel direct fail-close evidence path.
+  - this left an asymmetric tuple-truth seam where promoted macOS install artifacts could carry incomplete tuple metadata without the same explicit rejection posture as other platforms.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `macos_artifacts_missing_rid_by_head` evidence inventory.
+    - gate now emits explicit fail-close reason per affected macOS head when promoted macOS artifacts lack rid tuple metadata.
+    - gate now fail-closes when macOS desktop media exists but no artifact resolves to explicit head/rid tuple metadata.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded script-marker assertions for `macos_artifacts_missing_rid_by_head` and new explicit macOS head/rid tuple fail-close strings.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate marker assertions for new macOS missing-rid tuple evidence and fail-close reasons.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable tuple proof now enforces explicit head/rid tuple metadata parity for macOS artifacts on the same fail-close footing as Windows/Linux promoted desktop install media.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes desktop install-media artifact `version/releaseVersion` drift against promoted release version
 
 - Trigger:
