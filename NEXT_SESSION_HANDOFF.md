@@ -117,6 +117,41 @@
 - Exact blocker:
   - no blocker for landed milestone-18 posture projection path; focused `Chummer.Tests` execution remains blocked by pre-existing test-project compile/reference instability in current workspace baseline.
 
+## 2026-04-04: milestone-1/3 startup-smoke verifier now fail-closes alias drift and rid/arch contradictions in promoted installer receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/startup-smoke proof to stay non-contradictory per promoted tuple.
+  - registry startup-smoke verification already checked channel/head/platform/rid/digest presence and equality, but still allowed contradictory alias pairs (`headId` vs `head`, `channelId` vs `channel`) and accepted conflicting `rid` + `arch` metadata when `rid` was present.
+  - this left a false-green seam where contradictory startup-smoke receipts could pass if fallback field precedence happened to match expected tuple values.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - startup-smoke verification now fail-closes `headId/head` alias drift.
+    - startup-smoke verification now fail-closes `channelId/channel` alias drift.
+    - startup-smoke verification now fail-closes `rid` + `arch` contradictions when both are present.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation assertions for all three new fail-close paths (head alias drift, channel alias drift, rid-present arch drift).
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented startup-smoke alias-drift and rid/arch coherence fail-close contract posture.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - targeted verifier proofs on generated fixture roots:
+    - baseline fixture passes with allowed release-proof origins set:
+      - `CHUMMER_ALLOWED_RELEASE_PROOF_BASE_URLS='https://chummer.run,http://127.0.0.1:8091' python3 scripts/verify_public_release_channel.py /tmp/chummer-hub-registry-release-fixture` -> PASS.
+    - head alias drift fixture:
+      - `... verify_public_release_channel.py /tmp/chummer-hub-registry-release-fixture.alias-head` -> FAIL CLOSED (`startup-smoke receipt headId/head alias mismatch ...`).
+    - channel alias drift fixture:
+      - `... verify_public_release_channel.py /tmp/chummer-hub-registry-release-fixture.alias-channel` -> FAIL CLOSED (`startup-smoke receipt channelId/channel alias mismatch ...`).
+    - rid/arch contradiction fixture:
+      - `... verify_public_release_channel.py /tmp/chummer-hub-registry-release-fixture.rid-arch` -> FAIL CLOSED (`startup-smoke receipt arch mismatch ...`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> FAIL in current concurrent baseline at existing releases-compat tuple metadata mismatch path (`downloads[0] platform ... does not match file-name tuple platform ...`), outside this landed startup-smoke alias/rid-arch hardening slice.
+- Commits landed:
+  - `chummer-hub-registry`: `9a2c286` (`test(w1): fail-close startup-smoke alias and rid-arch drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `fd57ad5..9a2c286`).
+- Exact blocker:
+  - none for landed startup-smoke alias/rid-arch hardening; full `scripts/ai/verify.sh` end-to-end remains blocked by pre-existing concurrent compatibility-manifest tuple-metadata mismatch in current baseline.
+
 ## 2026-04-04: milestone-13 master-index now emits explicit snippet-coverage metrics for governed reference-lane stale posture
 
 - Trigger:
