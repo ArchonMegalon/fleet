@@ -909,7 +909,7 @@ def evaluate_journey(
                 counts[token] = counts.get(token, 0) + 1
             return {key: counts[key] for key in sorted(counts)}
 
-        def _normalized_summary_counter(value: Any) -> Dict[str, int]:
+        def _normalized_summary_counter(value: Any, *, field_name: str) -> Dict[str, int]:
             if not isinstance(value, dict):
                 return {}
             normalized: Dict[str, int] = {}
@@ -917,10 +917,12 @@ def evaluate_journey(
                 token = str(key or "").strip()
                 if not token:
                     continue
-                try:
-                    count = int(raw_count)
-                except (TypeError, ValueError):
+                if isinstance(raw_count, bool) or not isinstance(raw_count, int):
+                    support_packet_contract_violations.append(
+                        f"support packet summary {field_name} token '{token}' is missing integer count."
+                    )
                     continue
+                count = int(raw_count)
                 if count > 0:
                     normalized[token] = count
             return {key: normalized[key] for key in sorted(normalized)}
@@ -1463,7 +1465,8 @@ def evaluate_journey(
             ]
         )
         reported_external_proof_required_host_counts = _normalized_summary_counter(
-            support_summary.get("external_proof_required_host_counts")
+            support_summary.get("external_proof_required_host_counts"),
+            field_name="external_proof_required_host_counts",
         )
         if expected_external_proof_required_host_counts != reported_external_proof_required_host_counts:
             blocking_reasons.append(
@@ -1478,7 +1481,8 @@ def evaluate_journey(
             ]
         )
         reported_external_proof_required_tuple_counts = _normalized_summary_counter(
-            support_summary.get("external_proof_required_tuple_counts")
+            support_summary.get("external_proof_required_tuple_counts"),
+            field_name="external_proof_required_tuple_counts",
         )
         if expected_external_proof_required_tuple_counts != reported_external_proof_required_tuple_counts:
             blocking_reasons.append(
@@ -1496,7 +1500,8 @@ def evaluate_journey(
             [str(item.get("required_host") or "").strip().lower() for item in external_proof_requests]
         )
         reported_external_proof_backlog_host_counts = _normalized_summary_counter(
-            support_summary.get("unresolved_external_proof_request_host_counts")
+            support_summary.get("unresolved_external_proof_request_host_counts"),
+            field_name="unresolved_external_proof_request_host_counts",
         )
         if expected_external_proof_backlog_host_counts != reported_external_proof_backlog_host_counts:
             blocking_reasons.append(
@@ -1515,7 +1520,8 @@ def evaluate_journey(
             [str(item.get("tuple_id") or "").strip() for item in external_proof_requests]
         )
         reported_external_proof_backlog_tuple_counts = _normalized_summary_counter(
-            support_summary.get("unresolved_external_proof_request_tuple_counts")
+            support_summary.get("unresolved_external_proof_request_tuple_counts"),
+            field_name="unresolved_external_proof_request_tuple_counts",
         )
         if expected_external_proof_backlog_tuple_counts != reported_external_proof_backlog_tuple_counts:
             blocking_reasons.append(
