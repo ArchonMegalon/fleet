@@ -16,6 +16,7 @@
     - added compliance assertions locking canonical dual-head fail-close markers in executable, visual, and workflow scripts.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> visual/workflow PASS; executable gate expected FAIL (`exit 43`) on existing Windows/macOS tuple coverage blockers.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts" --nologo -v minimal` -> PASS (`4` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
 - Current trusted state:
   - milestone-3 per-head proof now fail-closes canonical dual-head drift across executable, visual familiarity, and workflow execution lanes.
