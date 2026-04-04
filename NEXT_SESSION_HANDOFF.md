@@ -27,6 +27,46 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 registry materialization now fail-closes future-dated startup-smoke receipts before installer promotion
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery proof that cannot lie.
+  - `chummer-hub-registry` already fail-closed future-dated promoted tuple receipts at verification time, but `materialize_public_release_channel.py` still clamped startup-smoke age with `max(0, ...)`.
+  - this left a pre-verification seam where implausibly future-dated startup-smoke receipts could be treated as fresh during promoted installer filtering.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added `STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 300`.
+    - added CLI flag `--startup-smoke-max-future-skew-seconds`.
+    - updated `load_startup_smoke_receipts(...)` to reject receipts more than the allowed future skew ahead of `now`.
+    - wired the new parameter through `canonical_payload(...)` startup-smoke receipt loading.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/test_materialize_public_release_channel.py`:
+    - `test_load_startup_smoke_receipts_rejects_future_dated_receipts_beyond_skew`
+    - `test_load_startup_smoke_receipts_accepts_future_dated_receipts_within_skew`
+  - rematerialized registry release artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - rematerialized Fleet control/frontier artifacts after registry refresh:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m pytest -q scripts/test_materialize_public_release_channel.py scripts/test_verify_public_release_channel.py` -> PASS (`6 passed`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/test_materialize_public_release_channel.py scripts/verify_public_release_channel.py scripts/test_verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest .codex-studio/published/releases.json --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json --runtime-bundles .codex-studio/published/RUNTIME_BUNDLE_HEADS.generated.json --proof .codex-studio/published/RELEASE_PROOF.generated.json --ui-localization-release-gate .codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (still external-proof-only blocked).
+- Commits landed:
+  - `chummer-hub-registry`: `099d791` (`fix(w1-1-3): reject future-dated startup smoke receipts in registry materializer`).
+- Push attempts:
+  - pending in this session.
+- Exact blocker:
+  - release closure still requires external host execution lane for promoted tuple proofs:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+
 ## 2026-04-04: milestone-1/3 registry verifier now fail-closes canonical desktop-head requirement drift in tuple coverage
 
 - Trigger:
