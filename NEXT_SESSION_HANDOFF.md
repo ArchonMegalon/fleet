@@ -23,6 +23,31 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes whitespace-padded tokens in required inventory arrays
+
+- Trigger:
+  - frontier milestones `1` and `3` require release/install proof contracts that cannot silently normalize token formatting drift.
+  - executable gate `normalize_required_token_list(...)` still accepted whitespace-padded tokens by trimming before validation, which allowed non-canonical ids in required inventory arrays to pass without explicit shape failure.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - hardened `normalize_required_token_list(...)` to fail-close string tokens with leading/trailing whitespace.
+    - added indexed failure reason:
+      - `contains a token with leading/trailing whitespace at index ...`
+    - added indexed evidence output:
+      - `<field>_whitespace_padded_indexes`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock whitespace-token fail-close markers and evidence key coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only.
+- Current trusted state:
+  - required token-array inventory values now require canonical no-padding token shape; whitespace format drift is explicit and fail-closed.
+  - remaining milestone-1/3 blockers in this workspace remain external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed release-channel identity/state scalar fields and channel alias drift
 
 - Trigger:
