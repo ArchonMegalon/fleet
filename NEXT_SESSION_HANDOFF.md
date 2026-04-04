@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-2 registry verify lane now mutation-tests locale-summary minimum-override and legacy-data-xml alias drift fail-close in verifier and materializer
+
+- Trigger:
+  - frontier milestone `2` requires deterministic flagship release-proof contract behavior for localization gate payloads.
+  - verifier and materializer already fail-closed many `localeSummary` row aliases, but mutation coverage in `scripts/ai/verify.sh` did not exercise row-level alias drift for:
+    - `minimumOverrideCount`/`minimum_override_count`
+    - `legacyDataXmlPresent`/`legacy_data_xml_present`
+  - this left regression room where row-level alias fail-close behavior could weaken without active mutation checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added verifier mutation checks requiring failure for conflicting alias values between:
+      - `releaseProof.uiLocalizationReleaseGate.localeSummary[*].minimumOverrideCount` and `releaseProof.uiLocalizationReleaseGate.localeSummary[*].minimum_override_count`
+      - `releaseProof.uiLocalizationReleaseGate.localeSummary[*].legacyDataXmlPresent` and `releaseProof.uiLocalizationReleaseGate.localeSummary[*].legacy_data_xml_present`
+    - added materializer mutation checks requiring failure (with explicit marker assertions) for conflicting alias values in localization source rows between:
+      - `locale_summary[*].minimum_override_count` and `locale_summary[*].minimumOverrideCount`
+      - `locale_summary[*].legacy_data_xml_present` and `locale_summary[*].legacyDataXmlPresent`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - expanded materializer malformed-payload contract docs to explicitly include these two locale-summary row alias-drift fail-close examples.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected verifier/materializer alias-drift fail-close mutation runs for both newly-added locale-summary row seams).
+- Commits landed:
+  - `chummer-hub-registry`: `1c5b1e4` (`fix(w1): mutation-test locale row alias drift fail-close seams`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6e81ed1..1c5b1e4`).
+  - `cd /docker/fleet && git push` -> pending.
+- Exact blocker:
+  - pending Fleet push attempt and credential check.
+
 ## 2026-04-04: fleet host-side push recovery now recognizes newer `remote push is still blocked` worker blocker wording
 
 - Trigger:
