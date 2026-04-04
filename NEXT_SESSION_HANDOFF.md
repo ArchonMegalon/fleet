@@ -127,9 +127,9 @@
     - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
     - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
 - Commits landed:
-  - pending (not committed yet in this slice at this handoff checkpoint).
+  - `fleet`: `193cbb2` (`feat(w5-10): fail-close support install tuple proof-request linkage`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks `pytest` module for local test runner execution.
   - release closure still externally blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
