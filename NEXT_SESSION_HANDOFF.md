@@ -43,14 +43,21 @@
       - `explicit_fallback_runtime` and `explicitFallbackRuntime`
       - `signoff_smoke_runner` and `signoffSmokeRunner`
       - `translation_backlog_findings_count` and `translationBacklogFindingsCount`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - expanded the materializer alias-drift fail-close contract examples to include:
+      - `explicitFallbackRuntime` vs `explicit_fallback_runtime`
+      - `signoffSmokeRunner` vs `signoff_smoke_runner`
+      - `translationBacklogFindingsCount` vs `translation_backlog_findings_count`
 - Verification:
   - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
   - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected alias-drift fail-close mutation runs for all newly-added seams).
 - Commits landed:
   - `chummer-hub-registry`: `4485e29` (`fix(w1): mutation-test localization gate alias drift seams`).
+  - `chummer-hub-registry`: `6b378ce` (`docs(w1): document added localization alias fail-close seams`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `2caeae2..4485e29`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `4485e29..6b378ce`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - fleet push remains blocked by missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
