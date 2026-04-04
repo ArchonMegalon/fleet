@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-5 GM prep lane now fail-closes compact `pkt/pkts` shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `5` requires GM prep packet retrieval to stay governed under real operator shorthand, but compact `pkt/pkts` variants for governed prep families were not canonicalized or live-audited.
+  - this left a false-negative seam where compact packet shorthand (`preplibrarypkt`, `oppositionpkt`, `rostermovepkt`, `eventcontrolpkt`, and plural `pkts`) could miss governed prep packet matches while equivalent `packet/packets` forms passed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for `preplibrarypkt/pkts`, `oppositionpkt/pkts`, `rostermovepkt/pkts`, `rostermovementpkt/pkts`, and `eventcontrolpkt/pkts` into canonical governed packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens` with `pkt/pkts` forms and negative-token assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms` so compact `pkt/pkts` forms resolve against governed prep packets.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for all added compact `pkt/pkts` forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same compact `pkt/pkts` forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for the new compact `pkt/pkts` probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" -v minimal` -> PASS (`4 passed` on both target frameworks).
+- Commits landed:
+  - pending in this session.
+- Push attempts:
+  - pending in this session.
+- Exact blocker:
+  - pending in this session.
+
 ## 2026-04-04: milestone-5 GM prep lane now fail-closes compact `preplibrarybrief*` shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
