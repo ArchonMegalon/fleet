@@ -23,11 +23,11 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="report_cluster_release_notify") | {state,signals,fleet_gate:.fleet_gate.require_support_recovery_path_contract}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`fleet_gate: true`; `support_recovery_route_contract_violation_count: 0` on current packet set).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_packet_install_truth_contract_is_incomplete or support_recovery_route_contract_drifts or report_cluster_release_notify_requires_support_install_truth_contract"` -> FAIL (`No module named pytest` in this environment).
 - Commits landed:
-  - `fleet`: `<pending>`
-  - `chummer6-design`: `<pending>`
+  - `fleet`: `01170dd` (`feat(w5-10): fail-close support recovery route contract`).
 - Push attempts:
-  - pending
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
+  - push remains blocked by missing GitHub HTTPS credentials.
   - `pytest` is not installed in this execution environment (`python3 -m pytest` fails with `No module named pytest`).
 
 ## 2026-04-04: milestone-17 master-index now emits explicit adjacent-SR6 oracle lane receipts and build-explain gate fail-closes on receipt markers
