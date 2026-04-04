@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4 campaign return lane now classifies compact `streetcred` and `publicawareness` relationship mutations
+
+- Trigger:
+  - frontier milestone `4` requires campaign return relationship continuity to stay governed across real table shorthand, not only spaced token phrasing.
+  - `CampaignWorkspaceServerPlaneService` recognized paired `street cred` and `public awareness` tokens, but compact shorthand (`streetcred`, `publicawareness`) could still miss relationship detection and report `0 relationship signal(s)`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `ContainsStreetCredTokenPair(...)` now accepts compact forms (`streetcred`, `street_cred`, `street-cred`) in addition to split-token matching.
+    - `ContainsPublicAwarenessTokenPair(...)` now accepts compact forms (`publicawareness`, `public_awareness`, `public-awareness`) in addition to split-token matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketCountsRelationshipSignalsFromCompactStreetCredAndPublicAwarenessMutations`.
+    - added fixture helper `BuildWorkspaceWithCompactStreetCredAndPublicAwarenessRelationshipSignalsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`327` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`350` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return relationship detection no longer depends on spaced street-cred/public-awareness phrasing to stay in the governed relationship lane.
+  - milestone-4 diary/contact/heat/consequence continuity remains robust under compact shorthand commonly used in imported or operator-authored notes.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 GM unresolved triage now classifies prep-library packet pressure as a governed domain
 
 - Trigger:
