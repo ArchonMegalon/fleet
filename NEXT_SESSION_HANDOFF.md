@@ -31780,3 +31780,31 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 parity verify now self-heals non-executable visual materializer retries and UI visual gate now emits canonical interaction-key ordering
+
+- Trigger:
+  - frontier milestone `2` verify lane in `chummer6-hub` failed after canonical-order drift detection because `scripts/ai/verify.sh` required the UI visual gate materializer to be executable (`-x`) instead of runnable via `bash`.
+  - live runs also hit stale lock-directory blocking during visual rematerialization retries, and `chummer6-ui` visual gate output still emitted `required_legacy_interaction_keys` in an order that drifted from Hub’s canonical milestone-2 baseline.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added `run_gate_materializer_script(...)` helper to fail-close on missing/unreadable scripts while allowing `bash` execution when executable bit is absent.
+    - visual rematerialization retry now runs with `CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1` to avoid stale lock-dir stalls during parity self-heal path.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - aligned `required_legacy_interaction_keys` ordering to the canonical milestone-2 sequence enforced by Hub parity audit (`contacts/diary`, then `magic`, `matrix`, then gear/cyberware/vehicles...).
+  - regenerated `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` from the updated materializer.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (including mutation probes and fail-close negative checks).
+- Commits landed:
+  - `chummer6-hub`: `d709779c` (`fix(milestone-2): unblock visual parity rematerialization retries`).
+  - `chummer6-ui`: `4e70cf76` (`fix(milestone-2): align visual interaction key canonical ordering`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commits `d709779c` and `4e70cf76` remain local-only until auth is restored.
