@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-6 mobile workspace-lite now fail-closes explicit offline capability split (can-do-now vs needs-online)
+
+- Trigger:
+  - W3 milestone `6` requires explicit offline readiness boundaries, but workspace-lite offline truth cues still blended allowed and blocked actions into one lane.
+  - that made it harder for travel/mobile continuity surfaces to show exactly what remains safe install-local versus what still requires online reconnection.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs`:
+    - `BuildOfflineTruthSummary(...)` now emits explicit capability split cues:
+      - `Can do now: ...`
+      - `Needs online: ...`
+    - `BuildOfflineTruthLabels(...)` now emits fail-closable labels:
+      - `Can-do-now lane: ...`
+      - `Needs-online lane: ...`
+    - role-aware allowed offline actions now spell out player/observer/GM install-local lanes while keeping existing cached/stale/offline-action cues.
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - `VerifyCampaignWorkspaceLiteProjectionPromotesContinuitySummary` now fail-closes on:
+      - `OfflineTruthSummary` containing both `Can do now:` and `Needs online:`
+      - `OfflineTruthLabels` containing both `Can-do-now lane:` and `Needs-online lane:`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj` -> FAIL (environment package feed not bootstrapped: missing `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` from configured sources).
+  - targeted diff sanity confirms projection + regression assertions align on the new offline capability markers.
+- Commits landed:
+  - `chummer6-mobile`: `e1204b9` (`feat(w3-6): split mobile offline truth into can-do-now vs needs-online lanes`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+  - local mobile regression execution remains blocked by unavailable internal package feeds in this shell session.
+
 ## 2026-04-04: milestone-15 utility parity is now release-gated
 
 - Trigger:
