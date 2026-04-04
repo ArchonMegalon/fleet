@@ -1,0 +1,219 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-04
+scope:
+  legacy_clients:
+    - name: Chummer5a
+      source: local_repo
+    - name: Chummer4
+      source: oracle_only
+      note: No local repo mirror is present in this workspace; SR4 parity still uses Chummer4 as the stronger workflow oracle where canon says it should.
+  adjacent_clients:
+    - name: Genesis / CommLink6
+      source: public_docs
+      urls:
+        - https://www.rpgframework.de/en/roleplaying/shadowrun-6/
+        - https://rpgframework.atlassian.net/wiki/spaces/COM6/pages/2031714315/Commlink%2Bvs.%2BGenesis
+    - name: Hero Lab Classic
+      source: public_docs
+      urls:
+        - https://www.wolflair.com/hero-lab-classic/
+  excluded:
+    - plugin-framework
+policy:
+  modernization_rule:
+    - Modern successors may consolidate or improve legacy forms when the same user job stays first-class, faster, and more explainable.
+    - No in-scope feature family may be stranded behind a missing action, support-only workaround, or operator ritual.
+families:
+  - id: shell_workbench_orientation
+    sources:
+      - Chummer5a
+      - Chummer4
+      - Genesis / CommLink6
+      - Hero Lab Classic
+    legacy_signals:
+      - desktop menu
+      - quick-action toolstrip
+      - tab panel
+      - dense section rhythm
+      - status strip
+    current_design_equivalents:
+      - CHUMMER5A_FAMILIARITY_BRIDGE.md
+      - FLAGSHIP_UI_RELEASE_GATE.md
+      - FLAGSHIP_RELEASE_ACCEPTANCE.yaml
+    status: partial
+    milestone_ids:
+      - 2
+      - 3
+  - id: dense_builder_and_career_workflows
+    sources:
+      - Chummer5a
+      - Chummer4
+      - Genesis / CommLink6
+      - Hero Lab Classic
+    legacy_signals:
+      - creation
+      - career mode
+      - advancement
+      - gear and augment configuration
+      - matrix and magic workflows
+    current_design_equivalents:
+      - CHUMMER5A_FAMILIARITY_BRIDGE.md
+      - DESKTOP_CLIENT_PRODUCT_CUT.md
+      - BUILD_LAB_PRODUCT_MODEL.md
+    status: partial
+    milestone_ids:
+      - 2
+      - 7
+  - id: identity_contacts_lifestyles_history
+    sources:
+      - Chummer5a
+      - Genesis / CommLink6
+    legacy_signals:
+      - contacts
+      - lifestyles
+      - licenses
+      - SINs
+      - history and career log
+    current_design_equivalents:
+      - CHUMMER5A_FAMILIARITY_BRIDGE.md
+      - CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
+      - CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md
+    status: partial
+    milestone_ids:
+      - 2
+      - 4
+  - id: sourcebooks_reference_and_master_index
+    sources:
+      - Chummer5a
+      - Genesis / CommLink6
+    legacy_signals:
+      - sourcebooks to use
+      - edit sourcebook info
+      - master index
+      - PDF or URL source opening
+      - rules snippets
+      - metaindex
+    current_design_equivalents:
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+    status: partial
+    milestone_ids:
+      - 13
+  - id: settings_and_rules_environment_authoring
+    sources:
+      - Chummer5a
+      - Genesis / CommLink6
+      - Hero Lab Classic
+    legacy_signals:
+      - global settings
+      - character settings
+      - source toggles
+      - house-rule posture
+      - authored ruleset settings
+    current_design_equivalents:
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+      - DESKTOP_CLIENT_PRODUCT_CUT.md
+    status: partial
+    milestone_ids:
+      - 14
+  - id: custom_data_xml_and_translator_bridge
+    sources:
+      - Chummer5a
+      - Genesis / CommLink6
+    legacy_signals:
+      - edit XML data
+      - translator-era corpus
+      - custom data
+      - custom descriptions
+    current_design_equivalents:
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+      - LOCALIZATION_AND_LANGUAGE_SYSTEM.md
+    status: partial
+    milestone_ids:
+      - 14
+  - id: dice_initiative_and_table_utilities
+    sources:
+      - Chummer5a
+      - Hero Lab Classic
+    legacy_signals:
+      - dice roller
+      - initiative roller
+      - initiative tracker
+      - fast table utility windows
+    current_design_equivalents: []
+    status: missing
+    milestone_ids:
+      - 15
+  - id: roster_dashboards_and_multi_character_ops
+    sources:
+      - Chummer5a
+      - Genesis / CommLink6
+    legacy_signals:
+      - character roster
+      - watch folder
+      - GM dashboard
+      - player dashboard
+      - online storage
+    current_design_equivalents:
+      - CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
+      - CAMPAIGN_AUTHORITY_AND_PERMISSIONS.md
+      - NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+    status: partial
+    milestone_ids:
+      - 5
+      - 15
+      - 18
+  - id: sheet_export_print_viewer_and_exchange
+    sources:
+      - Chummer5a
+      - Genesis / CommLink6
+      - Hero Lab Classic
+    legacy_signals:
+      - character sheet viewer
+      - print multiple characters
+      - export character
+      - PDF export
+      - JSON export
+      - Foundry export
+    current_design_equivalents:
+      - INTEROP_AND_PORTABILITY_MODEL.md
+      - BUILD_LAB_PRODUCT_MODEL.md
+      - RULESET_UI_DIRECTIVE.md
+    status: partial
+    milestone_ids:
+      - 16
+  - id: legacy_and_adjacent_import_oracles
+    sources:
+      - Chummer4
+      - Chummer5a
+      - Hero Lab Classic
+      - Genesis / CommLink6
+    legacy_signals:
+      - import compatibility
+      - migration receipts
+      - adjacent oracle comparison
+    current_design_equivalents:
+      - FLAGSHIP_RELEASE_ACCEPTANCE.yaml
+      - INTEROP_AND_PORTABILITY_MODEL.md
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+    status: partial
+    milestone_ids:
+      - 17
+  - id: sr6_supplements_designers_and_house_rules
+    sources:
+      - Genesis / CommLink6
+    legacy_signals:
+      - supplement-book coverage
+      - spell designer
+      - vehicle designer
+      - cyberdeck designer
+      - drug designer
+      - quality designer
+      - group rules
+      - better house rule support
+    current_design_equivalents:
+      - CHUMMER5A_FAMILIARITY_BRIDGE.md
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+    status: missing
+    milestone_ids:
+      - 18

@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-13 sourcebook parity canon now marks sourcebook/reference family partial after governed master-index metadata and snippet-coverage posture landed
+
+- Trigger:
+  - frontier milestone `13` sourcebook/reference runtime posture is now explicit in `chummer6-core` (`Sourcebooks`, snippet coverage counts, coverage percent, and stale/missing/governed reference posture), but parity canon still labeled the family as `missing`.
+  - this left avoidable drift between executable lane truth and design/fleet parity status.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`:
+    - family `sourcebooks_reference_and_master_index` status now `partial` (from `missing`).
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`:
+    - matrix row now states governed master-index sourcebook metadata/snippet-coverage posture is explicit, while first-class source selection UX and approved PDF/URL snapshot governance remain open.
+  - patched Fleet mirror copies:
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+- Verification:
+  - runtime evidence spot-check:
+    - `rg -n "SourcebooksWithSnippets|SourcebooksMissingSnippets|ReferenceCoveragePercent|ReferenceLanePosture" /docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs /docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs /docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs` -> PASS (fields/helpers/assertions present).
+  - source-level consistency check:
+    - `git -C /docker/chummercomplete/chummer-design diff -- products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md` -> PASS (status + matrix wording updated coherently for milestone `13`).
+- Commits landed:
+  - pending local commit in `chummer6-design` for this slice (to be recorded below).
+  - pending local commit in `fleet` for handoff refresh and parity-mirror update (to be recorded below).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this landed slice; remote push is expected to remain blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-6 account workspace now renders per-device travel cache status so stale readiness is actionable
 
 - Trigger:
