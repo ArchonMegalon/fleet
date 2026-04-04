@@ -15,6 +15,7 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_support_case_packets.py` -> PASS (`17 passed`).
 - Commits landed:
   - `fleet`: `cdf8cea` (`fix(w1-1-3): canonicalize legacy desktop tuple ids in support proof routing`).
+  - `fleet`: `c37656a` (`docs(handoff): record w1 legacy tuple canonicalization proof-routing slice`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
