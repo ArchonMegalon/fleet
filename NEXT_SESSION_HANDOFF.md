@@ -14,6 +14,7 @@
 - Commits landed:
   - `chummer6-media-factory`: `c36b571` (`feat(w4-16): preserve sheet and print parity evidence in creator packets`).
   - `fleet`: `5335947` (`docs(handoff): record w4 parity evidence retention slice`).
+  - `fleet`: `adaa805` (`docs(handoff): record fleet push blocker for w4 parity slice`).
 - Push attempts:
   - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `cc21bd5..c36b571`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
