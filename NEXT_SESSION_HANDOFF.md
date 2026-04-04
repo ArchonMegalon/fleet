@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-1 install journey contract-identity seam closed in hub-registry release channel (materializer + verifier + published receipt)
+
+- Trigger:
+  - frontier milestone `1` requires release truth, shelf truth, and installer truth to stay aligned by explicit contract identity.
+  - install journey gate already required non-empty `contract_name` in `chummer6-hub-registry` release channel proof, but `scripts/materialize_public_release_channel.py` did not emit that field, leaving persistent false-blocked gate output.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical default release contract identity `Chummer.Hub.Registry.Contracts`.
+    - added `--contract-name` override.
+    - canonical output now emits both `contract_name` and `contractName` with identical non-empty values.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added fail-close `verify_contract_identity(...)` check requiring non-empty `contract_name/contractName`.
+  - updated published registry truth:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+    - both now carry non-empty `contract_name` + `contractName`.
+  - regenerated Fleet journey gates:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - removed prior install blocker reason `field 'contract_name' must be a non-empty string but was None`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .blocking_reasons' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (contract-name blocker removed; remaining blockers are stale hub/mobile proofs + missing windows/macos tuple and failing UI executable gate).
+- Commits landed:
+  - `chummer6-hub-registry`: `6278a47` (`feat(w1-1): enforce non-empty release-channel contract identity`).
 ## 2026-04-04: milestone-13 master-index now emits an explicit aggregate reference-source lane receipt (PDF/URL/site-snapshot posture) and parity proof tracks it
 
 - Trigger:
