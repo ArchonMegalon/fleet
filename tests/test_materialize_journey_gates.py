@@ -2083,9 +2083,32 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
         '"campaign_workspace_v4_brief": "campaign_workspace_v4_brief",'
         in executive_assistant_runtime_contracts.get("must_contain", [])
     )
+    assert (
+        "W3_CONTRACT_SKILL_MEMORY_READS: dict[str, tuple[str, ...]] = {"
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
+    assert '"campaign_workspace_v4_brief": (' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert '"offline_actions",' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert (
+        "W3_CONTRACT_SKILL_MEMORY_WRITES: dict[str, str] = {"
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
+    assert (
+        '"campaign_workspace_v4_brief": "campaign_workspace_v4_fact",'
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
     assert '"workflow_template": "tool_then_artifact",' in executive_assistant_runtime_contracts.get("must_contain", [])
     assert (
         '"pre_artifact_capability_key": "structured_generate",'
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
+    assert '"memory_reads": list(memory_reads),' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert (
+        '"memory_writes": [memory_write_key] if memory_write_key else [],'
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
+    assert (
+        '"primary": ["Gemini Vortex", "AI Magicx", "BrowserAct"],'
         in executive_assistant_runtime_contracts.get("must_contain", [])
     )
 
@@ -2095,6 +2118,18 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     )
     assert (
         "def test_builtin_w3_campaign_and_gm_contracts_resolve_with_groundwork_runtime_policy("
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        "def test_builtin_w3_gm_ops_contract_projects_lane_memory_metadata() -> None:"
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        "def test_builtin_w3_mobile_continuity_contract_projects_safehouse_travel_offline_reads() -> None:"
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        "def test_builtin_w3_workspace_v4_contract_projects_unified_campaign_gm_and_offline_reads() -> None:"
         in executive_assistant_runtime_policy_tests.get("must_contain", [])
     )
     assert '("gm_ops_briefing", "gm_ops_brief"),' in executive_assistant_runtime_policy_tests.get("must_contain", [])
@@ -2108,6 +2143,18 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     )
     assert (
         'assert runtime_policy.pre_artifact_capability_key == "structured_generate"'
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        'assert runtime_policy.skill_catalog.memory_writes == ("gm_ops_brief_fact",)'
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        'assert runtime_policy.skill_catalog.memory_writes == ("campaign_mobile_companion_fact",)'
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        'assert runtime_policy.skill_catalog.memory_writes == ("campaign_workspace_v4_fact",)'
         in executive_assistant_runtime_policy_tests.get("must_contain", [])
     )
 

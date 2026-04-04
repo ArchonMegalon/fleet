@@ -1,3 +1,44 @@
+## 2026-04-04: milestone-4/5/6 EA runtime-policy contracts now fail-close lane-specific memory metadata for campaign/GM/offline continuity
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require the campaign workspace v4 lane to stay unified across downtime/diary/contacts/heat/aftermath/return, GM operations, and safehouse/travel/offline/mobile continuity.
+  - EA built-in W3 task contracts already fail-proved key presence and workflow template posture, but runtime policy metadata did not project the lane-specific memory read/write contract shape that the skill catalog advertises.
+  - this left a regression seam where contract keys could still resolve while memory grounding drifted away from governed campaign continuity semantics.
+- Landed:
+  - patched `/docker/EA/ea/app/services/task_contracts.py`:
+    - added canonical W3 runtime-policy metadata maps:
+      - `W3_CONTRACT_SKILL_MEMORY_READS`
+      - `W3_CONTRACT_SKILL_MEMORY_WRITES`
+    - built-in W3 contracts now project lane-specific `memory_reads` / `memory_writes` and provider hints in `runtime_policy_json.skill_catalog_json`.
+    - concretely fail-closes milestone text-focus lanes such as:
+      - GM ops (`rosters`, `opposition_notes`, `event_controls`)
+      - workspace-v4 continuity (`downtime_packets`, `diary_notes`, `contacts`, `heat_log`, `aftermath_packets`, `return_targets`)
+      - offline/mobile continuity (`safehouse_packets`, `travel_prefetches`, `offline_actions`, `mobile_companion_state`)
+  - patched `/docker/EA/tests/test_task_contract_runtime_policy.py`:
+    - added explicit assertions for runtime-policy metadata projection on:
+      - `gm_ops_briefing`
+      - `campaign_mobile_companion_brief`
+      - `campaign_workspace_v4_brief`
+  - tightened canonical and Fleet-mirror journey-gate contracts:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `campaign_session_recover_recap` now fail-closes EA runtime-policy memory metadata markers, not only key presence/workflow template markers.
+  - patched Fleet gate regression coverage:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` now asserts the new EA must-contain markers.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/EA && .venv/bin/python -m py_compile ea/app/services/task_contracts.py tests/test_task_contract_runtime_policy.py` -> PASS.
+  - `cd /docker/EA && PYTHONPATH=/docker/EA/ea python3 - <<'PY' ... assert built-in W3 runtime-policy memory metadata ... PY` -> PASS (`PASS: w3 builtin runtime-policy metadata contracts`).
+  - `cd /docker/fleet && python3 -m py_compile tests/test_materialize_journey_gates.py scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 22 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select(.repo=="executive-assistant" and (.path=="ea/app/services/task_contracts.py" or .path=="tests/test_task_contract_runtime_policy.py"))' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (new EA memory metadata markers present).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 gm continuity-return stale-drift gate slice
 
 - Commits landed:
