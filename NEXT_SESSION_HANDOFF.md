@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-12 public progress active-wave status now reads from the Next-12 active registry constant (not retired wave alias)
+
+- Trigger:
+  - frontier milestone `12` requires pulse/progress/governor automation to stay aligned with the active product program, but `admin/public_progress.py` still named `ACTIVE_WAVE_REGISTRY_PATH` as the retired `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml` path.
+  - the status map still resolved `"Next 12 Biggest Wins"` directly through `NEXT12_REGISTRY_PATH`, so the active-wave constant was semantically stale and could drift future routing.
+- Landed:
+  - patched `/docker/fleet/admin/public_progress.py`:
+    - `ACTIVE_WAVE_REGISTRY_PATH` now points at `NEXT_12_BIGGEST_WINS_REGISTRY.yaml`.
+    - added `LEGACY_ACTIVE_WAVE_REGISTRY_PATH` for the retired `Next 20 Big Wins After Post-Audit Closeout` key.
+    - `_active_wave_status(...)` now maps `"Next 12 Biggest Wins"` to `ACTIVE_WAVE_REGISTRY_PATH` so active-wave routing stays pinned to one explicit constant.
+  - patched `/docker/fleet/tests/test_public_progress_report.py`:
+    - added `test_active_wave_status_prefers_active_registry_constant_for_next12_key` to fail-close the mapping semantics.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile admin/public_progress.py tests/test_public_progress_report.py` -> PASS.
+  - `cd /docker/fleet && python3 -m unittest tests.test_public_progress_report.PublicProgressReportTests.test_active_wave_status_prefers_active_registry_constant_for_next12_key` -> PASS.
+  - `cd /docker/fleet && python3 -m unittest tests.test_public_progress_report.PublicProgressReportTests.test_build_progress_report_payload_computes_weighted_progress_and_participation` -> PASS.
+- Commits landed:
+  - `fleet`: `c9690f9` (`feat(w5-12): keep public progress active-wave registry pinned to next12`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
 ## 2026-04-04: milestone-3 readiness evidence now carries journey external-vs-local blocker counts
 
 - Trigger:
