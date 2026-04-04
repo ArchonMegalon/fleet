@@ -24,8 +24,46 @@
   - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - `chummer.run-services`: pending in this slice.
-  - `fleet`: pending in this slice.
+  - `chummer.run-services`: `7c6f5e6b` (`fix(w3): canonicalize debriefed recap shorthand across continuity and gm ops`).
+  - `fleet`: `8a7e828` (`docs(handoff): record w3 debriefed continuity and gm ops fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
+## 2026-04-04: milestone-2 hub parity audit now fail-closes localization `localeSummary` row contract drift (required keys, unexpected keys, and release-seed readiness fields), with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic legacy-familiar release proof that cannot silently pass when nested localization receipts drift.
+  - `scripts/audit-ui-parity.sh` already enforced shipping locale membership/order and zero `untranslatedKeyCount`, but still accepted `localeSummary` rows without strict row-shape/value contract checks.
+  - this left a fail-open seam where `localeSummary` row keys could drift (missing/unexpected keys) or release-seed readiness fields could degrade (`missingReleaseSeedKeys`, override threshold posture) without parity-audit failure.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/audit-ui-parity.sh`:
+    - added canonical row contract for `releaseProof.uiLocalizationReleaseGate.localeSummary`:
+      - required row keys: `locale`, `overrideCount`, `minimumOverrideCount`, `legacyXmlPresent`, `legacyDataXmlPresent`, `missingReleaseSeedKeys`, `untranslatedKeyCount`.
+      - fail-close on missing required row keys.
+      - fail-close on unexpected row keys.
+    - added per-locale row value fail-close checks:
+      - `overrideCount` and `minimumOverrideCount` must be integers.
+      - `overrideCount` must be `>= minimumOverrideCount`.
+      - `legacyXmlPresent` and `legacyDataXmlPresent` must be `true`.
+      - `missingReleaseSeedKeys` must be a string list and must be empty.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh`:
+    - added active mutation probe that injects non-empty `missingReleaseSeedKeys` for `de-de` and requires parity-audit failure.
+    - added active mutation probe that injects `bonus_noncanonical_row_key` in `localeSummary` and requires parity-audit failure.
+    - added fail-close verifier markers:
+      - `verify gate failed: parity audit should reject non-empty releaseProof.uiLocalizationReleaseGate.localeSummary missingReleaseSeedKeys.`
+      - `verify gate failed: parity audit should reject unexpected releaseProof.uiLocalizationReleaseGate.localeSummary row keys.`
+  - added script-lock tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/ParityAuditLocaleSummaryRowContractTests.cs`
+    - locks new parity-audit row-contract markers and verify mutation markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && bash -n scripts/audit-ui-parity.sh && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityAuditLocaleSummaryRowContractTests|FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation runs for non-empty `missingReleaseSeedKeys` and unexpected row keys).
+- Commits landed:
+  - `chummer.run-services`: `ac93d561` (`fix(milestone-2): fail-close locale-summary row contract drift`).
 - Push attempts:
   - pending in this slice.
 - Exact blocker:
