@@ -63,6 +63,12 @@
 - Verification:
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py` -> PASS (`25 passed`).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py` -> PASS (`10 passed`).
+- Commits landed:
+  - `fleet`: `5df352c` (`test(w1-1-3): align support proof suites with hardened contract`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: milestone-1/3 support install-proof contract now fail-closes proof-capture host/installer command drift
 
