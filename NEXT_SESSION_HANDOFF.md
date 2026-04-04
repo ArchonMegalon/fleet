@@ -68,6 +68,35 @@
   - overlapping pre-existing edits in the same files (`GmOpsBoardService.cs`, `GmOpsBoardServiceTests.cs`) make non-interactive, safe, isolated commit slicing non-trivial without risking inclusion of unrelated concurrent changes.
 
 
+## 2026-04-04: milestone-13/17/18 master-index parity lane now exposes first-class sourcebook selection detail, import-oracle matrix detail, and SR6 successor depth in flagship desktop dialog contracts
+
+- Trigger:
+  - parity canon for milestones `13/17/18` still called out first-class source-selection/import/SR6 successor UX depth as partial, with desktop `master_index` dialog skewed toward aggregate receipts.
+- Landed:
+  - patched desktop parity dialog projection:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Presentation/Overview/DesktopDialogFactory.cs`
+    - `BuildMasterIndexFields(...)` now adds:
+      - source-selection summary across discovered sourcebooks (selectable/permanent split plus governed posture counts).
+      - per-sourcebook first-class rows with selection kind, snippet count, provenance posture, and reference target kinds (`pdf`/`url`/`snapshot`).
+      - explicit import-oracle matrix field (Chummer4/Chummer5a/HeroLab/adjacent SR6 coverage) plus missing-source field.
+      - explicit SR6 designer-tools lane posture and house-rule overlay count fields.
+  - patched parity tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs`
+    - assertions now fail-close on the new source-selection, import-oracle matrix/missing-source, SR6 designer-lane, and house-rule overlay fields.
+  - patched design canon parity matrix wording:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - row narratives for milestones `13`, `17`, and `18` now explicitly describe the new first-class desktop master-index lane detail and remaining open UX closure scope.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet build Chummer.Presentation/Chummer.Presentation.csproj -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet build Chummer.Tests/Chummer.Tests.csproj -v minimal` -> FAIL (pre-existing unrelated compile breakage in `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/BlazorShellComponentTests.cs` plus one existing callsite mismatch in `AvaloniaFlagshipUiGateTests`; not introduced by this slice).
+- Commits landed:
+  - not committed yet in this environment.
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - `Chummer.Tests` currently cannot compile due unrelated pre-existing `BlazorShellComponentTests` component/type drift in `chummer-presentation` test sources.
+
 ## 2026-04-04: milestone-2/3 ui-kit now emits local release proof and Fleet promotes shared-surface boundary stage from that proof
 
 - Trigger:
