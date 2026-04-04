@@ -1,3 +1,33 @@
+## 2026-04-04: follow-up on prep-query canonicalization unification commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `0d59d567` (`refactor(campaign-os): unify prep query alias canonicalization`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 prep query canonicalization now runs through one shared contracts utility across campaign workspace and GM ops lanes
+
+- Trigger:
+  - campaign workspace prep search and GM ops prep search carried duplicate alias canonicalization logic, which created drift risk across the same continuity/ops query semantics.
+- Landed:
+  - added shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - new `PrepLibraryQueryAliasCanonicalizer.RewriteAliases(HashSet<string>)` centralizes all prep-query alias rewrites used by continuity and GM ops lanes.
+  - wired campaign workspace prep search to shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `RewritePrepLibraryQueryAliases` now delegates to contracts utility.
+  - wired GM ops prep search to shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - `TokenizeQueryText` now delegates alias rewrites to the same contracts utility.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsSplitOpsAndControlShorthand" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> FAIL due pre-existing verify-script expectation mismatch (`verify gate failed: parity audit should reject conflicting alias values between releaseProof.generatedAt and releaseProof.generated_at.`); unrelated to prep-query canonicalization files above.
+- Current trusted state:
+  - milestones 4/5 prep-query canonicalization for campaign workspace and GM ops is now owner-shared through one contracts utility, reducing drift risk between the two lanes.
+
 ## 2026-04-04: follow-up on fleet handoff sync commit and push status
 
 - Commits landed:
