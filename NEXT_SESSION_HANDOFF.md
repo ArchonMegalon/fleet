@@ -41489,3 +41489,41 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-1/3 support + journey external-proof contracts now fail-close release-channel identity drift
+
+- Trigger:
+  - W1 install/update/recovery closure already enforced tuple/host/proof/install-target/startup-smoke parity, but support and journey external-proof tuple contracts still allowed release-channel identity to be implicit.
+  - this left a drift seam where tuple rows could stay structurally valid while operator packets lost explicit channel provenance needed to prove artifact/head/architecture/channel alignment end to end.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `_release_channel_external_proof_requests(...)` now projects `channel_id` from release-channel truth into every external-proof tuple row.
+    - `require_support_install_truth_contract` now fail-closes missing `install_diagnosis.external_proof_request.channel_id`.
+    - support packet tuple-parity checks now require `channel_id` equality against release-channel external-proof tuple truth.
+    - unresolved backlog spec parity (`summary.unresolved_external_proof_request_specs`) now includes and validates per-tuple `channel_id`.
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - release-channel external-proof index rows now carry `channel_id`.
+    - support packet `install_diagnosis.external_proof_request` now emits `channel_id`.
+    - summary unresolved external-proof specs now project `channel_id` for each tuple.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - `/docker/fleet/tests/test_materialize_journey_gates_external_proof_contract.py`
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+    - `/docker/fleet/tests/test_support_external_proof_contract_projection.py`
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py scripts/materialize_support_case_packets.py tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py -k "external_proof or support_external_proof or startup_smoke_receipt_contract"` -> PASS (`18 passed, 26 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - `fleet`: `f3ee23c` (`feat(w1-1-3): fail-close external-proof channel contract in support and journey gates`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
