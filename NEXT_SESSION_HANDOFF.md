@@ -28,6 +28,46 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 release-channel completeness now fail-closes missing `head:rid:platform` tuples (not only platform/head pairs)
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery release truth to stay strict at tuple granularity (`head × rid × platform`) so packaged-binary proof cannot silently overstate completion.
+  - `chummer-hub-registry` computed tuple coverage correctly, but `desktop_tuple_coverage_is_complete(...)` only checked missing platforms/heads/pairs and ignored `missingRequiredPlatformHeadRidTuples`.
+  - this left a seam where future multi-RID coverage gaps could report `desktop_coverage_complete=true` even while required tuples were still missing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `desktop_tuple_coverage_is_complete(...)` now includes `missingRequiredPlatformHeadRidTuples` in the completeness gate.
+    - `desktop_tuple_coverage_gap_summary(...)` now reports missing tuple ids (`tuples: ...`) so generated rollout/supportability/known-issue prose cannot hide tuple-level gaps.
+  - added regression tests:
+    - `/docker/chummercomplete/chummer-hub-registry/scripts/test_materialize_public_release_channel.py`
+      - `test_desktop_tuple_coverage_incomplete_when_only_rid_tuple_is_missing`
+      - `test_desktop_tuple_coverage_gap_summary_reports_missing_rid_tuples`
+  - rematerialized registry artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - rematerialized Fleet control artifacts after registry refresh:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+    - `/docker/fleet/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m pytest -q scripts/test_materialize_public_release_channel.py` -> PASS (`2 passed`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/test_materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest .codex-studio/published/releases.json --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json --runtime-bundles .codex-studio/published/RUNTIME_BUNDLE_HEADS.generated.json --proof .codex-studio/published/RELEASE_PROOF.generated.json --ui-localization-release-gate .codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (still external-proof-only blocked).
+- Commits landed:
+  - `chummer-hub-registry`: pending commit in current session (tuple-completeness fail-close + tests + regenerated release artifacts).
+- Push attempts:
+  - pending in current session.
+- Exact blocker:
+  - release closure still requires external host execution lane for promoted tuple proofs:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+
 ## 2026-04-04: milestone-1/3 release projection now fail-closes future-dated startup-smoke receipts in Fleet wrapper selection
 
 - Trigger:
