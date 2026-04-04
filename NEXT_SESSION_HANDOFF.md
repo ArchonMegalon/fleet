@@ -38274,3 +38274,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - pending.
 - Exact blocker:
   - none for repo-local implementation and verification; push outcome depends on environment GitHub credentials.
+
+## 2026-04-04: handoff follow-up commit + push status for milestone-9/16 publication comparison receipt slice
+
+- Commits landed:
+  - `chummer6-hub`: `590cd23b` (`feat(w4-9-16): carry build-lab parity receipts into publication comparison`).
+  - `fleet`: `c58f95e` (`docs(handoff): record w4-9-16 publication comparison receipt closure`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
