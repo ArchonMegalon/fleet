@@ -18,6 +18,7 @@
 - Commits landed:
   - `chummer6-hub`: `f03f6ecb` (`feat(w3-5): canonicalize compact roster transfer and handoff queries`).
   - `fleet`: `0465f7e` (`docs(handoff): record w3 compact roster transfer/handoff canonicalization slice`).
+  - `fleet`: `9e2fb4c` (`docs(handoff): record w3 compact roster transfer/handoff push status`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
