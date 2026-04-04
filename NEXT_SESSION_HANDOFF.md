@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4 continuity packet synthesis now deduplicates identical recap versions to prevent inflated continuity counts
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires continuity packet counts to stay on unique campaign truth.
+  - `CampaignWorkspaceServerPlaneService.BuildContinuityPrepPacket(...)` still counted repeated identical `PublicationSafeProjection` recap rows separately.
+  - repeated identical recap rows could overstate recap-safe continuity output counts and consume bounded evidence slots.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity packet assembly now deduplicates recap shelf rows with `DeduplicateIdenticalPublicationRecapVersions(...)` before summary/evidence/search synthesis.
+    - continuity summary and signal counting now use deduplicated recap rows (`continuityRecaps`) instead of raw recap list counts.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `ContinuityPacketDeduplicatesIdenticalRecapSignalVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketDeduplicatesIdenticalRecapSignalVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~OppositionPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`252` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 continuity packet summaries now resist duplicate-row inflation for identical recap versions.
+  - milestone-4/5 continuity and GM-ops packet synthesis now dedupe identical versions across change, consequence, recap, aftermath-package, objective, roster, prep-launch, and travel receipt families.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 opposition/event-control packet synthesis now deduplicates identical run-pressure objective versions to prevent inflated GM ops counts
 
 - Trigger:
