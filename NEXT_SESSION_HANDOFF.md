@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for unexpected `releaseProof.proofRoutes` and duplicate `releaseProof.journeysPassed` ids
+
+- Trigger:
+  - parity audit already fail-closed unexpected flagship `releaseProof.proofRoutes` values and duplicate `releaseProof.journeysPassed` ids.
+  - Hub verify mutation coverage did not execute those branches, leaving route-inventory drift and duplicate journey-id fail-close behavior unproven in the end-to-end verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation with canonical required `releaseProof.proofRoutes` plus `/home/bonus-noncanonical-route` and asserted `audit-ui-parity.sh` fails.
+    - added mutation with canonical required `releaseProof.journeysPassed` plus duplicate `install_claim_restore_continue` and asserted `audit-ui-parity.sh` fails.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock both new mutation coverage texts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for unexpected `releaseProof.proofRoutes` and duplicate `releaseProof.journeysPassed`, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves unexpected flagship route-inventory drift and duplicate journey-id fail-close behavior inside the same release-proof mutation lane as existing route/journey grammar and freshness checks.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-passing and stale/future `releaseProof` status timestamps
 
 - Trigger:
