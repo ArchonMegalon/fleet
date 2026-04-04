@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T19:09:51Z",
+  "generated_at": "2026-04-04T19:18:06Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T19:09:50Z",
+      "at": "2026-04-04T19:14:54Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 192
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 983
+      "age_seconds": 1478
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 2658
+      "age_seconds": 3153
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 2658
+      "age_seconds": 3153
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T19:04:58Z",
       "state": "fresh",
-      "age_seconds": 293
+      "age_seconds": 788
     }
   },
   "journeys": [
@@ -1046,9 +1046,19 @@
               "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
               "\"campaign_session_recover_recap\"",
               "Assert(projection.ContinuityRailSummary.Contains(\\\"Downtime:\\\", StringComparison.Ordinal)",
+              "Assert(projection.ContinuityRailSummary.Contains(\\\"Diary:\\\", StringComparison.Ordinal)",
+              "Assert(projection.ContinuityRailSummary.Contains(\\\"Contacts:\\\", StringComparison.Ordinal)",
+              "Assert(projection.ContinuityRailSummary.Contains(\\\"Heat:\\\", StringComparison.Ordinal)",
+              "Assert(projection.ContinuityRailSummary.Contains(\\\"Aftermath:\\\", StringComparison.Ordinal)",
               "Assert(projection.ContinuityRailSummary.Contains(\\\"Return:\\\", StringComparison.Ordinal)",
               "Assert(projection.GmOperationsSummary.Contains(\\\"Opposition:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsSummary.Contains(\\\"Roster movement:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsSummary.Contains(\\\"Prep library:\\\", StringComparison.Ordinal)",
               "Assert(projection.GmOperationsSummary.Contains(\\\"Event controls:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Opposition lane:\\\", StringComparison.Ordinal))",
+              "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Roster movement lane:\\\", StringComparison.Ordinal))",
+              "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Prep library lane:\\\", StringComparison.Ordinal))",
+              "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Event controls lane:\\\", StringComparison.Ordinal))",
               "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Governance lane:\\\", StringComparison.Ordinal))",
               "Assert(projection.OfflineTruthSummary.Contains(\\\"Stale:\\\", StringComparison.Ordinal)",
               "Assert(projection.OfflineTruthSummary.Contains(\\\"Can do now:\\\", StringComparison.Ordinal)",
@@ -1056,12 +1066,19 @@
               "Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Can-do-now lane:\\\", StringComparison.Ordinal))",
               "Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\\\"Needs-online lane:\\\", StringComparison.Ordinal))",
               "Assert(plan.TravelCompanionSummary.Contains(\\\"Cached:\\\", StringComparison.Ordinal)",
+              "Assert(plan.TravelCompanionSummary.Contains(\\\"Stale:\\\", StringComparison.Ordinal)",
               "Assert(plan.TravelCompanionSummary.Contains(\\\"Offline actions:\\\", StringComparison.Ordinal)",
+              "Assert(plan.TravelCompanionLabels.Any(item => item.Contains(\\\"Cached lane:\\\", StringComparison.Ordinal))",
+              "Assert(plan.TravelCompanionLabels.Any(item => item.Contains(\\\"Stale lane:\\\", StringComparison.Ordinal))",
+              "Assert(plan.TravelCompanionLabels.Any(item => item.Contains(\\\"Offline action lane:\\\", StringComparison.Ordinal))",
               "id=\\\"workspace-continuity-rail\\\"",
+              "id=\\\"workspace-continuity-rail-list\\\"",
               "id=\\\"workspace-gm-ops\\\"",
+              "id=\\\"workspace-gm-ops-list\\\"",
               "id=\\\"workspace-offline-truth\\\"",
               "id=\\\"restore-offline-truth\\\"",
-              "id=\\\"restore-travel-companion\\\""
+              "id=\\\"restore-travel-companion\\\"",
+              "id=\\\"restore-travel-companion-labels\\\""
             ]
           },
           {
