@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4/5 workspace-state conflict and rule cues now prioritize highest-severity blockers
+
+- Trigger:
+  - frontier milestones `4` and `5` require workspace-state decision posture to surface the most urgent governed blocker first across return-loop and GM operations continuity lanes.
+  - `CampaignWorkspaceServerPlaneService.BuildWorkspaceStateSummary(...)` still selected the first non-ready continuity and rule-environment cue by list order, so earlier `review` cues could mask later `warning`/`attention` blockers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity conflict selection now orders by `ResolveReadinessAttentionPriority(...)` before choosing the blocking cue.
+    - rule-environment cue selection now orders by the same severity priority (`attention` > `warning` > `review` > other non-ready) before workspace-state projection.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `WorkspaceStateSummaryPrefersAttentionContinuityConflictOverEarlierReviewConflict`.
+    - added `WorkspaceStateSummaryPrefersWarningRuleCueOverEarlierReviewCue`.
+    - added reflection helpers `InvokeBuildWorkspaceStateSummary(...)` and `InvokeBuildNextSafeActionCue(...)` plus shared travel-mode fixture helper.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~WorkspaceStateSummaryPrefersAttentionContinuityConflictOverEarlierReviewConflict|FullyQualifiedName~WorkspaceStateSummaryPrefersWarningRuleCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineGroupSeasonBoardEntryWatchoutPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineGroupOperatorWatchoutsPrioritizeAttentionBeforeReviewWhenLimited" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`329` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - workspace-state blocking posture now picks the highest-severity continuity conflict and rule-environment cue under stale list ordering.
+  - season-board/operator watchout prioritization and workspace-state prioritization now share one deterministic severity contract across milestone-4/5 operational and return-loop guidance surfaces.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignWorkspaceServerPlaneService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 group season-board and operator watchouts now prioritize highest-severity readiness cues
 
 - Trigger:
