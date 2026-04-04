@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `hotwash` / `hot-wash` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to stay one governed prep-library lane across canonical alias rewrite, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand coverage already fail-closed `debrief`, `postmortem`, `postsession`, `postrun`, `postgame`, `after-action`, `aar`, and `retro`, but it did not canonicalize common GM debrief wording `hotwash` / `hot-wash` (including plural/split variants).
+  - this left a drift seam where hot-wash recap phrasing could miss governed prep packets and unresolved GM triage could classify recap signals outside `prep_library`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes compact/split/hyphen `hotwash` variants (including plurals) to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `hotwash` recap vocabulary and hot-wash token-pair detection so aftermath recap publication and continuity matching stay aligned with canonical aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact/split/hyphen hot-wash phrasing as governed `prep_library`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity matching, unresolved-domain coverage, and script-lock assertions for hotwash variants.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added prep-library API/workspace/browser checks for compact/split/hyphen hot-wash variants, each fail-closing on route drift, non-`200`, empty governed result, or missing snippets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatHotWashContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: pending local commit for this slice.
+- Push attempts:
+  - pending after commit.
+- Exact blocker:
+  - expected push blocker remains local GitHub HTTPS credential absence in this environment.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock plural `postgames` / `post-games` recap shorthand across API/workspace and browser journey proofs
 
 - Trigger:
