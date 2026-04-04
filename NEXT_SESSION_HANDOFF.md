@@ -108,6 +108,33 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-4/5 continuity query journey proof now covers `return lane(s)` variants in live-audit and Playwright
+
+- Trigger:
+  - after normalizing `return lane(s)` to governed return-loop tokens in campaign/GM matching, journey-proof scripts still only exercised `return loop` variants.
+  - this left proof drift where canonicalization supported lane wording but live operator audits and e2e checks did not actively exercise it.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API `queryText` probes for compact/split/hyphen lane variants:
+      - `returnlane`, `returnlanes`, `return lane(s)`, `return-lane(s)`
+      - `nextsessionreturnlane(s)`, `sessionreturnlane(s)`
+      - `session return lane(s)`, `session-return-lane(s)`
+      - `next session(s) return lanes`, `next-session(s)-return-lanes`
+    - added workspace `prepQuery` helper probes for the same lane variants.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - extended helper-driven continuity prep-query checks with the same compact/split/hyphen lane variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added assertions for new lane variant probes in live-audit and Playwright script verification blocks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`23` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`534` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `9a534d2d` (`fix(w3): audit and e2e return-lane continuity queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops prep search now normalizes `return lane(s)` shorthand to governed return-loop queries
 
 - Trigger:
