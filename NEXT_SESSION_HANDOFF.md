@@ -24,10 +24,11 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL at pre-existing compile break outside this slice (`CampaignWorkspaceServerPlaneService.cs` missing `IsCampaignDiarySignalKind` in concurrent baseline).
   - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Run.Api/Chummer.Run.Api.csproj -nologo -v minimal -m:1` -> FAIL in concurrent baseline (`CS0006` metadata file missing for `Chummer.Engine.Contracts.dll`), outside this slice.
 - Commits landed:
-  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice (not yet created in this session).
-  - pending local commit in `fleet` for handoff refresh (this update).
+  - `chummer6-hub` / `chummer.run-services`: `5311c4a0` (`feat(w4-8-9-16): surface build output publication and diff audit cues`).
+  - `fleet`: `0c30265` (`docs(handoff): record w4 build output publication and audit cues slice`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - `chummer.run-services` verification lane is currently blocked by pre-existing concurrent baseline compile instability (`IsCampaignDiarySignalKind` missing in `CampaignWorkspaceServerPlaneService.cs` plus downstream `Chummer.Engine.Contracts.dll` metadata resolution failure).
 
