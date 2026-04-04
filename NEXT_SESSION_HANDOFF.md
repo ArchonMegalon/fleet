@@ -1,3 +1,55 @@
+## 2026-04-04: follow-up on W3 `ctl` event/season control shorthand parity slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `ac4609f8` (`fix(w3): canonicalize ctl event-season prep-query shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-5 event/season controls lane now fail-closes compact `ctl` shorthand across campaign workspace and GM ops prep retrieval plus live journeys
+
+- Trigger:
+  - W3 milestones `4` and `5` require campaign workspace and GM operations prep retrieval to stay one governed lane for event and season controls.
+  - compact operator shorthand `eventctl` and `seasonctl` was not canonicalized or script-locked in API/browser journey lanes, leaving a drift seam where real-table control wording could miss governed prep packets without parity failure.
+- Landed:
+  - patched shared prep-query canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added `ctl` rewrites for `event`/`season` split and compact forms:
+      - `event ctl`, `eventctl` -> `eventcontrol`
+      - `season ctl`, `seasonctl` -> `seasoncontrol` (then into governed event/season operation tokens)
+  - patched GM unresolved-domain routing:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - `ResolveGmOpsDomain(...)` now treats `eventctl` and `seasonctl` as `event_control` domain cues.
+  - expanded campaign workspace query-token coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - event/season shorthand tests now assert `eventctl` and `seasonctl` matching.
+  - expanded GM ops unit coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added unresolved-domain regression for `eventctl` and `seasonctl`.
+    - added prep-query regression for `queryText=eventctl` and `queryText=seasonctl`.
+  - patched live API/workspace audit script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - added governed checks for:
+      - `queryText=eventctl`
+      - `queryText=seasonctl`
+      - `prepQuery=eventctl`
+      - `prepQuery=seasonctl`
+  - patched browser e2e journey checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added workspace prep-search route/copy/non-empty assertions for:
+      - `?prepQuery=eventctl`
+      - `?prepQuery=seasonctl`
+  - patched verification script-lock markers:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - added required marker assertions for new audit and Playwright `eventctl`/`seasonctl` paths.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSeasonControlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatCtlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCtlShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event/season-control prep retrieval now fail-closes compact `ctl` operator shorthand through the same shared canonicalizer and live journey proofs used by existing `ctrl` variants across campaign workspace and GM ops lanes.
+
 ## 2026-04-04: follow-up on milestone-2 localization acceptance-gate ordering canonicalization in hub-registry (commit and push status)
 
 - Commits landed:
