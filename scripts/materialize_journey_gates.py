@@ -594,6 +594,32 @@ def evaluate_journey(
                             support_packet_contract_violations.append(
                                 f"support packet {packet_id} is missing install_diagnosis.external_proof_request.required_proofs."
                             )
+                        smoke_contract = external_proof_request.get("startup_smoke_receipt_contract")
+                        if not isinstance(smoke_contract, dict):
+                            support_packet_contract_violations.append(
+                                f"support packet {packet_id} is missing install_diagnosis.external_proof_request.startup_smoke_receipt_contract."
+                            )
+                        else:
+                            for required_key in (
+                                "status_any_of",
+                                "ready_checkpoint",
+                                "head_id",
+                                "platform",
+                                "rid",
+                                "host_class_contains",
+                            ):
+                                value = smoke_contract.get(required_key)
+                                if required_key == "status_any_of":
+                                    if not isinstance(value, list) or not [
+                                        str(token or "").strip() for token in value if str(token or "").strip()
+                                    ]:
+                                        support_packet_contract_violations.append(
+                                            f"support packet {packet_id} is missing install_diagnosis.external_proof_request.startup_smoke_receipt_contract.status_any_of."
+                                        )
+                                elif not str(value or "").strip():
+                                    support_packet_contract_violations.append(
+                                        f"support packet {packet_id} is missing install_diagnosis.external_proof_request.startup_smoke_receipt_contract.{required_key}."
+                                    )
                 if install_truth_state == "tuple_not_on_promoted_shelf" and external_proof_required is not True:
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} with install_truth_state 'tuple_not_on_promoted_shelf' must declare external_proof_required=true."

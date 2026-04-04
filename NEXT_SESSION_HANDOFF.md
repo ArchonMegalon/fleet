@@ -109,6 +109,46 @@
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
   - local mobile regression execution remains blocked by unavailable internal package feeds in this shell session.
 
+## 2026-04-04: milestone-1/3 support packets now project startup-smoke contract fields and journey gates fail-close missing support linkage
+
+- Trigger:
+  - install tuple blockers now project startup-smoke receipt contract requirements in journey gates, but support packet `install_diagnosis.external_proof_request` still omitted that contract shape.
+  - this allowed support closures to carry tuple/host/proofs without the concrete receipt-shape contract needed for deterministic Windows/macOS startup-smoke capture and verification.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - release-channel indexing now ingests `startupSmokeReceiptContract` from `desktopTupleCoverage.externalProofRequests`.
+    - support packet `install_diagnosis.external_proof_request` now emits `startup_smoke_receipt_contract`.
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now fail-closes if `external_proof_required=true` and support packets miss `startup_smoke_receipt_contract` or required subfields:
+      - `status_any_of`
+      - `ready_checkpoint`
+      - `head_id`
+      - `platform`
+      - `rid`
+      - `host_class_contains`
+  - added focused regression tests:
+    - `/docker/fleet/tests/test_support_external_proof_contract_projection.py`
+      - support packet projection includes `startup_smoke_receipt_contract`.
+      - journey gate blocks when support packet external-proof request omits contract shape.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py scripts/materialize_journey_gates.py tests/test_support_external_proof_contract_projection.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts python3 - <<'PY' ... test_support_packets_project_startup_smoke_receipt_contract(...) ... test_journey_gate_requires_support_startup_smoke_receipt_contract(...) ... PY` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending local commit in `fleet` for support contract projection and gate fail-close updates.
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - environment is missing `pytest`.
+  - install journey remains external-only blocked on native Windows/macOS promoted installer + startup-smoke tuple receipts.
+
 ## 2026-04-04: milestone-1/3 install external-proof tuples now carry startup-smoke receipt contract shape for host capture lanes
 
 - Trigger:

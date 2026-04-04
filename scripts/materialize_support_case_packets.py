@@ -310,6 +310,11 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 "expected_startup_smoke_receipt_path": _normalize_text(
                     item.get("expectedStartupSmokeReceiptPath") or item.get("expected_startup_smoke_receipt_path")
                 ),
+                "startup_smoke_receipt_contract": dict(
+                    item.get("startupSmokeReceiptContract")
+                    or item.get("startup_smoke_receipt_contract")
+                    or {}
+                ),
             }
         )
     return {
@@ -610,6 +615,9 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
                 ),
                 "expected_startup_smoke_receipt_path": _normalize_text(
                     external_proof_request.get("expected_startup_smoke_receipt_path")
+                ),
+                "startup_smoke_receipt_contract": dict(
+                    external_proof_request.get("startup_smoke_receipt_contract") or {}
                 ),
             },
             "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
