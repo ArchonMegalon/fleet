@@ -71,6 +71,31 @@
   - `chummer6-hub`: local changes staged in working tree (`scripts/generate-parity-checklist.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`, `docs/PARITY_CHECKLIST.md`); commit/push pending.
   - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 GM prep launch and travel prefetch lookups now normalize whitespace-padded request ids before governed packet/device resolution
+
+- Trigger:
+  - frontier milestone `5` requires GM/operator actions to stay on one governed lane for prep packets and travel event controls.
+  - `CampaignWorkspaceServerPlaneService` still matched `LaunchWorkspacePrepPacket` `request.PacketId` and `StageTravelPrefetch` `request.InstallationId` without normalization.
+  - whitespace-padded request ids could fail lookup (`KeyNotFoundException`) even when canonical packet/device ids were present, creating avoidable operator-facing drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ResolvePrepPacket(...)` to normalize requested and stored packet ids before governed prep packet lookup.
+    - added `ResolveTravelPrefetchDevice(...)` to normalize requested and stored installation ids before claimed-device lookup.
+    - wired `LaunchWorkspacePrepPacket(...)` and `StageTravelPrefetch(...)` to use the new normalized resolvers.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `ResolvePrepPacketNormalizesWhitespacePaddedPacketIds`.
+    - added `ResolveTravelPrefetchDeviceNormalizesWhitespacePaddedInstallationIds`.
+    - added reflection helpers for `ResolvePrepPacket(...)` and `ResolveTravelPrefetchDevice(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`284` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`298` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM prep launches and travel-prefetch actions now resolve canonical packet/device targets when request ids include whitespace formatting drift.
+  - milestone-5 operator workflows keep one normalized lookup seam across prep library actions and event-control travel staging.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed visual screenshot token inventories from visual proof receipts
 
 - Trigger:
