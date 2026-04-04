@@ -126,6 +126,28 @@
   - `chummer6-hub`: local mirror changes reflect same landed slice; commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-3 executable proof now script-locks tuple-specific Windows gate receipts for non-default promoted heads
+
+- Trigger:
+  - milestone-3 per-head packaged-binary proof depends on tuple-specific platform receipts (`head × rid × platform`), but compliance locks did not explicitly pin the Windows fallback-vs-tuple receipt path split.
+  - a future regression could silently route non-default Windows heads through the default `UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json` path and weaken per-head proof honesty.
+- Landed:
+  - patched compliance script-lock test:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - added `Desktop_executable_gate_materializer_uses_tuple_specific_windows_receipts_for_non_default_heads`.
+    - new assertions now lock:
+      - bash tuple routing contract (`avalonia/win-x64` uses default path, other tuples use `UI_WINDOWS_${head_token}_${rid_token}_DESKTOP_EXIT_GATE.generated.json`).
+      - explicit environment wiring via `CHUMMER_UI_WINDOWS_DESKTOP_EXIT_GATE_PATH="$windows_gate_tuple_path"`.
+      - Python resolver parity in `windows_gate_path_for_head(...)` (default only for `avalonia/win-x64`, tuple-specific path otherwise).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_materializer_uses_tuple_specific_windows_receipts_for_non_default_heads" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`8` tests on `net10.0`).
+- Current trusted state:
+  - milestone-3 executable gate compliance now fail-closes regression risk where Windows non-default promoted tuples could accidentally collapse onto the default gate receipt path; per-head receipt path contract is explicitly pinned across bash materialization and Python gate-path resolution.
+- Push status:
+  - `chummer6-ui`: local change landed in this slice (`Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push not executed in this slice.
+  - `fleet`: handoff updated locally in this slice; commit/push not executed in this slice.
+
 ## 2026-04-04: milestone-2 Hub parity audit now derives required workflow families from SR4/SR6 workflow ledgers
 
 - Trigger:
