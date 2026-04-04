@@ -236,6 +236,8 @@
       - added `linux_policy_tuples_missing_release_artifacts`
       - emits `linux_policy_required_head_rid_tuples` and `linux_policy_tuples_missing_release_artifacts` evidence.
     - shifted Linux validation/status keys to tuple labels (`head:rid`) instead of head-only labels.
+    - keyed Linux gate evidence by tuple label (`linux_gates[head:rid]`) to prevent multi-rid overwrite.
+    - added Linux synthetic-policy artifact-source guard so policy-missing tuples skip embedded artifact arch/digest mismatch noise while preserving missing-artifact/startup-smoke blockers.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
     - renamed and expanded tuple-policy regression to lock Linux + Windows + macOS policy diagnostics/materializer wiring strings.
   - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
