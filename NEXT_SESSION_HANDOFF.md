@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes workflow-vs-visual release-channel drift
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar flagship proof receipts to be coherent as one governed release lane, not two independently passable packets.
+  - parity audit already required non-empty release-channel fields inside each receipt, but did not enforce that workflow and visual receipts agreed on the same `release_channel_channel_id` and `release_channel_version`.
+  - this left a tamper/drift path where mixed-release evidence could pass if each receipt was individually valid.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added `validate_cross_receipt_alignment(...)` to compare workflow and visual receipt evidence.
+    - fail-closes when milestone-2 workflow and visual receipts drift on release-channel id.
+    - fail-closes when milestone-2 workflow and visual receipts drift on release-channel version.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock new cross-receipt drift failure markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 Hub parity audit now treats workflow and visual flagship receipts as one release-bound proof pair and fails closed if they diverge on release-channel identity or version.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on compact plural `eventcontrols` prep retrieval across API and workspace route
 
 - Trigger:
