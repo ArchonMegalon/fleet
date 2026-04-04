@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests requiredDesktopHeads policy and canonical head coverage fail-close
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary per-head proof that cannot lie when desktop tuple policy/head inventories drift.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` already fail-closed both head-coverage seams:
+    - `Release channel desktopTupleCoverage requiredDesktopHeads is missing required policy head(s): ...`
+    - `Release channel desktopTupleCoverage requiredDesktopHeads is missing canonical required head(s): ...`
+  - `scripts/ai/verify.sh` only exercised `requiredDesktopPlatforms` and did not run active mutations for required/canonical desktop head coverage, leaving regression room where those fail-close branches could weaken silently while verify remained green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/verify.sh`:
+    - added active mutation that removes one entry from `desktopTupleCoverage.requiredDesktopHeads` and requires the policy-head fail-close marker.
+    - added active mutation that removes `blazor-desktop` from `desktopTupleCoverage.requiredDesktopHeads` and requires the canonical-head fail-close marker.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added:
+      - `Verify_entrypoint_runs_active_mutation_for_required_desktop_heads_missing_required_policy_coverage`
+      - `Verify_entrypoint_runs_active_mutation_for_required_desktop_heads_missing_canonical_required_head_coverage`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`28` tests on `net10.0`).
+- Commits landed:
+  - `chummer6-ui`: `2a7c2da3` (`fix(w1): mutation-test required desktop head policy and canonical coverage`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests requiredDesktopPlatformHeadRidTuples missing platform/head pair coverage fail-close
 
 - Trigger:
@@ -20,6 +46,28 @@
   - `chummer6-ui`: `a815d12f` (`fix(w1): mutation-test required rid tuple pair coverage drift`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-04: milestone-2 hub parity lane now contract-tests localization generated-at alias drift and signoff alias-status mutations in verify entrypoint
+
+- Trigger:
+  - frontier milestone `2` depends on parity-audit fail-close behavior staying active in Hub’s `scripts/ai/verify.sh`.
+  - Hub had mutation coverage for localization gate alias drift but lacked explicit contract tests pinning two critical mutation expectations in the verify entrypoint:
+    - `releaseProof.uiLocalizationReleaseGate.generatedAt` vs `releaseProof.uiLocalizationReleaseGate.generated_at`
+    - `releaseProof.uiLocalizationReleaseGate.signoff_smoke_runner_status` alias-status fail-close path
+  - without explicit tests, these mutation markers could regress silently during future verify-script refactors.
+- Landed:
+  - added `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityAuditLocalizationGateAliasDriftTests.cs` assertions for:
+    - `VerifyEntrypointMutatesLocalizationGateGeneratedAtAliasDriftForNegativeCoverage`
+    - `VerifyEntrypointMutatesLocalizationGateSignoffStatusAliasForNegativeCoverage`
+  - retained existing assertions for top-level localization-gate alias drift in `scripts/audit-ui-parity.sh` and `scripts/ai/verify.sh`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityAuditLocalizationGateAliasDriftTests" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `be8c4209` (`test(w1): lock localization alias-drift parity mutations in hub verify entrypoint`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
@@ -33579,6 +33627,28 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Current trusted state:
   - do not raise live `CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS` above `3` yet.
   - a future EA-only fifth shard is now supported by launcher config, but it should wait until the active frontier widens beyond the tightly-coupled `1-5` tranche.
+
+## 2026-04-04: shard suppression now writes an explicit active-shard manifest and frontier-probe failures fail closed instead of silently disabling concurrency
+
+- Trigger:
+  - audit found two safety holes in the new shard-4+ suppression path:
+    - skipped shard directories could still be counted for open-milestone slicing, which could strand frontier slices on non-running shards
+    - a failed `status --json` probe was being treated as an empty frontier, so transient probe failures could silently reduce concurrency
+- Landed:
+  - patched `/docker/fleet/scripts/run_chummer_design_supervisor.sh`:
+    - shard launch is now a two-pass flow: probe first, write `active_shards.json`, then launch only the chosen shard loops
+    - probe failures now abort the launcher with an explicit error instead of being reinterpreted as an empty shard frontier
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_configured_shard_roots()` now prefers the explicit `active_shards.json` manifest over stale `shard-*` directory enumeration
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added manifest-aware shard-root/frontier regression coverage
+    - added launcher fail-loud regression coverage for frontier probe failures
+- Verification:
+  - `bash -n /docker/fleet/scripts/run_chummer_design_supervisor.sh` -> PASS
+  - `python3 -m py_compile /docker/fleet/scripts/chummer_design_supervisor.py /docker/fleet/tests/test_chummer_design_supervisor.py` -> PASS
+  - `pytest -q /docker/fleet/tests/test_chummer_design_supervisor.py -k 'configured_shard_roots_prefers_active_manifest_over_stale_dirs or open_milestone_shard_frontier_uses_active_manifest_to_avoid_stranded_slices or run_supervisor_launcher_exits_loudly_when_frontier_probe_fails or github_https_auth_extraheader_returns_empty_when_gh_missing'` -> PASS (`4` tests)
+- Current trusted state:
+  - do not enable shards `4+` yet, but the suppression path no longer risks stranding slices on skipped shard directories and no longer hides probe failures as “empty” shards.
 
 ## 2026-04-04: live shard account groups now fan out across three distinct Codex accounts; horizons/mobile widening still does not justify shards 4-7 yet
 
