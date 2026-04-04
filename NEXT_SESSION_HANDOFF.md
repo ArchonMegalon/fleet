@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-5 opposition lane now canonicalizes `opfor/opforce` shorthand directly to `opposition` tokens
+
+- Trigger:
+  - W3 milestone `5` requires opposition packet discovery to stay governed across GM shorthand in prep-library and workspace search.
+  - `PrepLibraryQueryAliasCanonicalizer` normalized `opforce/opforces/opfors` into `opfor` but retained `opfor` as a required token, which could still miss packets that only expose canonical opposition vocabulary.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - collapsed all opfor-family shorthand (`opfor`, `opforce`, `opforces`, `opfors`, and split `op for` forms) to canonical `opposition` search tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - added `RewriteAliases_CollapsesOpForShorthandIntoOppositionTokens` to fail-close opfor-family normalization.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingTreatsOpForShorthandAsOppositionWhenPacketOmitsOpForVocabulary` to prove opfor-family queries still match governed opposition packets without explicit opfor text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesOpForShorthandIntoOppositionTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingTreatsOpForShorthandAsOppositionWhenPacketOmitsOpForVocabulary" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `fb6fe03f` (`feat(w3-5): collapse opfor shorthand into opposition prep tokens`).
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes compact plural `aftermathsreturn*` query forms across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
