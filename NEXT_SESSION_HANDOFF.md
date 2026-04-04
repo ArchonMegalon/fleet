@@ -1,3 +1,94 @@
+## 2026-04-04: milestone-5 split shorthand now fail-closes spaced/hyphen `gm ops`, `event ops`, and `season ops/control` aliases across campaign prep retrieval, GM prep search, unresolved-domain triage, and live API/UI journey audits
+
+- Trigger:
+  - frontier milestone `5` keeps GM operations and event/season controls as one governed lane, but split shorthand forms (`gm ops`, `event ops`, `season ops`, `season control`) were not canonicalized in prep query tokenization.
+  - this left a drift path where compact aliases (`gmops`, `eventops`, `seasonops`) passed while common spaced/hyphen variants could miss governed packets or unresolved-domain prioritization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - prep-library alias rewriting now canonicalizes split/hyphen token pairs for `gm ops`, `event ops`, `season ops`, `event ctrl`, `season ctrl`, and `season control` into governed event-control/operation tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - GM prep-asset tokenization now applies the same split alias canonicalization.
+    - unresolved-domain classifier now explicitly treats `gm ops`, `gm-ops`, and `gm_op` as `event_control` lane signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - updated punctuation-token expectation to canonical event-control/operation tokens.
+    - added split shorthand matching test for `event ops`, `gm ops`, `season ops`, and `season control` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded prep search shorthand coverage to include spaced/hyphen forms.
+    - added unresolved-domain ordering test for split `gm ops` signals.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API and signed-in workspace audit checks for `queryText=gm%20ops` and `prepQuery=gm%20ops`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertion for split `gm ops` route encoding and non-empty governed packet results.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded marker assertions to lock split `gm ops` coverage in live audit and Playwright scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryTokensSplitAndNormalizePunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatSplitGmOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`381` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 governed prep search and GM ops triage now treat compact plus split shorthand forms as one canonical event-control lane, and live API/UI audits fail-close if split `gm ops` coverage regresses.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
+## 2026-04-04: milestone-1/3 executable tuple integrity now fail-closes startup-smoke `rid` drift for Windows and macOS promoted tuples
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/recovery and packaged-binary proof to stay bound to exact promoted tuple identity (`head/platform/rid/channel/version`).
+  - executable-gate aggregation already validated startup-smoke `arch` on Windows/macOS, but it did not require explicit startup-smoke receipt `rid` to match the promoted release tuple.
+  - this left a false-green path where same-arch but wrong-rid receipts could still pass tuple proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Windows startup-smoke validation now records `startup_smoke_rid` evidence and fail-closes missing `rid`.
+    - Windows startup-smoke validation now fail-closes when receipt `rid` does not match promoted release-channel `rid`.
+    - macOS startup-smoke validation now records `startup_smoke_receipt_rid` evidence and fail-closes missing `rid`.
+    - macOS startup-smoke validation now fail-closes when receipt `rid` does not match promoted tuple `rid`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - extended executable-gate marker assertions to lock the new Windows/macOS startup-smoke `rid` fail-close reason strings and evidence keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~Desktop_executable_gate_fail_closes_invalid_platform_gate_contract_names" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable-gate tuple proof now requires startup-smoke `rid` identity on Windows/macOS in addition to `arch`, reducing false-green tuple drift in per-head release receipts.
+- Push status:
+  - `chummer6-ui`: commit/push pending for this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-2 release-proof base origin now fail-closes non-canonical `releaseProof.baseUrl` across hub parity audit and registry materialize/verify gates
+
+- Trigger:
+  - milestone `2` release-proof exactness had already fail-closed journey and route casing/superset drift, but `releaseProof.baseUrl` remained effectively ungoverned across hub parity audit and registry materialize/verify.
+  - this left a false-green path where malformed or non-canonical origin URLs could pass release proof while widening proof grammar across seams.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/audit-ui-parity.sh`:
+    - added canonical release-proof base origin normalization (`http|https` only, origin-only URL, no query/fragment, no userinfo, lowercase authority, no trailing slash).
+    - parity audit now fail-closes malformed/non-canonical `releaseProof.baseUrl` before journey/route checks.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added `normalize_release_proof_base_url(...)` with canonical origin guardrail semantics matching parity audit.
+    - materializer now rejects missing/non-canonical `base_url/baseUrl` in proof payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now enforces canonical `releaseProof.baseUrl` origin semantics on release-channel payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer mutation proving fail-close for non-canonical `base_url` origin casing/trailing slash.
+    - added verifier mutations proving fail-close for non-canonical and missing `releaseProof.baseUrl`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-marker assertions to lock canonical-origin fail-close guard text in active parity audit script.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh` and `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - mirrored the same `releaseProof.baseUrl` canonical-origin fail-close semantics and script-marker coverage in the hub mirror seam.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 release proof now fail-closes non-canonical base origins in the same canonical grammar lane as journeys/routes across hub parity audit and registry materialization/verification.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 event-control plural shorthand now fail-closes compact `eventcontrols` alias across campaign and GM prep query tokenization
 
 - Trigger:
