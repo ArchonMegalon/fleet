@@ -32,6 +32,37 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
 
+## 2026-04-04: milestone-2 parity audit now fail-closes workflow-family ordering and unexpected-family drift, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic proof that legacy-familiar workflow families stay canonical across generated UI receipts and Hub parity auditing.
+  - `scripts/audit-ui-parity.sh` validated `required_workflow_family_ids` as a set, so duplicate/order drift and unexpected extra family IDs could pass as long as required IDs were present.
+  - `scripts/ai/verify.sh` had no active mutation probe for workflow-family ordering drift, so regressions could evade the negative-test lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - `required_workflow_family_ids` now fail-closes on non-canonical/duplicate entries via `require_canonical_unique_string_list(...)`.
+    - added fail-close for unexpected milestone-2 workflow-family IDs:
+      - `workflow receipt declares unexpected milestone-2 family ids`
+    - added deterministic canonical-order fail-close for workflow families:
+      - `workflow receipt required_workflow_family_ids must preserve canonical milestone-2 family ordering`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active negative mutation probe that swaps the first two `required_workflow_family_ids` entries in `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` and requires parity audit fail-close.
+    - added explicit guard for missing workflow receipt before mutation.
+  - patched script-lock tests:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
+    - pinned the two new parity-audit fail-close markers and the new verify mutation assertion string.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (including expected fail-close mutation probes for release-proof, localization, workflow-family ordering, and visual ordering).
+- Commits landed:
+  - `chummer6-hub`: `dad75143` (`fix(w1): fail-close workflow family ordering drift in ui parity audit`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `dad75143` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes invalid (non-ISO) `generated_at` timestamps on promoted desktop release artifacts and embedded per-platform release-channel tuples
 
 - Trigger:
