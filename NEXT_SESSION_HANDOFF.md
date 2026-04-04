@@ -25,8 +25,13 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="organize_community_and_close_loop") | {state,blocking_reasons,warning_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: warning`; local blocker removed; only target-stage warnings remain).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_status_plane.py -k "upgrades_snapshot_stage_from_local_compile_evidence"` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `fleet`: `7d81f8e` (`feat(w5-12): self-heal stale status-plane stages from local compile evidence`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - `pytest` is unavailable in this execution environment.
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
   - `install_claim_restore_continue` remains externally blocked on missing promoted Windows/macOS tuple proof receipts (`blocked_by_external_constraints_only: true`).
 
 ## 2026-04-04: milestone-3 readiness now downgrades desktop external-only install blockers from missing to warning when local executable blockers are zero
