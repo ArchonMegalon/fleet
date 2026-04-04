@@ -17,8 +17,10 @@
   - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
 - Commits landed:
   - `chummer-hub-registry`: `23cc312` (`fix(w1-1-3): require canonical desktop heads in tuple coverage verification`).
+  - `fleet`: `d03ef13` (`docs(handoff): record w1-1-3 canonical desktop-head verifier closure`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated to `23cc312`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - release closure still requires external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
 
