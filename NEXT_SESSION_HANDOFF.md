@@ -1,3 +1,36 @@
+## 2026-04-04: follow-up on milestone-2 localization gate timestamp drift self-heal in chummer6-hub (commit and push status)
+
+- Commits landed:
+  - `chummer6-hub`: `1bcccea0` (`fix(milestone-2): self-heal localization gate timestamp drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-2 hub parity verify now auto-recovers stale/future nested UI localization gate timestamp drift from canonical UI localization evidence
+
+- Trigger:
+  - `chummer6-hub/scripts/ai/verify.sh` already self-healed `milestone-2 workflow/visual release-channel ...` drift via workflow-gate rematerialization, but still failed hard when parity drift was only nested localization-gate timestamp freshness (`releaseProof.uiLocalizationReleaseGate.generatedAt/generated_at` stale or future skew).
+  - this forced manual repair even when canonical UI localization evidence already existed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added timestamp drift markers for nested UI localization gate stale/future variants.
+    - added `sync_release_channel_localization_gate_timestamp_from_ui_receipt`, which:
+      - resolves release-channel path from `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` evidence.
+      - reads canonical `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json`.
+      - syncs nested `releaseProof.uiLocalizationReleaseGate.generatedAt` (and `generated_at` when present) in the release-channel receipt.
+    - verify now performs one parity retry after this targeted timestamp sync when those drift markers are detected.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs` script-lock assertions so verify must keep:
+    - new localization timestamp retry marker constants.
+    - the timestamp-sync helper hook.
+    - the retry note and canonical UI localization receipt path markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (baseline parity passes; repeated `parity audit failed: ...` lines are expected negative mutation probes; final `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 parity verify now self-heals both workflow-release-channel drift and nested UI localization timestamp freshness drift before fail-close, reducing manual reruns while preserving strict parity guards.
+
 ## 2026-04-04: follow-up on W1/W3 desktop proof root-path hardening and handoff refresh (commit and push status)
 
 - Commits landed:
