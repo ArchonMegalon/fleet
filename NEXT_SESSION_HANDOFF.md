@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-5 prep-library search now matches compact `preplibrary` shorthand across normalized packet text
+
+- Trigger:
+  - frontier milestone `5` requires prep library operations to stay first-class even when operators search with compact shorthand.
+  - prep-library search tokenization normalized query input, but packet matching still relied on whitespace-preserving raw text, so `preplibrary` could miss canonical `prep library` packet surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `MatchesPrepLibraryQuery(...)` now evaluates both raw searchable text and a normalized alphanumeric compact projection of the same text.
+    - compact query tokens (for example `preplibrary`) now match packet content rendered with whitespace or punctuation separation (`prep library`, `prep-library`, `prep_library`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsCompactShorthandAcrossWhitespaceBoundaries`.
+    - regression locks positive compact match (`preplibrary`) and negative miss (`matrixlibrary`).
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryMatchingSupportsCompactShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GetProjection_UnresolvedItemsTreatCompactDomainShorthandAsGovernedOpsDomains|FullyQualifiedName~EventControlPacketFallsBackToCompactEventControlSignalsWhenCanonicalEventTermsAreMissing|FullyQualifiedName~RosterMovementPacketFallsBackToCompactRosterMovementSignalsWhenCanonicalRosterTermsAreMissing|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`357` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - prep-library search now keeps compact operator shorthand aligned with governed packet semantics instead of dropping those queries into false-empty results.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now emits per-head Windows/macOS fail-honest diagnostics even when release tuples are missing
 
 - Trigger:
