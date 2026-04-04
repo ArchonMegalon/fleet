@@ -17,11 +17,11 @@
   - `cd /docker/chummercomplete/chummer-core-engine && dotnet pack Chummer.Contracts/Chummer.Contracts.csproj --nologo -c Release -o /tmp/chummer-pack-test` -> PASS.
   - `cd /docker/chummercomplete/chummer.run-services && dotnet pack Chummer.Campaign.Contracts/Chummer.Campaign.Contracts.csproj --nologo -c Release -o /tmp/chummer-pack-test` -> PASS.
 - Commits landed:
-  - pending local commit in `chummer6-mobile` for travel-companion continuity fallback/label fix.
-  - pending local commit in `chummer6-core` for `MasterIndexResponse` compile-order fix.
-  - pending local commit in `fleet` for this handoff update.
+  - `chummer6-mobile`: `67f18d4` (`fix(w3-6): keep travel companion continuity truth across sibling lanes`).
+  - `fleet`: `fb1a7c9` (`docs(handoff): record w3-6 mobile continuity regression fix`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer-play && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - no repo-local implementation blocker for this slice; remote pushes remain credential-dependent in this environment.
 
