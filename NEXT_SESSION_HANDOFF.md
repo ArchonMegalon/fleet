@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-6 restore planning now exposes explicit travel-companion cached/stale/offline-action truth
+
+- Trigger:
+  - milestone `6` requires continuity proof to be explicit about what is cached, stale, and safe offline while users move between primary claimed lanes and travel contexts.
+  - restore planning already exposed target-device offline truth, but sibling travel-cache posture remained implicit inside generic prefetch labels.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Roaming/RoamingWorkspaceSyncPlanner.cs`:
+    - `RoamingWorkspaceRestorePlan` now includes:
+      - `TravelCompanionSummary`
+      - `TravelCompanionLabels`
+    - planner now synthesizes dedicated travel-companion continuity truth with explicit:
+      - cached posture
+      - stale/conflict posture
+      - bounded offline-action posture
+    - travel-companion labels now also project sibling lane identity and restore summary.
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html`:
+    - added restore render targets:
+      - `id="restore-travel-companion"`
+      - `id="restore-travel-companion-labels"`
+    - wired restore payload binding for:
+      - `payload.travelCompanionSummary`
+      - `payload.travelCompanionLabels`
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - roaming planner checks now fail-close on travel-companion summary + labels in both aligned and conflict paths.
+    - restore-service checks now fail-close on travel companion offline-action posture and lane-role projection.
+    - index-shell accessibility/source-binding checks now require travel-companion IDs and binding lines.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj -c Release` -> FAIL (`NU1101` for private package ids such as `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, `Chummer.Ui.Kit`; only `nuget.org` is resolved in this environment).
+- Commits landed:
+  - `chummer6-mobile`: `c46f758` (`feat(w6): expose restore travel-companion continuity truth`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - private `Chummer.*` package feed/bootstrap is unavailable in this environment, so mobile regression execution cannot restore/build.
+
 ## 2026-04-04: milestone-8/9 Build Lab governed outputs now include source-hint tokens in publication/audit receipts
 
 - Trigger:
