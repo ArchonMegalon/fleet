@@ -98,6 +98,36 @@
   - `chummer6-hub`: local commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-4 campaign-return prep retrieval now fail-closes canonical continuity queries `contact`, `journal`, and `sessionlog` across API and workspace route journeys
+
+- Trigger:
+  - frontier milestone `4` requires diary, contacts, heat, and return continuity to behave as one governed prep-library lane.
+  - campaign-return signal canon already recognized `contact`, `journal`, and compact `sessionlog`, but return-packet prep indexing and live closeout checks only enforced `contacts`/`diary` style queries.
+  - this left drift windows where valid continuity-query variants could regress without failing signed-in closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return prep packet search terms now explicitly include canonical continuity variants `contact`, `journal`, and `sessionlog`.
+    - reordered guaranteed continuity tokens to keep bounded top-10 search-term projection deterministic (`diary/journal/sessionlog/contact/contacts/heat/downtime/aftermath/recap/return`).
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `queryText=contact`, `queryText=journal`, and `queryText=sessionlog` with non-empty governed packet assertions.
+    - added signed-in workspace route verification for `prepQuery=contact`, `prepQuery=journal`, and `prepQuery=sessionlog`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `contact`, `journal`, and `sessionlog`, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded return-packet search-term assertions to lock `journal`, `sessionlog`, `contact`, and `recap` on the governed return lane.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock API/live-audit and Playwright marker coverage for `contact`, `journal`, and `sessionlog`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign-return continuity retrieval now fail-closes canonical continuity query variants across API, signed-in workspace route, and browser journey checks.
+  - diary/contact/heat return continuity stays one governed prep lane across singular/plural and compact continuity query forms.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign-memory prep retrieval now fail-closes canonical memory queries (`memory`, `archive`, `history`, `timeline`, `ledger`) across API and workspace route journeys
 
 - Trigger:
