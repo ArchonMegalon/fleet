@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-3 canonical dual-head proof now fail-closes single-head drift across executable, visual, and workflow exit gates
+
+- Trigger:
+  - frontier milestone `3` requires Avalonia and Blazor promoted heads to prove executable menu liveness, workflow execution, and visual familiarity.
+  - gate scripts trusted `desktopHeads` inventory from flagship receipts but did not enforce canonical dual-head membership explicitly, leaving a fail-open path if receipts drifted to a single promoted head.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added canonical required desktop heads (`avalonia`, `blazor-desktop`) enforcement.
+    - fail-closes when release-channel promoted heads or flagship `desktopHeads` omit canonical heads.
+    - includes canonical heads in `heads_requiring_flagship_proof` so downstream per-head checks cannot silently skip them.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - added canonical dual-head enforcement and explicit fail-close reason when `desktopHeads` omits either canonical head.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - added canonical dual-head enforcement and explicit fail-close reason when `desktopHeads` omits either canonical head.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added compliance assertions locking canonical dual-head fail-close markers in executable, visual, and workflow scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts" --nologo -v minimal` -> PASS (`4` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+- Current trusted state:
+  - milestone-3 per-head proof now fail-closes canonical dual-head drift across executable, visual familiarity, and workflow execution lanes.
+  - release-channel/head-proof receipts can no longer pass by silently shrinking canonical head inventory to a single head.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 local linux gate artifact cleanup applied to match new retention policy
 
 - Trigger:
