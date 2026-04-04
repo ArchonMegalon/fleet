@@ -21,6 +21,15 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-hub-registry") | .json_must_be_non_empty_string' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (shows required trust-surface fields).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "json_field_not_non_empty_string or install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof"` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `chummer6-design`: `423e7cc` (`docs(w1-1): require non-empty release-channel trust summaries in install gate`).
+  - `fleet`: `642c52b` (`feat(w1-1): fail-close install gate on empty release-channel trust summaries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for push.
+  - `pytest` is unavailable in the current environment, so unit tests cannot run beyond compile/materialize checks.
 
 ## 2026-04-04: milestone-1/3 install journey now fail-closes on desktop executable gate evidence scope (per-head receipt roots + zero blocking findings)
 
