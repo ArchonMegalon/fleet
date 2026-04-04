@@ -1098,8 +1098,17 @@ def evaluate_journey(
                     normalized_requests,
                     key=lambda item: str(item.get("tuple_id") or "").strip(),
                 )
+                group_request_count_value = raw_group.get("request_count")
+                group_request_count = -1
+                if isinstance(group_request_count_value, bool) or not isinstance(group_request_count_value, int):
+                    support_packet_contract_violations.append(
+                        "support packet unresolved_external_proof_execution_plan "
+                        f"host '{host}' is missing integer request_count."
+                    )
+                else:
+                    group_request_count = int(group_request_count_value)
                 normalized_host_groups[host] = {
-                    "request_count": int(raw_group.get("request_count") or 0),
+                    "request_count": group_request_count,
                     "tuples": sorted(
                         {
                             str(token or "").strip()
@@ -1109,7 +1118,14 @@ def evaluate_journey(
                     ),
                     "requests": normalized_requests,
                 }
-            request_count = int(value.get("request_count") or 0)
+            request_count_value = value.get("request_count")
+            request_count = -1
+            if isinstance(request_count_value, bool) or not isinstance(request_count_value, int):
+                support_packet_contract_violations.append(
+                    "support packet unresolved_external_proof_execution_plan is missing integer request_count."
+                )
+            else:
+                request_count = int(request_count_value)
             hosts = sorted(
                 {
                     str(token or "").strip().lower()
