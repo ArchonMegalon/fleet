@@ -24,6 +24,40 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .blocking_reasons' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (contract-name blocker removed; remaining blockers are stale hub/mobile proofs + missing windows/macos tuple and failing UI executable gate).
 - Commits landed:
   - `chummer6-hub-registry`: `6278a47` (`feat(w1-1): enforce non-empty release-channel contract identity`).
+## 2026-04-04: milestone-17/18 build-explain gate now fail-closes on adjacent SR6 oracle and online-storage parity markers
+
+- Trigger:
+  - frontier milestones `17` and `18` require explicit import-oracle and storage continuity evidence in first-class release proof.
+  - `build_explain_publish` gate already required core parity lane receipts, but it did not fail-close if adjacent SR6 oracle posture markers or online-storage lane posture markers disappeared from `master-index` API/tests.
+- Landed:
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - `chummer6-core` API proof markers now also require:
+      - `response["adjacentSr6OracleReceiptPosture"]`
+      - `response["adjacentSr6OracleSourcesCovered"]`
+      - `response["onlineStorageLanePosture"]`
+      - `response["onlineStorageReceiptPosture"]`
+    - `chummer6-core` tool-catalog implementation proof markers now also require:
+      - `ResolveAdjacentSr6OracleCoverage`
+      - `BuildOnlineStorageSummary`
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same marker set.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - `test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` now fail-proves all new milestone-17/18 markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --registry .codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes adjacent-oracle and online-storage marker strings).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `ResolveAdjacentSr6OracleCoverage` and `BuildOnlineStorageSummary`).
+- Commits landed:
+  - `chummer6-design`: `7a07707` (`docs(w2-17-18): gate build-explain parity on adjacent oracle and online-storage markers`).
+  - `fleet`: `d266113` (`feat(w2-17-18): fail-close build-explain gate on adjacent-oracle and storage markers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
+
 ## 2026-04-04: milestone-13 master-index now emits an explicit aggregate reference-source lane receipt (PDF/URL/site-snapshot posture) and parity proof tracks it
 
 - Trigger:
