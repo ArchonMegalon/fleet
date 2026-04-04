@@ -142,6 +142,48 @@
 - Exact blocker:
   - no product blocker for this slice; full pytest execution is currently unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-13 master-index now emits aggregate reference-source lane posture and governed/stale/missing source counts
+
+- Trigger:
+  - milestone `13` required governed PDF/URL snapshot posture, but source-level evidence still required per-book inspection (`referenceSourcePosture`) and lacked a first-class aggregate lane signal.
+  - this made source-governance truth weaker than snippet/settings/custom-data import projections already available on the master-index endpoint.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes:
+      - `ReferenceSourceLanePosture`
+      - `SourcebooksWithGovernedReferenceSources`
+      - `SourcebooksWithStaleReferenceSources`
+      - `SourcebooksMissingReferenceSources`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - aggregate source-reference counts now derive from per-book `ReferenceSourcePosture`.
+    - lane posture now fail-closes:
+      - `missing` with zero sourcebooks
+      - `stale` when any sourcebook reference source is stale/missing
+      - `governed` only when all sourcebooks have governed source references.
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+      - baseline and sourcebook assertions extended for new aggregate fields.
+      - added `Master_index_reports_governed_reference_source_lane_when_all_sourcebooks_have_valid_pdf_or_url_targets`.
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+      - `Master_index_endpoint_returns_data` now asserts new aggregate source-reference fields.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - sourcebook parity row now cites aggregate reference-source lane posture evidence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_reference_source_lane_when_all_sourcebooks_have_valid_pdf_or_url_targets|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_import_oracle_lane_when_fixture_families_and_certification_are_present|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` missing namespace graph in current baseline).
+- Commits landed:
+  - `chummer6-core`: `5c0de1e6` (`feat(w13): aggregate reference-source posture in master index`).
+  - `chummer6-design`: `ff528de` (`docs(w13): cite aggregate reference-source posture evidence`).
+  - `fleet`: pending local commit for mirror + handoff refresh.
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `47a4948e..5c0de1e6`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no blocker for the landed milestone-13 implementation itself; full `Chummer.Tests` lane remains compile-blocked in current baseline, and design/fleet push remains credential-gated in this environment.
+
 ## 2026-04-04: milestone-17 master-index now emits explicit import-oracle coverage and receipt posture for Chummer4/5a/Hero Lab/adjacent SR6 parity evidence
 
 - Trigger:
