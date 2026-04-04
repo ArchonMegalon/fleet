@@ -49,6 +49,33 @@
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity checklist now fail-closes unacknowledged dialog-factory-only desktop control ids
+
+- Trigger:
+  - frontier milestone `2` legacy-familiar proof depends on explicit governance of desktop control drift, not informational checklist output.
+  - `chummer6-hub/scripts/generate-parity-checklist.sh` only fail-closed missing required legacy desktop controls; `present_in_dialog_factory_only` extras were not canon-acknowledged and could drift silently.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - added required oracle token list `acknowledgedDialogFactoryOnlyDesktopControls`.
+    - checklist generation now fail-closes when dialog-factory-only desktop controls are unacknowledged or stale in parity oracle.
+    - changed checklist status label from `present_in_dialog_factory_only` to `present_in_dialog_factory_acknowledged`.
+    - documented explicit dialog-factory-only acknowledgment rule in generated checklist preface.
+  - patched `/docker/chummercomplete/chummer6-hub/docs/PARITY_ORACLE.json`:
+    - added `acknowledgedDialogFactoryOnlyDesktopControls` with the current dialog-factory-only desktop control ids.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended parity checklist script assertions for the new fail-close seam.
+    - extended parity oracle canonical-token assertions for `acknowledgedDialogFactoryOnlyDesktopControls`.
+  - regenerated `/docker/chummercomplete/chummer6-hub/docs/PARITY_CHECKLIST.md`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~ParityOracleTokenListsUseCanonicalStringIds" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 checklist proof in hub now requires explicit parity-oracle acknowledgment for non-legacy-but-live desktop dialog controls, so desktop-control drift cannot hide in informational `catalog only` rows.
+  - parity evidence remains fully covered for required tabs/workspace actions/legacy desktop controls while extra dialog controls are now a governed, fail-closed inventory.
+- Push status:
+  - `chummer6-hub`: local changes in working tree (`scripts/generate-parity-checklist.sh`, `docs/PARITY_ORACLE.json`, `docs/PARITY_CHECKLIST.md`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace change-packet projection now normalizes whitespace-padded scene/objective ids before packet-id hashing
 
 - Trigger:
