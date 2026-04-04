@@ -70,6 +70,11 @@
   - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap" or .id=="recover_from_sync_conflict" or .id=="report_cluster_release_notify") | {id,state,warning_reasons,blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: ready` for all three journeys).
+- Commits landed:
+  - `fleet`: `618af6d` (`feat(w3-4-5-6): promote ui from public flagship proof in status-plane fallback`).
+  - `fleet`: `c693dfe` (`fix(w3-4-5-6): restore flagship readiness mirror artifact`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
