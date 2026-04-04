@@ -21,6 +21,30 @@
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-04: milestone-2 registry verify lane now mutation-tests `signoffSmokeRunnerStatus` alias drift fail-close in materializer
+
+- Trigger:
+  - frontier milestone `2` still depends on deterministic localization-gate fail-close behavior for flagship workbench release-proof trust.
+  - `scripts/materialize_public_release_channel.py` already fail-closed `signoffSmokeRunnerStatus`/`signoff_smoke_runner_status` alias drift when status aliases are sourced directly, but mutation coverage in `scripts/ai/verify.sh` only exercised the nested object alias seam (`signoffSmokeRunner`/`signoff_smoke_runner`).
+  - this left regression room where status-alias fail-close behavior could weaken without an active mutation assertion.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer mutation that removes nested `signoff_smoke_runner` object input, injects conflicting status aliases (`signoff_smoke_runner_status=pass` vs `signoffSmokeRunnerStatus=failed`), and requires materializer failure.
+    - added explicit fail-close marker assertion for:
+      - `signoff_smoke_runner_status alias values drift between signoff_smoke_runner_status and signoffSmokeRunnerStatus`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - expanded malformed `uiLocalizationReleaseGate` alias-drift examples to include `signoffSmokeRunnerStatus`/`signoff_smoke_runner_status`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected materializer alias-drift mutation run for `signoff_smoke_runner_status`/`signoffSmokeRunnerStatus`).
+- Commits landed:
+  - `chummer-hub-registry`: `1b24aaf` (`fix(w1): mutation-test signoff status alias drift fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `e3a2497..1b24aaf`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-2 registry verify lane now mutation-tests untranslated/override locale-summary alias drift and fixes minimum-override verifier mutation marker text
 
 - Trigger:
