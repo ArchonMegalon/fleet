@@ -1,3 +1,33 @@
+## 2026-04-04: account-gated mac dispatch and release promotion now pass with raw-manifest install routing while public shelf policy stays guest-safe
+
+- Trigger:
+  - full `chummer.run-services` suite had `10` failing tests concentrated in account-gated mac download dispatch/bootstrap and release promotion coherence.
+  - artifact lookup for install/download dispatch only used access-filtered public manifests, so account-gated mac artifacts hidden by guest shelf policy resolved as `NotFound`.
+  - release promotion coherence required every promoted artifact to remain visible after guest access filtering, which rejected valid account-gated promoted artifacts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Controllers/DownloadsCompatibilityController.cs`:
+    - added `ResolveManifestArtifact(...)` with public-manifest first and raw-manifest fallback.
+    - wired `/downloads/get/{artifactId}`, `/downloads/file/{artifactId}`, and `/downloads/files/{**path}` to shared fallback resolution.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Controllers/PublicLandingController.cs`:
+    - added `ResolveInstallDispatchArtifact(...)` with public-manifest first and raw-manifest fallback.
+    - wired `/downloads/install/{artifactId}`, `/downloads/install/{artifactId}/claim.json`, and guided bootstrap context resolution to fallback artifact lookup.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/ReleaseBundlePromotionService.cs`:
+    - `ValidatePublicShelfCoherence(...)` now validates promoted artifact existence against the raw manifest surface, then returns access-filtered manifest for outward public projection.
+  - patched tests for current policy alignment:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/DownloadsCompatibilityControllerTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingDownloadDispatchTests.cs`
+    - fixture manifests now include explicit mac proof routes where required, and mac claim/ticket setup pulls from raw manifest where policy may hide guest shelf entries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DownloadsCompatibilityControllerTests|FullyQualifiedName~PublicLandingDownloadDispatchTests|FullyQualifiedName~ReleaseBundlePromotionServiceTests|FullyQualifiedName~InternalReleaseBundlesControllerTests" --nologo -v minimal` -> PASS (`16` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`429` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - account-gated install dispatch and bootstrap ticket routes no longer fail-open to `NotFound` when artifacts are intentionally hidden from guest shelf listing.
+  - release promotion no longer rejects valid promoted artifacts solely because guest shelf filtering hides them.
+  - `chummer.run-services` test surface is fully green in this environment.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep library now prioritizes opposition/event/roster packets ahead of newer ops-noise receipts
 
 - Trigger:
