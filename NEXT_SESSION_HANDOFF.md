@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-8/9/16 build-handoff outputs now carry publication posture and rule-diff audit cues on account and signed-in home rails
+
+- Trigger:
+  - frontier milestones `8`, `9`, and `16` require explain/rule-diff and exchange/publication truth at the exact decision surface where users choose output lanes.
+  - Build Lab output rows already showed next/provenance/audit, but did not expose publication posture (`PublicationSummary`, `PublicationState`, `TrustBand`) and the generated output audit summary only pinned a single runtime fingerprint.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab outputs now receive rule-environment diff context at generation time.
+    - governed output `PublicationSummary` now includes runtime + explain receipt + rule-diff (`before -> after (status)`).
+    - governed output `AuditSummary` now includes explicit rule-diff, runtime fingerprint, and explain receipt tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - Build Lab output list now renders `Publication:` and `Lane status:` cues (`PublicationState` + `TrustBand`) per output.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - signed-in home Build Lab rail now renders `Output publication:` and `Output lane status:` cues per output.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves output publication posture and rule-diff audit tokens.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - source guard now requires account output publication/lane-status hooks.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - source guard now requires signed-in home output publication/lane-status hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Campaign.Contracts/Chummer.Campaign.Contracts.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL at pre-existing compile break outside this slice (`CampaignWorkspaceServerPlaneService.cs` missing `IsCampaignDiarySignalKind` in concurrent baseline).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet build Chummer.Run.Api/Chummer.Run.Api.csproj -nologo -v minimal -m:1` -> FAIL in concurrent baseline (`CS0006` metadata file missing for `Chummer.Engine.Contracts.dll`), outside this slice.
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (this update).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - `chummer.run-services` verification lane is currently blocked by pre-existing concurrent baseline compile instability (`IsCampaignDiarySignalKind` missing in `CampaignWorkspaceServerPlaneService.cs` plus downstream `Chummer.Engine.Contracts.dll` metadata resolution failure).
+
 ## 2026-04-04: milestone-13 sourcebook parity canon now marks sourcebook/reference family partial after governed master-index metadata and snippet-coverage posture landed
 
 - Trigger:
