@@ -263,6 +263,27 @@
 - Exact blocker:
   - none for this landed canon sync slice; push remains blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-6 decision notices now raise stale travel-cache refresh actions
+
+- Trigger:
+  - travel mode already carried stale-cache counts and summaries, but decision notices did not promote stale offline readiness to an explicit next action.
+  - operators could miss stale travel cache posture unless manually inspecting the travel section.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildDecisionNotices(...)` now receives `TravelModeReadinessSummary`.
+    - stale travel cache posture now emits `travel_cache_refresh` decision notice with direct travel-prefetch anchor.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale`.
+    - updated decision-notice reflection helper to pass travel-mode projection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeGmOperationsNoticeWhenReadinessIsNotGoverned|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesSkipGmOperationsNoticeWhenReadinessIsGoverned|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`3` tests).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `1b1181c1` (`feat(w3-6): raise stale travel cache refresh as decision notice`).
+- Push attempts:
+  - not attempted yet for this increment.
+- Exact blocker:
+  - no product blocker for this slice; current concurrent workspace still needs `StaticWebAssetsEnabled=false` for stable targeted runs.
+
 ## 2026-04-04: milestone-5 decision notices now raise explicit GM-operations follow-through when readiness is not governed
 
 - Trigger:
