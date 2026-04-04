@@ -1,3 +1,14 @@
+## 2026-04-04: follow-up on `debriefing` continuity lock commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `6522897c` (`fix(campaign-os): fail-close debriefing continuity aliases`).
+  - `fleet`: `0128a93` (`docs(handoff): record debriefing continuity lock slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close `debriefing` and `debriefings` aliases across canonicalization plus live API/UI journeys
 
 - Trigger:
