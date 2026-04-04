@@ -1,3 +1,45 @@
+## 2026-04-04: milestone-12 governor validation now aligns with Next-12 active-wave truth and guide manifest no longer hardcodes retired successor registry
+
+- Trigger:
+  - milestone `12` governance was still partially blocked by design automation expecting the retired `Next 20 Big Wins After Post-Audit Closeout` wave as active.
+  - `validate_product_invariants.py` and `validate_after_post_audit_next20_milestones.py` still required roadmap wording that conflicts with the active `Next 12 Biggest Wins` wave.
+  - `materialize_public_guide_bundle.py` still emitted a hardcoded active registry path to `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`, which drifted public-guide manifest metadata from active-wave truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py`:
+    - requires roadmap active follow-on wave `Next 12 Biggest Wins` after closed Next20 + post-audit waves.
+    - requires `NEXT_12_BIGGEST_WINS_REGISTRY.yaml` to be `active`/`in_progress` in that state.
+    - requires README references for `NEXT_12_BIGGEST_WINS_GUIDE.md` and `NEXT_12_BIGGEST_WINS_REGISTRY.yaml`.
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/validate_next20_milestones.py`:
+    - accepts `The current recommended wave is **Next 12 Biggest Wins**.` as a valid post-next20 follow-on sentence.
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/validate_after_post_audit_next20_milestones.py`:
+    - now fail-closes if roadmap still presents the retired after-post-audit wave as active.
+    - now requires roadmap references to active `NEXT_12_BIGGEST_WINS_GUIDE.md` and `NEXT_12_BIGGEST_WINS_REGISTRY.yaml`.
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/materialize_public_guide_bundle.py`:
+    - added active-wave registry resolution from roadmap/current status (prefers active Next12 when present).
+    - manifest active-wave metadata now uses resolved active registry path/status instead of hardcoded retired path.
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/verify.sh`:
+    - includes `NEXT_12_BIGGEST_WINS_GUIDE.md` and `NEXT_12_BIGGEST_WINS_REGISTRY.yaml` in required-file and shape checks.
+    - README-link regex now also requires Next-12 guide/registry references.
+  - regenerated:
+    - `/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json`
+    - `/docker/fleet/.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json` (mirror sync)
+- Verification:
+  - `cd /docker/chummercomplete/chummer-design && python3 -m py_compile scripts/ai/validate_product_invariants.py scripts/ai/validate_next20_milestones.py scripts/ai/validate_after_post_audit_next20_milestones.py scripts/ai/materialize_public_guide_bundle.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/validate_next20_milestones.py` -> PASS (`ok`).
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/validate_post_audit_next20_milestones.py` -> PASS (`ok`).
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/validate_after_post_audit_next20_milestones.py` -> PASS (`ok`).
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/validate_product_invariants.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --check` -> PASS (`weekly product pulse ok`) after regeneration.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_public_guide_bundle.py --check` -> FAIL in this environment (`FileNotFoundError: ffmpeg`).
+  - `cd /docker/chummercomplete/chummer-design && bash scripts/ai/verify.sh` -> FAIL on pre-existing non-slice gate (`validate_next20_repo_evidence: Downloads view must expose known-issues and release-notes trust surface language.`).
+- Commits landed:
+  - `chummer6-design`: `1e6ba48` (`fix(w5-12): align governor validators and guide manifest to next-12 active wave`).
+  - `fleet`: pending local commit in this slice (handoff + mirrored weekly pulse).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for push; full design verify still has a pre-existing non-slice failing gate in `validate_next20_repo_evidence`; public-guide check additionally needs `ffmpeg` installed.
+
 ## 2026-04-04: milestone-4/5/6 EA now also fail-proves W3 builtin contract runtime-policy resolution at service level
 
 - Trigger:
