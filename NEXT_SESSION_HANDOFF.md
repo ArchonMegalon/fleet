@@ -31,6 +31,7 @@
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` (after `cc2a25c`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `79a70d1`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
   - install lane closure remains externally blocked on native Windows/macOS promoted installer + startup-smoke tuple receipts.
