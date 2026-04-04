@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-4/5 continuity lane now fail-closes recap shelf classification drift for `debriefed`/`debriefing`/`debriefings` and split `post-session`/`post-run`/`post-game` shorthand
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep routing to stay one governed lane from search/query aliases through workspace recap shelf and creator projection surfaces.
+  - server-plane `IsAftermathSignalKind(...)` and recap token matching already recognized `debriefed` and split/hyphen post-session phrasing, but `IsAftermathRecapPublicationKind(...)` still only treated compact `debrief` family and omitted post-session/run/game pair handling.
+  - this left a continuity drift seam where recap publication kinds such as `debriefed` or `post-session` could land outside the aftermath shelf category (`other`) and lose creator-shelf eligibility despite matching the same governed continuity lane elsewhere.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsAftermathRecapPublicationKind(...)` now includes `debriefed`/`debriefing`/`debriefings`.
+    - `IsAftermathRecapPublicationKind(...)` now includes `ContainsPostMortemTokenPair(...)`, `ContainsPostSessionTokenPair(...)`, `ContainsPostRunTokenPair(...)`, and `ContainsPostGameTokenPair(...)`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath` theory for:
+      - `debriefed`, `debriefing`, `debriefings`, `post-session`, `post-run`, and `post-game`.
+    - fail-closes recap shelf category and creator shelf support for those continuity shorthand kinds.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - script-lock assertion now requires `queryText=debriefed` in hub live audit proof output.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryDoesNotActivateFromRecapitalizationKindWithoutRecapIdentity|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryKeepsCampaignRecapBundleClassification|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode" --nologo -v minimal` -> PASS (`9` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+- Commits landed:
+  - `chummer.run-services`: `0983335a` (`fix(w3): keep recap shorthand in aftermath shelf classification`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-4/5 campaign aftermath continuity now fail-closes split/hyphen carry-forward recap shorthand for `out brief`, `hot wash`, `post mortem`, `post session`, and `post run` in server-plane packet routing
 
 - Trigger:
