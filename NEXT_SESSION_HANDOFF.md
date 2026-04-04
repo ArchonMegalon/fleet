@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-1/3 external desktop tuple blockers now emit explicit cross-host proof-request receipts from registry through Fleet journey gates
+
+- Trigger:
+  - W1 milestone `1/3` was still externally blocked on missing Windows/macOS installer tuples, but control-plane blockers only reported missing tuple inventories and did not emit machine-readable per-tuple host-proof requests.
+  - this left install-lane recovery work under-specified for cross-host operators even when blocker classification was already correctly external-only.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `desktopTupleCoverage` now emits `externalProofRequests` rows for each missing `head:rid:platform` tuple with required host and required proof list (`promoted_installer_artifact`, `startup_smoke_receipt`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - accepts and fail-closes `desktopTupleCoverage.externalProofRequests` shape/content against canonical missing tuple coverage.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - startup-smoke fixture and canonical fixture assertions now require `externalProofRequests` parity with missing tuple coverage.
+  - regenerated hub-registry published artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - install-lane blocking reasons now project explicit external proof-request lines from hub-registry `desktopTupleCoverage.externalProofRequests`.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_install_journey_surfaces_release_channel_external_proof_requests` to fail-close journey projection of external proof-request blockers.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --channel docker --version local-docker --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && jq '.desktopTupleCoverage.externalProofRequests' .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS (4 explicit windows/macos tuple requests).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .external_blocking_reasons' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (now includes per-tuple `external proof request` lines).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
+- Exact blocker:
+  - promotion remains externally blocked until native Windows/macOS hosts publish matching startup-smoke receipts for promoted installer tuple bytes.
+
 ## 2026-04-04: milestone-4/5/6 status-plane fallback now promotes Hub/Mobile from public campaign continuity proof receipts
 
 - Trigger:
@@ -25,6 +60,10 @@
   - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap" or .id=="recover_from_sync_conflict") | {id,state,warning_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (hub/mobile warnings removed; only ui target-stage warning remains).
+- Commits landed:
+  - `fleet`: `19489a2` (`feat(w3-4-5-6): promote hub/mobile campaign proofs in status-plane fallback`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
