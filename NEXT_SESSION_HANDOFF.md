@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-4/5 campaign-spine creator publication build now normalizes whitespace-padded publication ids before dedup
+
+- Trigger:
+  - frontier milestones `4` and `5` require recap and GM/publication lanes to stay one governed truth even when recap publication ids arrive with formatting drift.
+  - `CampaignSpineService.BuildCreatorPublications(...)` still emitted raw `RecapShelf.CreatorPublicationId` values, so whitespace-padded ids were treated as distinct before dedup.
+  - repeated recap rows using padded/non-padded variants of the same publication id could inflate creator-publication output and weaken recap/publication lane coherence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - normalized recap `CreatorPublicationId` values before projection.
+    - creator publication projection now emits canonical normalized publication ids before grouping/dedup.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineBuildCreatorPublicationsDeduplicatesRows_WhenPublicationIdsHaveWhitespacePadding`.
+    - regression proves padded/non-padded publication-id variants collapse into one canonical creator-publication row.
+  - committed in `chummer.run-services`:
+    - `93d640bb` — `Normalize creator publication ids in campaign spine build`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildCreatorPublicationsDeduplicatesRows_WhenPublicationIdsHaveWhitespacePadding|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsDeduplicatesRows_WhenPublicationIdsRepeat|FullyQualifiedName~RecapShelfUsesLatestAftermathTimestamp_WhenRecapProjectionIdHasWhitespacePadding" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`283` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - campaign-spine creator publication rows now deduplicate consistently when recap publication ids differ only by whitespace formatting.
+  - milestone-4 recap continuity and milestone-5 GM/publication lanes now stay aligned on canonical creator-publication ids under formatting drift.
+- Push status:
+  - `chummer.run-services`: push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 desktop install/startup proof now fail-closes future-skewed timestamps across per-platform and aggregate executable gates
 
 - Trigger:
