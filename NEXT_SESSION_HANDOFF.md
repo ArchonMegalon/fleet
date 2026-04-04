@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1 install journey now fail-closes on release-channel trust-surface text fields (non-empty known-issue/fix/rollout/support summaries)
+
+- Trigger:
+  - frontier milestone `1` requires release truth, public shelf truth, and installer truth to stay aligned by promoted artifact tuples and channel posture.
+  - install journey proof already enforced tuple coverage and release-proof status, but did not structurally require non-empty trust-surface summary fields in `RELEASE_CHANNEL.generated.json`.
+  - that left a seam where publish state could pass while known-issue/fix/rollout/support summary copy degraded to empty/null and weakened recovery/update guidance truth.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added `json_must_be_non_empty_string` support for repo-source-proof JSON checks.
+    - new check blocks when a configured field is missing, non-string, or blank after trim.
+  - patched `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` install journey proof for `chummer6-hub-registry`:
+    - now requires non-empty `rolloutReason`, `supportabilitySummary`, `knownIssueSummary`, and `fixAvailabilitySummary`.
+  - patched canonical design source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same trust-surface non-empty checks.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_not_non_empty_string`.
+    - updated install-gate canon assertion to require the new `json_must_be_non_empty_string` mapping.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-hub-registry") | .json_must_be_non_empty_string' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (shows required trust-surface fields).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "json_field_not_non_empty_string or install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof"` -> FAIL (`No module named pytest`).
+
 ## 2026-04-04: milestone-1/3 install journey now fail-closes on desktop executable gate evidence scope (per-head receipt roots + zero blocking findings)
 
 - Trigger:
@@ -82,16 +106,14 @@
   - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/TravelModeCacheFreshnessTests.cs`:
     - stale-cache scenarios now fail-prove `OfflineLaneCues` status `degraded` and degraded offline actionability summaries.
 - Verification:
-  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter FullyQualifiedName~TravelModeCacheFreshnessTests -v minimal --nologo -m:1 -p:BuildInParallel=false` -> FAIL before test execution on pre-existing upstream compile break:
-    - `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs(64,56): error CS1736: Default parameter value for 'ImportOracleMissingSources' must be a compile-time constant`.
-  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter \"FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale\" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> FAIL with the same pre-existing compile break.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter FullyQualifiedName~TravelModeCacheFreshnessTests -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`3 passed` on `net10.0` and `net10.0-windows` filtered runs).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter \"FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale\" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`1 passed` on `net10.0` and `net10.0-windows` filtered runs).
 - Commits landed:
   - `chummer6-hub`: `6e8f3d94` (`feat(w3-6): mark offline lanes degraded when travel caches are stale`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - cross-repo baseline compile instability in `chummer-core-engine` currently prevents `chummer6-hub` test execution in this workspace until the `ToolCatalogModels.cs` default-parameter compile break is fixed.
   - environment lacks GitHub HTTPS credentials, so push remains blocked.
 
 ## 2026-04-04: follow-up on W1 release-proof/publish-state install-gate hardening (handoff commit + push status)
