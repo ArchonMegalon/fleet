@@ -50,9 +50,10 @@
 - Commits landed:
   - `chummer-hub-registry`: `4485e29` (`fix(w1): mutation-test localization gate alias drift seams`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `2caeae2..4485e29`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this slice.
+  - fleet push remains blocked by missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes nested localization-gate alias drift in source gate payloads
 
