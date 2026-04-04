@@ -29,6 +29,39 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commit `a785fcfd` remains local-only until auth is restored.
 
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `outbrief` / `out-brief` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to remain one governed lane across canonical alias rewrite, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand coverage already fail-closed debrief/postmortem/postsession/postrun/postgame/after-action/retro/hot-wash/lesson-learned families, but `outbrief` / `out-brief` recap phrasing was still outside the governed lane.
+  - this left a continuity drift seam where outbrief wording could classify outside `prep_library` in unresolved GM triage and evade live journey script-lock coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes compact and split `outbrief` / `out brief` variants (including plurals/hyphen forms) to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `outbrief` recap vocabulary and token-pair detection to campaign aftermath/recap publication matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact/split/hyphen `outbrief` phrasing as governed `prep_library`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity matching, unresolved-domain regressions, and script-lock assertions for `outbrief` variants.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added prep-library API/workspace/browser checks for compact/split/hyphen `outbrief` variants, fail-closing on non-`200`, empty governed result, route drift, or missing snippets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatOutBriefContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatLessonLearntContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `b2a8ba9e` (`fix(w3): canonicalize outbrief recap shorthand across continuity and gm ops`).
+- Push attempts:
+  - pending in this slice.
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock plural `postmortems` / `post-mortems`, `postsessions` / `post-sessions`, and `postruns` / `post-runs` recap shorthand across API/workspace and browser journey proofs
 
 - Trigger:
