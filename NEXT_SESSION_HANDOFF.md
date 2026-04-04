@@ -25,6 +25,28 @@
   - `chummer.run-services`: local changes landed in this slice (`scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-2 parity lane recovered by re-materializing stale desktop workflow execution gate timestamp to match nested SR4/SR6 receipts
+
+- Trigger:
+  - `chummer6-hub` verification failed in the parity audit because the parent receipt `.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` in `chummer6-ui` carried an older `generated_at` than nested workflow parity receipts.
+  - failure signature:
+    - `parity audit failed: workflow receipt sr4 workflow parity evidence generated_at drifts from nested receipt generatedAt`.
+- Landed:
+  - re-materialized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+  - command used:
+    - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (parity audit baseline now passes; script-local negative mutation checks still emit expected `parity audit failed` lines while returning success).
+- Current trusted state:
+  - hub parity baseline is no longer blocked by stale parent-vs-nested workflow receipt timestamps.
+  - milestone-2 workflow-execution proof recency is re-synchronized between top-level gate evidence and nested SR4/SR6 family receipts.
+- Push status:
+  - `chummer6-ui`: one generated receipt updated in this slice (`.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`); commit/push not performed in this slice.
+  - `fleet`: handoff updated in this slice; commit/push not performed in this slice.
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes plural relationship alias `connections` across workspace/GM canonicalization and live API/UI journeys
 
 - Trigger:
