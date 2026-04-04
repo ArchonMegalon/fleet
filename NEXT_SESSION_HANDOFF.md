@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-5 live audits now fail-close split `event ops` and `season control` shorthand across API and signed-in workspace prep journeys
+
+- Trigger:
+  - after split shorthand normalization landed in server tokenizers, live audit and browser journey scripts still only asserted compact event/season aliases.
+  - this left a drift window where split forms (`event ops`, `season control`) could regress in live journeys without tripping release-closeout evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=event%20ops` and `queryText=season%20control`.
+    - added signed-in workspace route checks for `prepQuery=event%20ops` and `prepQuery=season%20control` with non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library searches for split `event ops` and `season control` with encoded-route assertions and non-empty packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-marker assertions to lock split `event ops` and `season control` coverage in live audit and Playwright scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 live API and signed-in workspace journey audits now fail-close both compact and split event/season shorthand forms.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 split shorthand now fail-closes spaced/hyphen `gm ops`, `event ops`, and `season ops/control` aliases across campaign prep retrieval, GM prep search, unresolved-domain triage, and live API/UI journey audits
 
 - Trigger:
