@@ -1,3 +1,40 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity aliases `heats` and `journals` across canonicalization plus live API/UI journeys
+
+- Trigger:
+  - continuity script-locks already covered singular `heat` and `journal`, but plural user phrasing `heats` and `journals` was not canonicalized in prep-library tokenization.
+  - this left a regression seam where workspace and GM prep retrieval could drift from intended continuity equivalence under common plural phrasing.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrites:
+      - `heats -> heat`
+      - `journals -> journal + diary`
+  - expanded unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation` now asserts `journal`, `journals`, `heat`, and `heats`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - `ListPrepAssets_QuerySupportsContinuityPluralShorthand` now asserts `journals` and `heats`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=heats` and `queryText=journals`.
+      - added signed-in workspace route checks for `prepQuery=heats` and `prepQuery=journals`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `prepQuery=heats` and `prepQuery=journals` with route/copy/non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for `queryText/prepQuery=heats` and `queryText/prepQuery=journals`.
+      - expanded Playwright marker assertions for `?prepQuery=heats`, `?prepQuery=journals`, and the related continuity copy markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity and milestone-5 GM prep search now treat singular/plural heat and journal phrasing as one governed lane across workspace and ops canonicalization, unit tests, live API audits, and browser journey proof.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (`CampaignWorkspaceServerPlaneService.cs`, `GmOpsBoardService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`, `GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops live audits now script-lock plural compact return alias `nextsessions` across API/workspace and browser journey proof
 
 - Trigger:
