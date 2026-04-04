@@ -1,3 +1,60 @@
+## 2026-04-04: milestone-5 opposition/event-control packet synthesis now deduplicates identical run-pressure objective versions to prevent inflated GM ops counts
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires GM packet counts to reflect unique governed run-pressure truth.
+  - `CampaignWorkspaceServerPlaneService` still counted repeated identical `ObjectiveProjection` rows separately in `opposition` and `event-control` packet synthesis.
+  - repeated identical run objectives could overstate bounded ops receipt totals and consume packet evidence slots without new campaign truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `DeduplicateIdenticalObjectiveVersions(...)` and `BuildObjectiveDedupeKey(...)`.
+    - applied objective dedupe before bounded `Take(...)` in:
+      - `BuildOppositionPrepPacket(...)`
+      - `BuildEventControlPrepPacket(...)`
+    - objective dedupe key is version-safe (`objectiveId/title/status/pressure/summary/updatedAtUtc`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow`.
+    - added `OppositionPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~OppositionPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`251` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 opposition and event-control packet synthesis now resists duplicate-row inflation for identical run-pressure objective versions.
+  - bounded ops packet counts and evidence slots now prefer unique objective-version truth alongside existing consequence/roster/prep/travel dedupe hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-1/3 executable gate now requires explicit architecture-aware desktop tuple coverage metadata (head/rid/platform) so release truth cannot hide arch drift
+
+- Trigger:
+  - frontier milestones 1 and 3 require release truth alignment by artifact, head, architecture, and channel.
+  - `materialize-desktop-executable-exit-gate.sh` previously enforced `desktopTupleCoverage` only at platform/head granularity, allowing release-channel tuple metadata to omit RID-level coverage declarations.
+  - this left a fail-honesty gap where architecture coverage drift could be inferred from artifacts instead of being explicitly declared in tuple coverage metadata.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `build_platform_head_rid_tuple(...)` helper and evidence fields for RID-aware tuple inventories.
+    - added required `desktopTupleCoverage` metadata declarations:
+      - `requiredDesktopPlatformHeadRidTuples`
+      - `promotedPlatformHeadRidTuples`
+      - `missingRequiredPlatformHeadRidTuples`
+    - added inventory mismatch and missing-tuple failure checks for `head:rid:platform` tuples.
+    - gate now emits explicit reasons when RID-aware tuple coverage fields are missing or inconsistent with promoted installer artifacts.
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract markers for RID-aware tuple fields, evidence keys, and new failure strings.
+  - refreshed generated executable gate receipt:
+    - `/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal -m:1` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with honest blockers including:
+    - missing RID-aware `desktopTupleCoverage` declarations/inventory
+    - missing promoted Windows/macOS install media tuples
+- Current trusted state:
+  - executable milestone-3 proof now fails honest when release-channel tuple coverage omits architecture (`rid`) shape, rather than inferring architecture truth from artifact lists.
+  - W1 blocker posture is now narrower and stricter: release-channel must publish explicit RID-aware tuple coverage metadata in addition to landing promoted Windows/macOS tuples.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 recap-signal packet synthesis now deduplicates identical diary/downtime recap versions to prevent inflated return counts
 
 - Trigger:
