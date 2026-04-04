@@ -23,6 +23,27 @@
   - `chummer6-ui`: local commit created in this slice; push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-string `releaseProof.journeysPassed` entries and missing `releaseProof.generatedAt`
+
+- Trigger:
+  - frontier milestone `2` parity audit already fail-closed non-string entries inside `releaseProof.journeysPassed` and missing nested `releaseProof.generatedAt` timestamps.
+  - Hub verify mutation coverage did not execute those two branches, leaving journey-array typing and release-proof timestamp-presence enforcement partially unproven in the end-to-end verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.journeysPassed=["install_claim_restore_continue", 42, ...]` and asserted `audit-ui-parity.sh` fail-closes for non-string journey entries.
+    - added mutation removing both `releaseProof.generatedAt` and `releaseProof.generated_at` and asserted `audit-ui-parity.sh` fail-closes for missing nested proof timestamp.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions for both new mutation coverage texts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for non-string `journeysPassed` entries and missing `releaseProof.generatedAt`, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves journey-array string typing and nested release-proof timestamp presence in the same mutation lane as route grammar, journey inventory, origin policy, and freshness checks.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes split singular shorthand (`crew transfer/handoff/move`, `roster transfer/handoff/move`) across prep-library API, signed-in workspace routes, and GM ops prep search
 
 - Trigger:
