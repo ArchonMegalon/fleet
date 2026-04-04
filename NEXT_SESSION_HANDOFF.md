@@ -44,6 +44,33 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 localization shelf verifier now fail-closes stale/future `releaseProof.generatedAt` timestamps
+
+- Trigger:
+  - frontier milestone `2` and `BLK-009` require release-truth proof packets to be fresh and anti-tamper, not only status-valid.
+  - `chummer6-hub-registry` verifier already fail-closed stale/future `releaseProof.uiLocalizationReleaseGate.generatedAt`, but top-level `releaseProof.generatedAt` was not freshness-validated.
+  - this left a drift path where a passing release proof could be promoted with stale or far-future top-level proof timestamps.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added explicit `releaseProof.generatedAt` ISO parsing and fail-close checks for stale/future skew.
+    - added new verifier env overrides:
+      - `CHUMMER_VERIFY_RELEASE_PROOF_MAX_AGE_SECONDS` / `CHUMMER_RELEASE_PROOF_MAX_AGE_SECONDS`
+      - `CHUMMER_VERIFY_RELEASE_PROOF_MAX_FUTURE_SKEW_SECONDS` / `CHUMMER_RELEASE_PROOF_MAX_FUTURE_SKEW_SECONDS`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression mutations proving fail-close behavior for:
+      - stale `releaseProof.generatedAt`
+      - excessive future-skew `releaseProof.generatedAt`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented `releaseProof.generatedAt` freshness/future-skew contract and new verifier env controls.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - promoted release-channel verification now fails closed when top-level release proof timestamps are stale or implausibly future-dated, aligning release proof timestamp trust with localization gate freshness posture.
+- Push status:
+  - `chummer6-hub-registry`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes screenshot-dir drift by validating required files and timestamp skew on disk
 
 - Trigger:
