@@ -113,9 +113,9 @@
   - `cd /docker/fleet && jq '.coverage_details.desktop_client.evidence | {count:.install_claim_restore_continue_external_proof_request_count, hosts:.install_claim_restore_continue_external_proof_request_hosts, tuples:.install_claim_restore_continue_external_proof_request_tuples}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`count=4`, hosts=`["macos","windows"]`, tuples include all four missing promoted Windows/macOS tuples).
   - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k materialize_flagship_product_readiness_marks_real_missing_lanes` -> FAIL (`No module named pytest` in this environment).
 - Commits landed:
-  - pending commit in `fleet` worktree (this slice only touched Fleet files listed above).
+  - `fleet`: `87e672b` (`feat(w1-1-3): project tuple host-proof requests into flagship readiness evidence`).
 - Push attempts:
-  - pending post-commit push attempt (expected to remain credential-blocked in this environment).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
