@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5 campaign spine publication posture now fail-closes duplicate creator publication ids and keeps latest trust state
+
+- Trigger:
+  - frontier milestones 4/5 require campaign return and GM/publication continuity lanes to stay stable when recap/publication projection rows repeat.
+  - `CampaignSpineService.AttachCreatorPublicationPosture(...)` still used direct `ToDictionary(PublicationId, ...)`, so duplicate publication ids could throw and break campaign workspace publication posture assembly.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - replaced direct publication-id dictionary materialization with normalized grouping by `PublicationId`.
+    - publication-id lookup now ignores blank ids and keeps the latest `UpdatedAtUtc` row per publication id.
+    - campaign spine recap-publication posture now resists duplicate publication-id projection rows and preserves newest publication/trust state.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenPublicationIdsRepeat`.
+    - regression proves duplicate creator publication ids no longer break posture assembly and that latest publication status/trust is retained.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenPublicationIdsRepeat|FullyQualifiedName~RecapShelfUsesLatestCreatorPublication_WhenPublicationIdsRepeat|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`278` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - campaign spine creator-publication posture no longer fails on duplicate publication ids and now deterministically resolves to the newest publication trust/status row.
+  - milestone-4 return-loop and milestone-5 GM/publication posture projection remain green in workspace + GM ops coverage.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes duplicate localeSummary locale rows in registry verification
 
 - Trigger:
