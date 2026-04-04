@@ -6,15 +6,18 @@
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
     - projected replay, downtime, and non-downtime aftermath package anchors separately before packet projection.
+    - sorted aftermath packages by `GeneratedAtUtc` descending before category selection so each projected category uses the most recent governed receipt rather than list-order luck.
     - preserved recap fallback behavior by continuing to suppress recap projection whenever any non-replay aftermath package exists.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `CampaignSpineWorkspaceChangePacketsProjectDowntimeAndAfterActionSignalsWhenBothExist`.
+    - added `CampaignSpineWorkspaceChangePacketsPreferMostRecentPackagePerAftermathCategory`.
     - locked expectation that replay + downtime + after-action produce three governed change packets when ids are distinct.
+    - locked expectation that each projected aftermath category resolves to the newest package when older and newer receipts coexist.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceChangePacketsProjectDowntimeAndAfterActionSignalsWhenBothExist|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedRecapProjectionIdsWhenAftermathIsMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`292` tests on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`306` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceChangePacketsProjectDowntimeAndAfterActionSignalsWhenBothExist|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentPackagePerAftermathCategory|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`307` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - campaign return packet projection now keeps downtime and after-action aftermath truth visible together (alongside replay) when both are present, instead of dropping one category due to first-non-replay selection.
+  - replay/downtime/after-action change packets now track the newest receipt per category when older payload variants still exist in workspace history.
   - milestone-4 continuity surfaces now carry more faithful downtime/aftermath packet coverage without reopening local shadow-note behavior.
 - Push status:
   - `chummer.run-services`: pending in this environment (credential-dependent).
