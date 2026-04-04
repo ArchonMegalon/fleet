@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes promoted desktop install-media artifacts missing explicit `head`
+
+- Trigger:
+  - frontier milestones `1` and `3` require promoted desktop artifact truth to stay aligned by head/rid/platform/channel/version.
+  - executable gate enforced tuple/channel/version checks but could still ignore promoted desktop install-media entries missing `head` metadata when projecting platform/head tuple coverage.
+  - this left a metadata-hole seam where malformed promoted install artifacts could remain in release truth without explicit fail-close evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `release_channel_desktop_install_artifacts_missing_head` evidence inventory.
+    - gate now fail-closes when promoted desktop install-media artifacts are missing explicit `head` metadata.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded script-marker assertions for missing-head evidence key and fail-close reason string.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate marker assertions for missing-head evidence key and fail-close reason string.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable tuple proof now rejects promoted desktop install-media artifacts that omit `head`, preventing silent projection drift in per-head gate evidence.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for missing-required and unexpected `releaseProof.journeysPassed` baseline coverage
 
 - Trigger:
