@@ -1,3 +1,42 @@
+## 2026-04-04: milestone-5 roster movement lane now fail-closes split plural shorthand (`crew transfers/handoffs/moves`, `roster transfers/handoffs/moves`) across prep-library API, signed-in workspace routes, and GM ops prep search
+
+- Trigger:
+  - milestone `5` already fail-closed compact and hyphen roster shorthand families, but split plural forms (`crew transfers`, `roster handoffs`, etc.) were not explicitly normalized in prep-library search token rewrites.
+  - this left a drift seam where common whitespace phrasing could miss governed roster packets even though equivalent compact/hyphen aliases were covered.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added split plural roster alias rewrites that keep roster/crew identity tokens while normalizing action terms:
+      - `crew + transfer(s) -> crew + handoff`
+      - `crew + handoffs -> crew + handoff`
+      - `crew + moves -> crew + move`
+      - `roster + transfer(s) -> roster + move`
+      - `roster + handoffs -> roster + handoff`
+      - `roster + moves -> roster + move`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - mirrored the same split plural alias rewrites in GM prep-asset query tokenization.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=crew%20transfers`, `crew%20handoffs`, `crew%20moves`, `roster%20transfers`, `roster%20handoffs`, `roster%20moves`.
+    - added signed-in workspace route checks for the same six split plural aliases under `prepQuery=...`, with route/body proof and governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey assertions for the same six split plural prep queries with encoded-route preservation and non-empty governed packet checks.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended prep-library query matching regression to cover split plural roster shorthand.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - extended GM prep-asset query coverage for split plural roster shorthand.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions to lock all new split plural query checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`404` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement search normalization now treats split plural operator phrasing as first-class governed inputs across API, signed-in workspace routes, and browser journey checks, aligned with existing compact/hyphen coverage.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release truth that still uses the `unpublished` version sentinel
 
 - Trigger:
@@ -19,6 +58,29 @@
   - milestone-1/3 executable proof can no longer report publishable desktop release truth while carrying the non-release `unpublished` version sentinel.
 - Push status:
   - `chummer6-ui`: committed (`333b2885`); push failed in this environment (`could not read Username for 'https://github.com'`).
+
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-array `releaseProof.journeysPassed`/`releaseProof.proofRoutes` payloads and whitespace-padded journey ids
+
+- Trigger:
+  - parity audit already rejected malformed release-proof payload shapes and whitespace-padded journey ids, but Hub verify mutation coverage did not execute those branches.
+  - this left release-proof schema/whitespace grammar enforcement partially unproven in the end-to-end Hub verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.journeysPassed="install_claim_restore_continue"` and asserted `audit-ui-parity.sh` fails for non-array journeys payloads.
+    - added mutation `releaseProof.proofRoutes="/home/access"` and asserted `audit-ui-parity.sh` fails for non-array proof-routes payloads.
+    - added mutation `releaseProof.journeysPassed[0]=" install_claim_restore_continue"` and asserted `audit-ui-parity.sh` fails for leading-whitespace journey ids.
+    - preserved release-channel receipt restore flow between all mutation checks.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock all three new mutation coverage texts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for non-array `releaseProof.journeysPassed`, non-array `releaseProof.proofRoutes`, and whitespace-padded journey ids, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves release-proof journey/route payload-shape and journey-id whitespace fail-close branches alongside existing route/journey grammar and freshness checks.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for uppercase and empty-segment `releaseProof.proofRoutes` values
 
