@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes unexpected visual required-id supersets across tests, interaction keys, and screenshots
+
+- Trigger:
+  - frontier milestone `2` visual parity receipts already fail-closed missing required test/interaction/screenshot ids, but still allowed unexpected extra ids inside `required_tests`, `required_legacy_interaction_keys`, and `required_screenshots`.
+  - this left a drift window where non-canonical supersets could pass parity audit while silently expanding the declared visual contract surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added fail-close checks for unexpected required visual test ids beyond the canonical milestone-2 set.
+    - added fail-close checks for unexpected required legacy interaction keys beyond canonical milestone-2 interaction keys.
+    - added fail-close checks for unexpected required screenshot ids beyond canonical milestone-2 screenshot inventory.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-marker assertions locking the new `declares unexpected milestone-2 ...` fail-close guards for tests, interaction keys, and screenshots.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now enforces canonical exactness (not only subset coverage) for receipt-declared visual required-id inventories, reducing false-green drift from ungoverned supersets.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 GM ops board now fail-closes compact `gmops` and `gmop` aliases across prep-asset search tokenization and unresolved-domain triage
 
 - Trigger:
