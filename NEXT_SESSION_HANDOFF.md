@@ -54,6 +54,12 @@
   - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
     - added strict release-channel field checks for workflow/visual receipts (`release_channel_channel_id`, `release_channel_version`).
     - added workflow fail-close on `workflow_parity_receipt_channel_ids` drift from release-channel channel id.
+    - added workflow fail-close on missing/weak family execution evidence even when top-level status is pass:
+      - `workflow_execution_weak_receipts`
+      - `workflow_family_missing_receipts`
+      - `workflow_family_failing_receipts`
+      - `workflow_family_receipt_count_checked` (must be >= 1)
+      - `workflow_execution_receipt_count_checked` (must be >= 1)
     - added workflow/visual fail-close on non-empty anti-tamper marker arrays:
       - `flagship_gate.headProofs.status_malformed_entries`
       - `flagship_gate.headProofs.status_non_canonical_keys`
