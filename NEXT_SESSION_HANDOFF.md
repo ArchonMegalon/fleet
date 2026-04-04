@@ -21,6 +21,28 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 proof is now enforced by the main Hub verify entrypoint (not only ad hoc parity runs)
+
+- Trigger:
+  - frontier milestone `2` requires executable workflow + visual familiarity proof to stay release-blocking for the flagship legacy-familiar workbench lane.
+  - `scripts/audit-ui-parity.sh` already fail-closed on those receipts, but `scripts/ai/verify.sh` did not invoke it, so the primary Hub verification path could still pass without running milestone-2 proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added `bash scripts/audit-ui-parity.sh` between run-services verification and smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added `VerifyEntrypointRunsUiParityAudit` to lock the entrypoint contract and prevent silent regression.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`; workflow + visual receipts both pass).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, parity audit now runs in-path, `run-services in-process smoke passed`).
+- Current trusted state:
+  - the canonical Hub verify lane now fail-closes when milestone-2 parity/workflow/visual evidence drifts, instead of depending on separate manual parity command discipline.
+  - regression coverage now explicitly binds that verify-entrypoint behavior.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff update local commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now treats street-cred/public-awareness mutations as first-class relationship signals
 
 - Trigger:
