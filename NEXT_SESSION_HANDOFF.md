@@ -48,6 +48,7 @@
 - Commits landed:
   - `chummer-hub-registry`: `f2842f2` (`fix(w1): fail-close unexpected materializer release-proof and localization-gate keys`).
   - `fleet`: `d5f6d54` (`docs(handoff): record w1 materializer proof/gate unexpected-key fail-close`).
+  - `fleet`: `7e6dd81` (`docs(handoff): finalize w1 proof/gate fail-close commit and push receipts`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `06e3e3a..f2842f2`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
