@@ -253,10 +253,12 @@ def evaluate_journey(
                 )
         json_required = dict(proof_row.get("json_must_equal") or {})
         json_required_one_of = dict(proof_row.get("json_must_be_one_of") or {})
+        json_required_non_empty = dict(proof_row.get("json_must_be_non_empty_string") or {})
         max_age_hours_raw = proof_row.get("max_age_hours")
         enforce_json_parsing = (
             bool(json_required)
             or bool(json_required_one_of)
+            or bool(json_required_non_empty)
             or (max_age_hours_raw is not None and str(max_age_hours_raw).strip())
         )
         proof_payload: Dict[str, Any] | None = None
@@ -295,6 +297,15 @@ def evaluate_journey(
                 if actual not in normalized_allowed:
                     blocking_reasons.append(
                         f"repo proof {repo_name}:{relative_path} field '{field_path}' expected one of {normalized_allowed!r} but was {actual!r}."
+                    )
+
+        if json_required_non_empty:
+            assert proof_payload is not None
+            for field_path in json_required_non_empty.keys():
+                actual = _resolve_json_path(proof_payload, str(field_path))
+                if not isinstance(actual, str) or not actual.strip():
+                    blocking_reasons.append(
+                        f"repo proof {repo_name}:{relative_path} field '{field_path}' must be a non-empty string but was {actual!r}."
                     )
 
         if max_age_hours_raw is not None and str(max_age_hours_raw).strip():

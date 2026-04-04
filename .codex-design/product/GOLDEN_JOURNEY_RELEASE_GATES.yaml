@@ -55,6 +55,11 @@ journey_gates:
             status:
               - published
               - publishable
+          json_must_be_non_empty_string:
+            rolloutReason: true
+            supportabilitySummary: true
+            knownIssueSummary: true
+            fixAvailabilitySummary: true
           must_contain:
             - '"desktopTupleCoverage"'
             - '"releaseProof"'

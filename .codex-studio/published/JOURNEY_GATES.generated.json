@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:31:19Z",
+  "generated_at": "2026-04-04T17:33:37Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:30:33Z",
+      "at": "2026-04-04T17:31:19Z",
       "state": "fresh",
-      "age_seconds": 46
+      "age_seconds": 138
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 751
+      "age_seconds": 889
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 797
+      "age_seconds": 935
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 797
+      "age_seconds": 935
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 796
+      "age_seconds": 934
     }
   },
   "journeys": [
@@ -126,6 +126,12 @@
                 "published",
                 "publishable"
               ]
+            },
+            "json_must_be_non_empty_string": {
+              "rolloutReason": true,
+              "supportabilitySummary": true,
+              "knownIssueSummary": true,
+              "fixAvailabilitySummary": true
             },
             "must_contain": [
               "\"desktopTupleCoverage\"",
