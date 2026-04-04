@@ -1,3 +1,10 @@
+## 2026-04-04: follow-up verify after milestone-2 workflow gate rematerialization confirms run-services parity lane remains green
+
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (baseline parity audit passes; repeated `parity audit failed: ...` lines are expected negative mutation probes in script-lock coverage; final `run-services in-process smoke passed`).
+- Current trusted state:
+  - run-services parity lane remains synchronized with refreshed UI workflow gate evidence after this session’s rematerialization slice.
+
 ## 2026-04-04: follow-up on W1/W3 localization signoff runtimeconfig bootstrap drift fail-close in chummer6-ui (commit and push status)
 
 - Commits landed:
