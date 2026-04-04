@@ -49,11 +49,12 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~Desktop_executable_gate_fail_closes_invalid_platform_gate_contract_names" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`6` tests on `net10.0`).
 - Current trusted state:
   - milestone-1/3 executable-gate tuple proof now requires startup-smoke `rid` identity on Windows/macOS in addition to `arch`, reducing false-green tuple drift in per-head release receipts.
 - Push status:
-  - `chummer6-ui`: commit/push pending for this slice (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+  - `chummer6-ui`: commit landed (`91794ded`); push attempted and failed in this environment due missing GitHub credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff commit landed (`d4521f9`); push attempted and failed in this environment due missing GitHub credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 release-proof base origin now fail-closes non-canonical `releaseProof.baseUrl` across hub parity audit and registry materialize/verify gates
 
