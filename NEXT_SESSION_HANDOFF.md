@@ -22,12 +22,14 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "repo_source_proof_json_field_mismatches or json_field_not_in_allowed_set or install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof"` -> FAIL (`No module named pytest`).
   - `cd /docker/fleet && .venv/bin/python -m pytest ...` -> FAIL (`No module named pytest`).
 - Commits landed:
-  - pending local commit in `chummer6-design` for canonical gate hardening.
-  - pending local commit in `fleet` for evaluator/test/handoff/gate mirror updates.
+  - `chummer6-design`: `69a3200` (`docs(w1-1): require release-proof and publish-state checks for install gate`).
+  - `fleet`: `82a26dd` (`feat(w1-1): fail-close install journey on release-proof publish-state drift`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - `pytest` is unavailable in the current environment, so Python unit tests cannot run until test tooling is installed; push remains credential-gated in this workspace.
+  - `pytest` is unavailable in the current environment, so Python unit tests cannot run until test tooling is installed.
+  - GitHub HTTPS credentials are unavailable in this environment, so push remains blocked.
 
 ## 2026-04-04: milestone-13/14 parity lane receipts now end-to-end visible in presentation API suite
 
