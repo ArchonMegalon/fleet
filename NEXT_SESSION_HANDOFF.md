@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-7/8/9/16 signed-in home rail now shows multiple build-handoff outputs with per-output continuity cues
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require build/explain/exchange/viewer/print follow-through to be visible where users make real next-step decisions.
+  - signed-in public home rail previously rendered only `handoff.Outputs[0]`, which could hide adjacent governed lanes even when the handoff carried richer output truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - build-handoff rail now renders `Outputs.Take(2)` labels and iterates those outputs for per-output `Output next` and `Output provenance` cues.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - source guard now fail-proves `handoff.Outputs.Take(2)` plus the per-output continuity markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `19a769a2` (`feat(w4): show multiple build-handoff outputs on signed-in home rail`).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now carries explicit print-ready PDF export continuity alongside template/foundry/sheet lanes
 
 - Trigger:
