@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 parity checklist now fail-closes malformed token drift and reads live core-engine workbench catalogs
+
+- Trigger:
+  - frontier milestone `2` depends on trustworthy shell/workbench parity evidence (`shell_workbench_orientation` and dense-workflow familiarity), but Hub’s parity checklist generator had two fail-open seams:
+    - it silently deduplicated malformed oracle tokens (`docs/PARITY_ORACLE.json`) instead of failing on blank/whitespace-padded/normalized-collision ids.
+    - it still pointed at in-repo catalog paths that no longer exist, so `RUNBOOK_MODE=parity-checklist` could fail before producing current parity proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - added strict token normalization helpers (`normalize_required_token`, `parse_required_token_list`) so oracle `tabs` / `workspaceActions` fail-close on non-string, blank, whitespace-padded, and duplicate-normalized ids.
+    - rewired catalog sourcing to live core-engine paths by default (`../chummer-core-engine/Chummer.Rulesets.Hosting/Presentation/{NavigationTabCatalog,WorkspaceSurfaceActionCatalog}.cs`) with explicit env overrides:
+      - `CHUMMER_CORE_ENGINE_ROOT`
+      - `CHUMMER_PARITY_NAVIGATION_TAB_CATALOG_PATH`
+      - `CHUMMER_PARITY_WORKSPACE_ACTION_CATALOG_PATH`
+    - added explicit missing-file failure for required sources.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added `ParityChecklistGeneratorFailClosesMalformedParityTokens` to lock strict-token fail-close behavior in regression coverage.
+  - regenerated `/docker/chummercomplete/chummer6-hub/docs/PARITY_CHECKLIST.md` from the live catalogs.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~AuditComplianceUsesSupportedVerificationScript" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity checklist generation is executable again against the live workbench catalogs and no longer silently normalizes malformed oracle token drift.
+  - regenerated checklist now shows additional current catalog-only entries (`tab-create`, `build-lab`) that were previously not reflected because the stale in-repo catalog paths were invalid.
+- Push status:
+  - `chummer6-hub`: local changes staged in working tree (`scripts/generate-parity-checklist.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`, `docs/PARITY_CHECKLIST.md`); commit/push pending.
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed visual screenshot token inventories from visual proof receipts
 
 - Trigger:
