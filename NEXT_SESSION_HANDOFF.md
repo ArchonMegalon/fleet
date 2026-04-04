@@ -1,3 +1,13 @@
+## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 external-proof tuple-spec contract slice
+
+- Commits landed:
+  - `fleet`: `5d3628d` (`feat(w1-1-3): fail-close external-proof backlog tuple specs in support summary`).
+  - `fleet`: `102067a` (`docs(handoff): record w1 tuple-spec external-proof fail-close slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 support packets and journey gates now fail-close unresolved external-proof tuple-spec drift against release-channel truth
 
 - Trigger:
