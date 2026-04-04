@@ -24,6 +24,36 @@
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-04: milestone-2 localization proof lane now mutation-tests verifier and materializer alias-drift fail-close for fallback runtime, signoff runner, and backlog-count seams
+
+- Trigger:
+  - frontier milestone `2` depends on deterministic release-proof contracts for flagship-workbench trust.
+  - localization-gate alias drift was already fail-closed in `scripts/materialize_public_release_channel.py` and `scripts/verify_public_release_channel.py`, but `scripts/ai/verify.sh` did not actively mutate three seams:
+    - `explicitFallbackRuntime` vs `explicit_fallback_runtime`
+    - `signoffSmokeRunnerStatus`/`signoff_smoke_runner_status` (verifier projection seam) and `signoffSmokeRunner`/`signoff_smoke_runner` (materializer source seam)
+    - `translationBacklogFindingsCount` vs `translation_backlog_findings_count`
+  - this left regression room where alias fail-close behavior could weaken without mutation coverage catching it.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added verifier mutation checks that require failure for conflicting alias values between:
+      - `releaseProof.uiLocalizationReleaseGate.explicitFallbackRuntime` and `releaseProof.uiLocalizationReleaseGate.explicit_fallback_runtime`
+      - `releaseProof.uiLocalizationReleaseGate.signoffSmokeRunnerStatus` and `releaseProof.uiLocalizationReleaseGate.signoff_smoke_runner_status`
+      - `releaseProof.uiLocalizationReleaseGate.translationBacklogFindingsCount` and `releaseProof.uiLocalizationReleaseGate.translation_backlog_findings_count`
+    - added materializer mutation checks that require failure with explicit marker checks for conflicting alias values between:
+      - `explicit_fallback_runtime` and `explicitFallbackRuntime`
+      - `signoff_smoke_runner` and `signoffSmokeRunner`
+      - `translation_backlog_findings_count` and `translationBacklogFindingsCount`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected alias-drift fail-close mutation runs for all newly-added seams).
+- Commits landed:
+  - `chummer-hub-registry`: `4485e29` (`fix(w1): mutation-test localization gate alias drift seams`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes nested localization-gate alias drift in source gate payloads
 
 - Trigger:
