@@ -26,6 +26,15 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state, blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (blocking reasons now explicitly include `blocking_findings_count` mismatch when desktop executable gate is not clean).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof` -> FAIL (`No module named pytest`).
 
+## 2026-04-04: handoff append commit + fleet push status for milestone-13/14/17/18 gate fail-close slice
+
+- Commits landed:
+  - `fleet`: `16ee29a` (`docs(handoff): record w2 parity release-gate fail-close on master-index lanes`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: milestone-13/14/17/18 release-gate proof now fail-closes on core master-index parity lane receipts
 
 - Trigger:
