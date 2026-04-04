@@ -59,10 +59,11 @@
   - patched compliance script-lock test:
     - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
     - expanded marker assertions for the new Linux embedded-artifact fail-close strings and evidence keys.
+    - added `Linux_exit_gate_materializer_embeds_release_channel_artifact_identity_in_checks_envelope` to lock materializer emission of `checks.release_channel_linux_artifact` plus `checks.release_channel_id/version`.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
-  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`; analyzer warnings only).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~DesktopExecutableGateComplianceTests.Linux_exit_gate_materializer_embeds_release_channel_artifact_identity_in_checks_envelope" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
 - Current trusted state:
   - milestone-1/3 executable proof now enforces embedded artifact identity parity on Linux as well as Windows/macOS, preventing per-head Linux gate envelopes from silently drifting channel/version/arch or artifact bytes from promoted release-channel truth.
 - Push status:
@@ -99,6 +100,35 @@
   - milestone-1/3 executable proof now fail-closes channel/version alias drift not only in top-level gate fields and startup smoke receipts, but also inside embedded Windows/macOS release-channel artifact envelopes consumed by per-head packaged-binary gates.
 - Push status:
   - `chummer6-ui`: local changes landed in this slice (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
+## 2026-04-04: milestone-5 organizer event-control lane now fail-closes hyphen compact-control aliases `league-ctrl` and `community-ctrl` across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-5 organizer query proof already covered compact/split/hyphen control families for league/community (`leaguectrl`, `league-control`, `communityctrl`, `community-control`) plus ops/operation variants.
+  - hyphen compact-control aliases (`league-ctrl`, `community-ctrl`) were token-supported but not explicitly script-locked in service tests, live API/workspace audits, or Playwright markers.
+- Landed:
+  - patched service/query tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added explicit assertions for `league-ctrl` and `community-ctrl` in prep matching and GM prep retrieval lanes.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=league-ctrl` and `queryText=community-ctrl`.
+      - added signed-in workspace route checks for `prepQuery=league-ctrl` and `prepQuery=community-ctrl`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `league-ctrl` and `community-ctrl` with route-preservation and non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions for the new hyphen compact-control aliases.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 organizer event-control proof now explicitly fail-closes compact, split, and hyphen control aliases for league/community lanes, including `league-ctrl` and `community-ctrl`, across unit canonicalization, live API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
 ## 2026-04-04: milestone-4 return continuity lane now fail-closes compact `nextsessionreturn` and `sessionreturn` aliases across prep canonicalization and live API/UI journeys
