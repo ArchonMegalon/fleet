@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-12 weekly pulse v3 now resolves active-wave registry from roadmap truth and emits explicit measured freeze/launch governance decisions
+
+- Trigger:
+  - frontier milestone `12` requires pulse/governor automation to stay aligned with the active product program and justify launch/freeze posture from measured truth.
+  - `/docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py` still hard-wired `active_wave_status` and `active_wave_registry` to `NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml`, even when roadmap truth moved to `Next 12 Biggest Wins`.
+  - this created drift risk where pulse snapshots could carry stale wave-status posture and weak launch-governance decisions (`continue` prose only) instead of explicit freeze/launch control decisions grounded in journey/canary/support/release evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py`:
+    - added dynamic active-wave registry resolution (`_resolve_active_wave_registry(...)`) with `Next 12` precedence and status normalization (`active`/`in_progress`).
+    - pulse `supporting_signals.active_wave_registry` now materializes from the resolved active registry path instead of a fixed Next-20 path.
+    - added explicit wave-aware cluster summary branch for `Next 12 Biggest Wins` in `_top_clusters(...)`.
+    - expanded governor decisions to include measured launch-governance control output:
+      - `action=freeze_launch` when journeys block, local release proof is not passed, canary status is non-green, or support closure is non-clear.
+      - `action=launch_expand` only when those measured conditions are green.
+      - retained wave-focus decision output (`focus_shift` / closeout continuation) with cited signals.
+    - corrected provider-route signal return typing and active-wave status handling so `active` registry states are treated as live wave posture.
+  - regenerated `/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json` for `--as-of 2026-04-04`.
+  - mirrored refreshed pulse into `/docker/fleet/.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-design && python3 -m py_compile scripts/ai/materialize_weekly_product_pulse_snapshot.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --as-of 2026-04-04 --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --as-of 2026-04-04 --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json --check` -> PASS (`weekly product pulse ok`).
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/validate_product_invariants.py` -> FAIL due pre-existing repo invariant drift unrelated to this slice:
+    - `ROADMAP.md must name Next 20 Big Wins After Post-Audit Closeout as the active follow-on wave.`
+    - `Weekly product pulse must carry the same history snapshot count as PROGRESS_HISTORY.generated.json.`
+- Commits landed:
+  - pending local commit in `chummer-design` (not yet created in this session).
+  - pending local commit in `fleet` for handoff + pulse mirror refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for the landed pulse-v3 generator changes; full `validate_product_invariants.py` remains blocked by pre-existing baseline invariant expectations in current repo state.
+
 ## 2026-04-04: milestone-7/8/9/16 signed-in home rail now shows multiple build-handoff outputs with per-output continuity cues
 
 - Trigger:
@@ -70,6 +103,33 @@
   - `chummer6-core`: `43462a3f` (`fix(w17): preserve Hero Lab metadata provenance across online shape drift`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `b95e1b0b..43462a3f`).
+- Exact blocker:
+  - none for this slice.
+
+## 2026-04-04: milestone-1/3 registry verify lane now mutation-proves startup-smoke head/platform mismatch and stale-age fail-close guards for promoted desktop installer tuples
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged installer proof to fail honest on tuple identity drift and stale startup-smoke evidence, not only on missing metadata or digest/channel mismatch.
+  - `verify_public_release_channel.py` already fail-closed on:
+    - startup-smoke `head` mismatch
+    - startup-smoke `platform` mismatch
+    - startup-smoke stale timestamp age
+  - `scripts/ai/verify.sh` did not mutate those branches yet, leaving a regression seam where those guards could weaken silently.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative startup-smoke mutations for promoted tuple receipts with:
+      - mismatched `headId` (`blazor-desktop` vs expected `avalonia`)
+      - mismatched `platform` (`linux` vs expected `windows`)
+      - stale `recordedAtUtc` beyond max age
+    - added explicit fail-close marker assertions for each new branch.
+    - fixed verify fixture ordering by materializing `/tmp/chummer-hub-registry-release-fixture/RELEASE_CHANNEL.generated.json` before early release-proof/startup-smoke shape mutations run.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close markers for new head/platform/stale startup-smoke mutation paths).
+- Commits landed:
+  - `chummer-hub-registry`: `b41b66e` (`test(w1): lock startup-smoke mismatch and stale fail-close branches`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `def5389..b41b66e`).
 - Exact blocker:
   - none for this slice.
 
