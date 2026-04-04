@@ -23,6 +23,33 @@
 - Exact blocker:
   - none for landed milestone-14 code path; focused `Chummer.Tests` execution remains blocked by pre-existing test-project compile/reference instability in current workspace baseline.
 
+## 2026-04-04: milestone-4/5/6 prep-library continuity lane now collapse-matches mobile safehouse readiness/cache shorthand
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign continuity and GM prep retrieval to keep mobile-safehouse phrasing aligned with travel/offline continuity truth.
+  - prep query alias collapse already normalized mobile travel/offline shorthand, but compact safehouse mobile forms (`mobilesafehousereadiness`, `mobilesafehousecache`) were not canonicalized.
+  - result: mobile-safehouse continuity queries could over-constrain and miss governed prep packets that were otherwise discoverable through travel/offline wording.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact aliases:
+      - `mobilesafehousereadiness`
+      - `mobilesafehousecache`
+      - `mobilesafehouse`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand` with mobile-safehouse readiness/cache positive assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended `ListPrepAssets_QueryCollapsesTravelOfflineReadinessShorthand` with mobile-safehouse readiness/cache positive assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~ListPrepAssets_QueryCollapsesTravelOfflineReadinessShorthand" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`437` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `5e2fd1f3` (`feat(w4-6): extend prep query continuity aliases for mobile safehouse`).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for the landed slice; push remains blocked in this environment by missing GitHub credential material.
+
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now fail-closes governed export-lane eviction when carry-forward projections are long
 
 - Trigger:
