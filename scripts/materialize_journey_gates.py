@@ -692,6 +692,34 @@ def evaluate_journey(
                             support_packet_contract_violations.append(
                                 f"support packet {packet_id} is missing install_diagnosis.external_proof_request.proof_capture_commands."
                             )
+                        else:
+                            normalized_commands = [
+                                str(token or "").strip()
+                                for token in proof_capture_commands
+                                if str(token or "").strip()
+                            ]
+                            expected_installer_file_name = str(
+                                external_proof_request.get("expected_installer_file_name") or ""
+                            ).strip()
+                            required_host = str(external_proof_request.get("required_host") or "").strip().lower()
+                            if not any("run-desktop-startup-smoke.sh" in token for token in normalized_commands):
+                                support_packet_contract_violations.append(
+                                    f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands is missing run-desktop-startup-smoke.sh."
+                                )
+                            if expected_installer_file_name and not any(
+                                expected_installer_file_name in token for token in normalized_commands
+                            ):
+                                support_packet_contract_violations.append(
+                                    f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands does not reference expected installer file '{expected_installer_file_name}'."
+                                )
+                            if required_host:
+                                expected_host_token = (
+                                    f"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS={required_host}-host"
+                                )
+                                if not any(expected_host_token in token for token in normalized_commands):
+                                    support_packet_contract_violations.append(
+                                        f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands does not declare expected host token '{expected_host_token}'."
+                                    )
                 if install_truth_state == "tuple_not_on_promoted_shelf" and external_proof_required is not True:
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} with install_truth_state 'tuple_not_on_promoted_shelf' must declare external_proof_required=true."

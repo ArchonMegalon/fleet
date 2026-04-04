@@ -49,6 +49,30 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 support install-proof contract now fail-closes proof-capture host/installer command drift
+
+- Trigger:
+  - W1 install proof packets required non-empty `proof_capture_commands`, but command lists could still drift away from tuple truth (wrong host token or wrong installer filename) while contract checks passed.
+  - that left room for support/recovery packets to look structurally complete while pointing operators at invalid host lanes or installer artifacts.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now fail-closes `install_diagnosis.external_proof_request.proof_capture_commands` when:
+      - no command invokes `run-desktop-startup-smoke.sh`
+      - no command references `expected_installer_file_name`
+      - no command includes expected host token `CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=<required_host>-host`
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_blocks_when_support_external_proof_commands_do_not_match_host_or_installer`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && python3 - <<'PY' ... synthetic support packet with linux-host + wrong installer filename ... PY` -> PASS (journey gate blocks on both host token and expected installer filename mismatch).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_external_proof"` -> FAIL (`No module named pytest`).
+
 ## 2026-04-04: milestone-1/3 support install-proof contract now fail-closes expected installer target fields
 
 - Trigger:
