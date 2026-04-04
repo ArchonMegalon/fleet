@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4 workspace change-packet projection now keeps downtime and after-action packets visible together when both exist
+
+- Trigger:
+  - frontier milestone `4` requires downtime and aftermath continuity to stay visible as one governed return lane rather than collapsing to a single recap-like packet.
+  - `CampaignSpineService.BuildWorkspaceChangePackets(...)` selected replay plus only the first non-replay package, which could hide either `downtime_brief` or `after_action_report` when both existed with distinct package ids.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - projected replay, downtime, and non-downtime aftermath package anchors separately before packet projection.
+    - preserved recap fallback behavior by continuing to suppress recap projection whenever any non-replay aftermath package exists.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineWorkspaceChangePacketsProjectDowntimeAndAfterActionSignalsWhenBothExist`.
+    - locked expectation that replay + downtime + after-action produce three governed change packets when ids are distinct.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceChangePacketsProjectDowntimeAndAfterActionSignalsWhenBothExist|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedRecapProjectionIdsWhenAftermathIsMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`292` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`306` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return packet projection now keeps downtime and after-action aftermath truth visible together (alongside replay) when both are present, instead of dropping one category due to first-non-replay selection.
+  - milestone-4 continuity surfaces now carry more faithful downtime/aftermath packet coverage without reopening local shadow-note behavior.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace change-packet projection now normalizes whitespace-padded scene/objective ids before packet-id hashing
 
 - Trigger:
