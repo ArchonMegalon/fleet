@@ -43,6 +43,11 @@ ARTIFACT_STALE_HOURS = {
     "progress_report": 24 * 7,
     "progress_history": 24 * 7,
 }
+RECOVERY_ACTION_HREF_MAP = {
+    "open_downloads": "/downloads",
+    "open_support_timeline": "/account/support",
+    "open_account_access": "/account/access",
+}
 REPO_ROOTS = {
     "fleet": ROOT,
     "chummer6-design": Path("/docker/chummercomplete/chummer-design"),
@@ -349,6 +354,7 @@ def evaluate_journey(
 
     support_summary = dict(support_packets.get("summary") or {})
     support_packet_contract_violations: List[str] = []
+    support_recovery_contract_violations: List[str] = []
     support_generated_at = str(support_packets.get("generated_at") or "").strip()
     support_freshness = dict(artifacts.get("support_packets") or {})
     if bool(fleet_gate.get("require_support_freshness")) and support_freshness.get("state") != "fresh":
@@ -431,6 +437,79 @@ def evaluate_journey(
                 blocking_reasons.append(
                     f"support packet install-truth contract has {len(support_packet_contract_violations) - 5} additional violations."
                 )
+    if bool(fleet_gate.get("require_support_recovery_path_contract")):
+        packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
+        for index, packet in enumerate(packets, start=1):
+            packet_id = str(packet.get("packet_id") or "").strip() or f"packet#{index}"
+            install_truth_state = str(packet.get("install_truth_state") or "").strip().lower()
+            fix_confirmation = packet.get("fix_confirmation")
+            recovery_path = packet.get("recovery_path")
+
+            action_id = ""
+            href = ""
+            if not isinstance(recovery_path, dict):
+                support_recovery_contract_violations.append(
+                    f"support packet {packet_id} is missing recovery_path for recovery-route contract."
+                )
+            else:
+                action_id = str(recovery_path.get("action_id") or "").strip().lower()
+                href = str(recovery_path.get("href") or "").strip()
+                if not action_id:
+                    support_recovery_contract_violations.append(
+                        f"support packet {packet_id} is missing recovery_path.action_id for recovery-route contract."
+                    )
+                else:
+                    expected_href = RECOVERY_ACTION_HREF_MAP.get(action_id)
+                    if expected_href is None:
+                        support_recovery_contract_violations.append(
+                            f"support packet {packet_id} has unsupported recovery_path.action_id '{action_id}'."
+                        )
+                    elif href != expected_href:
+                        support_recovery_contract_violations.append(
+                            f"support packet {packet_id} maps recovery_path.action_id '{action_id}' to '{href}' instead of '{expected_href}'."
+                        )
+
+            if not isinstance(fix_confirmation, dict):
+                support_recovery_contract_violations.append(
+                    f"support packet {packet_id} is missing fix_confirmation for recovery-route contract."
+                )
+            else:
+                update_required = fix_confirmation.get("update_required")
+                if not isinstance(update_required, bool):
+                    support_recovery_contract_violations.append(
+                        f"support packet {packet_id} fix_confirmation.update_required must be boolean for recovery-route contract."
+                    )
+                elif update_required and (action_id != "open_downloads" or href != "/downloads"):
+                    support_recovery_contract_violations.append(
+                        f"support packet {packet_id} requires download recovery when update_required is true."
+                    )
+
+                fix_state = str(fix_confirmation.get("state") or "").strip().lower()
+                fixed_version = str(fix_confirmation.get("fixed_version") or "").strip()
+                fixed_channel = str(fix_confirmation.get("fixed_channel") or "").strip()
+                if (
+                    fix_state
+                    and fix_state != "no_fix_recorded"
+                    and not fixed_version
+                    and not fixed_channel
+                ):
+                    support_recovery_contract_violations.append(
+                        f"support packet {packet_id} fix_confirmation.state '{fix_state}' requires fixed_version or fixed_channel."
+                    )
+
+            if install_truth_state in {"channel_mismatch", "tuple_not_on_promoted_shelf"} and (
+                action_id != "open_downloads" or href != "/downloads"
+            ):
+                support_recovery_contract_violations.append(
+                    f"support packet {packet_id} must route install_truth_state '{install_truth_state}' to /downloads."
+                )
+
+        if support_recovery_contract_violations:
+            blocking_reasons.extend(support_recovery_contract_violations[:5])
+            if len(support_recovery_contract_violations) > 5:
+                blocking_reasons.append(
+                    f"support packet recovery-route contract has {len(support_recovery_contract_violations) - 5} additional violations."
+                )
 
     state = "ready"
     if blocking_reasons:
@@ -463,6 +542,7 @@ def evaluate_journey(
             support_summary.get("update_required_misrouted_case_count") or 0
         ),
         "support_install_truth_contract_violation_count": len(support_packet_contract_violations),
+        "support_recovery_route_contract_violation_count": len(support_recovery_contract_violations),
     }
     return {
         "id": str(row.get("id") or "").strip(),

@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
+
+- Trigger:
+  - frontier milestone `10` requires support packets, trust/support surfaces, and installer/update recovery routes to agree on one install-specific truth.
+  - Fleet journey-gate support contract validated install diagnosis fields but did not fail-close if packet recovery action routing drifted from canonical support/download/account paths.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added `require_support_recovery_path_contract` gate support.
+    - report-cluster gate now fail-closes on unsupported `recovery_path.action_id`, action-to-href mismatches, missing boolean `fix_confirmation.update_required`, missing fix detail on non-`no_fix_recorded` states, and update-required/install-mismatch packets not routed to `/downloads`.
+    - added `support_recovery_route_contract_violation_count` signal.
+  - patched canonical + mirror journey gates:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `report_cluster_release_notify` now requires `require_support_recovery_path_contract: true`.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added regression `test_materialize_journey_gates_blocks_when_support_recovery_route_contract_drifts`.
+    - extended registry parity assertion to require `require_support_recovery_path_contract`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="report_cluster_release_notify") | {state,signals,fleet_gate:.fleet_gate.require_support_recovery_path_contract}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`fleet_gate: true`; `support_recovery_route_contract_violation_count: 0` on current packet set).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_packet_install_truth_contract_is_incomplete or support_recovery_route_contract_drifts or report_cluster_release_notify_requires_support_install_truth_contract"` -> FAIL (`No module named pytest` in this environment).
+- Commits landed:
+  - `fleet`: `<pending>`
+  - `chummer6-design`: `<pending>`
+- Push attempts:
+  - pending
+- Exact blocker:
+  - `pytest` is not installed in this execution environment (`python3 -m pytest` fails with `No module named pytest`).
+
 ## 2026-04-04: milestone-17 master-index now emits explicit adjacent-SR6 oracle lane receipts and build-explain gate fail-closes on receipt markers
 
 - Trigger:
