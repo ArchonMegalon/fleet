@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-5 prep library now prioritizes opposition/event/roster packets ahead of newer ops-noise receipts
+
+- Trigger:
+  - frontier milestone `5` requires GM operations and prep-library surfaces to foreground opposition/event/roster packet truth rather than recency-only ordering.
+  - `CampaignWorkspaceServerPlaneService.BuildPrepPackets(...)` ordered packets by `UpdatedAtUtc` only, so newer prep-launch or travel-prefetch receipts could outrank opposition/event/roster packets in the main prep library lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ResolvePrepPacketPriority(...)` for deterministic GM-priority ordering.
+    - prep packet ordering now applies priority first (`opposition` > `event_control` > `roster_movement` > scene/return/memory/continuity > aftermath > prep-launch > travel) and only then recency/title.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryOrderingPrioritizesOppositionAndRosterPacketsAheadOfNewerOpsReceipts`.
+    - added `PrepLibraryOrderingPrioritizesEventControlPacketAheadOfNewerOpsReceipts`.
+    - added helper `IndexOfPacketKind(...)` for stable ordering assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryOrderingPrioritizesOppositionAndRosterPacketsAheadOfNewerOpsReceipts|FullyQualifiedName~PrepLibraryOrderingPrioritizesEventControlPacketAheadOfNewerOpsReceipts|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`323` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - prep-library packet projection now keeps milestone-5 opposition/event/roster packets visually ahead of newer travel/launch operational noise.
+  - GM decision prep stays aligned with the same severity-first prioritization pattern already enforced across workspace, watchout, and unresolved-board surfaces.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable/visual/workflow proof now fail-closes release-version drift across same-channel receipts
 
 - Trigger:
