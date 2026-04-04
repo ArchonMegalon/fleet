@@ -24,9 +24,9 @@
   - `chummer-hub-registry`: `1c5b1e4` (`fix(w1): mutation-test locale row alias drift fail-close seams`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6e81ed1..1c5b1e4`).
-  - `cd /docker/fleet && git push` -> pending.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - pending Fleet push attempt and credential check.
+  - expected environment blocker remains missing GitHub HTTPS credentials when Fleet push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: fleet host-side push recovery now recognizes newer `remote push is still blocked` worker blocker wording
 
