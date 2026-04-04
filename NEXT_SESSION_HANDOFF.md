@@ -1,3 +1,46 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes plural continuity aliases `diaries`, `downtimes`, and `aftermaths` across workspace/GM canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-4 continuity proof script-locked singular `diary`, `downtime`, and `aftermath`, but compact plural user phrasing (`diaries`, `downtimes`, `aftermaths`) was not canonicalized in either prep-library tokenization path.
+  - this left a drift seam where campaign workspace and GM prep retrieval could diverge on ordinary plural continuity phrasing.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added plural continuity rewrites:
+      - `diaries -> diary`
+      - `downtimes -> downtime`
+      - `aftermaths -> aftermath`
+  - patched unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - added `PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - added `ListPrepAssets_QuerySupportsContinuityPluralShorthand`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for:
+        - `queryText=diaries`
+        - `queryText=downtimes`
+        - `queryText=aftermaths`
+      - added signed-in workspace route checks for:
+        - `prepQuery=diaries`
+        - `prepQuery=downtimes`
+        - `prepQuery=aftermaths`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for the same plural continuity queries above.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions for all three new plural continuity queries in both API and workspace lanes.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity search now treats singular and compact plural diary/downtime/aftermath phrasing as one governed lane across campaign workspace search, GM prep lookup, live API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (`CampaignWorkspaceServerPlaneService.cs`, `GmOpsBoardService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`, `GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops prep lanes now script-lock plural return aliases `returnloops`, `nextsessionreturns`, and `sessionreturns`
 
 - Trigger:
