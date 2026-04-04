@@ -156,9 +156,9 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_status_plane.py -q` -> FAIL (`No module named pytest`) in this environment.
 - Commits landed:
-  - pending local commit in this slice.
+  - `fleet`: `676f3fa` (`fix(w1-1): recover status-plane project inventory from project configs`).
 - Push attempts:
-  - pending.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
@@ -184,9 +184,9 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py` -> FAIL (`No module named pytest`) in this environment.
 - Commits landed:
-  - pending local commit in this slice.
+  - `fleet`: `cdac66b` (`fix(w1-1): fail-close journey posture checks on empty status-plane inventory`).
 - Push attempts:
-  - pending.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
