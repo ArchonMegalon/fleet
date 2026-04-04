@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T20:19:24Z",
+  "generated_at": "2026-04-04T21:56:49Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
@@ -148,14 +148,14 @@
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 24453,
-          "desktop workflow execution gate proof_age_seconds": 1242,
-          "desktop visual familiarity gate proof_age_seconds": 1242
+          "flagship UI release gate proof_age_seconds": 27751,
+          "desktop workflow execution gate proof_age_seconds": 162,
+          "desktop visual familiarity gate proof_age_seconds": 162
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-04T20:13:29.867285Z",
-        "ui_executable_gate_age_seconds": 354,
+        "ui_executable_gate_generated_at": "2026-04-04T21:08:27.946225Z",
+        "ui_executable_gate_age_seconds": 2901,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -255,8 +255,8 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-04T20:06:45Z",
-        "release_channel_age_seconds": 759,
+        "release_channel_generated_at": "2026-04-04T20:22:27Z",
+        "release_channel_age_seconds": 5662,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -444,6 +444,8 @@
             "head_id": "avalonia",
             "rid": "osx-arm64",
             "platform": "macos",
+            "tuple_identity_valid": true,
+            "required_host_matches_tuple_platform": true,
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
@@ -463,7 +465,9 @@
             "proof_capture_commands": [
               "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
               "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ]
+            ],
+            "tuple_entry_count": 1,
+            "tuple_unique": true
           },
           {
             "tuple_id": "avalonia:win-x64:windows",
@@ -476,6 +480,8 @@
             "head_id": "avalonia",
             "rid": "win-x64",
             "platform": "windows",
+            "tuple_identity_valid": true,
+            "required_host_matches_tuple_platform": true,
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
@@ -495,7 +501,9 @@
             "proof_capture_commands": [
               "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
               "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ]
+            ],
+            "tuple_entry_count": 1,
+            "tuple_unique": true
           },
           {
             "tuple_id": "blazor-desktop:osx-arm64:macos",
@@ -508,6 +516,8 @@
             "head_id": "blazor-desktop",
             "rid": "osx-arm64",
             "platform": "macos",
+            "tuple_identity_valid": true,
+            "required_host_matches_tuple_platform": true,
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
@@ -527,7 +537,9 @@
             "proof_capture_commands": [
               "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
               "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ]
+            ],
+            "tuple_entry_count": 1,
+            "tuple_unique": true
           },
           {
             "tuple_id": "blazor-desktop:win-x64:windows",
@@ -540,6 +552,8 @@
             "head_id": "blazor-desktop",
             "rid": "win-x64",
             "platform": "windows",
+            "tuple_identity_valid": true,
+            "required_host_matches_tuple_platform": true,
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
@@ -559,41 +573,22 @@
             "proof_capture_commands": [
               "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe blazor-desktop win-x64 Chummer.Blazor.Desktop.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
               "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ]
+            ],
+            "tuple_entry_count": 1,
+            "tuple_unique": true
           }
         ],
+        "install_claim_restore_continue_relevant_external_proof_request_count": 4,
+        "build_explain_publish_relevant_external_proof_request_count": 0,
+        "desktop_ignore_nonlinux_desktop_host_proof_blockers": false,
         "parity_registry_path": "/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
         "parity_registry_excluded_scope": [
           "plugin-framework"
         ],
-        "parity_registry_declared_blocking_family_count": 11,
-        "parity_registry_declared_blocking_family_ids": [
-          "custom_data_xml_and_translator_bridge",
-          "dense_builder_and_career_workflows",
-          "dice_initiative_and_table_utilities",
-          "identity_contacts_lifestyles_history",
-          "legacy_and_adjacent_import_oracles",
-          "roster_dashboards_and_multi_character_ops",
-          "settings_and_rules_environment_authoring",
-          "sheet_export_print_viewer_and_exchange",
-          "shell_workbench_orientation",
-          "sourcebooks_reference_and_master_index",
-          "sr6_supplements_designers_and_house_rules"
-        ],
-        "parity_registry_proof_closed_family_count": 11,
-        "parity_registry_proof_closed_family_ids": [
-          "custom_data_xml_and_translator_bridge",
-          "dense_builder_and_career_workflows",
-          "dice_initiative_and_table_utilities",
-          "identity_contacts_lifestyles_history",
-          "legacy_and_adjacent_import_oracles",
-          "roster_dashboards_and_multi_character_ops",
-          "settings_and_rules_environment_authoring",
-          "sheet_export_print_viewer_and_exchange",
-          "shell_workbench_orientation",
-          "sourcebooks_reference_and_master_index",
-          "sr6_supplements_designers_and_house_rules"
-        ],
+        "parity_registry_declared_blocking_family_count": 0,
+        "parity_registry_declared_blocking_family_ids": [],
+        "parity_registry_proof_closed_family_count": 0,
+        "parity_registry_proof_closed_family_ids": [],
         "parity_registry_unresolved_family_count": 0,
         "parity_registry_unresolved_family_ids": [],
         "parity_registry_desktop_family_ids": [],
@@ -618,34 +613,10 @@
         "parity_registry_excluded_scope": [
           "plugin-framework"
         ],
-        "parity_registry_declared_blocking_family_count": 11,
-        "parity_registry_declared_blocking_family_ids": [
-          "custom_data_xml_and_translator_bridge",
-          "dense_builder_and_career_workflows",
-          "dice_initiative_and_table_utilities",
-          "identity_contacts_lifestyles_history",
-          "legacy_and_adjacent_import_oracles",
-          "roster_dashboards_and_multi_character_ops",
-          "settings_and_rules_environment_authoring",
-          "sheet_export_print_viewer_and_exchange",
-          "shell_workbench_orientation",
-          "sourcebooks_reference_and_master_index",
-          "sr6_supplements_designers_and_house_rules"
-        ],
-        "parity_registry_proof_closed_family_count": 11,
-        "parity_registry_proof_closed_family_ids": [
-          "custom_data_xml_and_translator_bridge",
-          "dense_builder_and_career_workflows",
-          "dice_initiative_and_table_utilities",
-          "identity_contacts_lifestyles_history",
-          "legacy_and_adjacent_import_oracles",
-          "roster_dashboards_and_multi_character_ops",
-          "settings_and_rules_environment_authoring",
-          "sheet_export_print_viewer_and_exchange",
-          "shell_workbench_orientation",
-          "sourcebooks_reference_and_master_index",
-          "sr6_supplements_designers_and_house_rules"
-        ],
+        "parity_registry_declared_blocking_family_count": 0,
+        "parity_registry_declared_blocking_family_ids": [],
+        "parity_registry_proof_closed_family_count": 0,
+        "parity_registry_proof_closed_family_ids": [],
         "parity_registry_rules_family_ids": [],
         "parity_registry_unresolved_family_count": 0,
         "parity_registry_unresolved_family_ids": []
@@ -655,7 +626,7 @@
       "status": "warning",
       "summary": "Hub and registry flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked, not ready."
+        "Install/claim/restore journey is blocked only by external platform-host proof requests; the remaining work is to capture and ingest the missing desktop host receipts."
       ],
       "evidence": {
         "hub_stage": "publicly_promoted",
@@ -707,11 +678,11 @@
       "status": "warning",
       "summary": "Horizons and public-surface flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked, not ready."
+        "Install/claim/restore journey is blocked only by external platform-host proof requests; the remaining work is to capture and ingest the missing desktop host receipts."
       ],
       "evidence": {
         "public_group_deployment_status": "public",
-        "progress_report_generated_at": "2026-04-04T18:25:33Z",
+        "progress_report_generated_at": "2026-04-04T21:38:14Z",
         "install_claim_restore_continue": "blocked",
         "report_cluster_release_notify": "ready",
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -721,19 +692,21 @@
       "status": "warning",
       "summary": "Fleet and operator-loop flagship proof is still incomplete.",
       "reasons": [
-        "Journey-gate overall state is blocked, not ready."
+        "Journey-gate overall state is blocked only by external desktop host-proof requests; the control loop is otherwise current."
       ],
       "evidence": {
         "runtime_healing_alert_state": "healthy",
         "runtime_healing_last_event_at": "",
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
+        "journey_blocked_external_only_count": 1,
+        "journey_blocked_with_local_count": 0,
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T20:19:23Z",
+        "support_packets_generated_at": "2026-04-04T21:56:36Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T20:16:35Z",
+        "supervisor_updated_at": "2026-04-04T21:55:40Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -761,693 +734,12 @@
     "excluded_scope": [
       "plugin-framework"
     ],
-    "declared_blocking_family_count": 11,
-    "declared_blocking_family_ids": [
-      "custom_data_xml_and_translator_bridge",
-      "dense_builder_and_career_workflows",
-      "dice_initiative_and_table_utilities",
-      "identity_contacts_lifestyles_history",
-      "legacy_and_adjacent_import_oracles",
-      "roster_dashboards_and_multi_character_ops",
-      "settings_and_rules_environment_authoring",
-      "sheet_export_print_viewer_and_exchange",
-      "shell_workbench_orientation",
-      "sourcebooks_reference_and_master_index",
-      "sr6_supplements_designers_and_house_rules"
-    ],
-    "declared_blocking_families": [
-      {
-        "id": "custom_data_xml_and_translator_bridge",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "edit XML data",
-          "translator-era corpus",
-          "custom data",
-          "custom descriptions"
-        ],
-        "current_design_equivalents": [
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "LOCALIZATION_AND_LANGUAGE_SYSTEM.md"
-        ],
-        "milestone_ids": [
-          14
-        ]
-      },
-      {
-        "id": "dense_builder_and_career_workflows",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Chummer4",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "creation",
-          "career mode",
-          "advancement",
-          "gear and augment configuration",
-          "matrix and magic workflows"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "DESKTOP_CLIENT_PRODUCT_CUT.md",
-          "BUILD_LAB_PRODUCT_MODEL.md"
-        ],
-        "milestone_ids": [
-          2,
-          7
-        ]
-      },
-      {
-        "id": "dice_initiative_and_table_utilities",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "dice roller",
-          "initiative roller",
-          "initiative tracker",
-          "fast table utility windows"
-        ],
-        "current_design_equivalents": [
-          "DESKTOP_CLIENT_PRODUCT_CUT.md",
-          "GOLDEN_JOURNEY_RELEASE_GATES.yaml",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          15
-        ]
-      },
-      {
-        "id": "identity_contacts_lifestyles_history",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "contacts",
-          "lifestyles",
-          "licenses",
-          "SINs",
-          "history and career log"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md",
-          "CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md"
-        ],
-        "milestone_ids": [
-          2,
-          4
-        ]
-      },
-      {
-        "id": "legacy_and_adjacent_import_oracles",
-        "status": "partial",
-        "sources": [
-          "Chummer4",
-          "Chummer5a",
-          "Hero Lab Classic",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "import compatibility",
-          "migration receipts",
-          "adjacent oracle comparison"
-        ],
-        "current_design_equivalents": [
-          "FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
-          "INTEROP_AND_PORTABILITY_MODEL.md",
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          17
-        ]
-      },
-      {
-        "id": "roster_dashboards_and_multi_character_ops",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "character roster",
-          "watch folder",
-          "GM dashboard",
-          "player dashboard",
-          "online storage"
-        ],
-        "current_design_equivalents": [
-          "CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md",
-          "CAMPAIGN_AUTHORITY_AND_PERMISSIONS.md",
-          "NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          5,
-          15,
-          18
-        ]
-      },
-      {
-        "id": "settings_and_rules_environment_authoring",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "global settings",
-          "character settings",
-          "source toggles",
-          "house-rule posture",
-          "authored ruleset settings"
-        ],
-        "current_design_equivalents": [
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "DESKTOP_CLIENT_PRODUCT_CUT.md"
-        ],
-        "milestone_ids": [
-          14
-        ]
-      },
-      {
-        "id": "sheet_export_print_viewer_and_exchange",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "character sheet viewer",
-          "print multiple characters",
-          "export character",
-          "PDF export",
-          "JSON export",
-          "Foundry export"
-        ],
-        "current_design_equivalents": [
-          "INTEROP_AND_PORTABILITY_MODEL.md",
-          "BUILD_LAB_PRODUCT_MODEL.md",
-          "RULESET_UI_DIRECTIVE.md"
-        ],
-        "milestone_ids": [
-          16
-        ]
-      },
-      {
-        "id": "shell_workbench_orientation",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Chummer4",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "desktop menu",
-          "quick-action toolstrip",
-          "tab panel",
-          "dense section rhythm",
-          "status strip"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "FLAGSHIP_UI_RELEASE_GATE.md",
-          "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
-        ],
-        "milestone_ids": [
-          2,
-          3
-        ]
-      },
-      {
-        "id": "sourcebooks_reference_and_master_index",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "sourcebooks to use",
-          "edit sourcebook info",
-          "master index",
-          "PDF or URL source opening",
-          "rules snippets",
-          "metaindex"
-        ],
-        "current_design_equivalents": [
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md"
-        ],
-        "milestone_ids": [
-          13
-        ]
-      },
-      {
-        "id": "sr6_supplements_designers_and_house_rules",
-        "status": "partial",
-        "sources": [
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "supplement-book coverage",
-          "spell designer",
-          "vehicle designer",
-          "cyberdeck designer",
-          "drug designer",
-          "quality designer",
-          "group rules",
-          "better house rule support"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          18
-        ]
-      }
-    ],
-    "proof_closed_family_count": 11,
-    "proof_closed_family_ids": [
-      "custom_data_xml_and_translator_bridge",
-      "dense_builder_and_career_workflows",
-      "dice_initiative_and_table_utilities",
-      "identity_contacts_lifestyles_history",
-      "legacy_and_adjacent_import_oracles",
-      "roster_dashboards_and_multi_character_ops",
-      "settings_and_rules_environment_authoring",
-      "sheet_export_print_viewer_and_exchange",
-      "shell_workbench_orientation",
-      "sourcebooks_reference_and_master_index",
-      "sr6_supplements_designers_and_house_rules"
-    ],
-    "proof_closed_families": [
-      {
-        "id": "custom_data_xml_and_translator_bridge",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "edit XML data",
-          "translator-era corpus",
-          "custom data",
-          "custom descriptions"
-        ],
-        "current_design_equivalents": [
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "LOCALIZATION_AND_LANGUAGE_SYSTEM.md"
-        ],
-        "milestone_ids": [
-          14
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Custom-data, XML bridge, and translator successor lanes are explicit in core receipts and surfaced through the flagship translator dialog.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildCustomDataLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildCustomDataAuthoringLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildXmlBridgeLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildTranslatorLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::customDataLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::customDataAuthoringLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::xmlBridgeLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::translatorLaneReceipt",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs::CreateCommandDialog_translator_prefers_catalog_languages_and_surfaces_lane_posture"
-        ]
-      },
-      {
-        "id": "dense_builder_and_career_workflows",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Chummer4",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "creation",
-          "career mode",
-          "advancement",
-          "gear and augment configuration",
-          "matrix and magic workflows"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "DESKTOP_CLIENT_PRODUCT_CUT.md",
-          "BUILD_LAB_PRODUCT_MODEL.md"
-        ],
-        "milestone_ids": [
-          2,
-          7
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Dense workbench workflow-family parity is passing on both SR4 and SR6 heads with promoted desktop execution proof.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR4_WORKFLOW_FAMILY_DENSE_WORKBENCH_AFFORDANCES_SEARCH_ADD_EDIT_REMOVE_PREVIEW_DRILL_IN_COMPARE_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR6_WORKFLOW_FAMILY_DENSE_WORKBENCH_AFFORDANCES_SEARCH_ADD_EDIT_REMOVE_PREVIEW_DRILL_IN_COMPARE_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
-        ]
-      },
-      {
-        "id": "dice_initiative_and_table_utilities",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "dice roller",
-          "initiative roller",
-          "initiative tracker",
-          "fast table utility windows"
-        ],
-        "current_design_equivalents": [
-          "DESKTOP_CLIENT_PRODUCT_CUT.md",
-          "GOLDEN_JOURNEY_RELEASE_GATES.yaml",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          15
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Dice and initiative utility lanes are explicit in the shared audit contract and exercised through flagship desktop dialog and presenter tests.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer-presentation/scripts/audit-ui-parity.sh::dice_roller",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs::CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs::ExecuteCommandAsync_dice_roller_opens_utility_lane_with_roster_context"
-        ]
-      },
-      {
-        "id": "identity_contacts_lifestyles_history",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "contacts",
-          "lifestyles",
-          "licenses",
-          "SINs",
-          "history and career log"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md",
-          "CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md"
-        ],
-        "milestone_ids": [
-          2,
-          4
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Contacts, identities, notes, lifestyles, and source-family workflow parity is passing across SR4 and SR6.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR4_WORKFLOW_FAMILY_QUALITIES_CONTACTS_IDENTITIES_NOTES_CALENDAR_EXPENSES_LIFESTYLES_SOURCES_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR6_WORKFLOW_FAMILY_QUALITIES_CONTACTS_IDENTITIES_NOTES_CALENDAR_EXPENSES_LIFESTYLES_SOURCES_PARITY.generated.json"
-        ]
-      },
-      {
-        "id": "legacy_and_adjacent_import_oracles",
-        "status": "partial",
-        "sources": [
-          "Chummer4",
-          "Chummer5a",
-          "Hero Lab Classic",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "import compatibility",
-          "migration receipts",
-          "adjacent oracle comparison"
-        ],
-        "current_design_equivalents": [
-          "FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
-          "INTEROP_AND_PORTABILITY_MODEL.md",
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          17
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Core import-oracle and adjacent-SR6 successor receipts are explicit and surfaced through the flagship master-index dialog.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildImportOracleLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildAdjacentSr6OracleLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildSr6SuccessorLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::importOracleLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::adjacentSr6OracleLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::sr6SuccessorLaneReceipt",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs::CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture"
-        ]
-      },
-      {
-        "id": "roster_dashboards_and_multi_character_ops",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "character roster",
-          "watch folder",
-          "GM dashboard",
-          "player dashboard",
-          "online storage"
-        ],
-        "current_design_equivalents": [
-          "CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md",
-          "CAMPAIGN_AUTHORITY_AND_PERMISSIONS.md",
-          "NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          5,
-          15,
-          18
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Roster/operator lanes are explicit in the flagship desktop shell and Hub workflow-surface contracts, with hub local release proof current.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer-presentation/scripts/audit-ui-parity.sh::character_roster",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs::CreateCommandDialog_character_roster_summarizes_open_workspaces",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs::ExecuteCommandAsync_character_roster_opens_dialog_with_workspace_summary",
-          "/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/CompatCore/Presentation/WorkflowSurfaceContracts.cs::dashboard",
-          "chummer6-hub.local_release_proof"
-        ]
-      },
-      {
-        "id": "settings_and_rules_environment_authoring",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "global settings",
-          "character settings",
-          "source toggles",
-          "house-rule posture",
-          "authored ruleset settings"
-        ],
-        "current_design_equivalents": [
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "DESKTOP_CLIENT_PRODUCT_CUT.md"
-        ],
-        "milestone_ids": [
-          14
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Settings, source-toggle, and rules-environment successor lanes are explicit in core receipts and surfaced through the flagship character-settings dialog.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildSettingsLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildSourceToggleLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildSourceSelectionLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::settingsLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::sourceToggleLaneReceipt",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs::CreateCommandDialog_character_settings_surfaces_rules_environment_posture"
-        ]
-      },
-      {
-        "id": "sheet_export_print_viewer_and_exchange",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "character sheet viewer",
-          "print multiple characters",
-          "export character",
-          "PDF export",
-          "JSON export",
-          "Foundry export"
-        ],
-        "current_design_equivalents": [
-          "INTEROP_AND_PORTABILITY_MODEL.md",
-          "BUILD_LAB_PRODUCT_MODEL.md",
-          "RULESET_UI_DIRECTIVE.md"
-        ],
-        "milestone_ids": [
-          16
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Build Lab now projects explicit sheet-viewer, PDF, JSON, and Foundry exchange lanes, and print/export workflow parity is passing on SR4 and SR6.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs::workflow.exchange.foundry",
-          "/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs::workflow.exchange.json",
-          "/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs::workflow.viewer.sheet",
-          "/docker/chummercomplete/chummer6-core/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs::workflow.export.pdf",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR4_WORKFLOW_FAMILY_CREATE_OPEN_IMPORT_SAVE_SAVE_AS_PRINT_EXPORT_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR6_WORKFLOW_FAMILY_CREATE_OPEN_IMPORT_SAVE_SAVE_AS_PRINT_EXPORT_PARITY.generated.json"
-        ]
-      },
-      {
-        "id": "shell_workbench_orientation",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Chummer4",
-          "Genesis / CommLink6",
-          "Hero Lab Classic"
-        ],
-        "legacy_signals": [
-          "desktop menu",
-          "quick-action toolstrip",
-          "tab panel",
-          "dense section rhythm",
-          "status strip"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "FLAGSHIP_UI_RELEASE_GATE.md",
-          "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
-        ],
-        "milestone_ids": [
-          2,
-          3
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Promoted desktop chrome, visual familiarity, and cross-ruleset workflow parity are all passing.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
-          "/docker/chummercomplete/chummer-presentation/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
-        ]
-      },
-      {
-        "id": "sourcebooks_reference_and_master_index",
-        "status": "partial",
-        "sources": [
-          "Chummer5a",
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "sourcebooks to use",
-          "edit sourcebook info",
-          "master index",
-          "PDF or URL source opening",
-          "rules snippets",
-          "metaindex"
-        ],
-        "current_design_equivalents": [
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md"
-        ],
-        "milestone_ids": [
-          13
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "Master-index sourcebook, reference-source, and source-selection successor lanes are explicit in core and surfaced on the flagship desktop dialog.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildReferenceLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildReferenceSourceLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildSourceSelectionLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::referenceSourceLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::sourceSelectionLaneReceipt",
-          "/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs::CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture"
-        ]
-      },
-      {
-        "id": "sr6_supplements_designers_and_house_rules",
-        "status": "partial",
-        "sources": [
-          "Genesis / CommLink6"
-        ],
-        "legacy_signals": [
-          "supplement-book coverage",
-          "spell designer",
-          "vehicle designer",
-          "cyberdeck designer",
-          "drug designer",
-          "quality designer",
-          "group rules",
-          "better house rule support"
-        ],
-        "current_design_equivalents": [
-          "CHUMMER5A_FAMILIARITY_BRIDGE.md",
-          "RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md",
-          "LEGACY_CLIENT_AND_ADJACENT_PARITY.md"
-        ],
-        "milestone_ids": [
-          18
-        ],
-        "registry_status": "partial",
-        "effective_status": "covered",
-        "closure_strategy": "proof_backed_successor_route",
-        "closure_reason": "SR6 supplement, designer-family, house-rule, and online-storage successor receipts are explicit in core and backed by current hub/mobile release proof.",
-        "closure_receipts": [
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::ResolveSr6SupplementLanePosture",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildSr6SuccessorLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildOnlineStorageSummary",
-          "/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs::BuildOnlineStorageLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::sr6SuccessorLaneReceipt",
-          "/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs::onlineStorageLaneReceipt",
-          "chummer6-hub.local_release_proof",
-          "chummer6-mobile.local_release_proof"
-        ]
-      }
-    ],
+    "declared_blocking_family_count": 0,
+    "declared_blocking_family_ids": [],
+    "declared_blocking_families": [],
+    "proof_closed_family_count": 0,
+    "proof_closed_family_ids": [],
+    "proof_closed_families": [],
     "unresolved_family_count": 0,
     "unresolved_family_ids": [],
     "unresolved_families": []
@@ -1461,7 +753,7 @@
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
-    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260404T163340Z_8h/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
     "ui_linux_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
@@ -1472,8 +764,8 @@
     "sr4_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr6_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr4_sr6_frontier_receipt": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
-    "hub_local_release_proof": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-    "mobile_local_release_proof": "/docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    "hub_local_release_proof": "/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+    "mobile_local_release_proof": "/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
     "release_channel": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
     "releases_json": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
   }

@@ -87,6 +87,7 @@ RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS = (
     "release_channel.generated.json field 'desktoptuplecoverage.missingrequiredplatformheadpairs'",
     "release_channel.generated.json field 'desktoptuplecoverage.missingrequiredplatformheadridtuples'",
 )
+REQUIRED_EXTERNAL_PROOF_TOKENS = ("promoted_installer_artifact", "startup_smoke_receipt")
 
 
 def utc_now() -> dt.datetime:
@@ -216,7 +217,11 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         required_proofs = item.get("requiredProofs")
         if not tuple_id or not isinstance(required_proofs, list):
             continue
-        proof_tokens = [str(token or "").strip() for token in required_proofs if str(token or "").strip()]
+        proof_tokens = [
+            str(token or "").strip().lower()
+            for token in required_proofs
+            if str(token or "").strip()
+        ]
         if not proof_tokens:
             continue
         head, rid, platform = _parse_tuple_identity(tuple_id)
@@ -409,6 +414,19 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredHost' "
                 f"must match tuple platform for {tuple_id} but was {required_host!r}."
+            )
+            continue
+        normalized_proof_tokens = sorted(
+            {
+                str(token or "").strip().lower()
+                for token in proof_tokens
+                if str(token or "").strip()
+            }
+        )
+        if normalized_proof_tokens != list(REQUIRED_EXTERNAL_PROOF_TOKENS):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredProofs' "
+                f"for tuple {tuple_id} must equal {list(REQUIRED_EXTERNAL_PROOF_TOKENS)!r} but was {normalized_proof_tokens!r}."
             )
             continue
         expected_artifact_id = str(item.get("expected_artifact_id") or "").strip()

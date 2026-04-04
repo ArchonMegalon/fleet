@@ -959,6 +959,86 @@ def test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuple
     assert packet["install_diagnosis"]["external_proof_request"]["tuple_unique"] is False
 
 
+def test_materialize_support_case_packets_normalizes_external_proof_required_proofs_tokens(tmp_path: Path) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(json.dumps({"items": []}, indent=2) + "\n", encoding="utf-8")
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "desktopTupleCoverage": {
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "requiredHost": "windows",
+                            "requiredProofs": [
+                                "STARTUP_SMOKE_RECEIPT",
+                                "promoted_installer_artifact",
+                                "startup_smoke_receipt",
+                            ],
+                        },
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["unresolved_external_proof_request_specs"] == {
+        "avalonia:win-x64:windows": {
+            "channel_id": "preview",
+            "tuple_entry_count": 1,
+            "tuple_unique": True,
+            "required_host": "windows",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+            "expected_artifact_id": "",
+            "expected_installer_file_name": "",
+            "expected_public_install_route": "",
+            "expected_startup_smoke_receipt_path": "",
+            "startup_smoke_receipt_contract": {
+                "head_id": "avalonia",
+                "host_class_contains": "windows",
+                "platform": "windows",
+                "ready_checkpoint": "pre_ui_event_loop",
+                "rid": "win-x64",
+                "status_any_of": ["pass", "passed", "ready"],
+            },
+            "proof_capture_commands": [
+                "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+            ],
+        },
+    }
+
+
 def test_materialize_support_case_packets_marks_update_required_when_fixed_version_differs_from_installed_version(tmp_path: Path) -> None:
     source = tmp_path / "support_cases.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"

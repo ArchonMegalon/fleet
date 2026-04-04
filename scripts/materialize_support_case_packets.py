@@ -470,7 +470,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
             rid=rid,
         )
         required_proofs = [
-            _normalize_text(token)
+            _normalize_text(token).lower()
             for token in (item.get("requiredProofs") or item.get("required_proofs") or [])
             if _normalize_text(token)
         ]
@@ -485,7 +485,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 "platform": platform,
                 "rid": rid,
                 "required_host": required_host,
-                "required_proofs": required_proofs,
+                "required_proofs": sorted(set(required_proofs)),
                 "expected_artifact_id": _normalize_text(item.get("expectedArtifactId") or item.get("expected_artifact_id")),
                 "expected_installer_file_name": _normalize_text(
                     item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")

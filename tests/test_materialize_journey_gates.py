@@ -136,6 +136,31 @@ def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() ->
     assert any("appeared 2 times" in reason for reason in reasons)
 
 
+def test_release_channel_external_proof_reasons_reject_required_proofs_contract_drift() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact"],
+                },
+            ],
+        }
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert any("externalProofRequests.requiredProofs" in reason for reason in reasons)
+    assert any(
+        "must equal ['promoted_installer_artifact', 'startup_smoke_receipt']" in reason
+        for reason in reasons
+    )
+
+
 def test_release_channel_external_proof_reasons_reject_missing_tuple_inventory_mismatch() -> None:
     payload = {
         "desktopTupleCoverage": {
