@@ -67,6 +67,12 @@ EXTERNAL_BLOCKER_MARKERS = (
     "current host cannot run promoted macos installer smoke",
 )
 
+RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS = (
+    "release_channel.generated.json field 'desktoptuplecoverage.missingrequiredplatforms'",
+    "release_channel.generated.json field 'desktoptuplecoverage.missingrequiredplatformheadpairs'",
+    "release_channel.generated.json field 'desktoptuplecoverage.missingrequiredplatformheadridtuples'",
+)
+
 
 def utc_now() -> dt.datetime:
     return dt.datetime.now(UTC)
@@ -178,7 +184,14 @@ def classify_blocking_reasons(blocking_reasons: List[str]) -> Tuple[List[str], L
     local_blocking_reasons: List[str] = []
     for reason in blocking_reasons:
         normalized = str(reason or "").strip().lower()
-        if normalized and any(marker in normalized for marker in EXTERNAL_BLOCKER_MARKERS):
+        is_external = normalized and any(marker in normalized for marker in EXTERNAL_BLOCKER_MARKERS)
+        if not is_external and normalized and any(
+            marker in normalized for marker in RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS
+        ):
+            # Missing Windows/macOS tuples on a non-hosted platform should not be
+            # reported as repo-local defects; Linux tuple gaps still stay local.
+            is_external = "linux" not in normalized
+        if is_external:
             external_blocking_reasons.append(reason)
         else:
             local_blocking_reasons.append(reason)

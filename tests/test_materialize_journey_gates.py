@@ -1647,6 +1647,45 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     rules = proof_for("chummer6-ui", "Chummer.Blazor/Components/Shared/RulesNavigatorPanel.razor")
     assert "ChummerPatternBoundary.ExplainChipClass" in rules.get("must_contain", [])
 
+    dialog_factory = proof_for("chummer6-ui", "Chummer.Presentation/Overview/DesktopDialogFactory.cs")
+    assert 'new DesktopDialogField("masterIndexSourceSelectionReceipt"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexCustomDataAuthoringReceipt"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexImportOracleReceipt"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexAdjacentSr6OracleLane"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexOnlineStorageLane"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexOnlineStorageReceipt"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexSr6SuccessorReceipt"' in dialog_factory.get("must_contain", [])
+
+    dialog_factory_tests = proof_for("chummer6-ui", "Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs")
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSourceSelectionReceipt")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexCustomDataAuthoringReceipt")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexImportOracleReceipt")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexAdjacentSr6OracleLane")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageLane")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageReceipt")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSr6SuccessorReceipt")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+
 
 def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() -> None:
     registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
@@ -1758,8 +1797,7 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
         and row.get("path") == ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
     )
     assert desktop_exit_proof.get("json_must_equal") == {
-        "status": "pass",
-        "blocking_findings_count": 0,
+        "local_blocking_findings_count": 0,
         "evidence.hub_registry_root_trusted_for_startup_smoke_proof": True,
         "evidence.flagship_status": "pass",
         "evidence.visual_familiarity_status": "pass",
@@ -1774,7 +1812,7 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
     assert desktop_exit_proof.get("max_age_hours") == 48
     assert desktop_exit_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
     required_markers = desktop_exit_proof.get("must_contain", [])
-    assert '"status": "pass"' in required_markers
+    assert '"local_blocking_findings_count": 0' in required_markers
     assert '"windows_gate:avalonia:win-x64"' in required_markers
     assert '"windows_gate:blazor-desktop:win-x64"' in required_markers
     assert '"linux_gate:avalonia:linux-x64"' in required_markers
