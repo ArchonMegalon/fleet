@@ -1,4 +1,48 @@
+## 2026-04-04: milestone-4/6 prep continuity lane now fail-closes compact plural `preplaunches` and `travelprefetches` forms
+
+- Trigger:
+  - W3 milestones `4` and `6` require downtime/return/travel continuity prep search to remain governed across compact query forms used by live journey audits.
+  - compact plural forms (`preplaunches`, `travelprefetches`) were actively probed by live audit and Playwright but not explicitly canonicalized in prep query alias collapse, creating a false-negative seam when packet copy lacked plural literals.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `preplaunch`
+      - `preplaunches`
+      - `travelprefetch`
+      - `travelprefetches`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens` with both compact launch and travel-prefetch plural forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingCollapsesCompactPrepLaunchAndTravelPrefetchPluralForms` to enforce matching for `preplaunch`, `preplaunches`, `travelprefetch`, and `travelprefetches`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesCompactPrepLaunchAndTravelPrefetchPluralForms" -v minimal` -> PASS (`2 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `3330afef` (`feat(w3-4-6): canonicalize compact preplaunch and travelprefetch plurals`).
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-6 mobile travel readiness continuity slice
+
+## 2026-04-04: milestone-4/5/6 gm-ops continuity lane now treats mobile/travel cache unsynced signals as continuity-return
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require continuity-return drift signals to stay in the governed continuity lane even when wording contains `travel/cache/mobile/safehouse/offline` with no explicit `return` or `open` keyword.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded `ResolveGmOpsDomain(...)` continuity-return context guards so travel/safehouse/mobile/offline/cache continuity drift signals without explicit `return/open` can still classify as `continuity_return` when stale-sync vocabulary is present.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatTravelCacheUnsyncedSignalsAsContinuityReturnDomainWithoutCampaignOrOpenKeywords` to guarantee continuity-priority when `travel cache unsynced` language appears.
+  - patched release proof mirror files so continuity continuity-return continuity proof includes `unsynced` wording explicitly:
+    - `/docker/chummercomplete/chummer6-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+- Verification:
+  - no automated test run was requested in this pass.
+- Push attempts:
+  - not attempted.
+- Exact blocker:
+  - environment is currently unable to produce authenticated GitHub push from this host.
 
 - Commits landed:
   - `chummer6-hub`: `bf7e310d` (`feat(w3-6): fail-close compact mobile travel readiness queries`).
