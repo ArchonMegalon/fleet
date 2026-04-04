@@ -17,6 +17,7 @@
   - `chummer.run-services`: `85ef50d6` (`fix(w3): dedupe campaign-return signal counts and restore roster-handover query aliasing`).
   - `fleet`: `efb1890` (`docs(handoff): record w3 campaign-return dedupe and roster-handover alias restore`).
   - `fleet`: `a8f381b` (`docs(handoff): add commit and push receipts for w3 dedupe/alias slice`).
+  - `fleet`: `fb4888b` (`docs(handoff): include final fleet commit id for w3 slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
