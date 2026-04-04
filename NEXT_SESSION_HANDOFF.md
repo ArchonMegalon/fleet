@@ -1,3 +1,35 @@
+## 2026-04-04: follow-up on W3 prep-library packet-plural canonicalization (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `d76709e6` (`fix(w3): canonicalize prep packet plural query aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 prep-library query now treats `packets` as canonical `packet` across campaign workspace and GM ops lanes
+
+- Trigger:
+  - W3 design wording centers GM prep/opposition packets, but shared prep-query alias canonicalization did not normalize plural `packets`.
+  - because prep search is all-tokens-required, `packets` queries could miss assets indexed with canonical `packet` tokens.
+- Landed:
+  - patched shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrite: `packets -> packet`.
+  - expanded campaign workspace query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsCompactShorthandAcrossWhitespaceBoundaries` now asserts `packets` and `prep packets` matching.
+  - expanded GM ops query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation` now asserts `packets` and `prep packets` matching.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupports|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupports" --nologo -v minimal` -> PASS (`17` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/audit-ui-parity.sh` -> PASS.
+- Current trusted state:
+  - prep-library packet search semantics for milestone-4/5 are canonicalized for both campaign workspace and GM ops surfaces, reducing misses for plural packet wording.
+
 ## 2026-04-04: follow-up on W3 workflow-parity generatedAt drift gate refresh (commit and push status)
 
 - Commits landed:
@@ -28,6 +60,33 @@
   - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (`run-services in-process smoke passed`; initial workflow generatedAt drift is resolved and script-lock mutation rejects still execute as expected).
 - Current trusted state:
   - W3 campaign workspace and GM-ops verification no longer fails on workflow nested-receipt generatedAt drift; parity gate passes with synchronized workflow proof receipts.
+
+## 2026-04-04: milestone-2 parity verify now isolates release-channel mutation fixtures to prevent concurrent cross-repo receipt clobbering
+
+- Trigger:
+  - `chummer6-hub/scripts/ai/verify.sh` mutates the release-channel receipt path emitted by UI workflow evidence.
+  - concurrent registry/hub verification can target the same checked-in receipt path and produce non-deterministic parity failures unrelated to product drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added `CHUMMER_UI_PARITY_RELEASE_CHANNEL_PATH` override support through `resolve_release_channel_receipt_path(...)`.
+    - workflow, visual, and cross-receipt release-channel resolution now route through the override helper.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - verifies against a temp release-channel fixture copy (`release_channel_fixture_path`) instead of mutating the checked-in registry receipt.
+    - exports `CHUMMER_UI_PARITY_RELEASE_CHANNEL_PATH` so all parity-audit calls in the script use the isolated fixture.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - script-lock assertions now require the new fixture/override markers in both audit and verify scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - fixture isolation proof:
+    - mutated only a temp release-channel fixture via `CHUMMER_UI_PARITY_RELEASE_CHANNEL_PATH`, confirmed `bash scripts/audit-ui-parity.sh` fails on injected invalid `journeysPassed`, and confirmed source receipt sha256 remains unchanged (`fixture-isolation-ok`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> currently intermittently blocked by external `.NET` build-output file locks in shared workspace paths (`*.deps.json`/`*.runtimeconfig.json` in `chummer-hub-registry` and `chummer.run-services`); script changes above are still validated by targeted tests and fixture isolation proof.
+- Commits landed:
+  - `chummer6-hub`: `78eeee74` (`fix(milestone-2): isolate parity release-channel mutation fixtures`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub HTTPS credentials, so the new Hub commit remains local-only until auth is restored.
 
 ## 2026-04-04: follow-up on fleet handoff sync for contact continuity alias canonicalization
 
