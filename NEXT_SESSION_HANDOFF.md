@@ -22,6 +22,7 @@
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-play && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`) after handoff commit `3b5bf67`.
 - Exact blocker:
   - no repo-local implementation blocker for this slice; remote pushes remain credential-dependent in this environment.
 
