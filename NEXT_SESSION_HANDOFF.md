@@ -1,3 +1,41 @@
+## 2026-04-04: follow-up on W3 compact plural `ctls` prep-query parity slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `22114be5` (`fix(w3): script-lock eventctls seasonctls prep-query aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-5 event/season controls lane now fail-closes compact plural `eventctls` and `seasonctls` across workspace and GM prep query journeys
+
+- Trigger:
+  - after landing singular `eventctl` and `seasonctl` coverage, compact plural forms `eventctls` and `seasonctls` remained outside shared prep-query alias canonicalization and live script-lock journeys.
+  - this left a residual operator-wording seam in milestone-5 event/season control retrieval.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - `eventctls -> eventcontrol`
+    - `seasonctls -> eventcontrol + season + operation`
+  - expanded unit coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added `eventctls` and `seasonctls` matching assertions.
+  - patched live journey script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added governed API and workspace checks for:
+      - `queryText=eventctls`
+      - `queryText=seasonctls`
+      - `prepQuery=eventctls`
+      - `prepQuery=seasonctls`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs` script-lock markers for new audit/e2e strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSeasonControlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatCtlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCtlShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - event/season control prep retrieval now fail-closes both singular and plural compact `ctl` forms (`eventctl`/`eventctls`, `seasonctl`/`seasonctls`) across canonicalization, GM domain routing, API audit, and workspace browser journey proof.
+
 ## 2026-04-04: follow-up on milestone-2 canonical shipping-locale ordering fail-close in hub-registry (commit and push status)
 
 - Commits landed:
