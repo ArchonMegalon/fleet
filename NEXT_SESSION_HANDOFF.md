@@ -57,6 +57,32 @@
   - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub parity audit now fail-closes conflicting `releaseProof` alias-key payloads (`baseUrl/base_url`, `generatedAt/generated_at`, `journeysPassed/journeys_passed`, `proofRoutes/proof_routes`)
+
+- Trigger:
+  - frontier milestone `2` relies on release-proof receipts as executable truth for legacy-familiar flagship workbench parity.
+  - parity audit already validated shape/content for each `releaseProof` field, but accepted conflicting dual-key alias payloads by silently preferring one key via `or` fallback.
+  - this left a drift seam where producers could emit contradictory `camelCase` and `snake_case` values without tripping Hub verify closeout.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added `resolve_alias_value(...)` helper to fail-close when both alias keys are present with different values.
+    - routed `releaseProof.generatedAt`, `releaseProof.baseUrl`, `releaseProof.journeysPassed`, and `releaseProof.proofRoutes` through alias-conflict enforcement before existing validation.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation coverage that sets conflicting `releaseProof.baseUrl`/`releaseProof.base_url` values and asserts `audit-ui-parity.sh` fails as expected.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-lock assertions for alias-drift messaging in parity audit.
+    - expanded verify entrypoint marker assertions for the new alias-conflict mutation coverage text.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now emits expected fail-close for conflicting `releaseProof.baseUrl`/`releaseProof.base_url` values, then completes smoke).
+- Current trusted state:
+  - Hub parity closeout can no longer accept contradictory alias-key release-proof payloads; schema aliasing now behaves as one canonical truth surface instead of a precedence loophole.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/audit-ui-parity.sh`, `scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live audits now fail-close hyphen `gm-ops` and `gm-op` shorthand across prep-library API and signed-in workspace prep journeys
 
 - Trigger:
