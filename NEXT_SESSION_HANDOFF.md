@@ -53,6 +53,15 @@
   - environment lacks GitHub HTTPS credentials for push.
   - local environment is missing configured private package feeds required to restore Chummer contract/ui packages, so mobile regression checks cannot execute end-to-end here.
 
+## 2026-04-04: follow-up on W1 contract-identity handoff-log commit (push status)
+
+- Commits landed:
+  - `fleet`: `4e6760d` (`docs(handoff): record w1 install-gate contract-identity commit and push status`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet handoff commit remains local-only.
+
 ## 2026-04-04: follow-up on W1 install-gate contract-identity fail-close (handoff commit + push status)
 
 - Commits landed:
