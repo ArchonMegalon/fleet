@@ -23,6 +23,31 @@
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-04: milestone-2 registry verify lane now mutation-tests localization-gate `generatedAt`/`generated_at` alias drift fail-close in materializer
+
+- Trigger:
+  - frontier milestone `2` still relies on deterministic release-proof and localization-gate fail-close behavior for flagship workbench trust.
+  - `scripts/materialize_public_release_channel.py` already fail-closed alias drift between `uiLocalizationReleaseGate.generatedAt` and `uiLocalizationReleaseGate.generated_at`, but `scripts/ai/verify.sh` did not run an active materializer mutation for that specific seam.
+  - this left regression room where the materializer branch could weaken silently while verify remained green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added a materializer mutation that sets conflicting `generated_at` and `generatedAt` values in `ui-localization-release-gate.json`.
+    - requires non-zero exit from `scripts/materialize_public_release_channel.py`.
+    - requires explicit fail-close marker assertion:
+      - `generated_at alias values drift between generatedAt and generated_at`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - added `generatedAt`/`generated_at` to the documented malformed localization-gate alias-drift examples under the materializer fail-close contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected materializer alias-drift mutation run for `generatedAt`/`generated_at`).
+- Commits landed:
+  - `chummer-hub-registry`: `6a87172` (`fix(w1): mutation-test localization generatedAt alias drift in materializer verify lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `e24a726..6a87172`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests missingRequiredPlatformHeadPairs/missingRequiredPlatforms/missingRequiredHeads inventory drift fail-close
 
 - Trigger:
