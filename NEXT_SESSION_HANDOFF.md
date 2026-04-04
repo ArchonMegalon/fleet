@@ -22,6 +22,33 @@
   - `chummer6-hub-registry`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 Linux desktop exit gate now fail-honest on non-Linux host startup-smoke capability gaps
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged desktop exit proof that cannot lie when startup-smoke evidence is missing.
+  - Windows/macOS gate scripts already emitted explicit host-capability blockers when startup-smoke receipts were absent on non-native hosts.
+  - Linux gate still reported only missing receipt paths, leaving operator triage ambiguous between evidence regression and host incapability.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added Linux host capability detection (`platform.system`, `dpkg`, `dpkg-deb`) in promoted-installer integrity validation.
+    - fail-closes with explicit reason `Linux startup smoke requires a Linux host with dpkg and dpkg-deb; current host cannot run promoted Linux installer smoke.` when startup-smoke receipt is missing on non-Linux-capable hosts.
+    - enriched generated proof `release_channel` evidence with:
+      - `host_operating_system`
+      - `host_operating_system_normalized`
+      - `host_supports_linux_startup_smoke`
+      - `startup_smoke_external_blocker=missing_linux_host_capability` when applicable.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded `Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing` assertions to lock the new host-capability blocker markers and fail-honest reason text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`3` tests on `net10.0`).
+- Current trusted state:
+  - Linux desktop exit-gate proof now matches Windows/macOS fail-honest posture for host capability blockers.
+  - milestone-1/3 startup-smoke triage can distinguish missing evidence from impossible host execution for Linux promoted installer smoke.
+- Push status:
+  - `chummer6-ui`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes workflow-vs-visual release-channel drift
 
 - Trigger:
