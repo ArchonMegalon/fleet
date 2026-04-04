@@ -198,6 +198,28 @@
   - `chummer6-hub`: local mirror changes reflect same landed slice; commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-3 executable proof now script-locks Linux head-specific receipt routing for Avalonia and Blazor promoted tuples
+
+- Trigger:
+  - milestone-3 per-head packaged-binary proof relies on Linux head-specific receipts (`UI_LINUX_DESKTOP_EXIT_GATE` for Avalonia and `UI_LINUX_BLAZOR_DESKTOP_EXIT_GATE` for Blazor desktop).
+  - compliance locks did not explicitly pin the special-case Linux head routing contract in both bash materialization and Python path resolution, leaving room for silent receipt-path drift.
+- Landed:
+  - patched compliance script-lock test:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - added `Desktop_executable_gate_materializer_preserves_linux_head_specific_receipt_paths_for_avalonia_and_blazor`.
+    - new assertions now lock:
+      - bash routing contract (`avalonia/linux-x64 -> linux_avalonia_gate_path`, `blazor-desktop/linux-x64 -> linux_blazor_gate_path`, else tuple-specific fallback path).
+      - explicit `CHUMMER_UI_LINUX_DESKTOP_EXIT_GATE_PATH="$linux_gate_tuple_path"` wiring.
+      - Python resolver parity in `linux_gate_path_for_head(...)` for both special-case heads plus tuple fallback.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_materializer_preserves_linux_head_specific_receipt_paths_for_avalonia_and_blazor" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`9` tests on `net10.0`).
+- Current trusted state:
+  - milestone-3 Linux per-head proof now has explicit script-lock coverage preventing silent routing collapse between Avalonia and Blazor promoted tuple receipts.
+- Push status:
+  - `chummer6-ui`: local change landed in this slice (`Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable proof now script-locks tuple-specific Windows gate receipts for non-default promoted heads
 
 - Trigger:
