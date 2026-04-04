@@ -19,6 +19,29 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 live audits now fail-close hyphen `league/community-operation(s)` aliases across prep-library API and signed-in workspace prep journeys
+
+- Trigger:
+  - frontier milestone `5` already supported split/compact/hyphen `league/community ops/control` and compact/split `league/community operation(s)` language at service level.
+  - live API and signed-in workspace journey proofs still lacked explicit hyphen `league-operation`, `league-operations`, `community-operation`, and `community-operations` assertions.
+  - this left an operator-language punctuation seam where hyphen `*operation(s)` regressions could bypass closeout evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=league-operation`, `queryText=league-operations`, `queryText=community-operation`, and `queryText=community-operations`.
+    - added signed-in workspace route checks for `prepQuery=league-operation`, `prepQuery=league-operations`, `prepQuery=community-operation`, and `prepQuery=community-operations` with route/body proof and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertions for all four hyphen `*operation(s)` variants with encoded-route preservation and non-empty governed packet checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --no-build --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 live API and signed-in workspace prep journeys now fail-close hyphen `league/community-operation(s)` aliases on the same governed event-control lane as existing compact/split/hyphen operator-language variants.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for duplicate-normalized `releaseProof.proofRoutes`
 
 - Trigger:
