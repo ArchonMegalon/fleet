@@ -60,6 +60,43 @@
 - Exact blocker:
   - none for this landed slice; push is blocked in this environment by missing GitHub credential material.
 
+## 2026-04-04: milestone-18 tool catalog now emits explicit SR6 supplement/designer and house-rule successor posture
+
+- Trigger:
+  - frontier milestone `18` requires SR6 supplement breadth, designer-tool continuity, and house-rule successor posture to become first-class product lanes.
+  - `MasterIndexResponse` still only surfaced sourcebook/xml bridge fields, so callers could not read milestone-18 successor posture directly from governed catalog truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - added milestone-18 projection fields on `MasterIndexResponse`:
+      - `Sr6SupplementLanePosture`
+      - `Sr6DesignerToolsPosture`
+      - `Sr6DesignerFamiliesAvailable`
+      - `Sr6DesignerFamiliesExpected`
+      - `HouseRuleLanePosture`
+      - `HouseRuleOverlayCount`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - `GetMasterIndex()` now computes deterministic milestone-18 posture from effective catalog and overlay truth:
+      - supplement posture from sourcebook snippet coverage (`missing` / `stale` / `governed`)
+      - SR6 designer posture from canonical designer catalog coverage (`spells`, `vehicles`, `programs`, `drugcomponents`, `qualities`)
+      - house-rule posture/count from enabled overlay packs with house-rule semantics.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - expanded baseline/sourcebook/xml-bridge assertions to include new milestone-18 fields.
+    - added fail-proof tests for:
+      - governed SR6 designer-tool catalog coverage (`5/5` families)
+      - governed house-rule lane when a house-rule overlay is enabled.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now guards API projection presence for all new milestone-18 fields.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL due pre-existing `Chummer.Tests` compile/reference instability in this workspace baseline (`Chummer.Presentation`/`Chummer.Api` namespace resolution failures) before filtered tests execute.
+- Commits landed:
+  - `chummer6-core`: `ab8c01af` (`feat(w18): surface sr6 successor posture in tool catalog`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `ce58ec14..ab8c01af`).
+- Exact blocker:
+  - no blocker for landed milestone-18 posture projection path; focused `Chummer.Tests` execution remains blocked by pre-existing test-project compile/reference instability in current workspace baseline.
+
 ## 2026-04-04: milestone-13 master-index now emits explicit snippet-coverage metrics for governed reference-lane stale posture
 
 - Trigger:
