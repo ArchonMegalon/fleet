@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-4 runboard summary now deduplicates identical open objective versions to prevent inflated campaign return attention counts
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires runboard return attention counts to reflect unique campaign truth.
+  - `CampaignWorkspaceServerPlaneService.BuildRunboardSummary(...)` still counted repeated identical open `ObjectiveProjection` rows separately.
+  - repeated identical objective rows could overstate objective attention and blocker lists during campaign return reopen.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - runboard open-objective intake now deduplicates identical objective versions with `DeduplicateIdenticalObjectiveVersions(...)` before summary and blocker synthesis.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RunboardSummaryDeduplicatesIdenticalOpenObjectiveVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RunboardSummaryDeduplicatesIdenticalOpenObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~RosterMovementPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~OppositionPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`254` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 runboard objective attention counts now resist duplicate-row inflation for identical open objective versions.
+  - milestone-4/5 campaign workspace and GM-ops packet surfaces now dedupe duplicate versions across objective-driven prep packets and runboard return attention summaries.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 per-head visual proof contracts now fail-honest in both visual and executable desktop exit gates
 
 - Trigger:
