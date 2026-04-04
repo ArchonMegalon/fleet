@@ -133,6 +133,10 @@ def _infer_fallback_readiness_stage(
             release_proof_status = str(((release_channel.get("releaseProof") or {}).get("status") or "")).strip().lower()
             if release_status in {"published", "publishable"} and release_proof_status in {"pass", "passed"}:
                 return "boundary_pure"
+    elif project_id == "core":
+        import_parity = _load_json_file(published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json")
+        if _proof_passed(import_parity):
+            return "boundary_pure"
     elif project_id == "media-factory":
         media_local_release_proof = _load_json_file(published_dir / "MEDIA_LOCAL_RELEASE_PROOF.generated.json")
         artifact_publication_certification = _load_json_file(published_dir / "ARTIFACT_PUBLICATION_CERTIFICATION.generated.json")

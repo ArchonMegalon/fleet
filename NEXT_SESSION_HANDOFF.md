@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-2/3 status-plane fallback now promotes core to boundary-pure from passing import parity certification
+
+- Trigger:
+  - frontier W1 still showed `build_explain_publish` as warning-only because `core` remained at `repo_local_complete`, despite passing local import/parity certification evidence.
+  - this held milestone-2/3 workbench/explain proof below ready in Fleet journey gates and flagship readiness even when the remaining install blockers were already isolated to external Windows/macOS host proof capture.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_status_plane.py`:
+    - `_infer_fallback_readiness_stage(...)` now promotes `core` to `boundary_pure` when `.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json` has passing status.
+  - patched `/docker/fleet/scripts/verify_status_plane_semantics.py` with identical `core` fallback promotion logic so verifier/materializer stay lockstep.
+  - patched `/docker/fleet/tests/test_materialize_status_plane.py`:
+    - added `test_core_fallback_stage_uses_import_parity_certification`.
+    - added `test_core_fallback_stage_stays_repo_local_without_import_parity_pass`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/state/status-plane.verify.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_status_plane.py scripts/verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_status_plane.py -k "core_fallback_stage_uses_import_parity_certification or core_fallback_stage_stays_repo_local_without_import_parity_pass"` -> FAIL (`No module named pytest` in this environment).
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml --status-json-out state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish" or .id=="install_claim_restore_continue") | {id,state,blocked_by_external_constraints_only}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`build_explain_publish: ready`; install journey remains external-only blocked).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=3, warning=5, missing=0`).
+  - `cd /docker/fleet && jq '{rules_engine_and_import:.coverage.rules_engine_and_import, desktop_client:.coverage.desktop_client, install_external_only:.coverage_details.desktop_client.evidence.install_claim_restore_continue_blocked_by_external_constraints_only}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`rules_engine_and_import: ready`; desktop remains warning; install remains external-only).
+- Commits landed:
+  - `fleet`: `<pending>` (`feat(w1-2-3): promote core boundary stage from import parity certification`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> `<pending>`.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+  - install lane closure remains externally blocked on native Windows/macOS promoted installer + startup-smoke tuple receipts.
+
 ## 2026-04-04: milestone-1/3 external desktop tuple blockers now emit explicit cross-host proof-request receipts from registry through Fleet journey gates
 
 - Trigger:

@@ -497,6 +497,60 @@ path: {tmp_path / "hub-registry"}
     assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
+def test_core_fallback_stage_uses_import_parity_certification(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "core" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "core.yaml").write_text(
+        f"""
+id: core
+enabled: true
+lifecycle: live
+path: {tmp_path / "core"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "core"
+    assert rows[0]["readiness"]["stage"] == "boundary_pure"
+
+
+def test_core_fallback_stage_stays_repo_local_without_import_parity_pass(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "core" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "core.yaml").write_text(
+        f"""
+id: core
+enabled: true
+lifecycle: live
+path: {tmp_path / "core"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json").write_text(
+        json.dumps({"status": "failed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "core"
+    assert rows[0]["readiness"]["stage"] == "repo_local_complete"
+
+
 def test_media_factory_fallback_stage_uses_release_and_publication_proofs(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "media-factory" / ".codex-studio" / "published"
