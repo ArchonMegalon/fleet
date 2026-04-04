@@ -60,6 +60,13 @@ REPO_ROOTS = {
     "executive-assistant": Path("/docker/EA"),
 }
 
+EXTERNAL_BLOCKER_MARKERS = (
+    "requires a windows-capable host",
+    "requires a macos host",
+    "current host cannot run promoted windows installer smoke",
+    "current host cannot run promoted macos installer smoke",
+)
+
 
 def utc_now() -> dt.datetime:
     return dt.datetime.now(UTC)
@@ -164,6 +171,18 @@ def posture_value(project_row: Dict[str, Any]) -> str:
 
 def compare_order(actual: str, expected: str, order: Dict[str, int]) -> int:
     return order.get(str(actual or "").strip(), -1) - order.get(str(expected or "").strip(), -1)
+
+
+def classify_blocking_reasons(blocking_reasons: List[str]) -> Tuple[List[str], List[str]]:
+    external_blocking_reasons: List[str] = []
+    local_blocking_reasons: List[str] = []
+    for reason in blocking_reasons:
+        normalized = str(reason or "").strip().lower()
+        if normalized and any(marker in normalized for marker in EXTERNAL_BLOCKER_MARKERS):
+            external_blocking_reasons.append(reason)
+        else:
+            local_blocking_reasons.append(reason)
+    return external_blocking_reasons, local_blocking_reasons
 
 
 def evaluate_journey(
@@ -517,9 +536,18 @@ def evaluate_journey(
     elif warning_reasons:
         state = "warning"
 
+    external_blocking_reasons, local_blocking_reasons = classify_blocking_reasons(blocking_reasons)
+    blocked_by_external_constraints_only = bool(external_blocking_reasons) and not local_blocking_reasons
+
     recommended_action = "Keep the journey under routine weekly proof."
     if blocking_reasons:
-        recommended_action = "Resolve the blocking artifact or posture gap before widening promotion or trust claims."
+        if blocked_by_external_constraints_only:
+            recommended_action = (
+                "Run the missing platform-host proof lane (for example Windows/macOS startup smoke) "
+                "and ingest receipts before widening promotion or trust claims."
+            )
+        else:
+            recommended_action = "Resolve the blocking artifact or posture gap before widening promotion or trust claims."
     elif warning_reasons:
         recommended_action = "Close the remaining target-stage or evidence-depth gap before calling the journey boring."
 
@@ -543,6 +571,9 @@ def evaluate_journey(
         ),
         "support_install_truth_contract_violation_count": len(support_packet_contract_violations),
         "support_recovery_route_contract_violation_count": len(support_recovery_contract_violations),
+        "external_blocking_reason_count": len(external_blocking_reasons),
+        "local_blocking_reason_count": len(local_blocking_reasons),
+        "blocked_by_external_constraints_only": blocked_by_external_constraints_only,
     }
     return {
         "id": str(row.get("id") or "").strip(),
@@ -551,6 +582,9 @@ def evaluate_journey(
         "state": state,
         "recommended_action": recommended_action,
         "blocking_reasons": blocking_reasons,
+        "external_blocking_reasons": external_blocking_reasons,
+        "local_blocking_reasons": local_blocking_reasons,
+        "blocked_by_external_constraints_only": blocked_by_external_constraints_only,
         "warning_reasons": warning_reasons,
         "owner_repos": [str(item) for item in (row.get("owner_repos") or []) if str(item).strip()],
         "canonical_journeys": [str(item) for item in (row.get("canonical_journeys") or []) if str(item).strip()],
@@ -608,6 +642,8 @@ def build_payload(
 
     blocked = [row for row in rows if row["state"] == "blocked"]
     warnings = [row for row in rows if row["state"] == "warning"]
+    blocked_external_only = [row for row in blocked if row.get("blocked_by_external_constraints_only")]
+    blocked_with_local = [row for row in blocked if not row.get("blocked_by_external_constraints_only")]
     overall_state = "ready"
     if blocked:
         overall_state = "blocked"
@@ -648,6 +684,8 @@ def build_payload(
             "ready_count": sum(1 for row in rows if row["state"] == "ready"),
             "warning_count": len(warnings),
             "blocked_count": len(blocked),
+            "blocked_external_only_count": len(blocked_external_only),
+            "blocked_with_local_count": len(blocked_with_local),
             "recommended_action": recommended_action,
         },
         "artifact_freshness": artifacts,
