@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed release-channel artifacts payload shape
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-truth inventory parsing that cannot silently coerce malformed artifact payloads.
+  - executable gate still filtered `release_channel.artifacts` permissively, which could ignore non-list/non-object drift without explicit failure evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `artifacts` parsing now fail-closes when `release_channel.artifacts` is not a list.
+    - list-form `artifacts` now fail-close non-object items with index-specific reasons.
+    - added artifact-shape evidence keys:
+      - `release_channel_artifacts_total_count`
+      - `release_channel_artifacts_object_count`
+      - `release_channel_artifacts_non_object_indexes`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock artifact-shape fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only.
+- Current trusted state:
+  - executable gate no longer accepts malformed `release_channel.artifacts` shape drift silently; malformed payloads now fail closed with explicit reasons and evidence.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes duplicate-normalized promotedPlatformHeads keys in release-channel tuple coverage
 
 - Trigger:
