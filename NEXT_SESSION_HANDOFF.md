@@ -22,6 +22,40 @@
 - Exact blocker:
   - remaining install lane closure still depends on native Windows/macOS startup-smoke receipts for promoted installer bytes; this Linux-only host cannot execute those installer smokes locally.
 
+## 2026-04-04: milestone-9/16 creator publication packets now fail-close JSON/Foundry exchange and recap/run-module portability evidence retention
+
+- Trigger:
+  - frontier milestones `9` and `16` require adjacent exchange (`JSON` + `Foundry`) and portability (`replay` + `recap` + `run-module`) lanes to remain explicit in the same creator publication packet evidence users/operators audit.
+  - `chummer-media-factory` packet planning already preserved `Sheet viewer`, `Print PDF`, and `Character template export`, but retained only the first two exchange lines by default and only force-preserved `Replay timeline` on portability rows.
+  - this left a regression seam where `JSON exchange`, `Foundry exchange`, `Session recap`, and `Run module` evidence could be dropped when line ordering or payload length changed.
+- Landed:
+  - patched `/docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs`:
+    - exchange parity retention now force-preserves all explicit adjacent exchange lanes when present:
+      - `JSON exchange:`
+      - `Foundry exchange:`
+      - `Sheet viewer:`
+      - `Print PDF:`
+      - `Character template export:`
+    - portability pillar retention now force-preserves:
+      - `Replay timeline:`
+      - `Session recap:`
+      - `Run module:`
+    - generalized lane retention helper from parity-specific naming to shared lane semantics.
+  - patched runtime verify coverage:
+    - `/docker/fleet/repos/chummer-media-factory/Chummer.Media.Factory.Runtime.Verify/Program.cs`
+    - added fail-close assertions requiring `JSON exchange`, `Foundry exchange`, `Session recap`, and `Run module` evidence lines in creator publication packet output.
+  - regenerated fleet proof artifacts after media verify:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj` -> PASS (`Media factory runtime verification passed.`).
+  - `cd /docker/fleet/repos/chummer-media-factory && bash scripts/ai/verify.sh` -> PASS (`verify ok`; refreshed media proof receipts written).
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
+
 ## 2026-04-04: milestone-9/16 media-factory now projects explicit local release + artifact publication proofs and boundary-pure fallback posture
 
 - Trigger:
@@ -39103,6 +39137,39 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push from `chummer6-mobile`, `chummer6-design`, and `fleet`.
+
+- Current open milestone ids: 4, 5, 6
+- Frontier milestone ids to prioritize first: 4, 5, 6
+
+## 2026-04-04: milestone-5 GM lane now fail-closes opposition/roster/event-control packet markers in campaign session journey gate
+
+- Trigger:
+  - frontier milestone `5` requires GM operations, opposition packets, roster movement, prep library, and event controls to stay first-class on the same governed lane.
+  - `campaign_session_recover_recap` already referenced `CampaignWorkspaceServerPlaneServiceTests.cs`, but its required markers only covered diary/heat/downtime and could miss regressions in opposition/roster/event-control packet lane coverage.
+- Landed:
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - expanded `campaign_session_recover_recap` Hub workspace-test marker requirements with:
+      - `Kind: "opposition_packet"`
+      - `Kind: "roster_movement_packet"`
+      - `Kind: "event_control_packet"`
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same marker requirements.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` now fail-closes these three packet-kind markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile tests/test_materialize_journey_gates.py scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() ... PY` -> PASS.
+- Commits landed:
+  - `chummer6-design`: `06eb826` (`feat(w3-5): fail-close gm packet lane markers in campaign journey gate`).
+  - `fleet`: `3efb3f4` (`feat(w3-5): enforce gm packet lane markers in journey gate regression`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 - Current open milestone ids: 4, 5, 6
 - Frontier milestone ids to prioritize first: 4, 5, 6
