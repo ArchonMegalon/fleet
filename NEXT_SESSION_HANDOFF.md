@@ -1,3 +1,57 @@
+## 2026-04-04: milestone-1/3 executable gate now emits per-head Windows/macOS fail-honest diagnostics even when release tuples are missing
+
+- Trigger:
+  - frontier milestones `1` and `3` still fail on missing promoted Windows/macOS tuples, but `DESKTOP_EXECUTABLE_EXIT_GATE` could stop at aggregate tuple-missing reasons without always surfacing per-head platform gate diagnostics.
+  - this made control-plane proof less actionable when platform tuple publication and per-head startup smoke both drifted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - derives expected Windows/macOS validation tuples from `desktopTupleCoverage.requiredDesktopPlatformHeadRidTuples` even when matching promoted artifacts are absent.
+    - materializes synthetic expected tuple records (`source=required_tuple_policy_missing_release_artifact`) so per-head gate validation still executes fail-honest for missing tuple lanes.
+    - publishes new evidence inventories:
+      - `windows_policy_required_head_rid_tuples`
+      - `windows_policy_tuples_missing_release_artifacts`
+      - `macos_policy_required_head_rid_tuples`
+      - `macos_policy_tuples_missing_release_artifacts`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Desktop_executable_gate_surfaces_windows_and_macos_per_head_diagnostics_from_required_tuple_policy_when_release_artifacts_are_missing`.
+    - regression locks policy-derived tuple diagnostics/evidence markers.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - still fails (correctly) but now includes explicit Windows/macOS per-head gate failures in the same receipt, not only aggregate tuple-missing statements.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`3` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with expanded per-head Windows/macOS fail-honest reasons (missing promoted artifacts/startup-smoke paths + gate mismatch details).
+- Current trusted state:
+  - executable gate now provides per-head actionable blocker truth for missing Windows/macOS tuple coverage, rather than only aggregate release-channel tuple deficits.
+  - true blocker remains external proof materialization for promoted Windows/macOS installer bytes + startup-smoke receipts on appropriate hosts.
+- Push status:
+  - `chummer6-ui`: local commit/push pending in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`, `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-4/5 compact shorthand now stays governed across campaign workspace packets and GM unresolved triage
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return and GM operations to stay one governed lane even when operators use compact shorthand instead of spaced canonical terms.
+  - compact forms such as `eventcontrol`, `seasonops`, `rostermove`, `crewhandoff`, and `preplibrary` could still under-classify to generic lanes in packet synthesis or unresolved triage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added compact event-control token support (`eventcontrol`, `eventcontrols`, `eventctrl`, `seasonops`) to event-control detection/fallback.
+    - added compact roster movement token support (`rostermove`, `rostertransfer`, `rosterhandoff`, `crewhandoff`) to roster kind and movement detection.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded unresolved domain classification for compact event control (`eventcontrol`, `eventcontrols`, `eventctrl`, `seasonops`, `seasonop`), roster movement (`rostermove`, `rostertransfer`, `rosterhandoff`, `crewhandoff`), and prep library (`preplibrary`, `preppacket`, `prepdossier`, `prepbriefing`) variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketFallsBackToCompactEventControlSignalsWhenCanonicalEventTermsAreMissing`.
+    - added `RosterMovementPacketFallsBackToCompactRosterMovementSignalsWhenCanonicalRosterTermsAreMissing`.
+    - added fixture helpers `BuildWorkspaceWithCompactEventControlSignalsOnly` and `BuildWorkspaceWithCompactRosterMovementSignalsOnly`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatCompactDomainShorthandAsGovernedOpsDomains`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GetProjection_UnresolvedItemsTreatCompactDomainShorthandAsGovernedOpsDomains|FullyQualifiedName~EventControlPacketFallsBackToCompactEventControlSignalsWhenCanonicalEventTermsAreMissing|FullyQualifiedName~RosterMovementPacketFallsBackToCompactRosterMovementSignalsWhenCanonicalRosterTermsAreMissing|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`356` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign workspace prep packet synthesis and GM unresolved triage now keep compact event-control, roster-movement, and prep-library shorthand on governed milestone-4/5 lanes instead of dropping to generic handling.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 GM unresolved triage now classifies `op_for` and `opforce` shorthand as opposition-domain pressure
 
 - Trigger:
