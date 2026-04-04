@@ -16,6 +16,24 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-5 gm operations lane now fail-closes compact and split game-master packet shorthand into event-control unresolved domain routing
+
+- Trigger:
+  - W3 milestone `5` requires GM operations and event controls to stay on one governed lane even when unresolved payloads use compact packet shorthand from audit and prep-query surfaces.
+  - `ResolveGmOpsDomain(...)` already handled `gm*` compact forms but did not explicitly match `gamemaster*` compact/split packet phrasing, creating a potential domain-priority seam for unresolved-item sorting.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded event-control signal detection with compact and split `gamemaster` and `game master` forms (`ops/operation/control/ctl/ctrl` families) so unresolved packet payloads classify as `event_control`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatGameMasterPacketShorthandAsEventControlDomain` to fail-close unresolved-item prioritization for `gamemasteropspacket` and split `game master control packet` payloads.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGameMasterPacketShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGmOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatSplitGmOpsShorthandAsEventControlDomain" -v minimal` -> PASS (`3 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries" -v minimal` -> PASS (`2 passed` on both target frameworks).
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-5 roster movement continuity lane now canonicalizes compact singular `rostertransfer` and `rosterhandoff` query forms
 
 - Trigger:
