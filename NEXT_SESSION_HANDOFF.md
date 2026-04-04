@@ -35,11 +35,15 @@
 - Commits landed:
   - `chummer6-core`: `e886138e` (`feat(w2-13): add aggregate reference-source lane receipt in master index`).
   - `chummer6-design`: `c4b10d3` (`docs(w2-13): note reference-source lane receipts in parity canon`).
+  - `fleet`: `a9a4059` (`feat(w2-13): track reference-source lane receipt in parity proof`).
 - Push attempts:
-  - not run in this slice yet.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `7439b5b5..e886138e`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - `Chummer.Tests` filtered execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
   - `pytest` remains unavailable in this environment.
+  - environment lacks GitHub HTTPS credentials for `chummer6-design` and `fleet` pushes.
 
 ## 2026-04-04: milestone-4/6 travel continuity now includes explicit offline return-loop lane cues (downtime/diary + contacts/heat + aftermath + return)
 
