@@ -45,6 +45,41 @@
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 release-proof origin policy now fail-closes canonical-but-unapproved `releaseProof.baseUrl` origins across hub parity audit and registry materialize/verify gates
+
+- Trigger:
+  - frontier milestone `2` proof grammar already fail-closed malformed `releaseProof.baseUrl`, but still allowed any canonical origin host.
+  - this left a drift path where proof packets could point at non-product origins while still passing route/journey checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added allowed-origin policy for nested `releaseProof.baseUrl` (`CHUMMER_UI_PARITY_ALLOWED_RELEASE_PROOF_BASE_URLS` or shared `CHUMMER_ALLOWED_RELEASE_PROOF_BASE_URLS`, default `https://chummer.run`).
+    - parity audit now fail-closes canonical-but-unapproved base origins.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-marker assertions to lock allowed-origin env markers and fail-close message text.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added allowed-origin policy in release-proof normalization (`CHUMMER_MATERIALIZE_ALLOWED_RELEASE_PROOF_BASE_URLS` or shared `CHUMMER_ALLOWED_RELEASE_PROOF_BASE_URLS`, default `https://chummer.run`).
+    - materializer now rejects proof payloads whose canonical `base_url` is outside allowed origin set.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now enforces the same allowed-origin policy (`CHUMMER_VERIFY_ALLOWED_RELEASE_PROOF_BASE_URLS` or shared `CHUMMER_ALLOWED_RELEASE_PROOF_BASE_URLS`, default `https://chummer.run`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - set bounded local default allowed origins to `https://chummer.run,http://127.0.0.1:8091`.
+    - added materializer mutation proving fail-close for canonical-but-disallowed `base_url` (`https://example.com`).
+    - added verifier mutation proving fail-close for canonical-but-disallowed `releaseProof.baseUrl` (`https://example.com`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented allowed-origin policy and override env vars for bounded local fixtures.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 release proof now requires `releaseProof.baseUrl` to be canonical and explicitly approved, preventing non-product origin drift across hub parity and registry projection/verification seams.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `chummer-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 split shorthand now fail-closes spaced/hyphen `gm ops`, `event ops`, and `season ops/control` aliases across campaign prep retrieval, GM prep search, unresolved-domain triage, and live API/UI journey audits
 
 - Trigger:
