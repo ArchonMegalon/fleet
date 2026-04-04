@@ -435,10 +435,10 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
-    assert payload["summary"]["open_case_count"] == 2
+    assert payload["summary"]["open_case_count"] == 1
     assert payload["summary"]["closure_waiting_on_release_truth"] == 1
     assert payload["summary"]["needs_human_response"] == 0
-    assert payload["summary"]["install_truth_state_counts"]["promoted_tuple_match"] == 2
+    assert payload["summary"]["install_truth_state_counts"]["promoted_tuple_match"] == 1
     assert payload["summary"]["update_required_case_count"] == 0
     assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
     assert payload["summary"]["update_required_misrouted_case_count"] == 0
@@ -464,7 +464,7 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     }
     assert waiting_packet["recovery_path"]["href"] == "/account/support"
     fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
-    assert fix_states == ["awaiting_reporter_verification", "confirmed_fixed"]
+    assert fix_states == ["awaiting_reporter_verification"]
 
 
 def test_materialize_support_case_packets_projects_external_proof_requests_for_missing_tuple(tmp_path: Path) -> None:

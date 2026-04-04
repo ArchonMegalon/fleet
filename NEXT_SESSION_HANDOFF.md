@@ -49,6 +49,21 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 support install-proof regression suite now runs locally and is green after contract hardening
+
+- Trigger:
+  - after tightening W1 support install-proof contract checks, local `pytest` execution surfaced stale test fixtures that no longer matched active support-packet contract semantics (open-case filtering and richer external-proof requirements).
+- Landed:
+  - environment bootstrap:
+    - `python3 -m pip install --user pytest` (local session dependency unblocked).
+  - patched `/docker/fleet/tests/test_materialize_support_case_packets.py`:
+    - aligned `test_materialize_support_case_packets_enriches_install_truth_from_release_channel` expectations with active open-status filtering (no longer counting `user_notified` as open).
+  - patched `/docker/fleet/tests/test_support_external_proof_contract_projection.py`:
+    - enriched fixture in `test_journey_gate_requires_support_startup_smoke_receipt_contract` with required install-diagnosis + expected-target + proof-command fields so the test isolates missing startup-smoke contract behavior under the current gate contract.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py` -> PASS (`25 passed`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py` -> PASS (`10 passed`).
+
 ## 2026-04-04: milestone-1/3 support install-proof contract now fail-closes proof-capture host/installer command drift
 
 - Trigger:

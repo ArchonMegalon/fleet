@@ -152,20 +152,34 @@ groups: []
         json.dumps(
             {
                 "generated_at": "2026-04-04T18:00:00Z",
-                "summary": {},
+                "summary": {"external_proof_required_case_count": 1},
                 "packets": [
                     {
                         "packet_id": "case-1",
                         "status": "accepted",
                         "install_truth_state": "tuple_not_on_promoted_shelf",
                         "install_diagnosis": {
+                            "registry_channel_id": "preview",
+                            "registry_release_channel_status": "published",
+                            "registry_release_version": "1.2.3",
+                            "registry_release_proof_status": "passed",
                             "external_proof_required": True,
                             "external_proof_request": {
                                 "tuple_id": "avalonia:win-x64:windows",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "proof_capture_commands": [
+                                    "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                                    "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                                ],
                             },
                         },
+                        "fix_confirmation": {"state": "no_fix_recorded", "update_required": False},
+                        "recovery_path": {"action_id": "open_downloads", "href": "/downloads"},
                     }
                 ],
             },
