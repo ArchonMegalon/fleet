@@ -38,9 +38,11 @@
   - `python3 -m pytest -q tests/test_materialize_support_case_packets.py -q` -> FAIL (`No module named pytest`) in this environment.
   - `python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
 - Commits landed:
-  - pending local commit in `fleet` and `chummer6-design` for update-required route proof + journey gate enforcement + handoff refresh.
+  - `fleet`: `e2a907e` (`feat(w10): enforce update-required support download routing proof`).
+  - `chummer6-design`: `04e15a1` (`docs(w10): require update-required support routes to downloads`).
 - Push attempts:
-  - none yet for this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - full pytest execution is unavailable in this environment because `pytest` is not installed.
 
