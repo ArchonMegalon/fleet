@@ -28,6 +28,27 @@
   - `chummer.run-services`: commit landed locally (`6aa4b4ee`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `fleet`: pending (credential-dependent in this environment).
 
+## 2026-04-04: registry release verification now fail-closes non-passing releaseProof.status values
+
+- Trigger:
+  - release-channel verification enforced localization gate posture but only required `releaseProof.status` to be a present string.
+  - this left a shelf-truth seam where non-passing release-proof statuses (for example `failed`) could pass verification if other fields looked valid.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.status` to be passing (`pass`, `passed`, or `ready`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that sets `releaseProof.status=failed` and asserts verifier failure.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel contract now explicitly states `releaseProof.status` is verifier-bound passing truth.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes non-passing `releaseProof.status` negative regression).
+- Current trusted state:
+  - registry release verification now fail-closes failed release-proof packets before they can be treated as promoted shelf truth.
+- Push status:
+  - `chummer-hub-registry`: pending in this environment (commit/push not yet attempted for this slice).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes duplicate and unexpected acceptance-gate ids in registry verification
 
 - Trigger:
