@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes compact `diaries/contacts/heats return*` shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `4` requires diary/contact/heat return continuity to stay on one governed lane across compact operator and player shorthand.
+  - compact plural return forms for diary/contact/heat (`diariesreturn*`, `contactsreturn*`, `heatsreturn*`) were not explicitly canonicalized or live-audited, leaving a false-negative seam outside existing `campaigns/aftermaths/downtimes return*` proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact return-loop aliases for `diariesreturn*`, `contactsreturn*`, and `heatsreturn*`.
+    - added compact return-packet/brief aliases for the same families (`...returnpacket(s)`, `...returnbrief(s)`).
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with `diaries/contacts/heats return*` packet and brief forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` with `diaries/contacts/heats return*` packet/brief matching assertions against governed continuity packets.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for all added `diaries/contacts/heats return*` compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same compact continuity forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for the new `diaries/contacts/heats return*` probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactCampaignAftermathAndDowntimeReturnShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`4 passed` on both target frameworks).
+- Commits landed:
+  - pending (recorded after commit step below).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-1/3 install proof lane now fail-closes tuple-coverage drift between missing tuple inventory and external-proof request inventory
 
 - Trigger:
@@ -17,8 +47,12 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "release_channel_external_proof_reasons_reject_missing_tuple_inventory_mismatch or release_channel_external_proof_reasons_reject_missing_platform_pair_inventory_drift or release_channel_external_proof_reasons_reject_duplicate_tuple_rows or release_channel_external_proof_reasons_reject_malformed_tuple_identity or release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch"` -> PASS (`5 passed`, `27 deselected`).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py -k "external_proof_requests_include_startup_smoke_contract_fields or install_journey_blocks_when_support_external_proof_backlog_summary_drifts" && python3 -m pytest -q tests/test_materialize_support_case_packets.py -k "external_proof"` -> PASS (`2 passed`, `5 deselected`; `4 passed`, `7 deselected`).
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion-review frontier rematerialized; active blocker remains missing external macOS/Windows tuple proof capture).
+- Commits landed:
+  - `fleet`: `1c1ca39` (`fix(w1-1-3): fail-close external-proof tuple coverage drift`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - missing external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
+  - environment lacks GitHub HTTPS credentials for authenticated pushes, and milestone `1/3` release closure still needs external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
 
 ## 2026-04-04: milestone-1/3 completion-review executable gate now fail-closes future-generated proof timestamps
 
