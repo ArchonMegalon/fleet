@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
@@ -9307,6 +9308,25 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
         audit["status"] = "fail"
         audit["reason"] = "desktop executable exit gate blocking findings counts must be non-negative"
         return audit
+    if len(set(blocking_findings)) != len(blocking_findings):
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate blocking findings rows must be unique"
+        return audit
+    if len(set(local_findings)) != len(local_findings):
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate local blocking findings rows must be unique"
+        return audit
+    if len(set(external_findings)) != len(external_findings):
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate external blocking findings rows must be unique"
+        return audit
+    if blocking_findings and (local_findings or external_findings):
+        if Counter(blocking_findings) != Counter(local_findings + external_findings):
+            audit["status"] = "fail"
+            audit["reason"] = (
+                "desktop executable exit gate blocking findings rows must match local plus external finding rows"
+            )
+            return audit
 
     proof_is_ready = str(audit["proof_status"]).lower() in {"pass", "passed", "ready"}
     if proof_is_ready:

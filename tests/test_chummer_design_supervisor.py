@@ -3511,6 +3511,62 @@ def test_desktop_executable_exit_gate_audit_rejects_negative_blocking_counts() -
         assert "counts must be non-negative" in str(audit["reason"])
 
 
+def test_desktop_executable_exit_gate_audit_rejects_duplicate_external_blocking_rows() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "fail",
+                "reason": "external host proof backlog remains",
+                "blockedByExternalConstraintsOnly": True,
+                "blockingFindings": ["missing macos host proof", "missing windows host proof"],
+                "blockingFindingsCount": 2,
+                "localBlockingFindings": [],
+                "localBlockingFindingsCount": 0,
+                "externalBlockingFindings": ["missing macos host proof", "missing macos host proof"],
+                "externalBlockingFindingsCount": 2,
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "external blocking findings rows must be unique" in str(audit["reason"])
+
+
+def test_desktop_executable_exit_gate_audit_rejects_blocking_row_content_mismatch_vs_local_and_external() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        payload_path = root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        payload.update(
+            {
+                "status": "fail",
+                "reason": "blocking findings remain",
+                "blockedByExternalConstraintsOnly": False,
+                "blockingFindings": ["local gate drift", "unexpected aggregate row"],
+                "blockingFindingsCount": 2,
+                "localBlockingFindings": ["local gate drift"],
+                "localBlockingFindingsCount": 1,
+                "externalBlockingFindings": ["missing windows host proof"],
+                "externalBlockingFindingsCount": 1,
+            }
+        )
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        audit = module._desktop_executable_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert "must match local plus external finding rows" in str(audit["reason"])
+
+
 def test_design_completion_audit_rejects_release_proof_warning() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
