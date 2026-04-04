@@ -42,11 +42,53 @@
 - Commits landed:
   - `chummer6-design`: `45e08c5` (`feat(w5-12): harden weekly product pulse v3 contract and alignment signals`).
   - `fleet`: `6394d90` (`docs(handoff): record milestone-12 pulse-v3 alignment hardening slice`).
+  - `fleet`: `b9b1076` (`docs(handoff): append push outcome for pulse-v3 slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - GitHub HTTPS credentials are unavailable for push in this environment; fleet test execution is additionally blocked by missing `pytest`.
+
+## 2026-04-04: milestone-14 master-index now projects translator successor posture (corpus + bridge) alongside settings/custom-data XML lanes
+
+- Trigger:
+  - frontier milestone `14` requires the translator-era successor story to be explicit on the same governed parity surface as settings/source toggles/custom-data lanes.
+  - `master-index` already projected settings/custom-data/XML bridge posture, but translator evidence lived only on the separate translator endpoint and was not first-class in the parity lane summary.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes translator successor fields:
+      - `TranslatorLanePosture`
+      - `TranslatorBridgePosture`
+      - `TranslatorLanguageCount`
+      - `EnabledLanguageOverlayCount`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - `GetMasterIndex()` now computes translator catalog summary from effective `lang` corpus + enabled language overlays.
+    - translator lane posture now fail-closes as:
+      - `missing` when neither corpus nor bridge coverage is present
+      - `stale` when corpus exists without governed bridge (or bridge exists without recognized corpus)
+      - `governed` when corpus and overlay bridge are both explicit
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`
+      - baseline/sourcebook assertions now include new translator fields.
+      - added:
+        - `Master_index_reports_stale_translator_lane_when_corpus_exists_without_language_overlay_bridge`
+        - `Master_index_reports_governed_translator_lane_when_corpus_and_language_overlay_bridge_exist`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`
+      - `Master_index_endpoint_returns_data` now asserts translator fields are present.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-14 custom-data/XML/translator row now records master-index translator corpus + bridge posture projection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_translator_lane_when_corpus_exists_without_language_overlay_bridge|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_translator_lane_when_corpus_and_language_overlay_bridge_exist|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+- Commits landed:
+  - pending local commits in `chummer6-core`, `chummer6-design`, and `fleet`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for the milestone-14 translator projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
 
 ## 2026-04-04: follow-up on W3-6 EA continuity contracts now fail-proves all four new builtin keys in planner coverage
 
