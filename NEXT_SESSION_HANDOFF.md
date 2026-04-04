@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 campaign continuity query lane now normalizes diary/contact/heat mutation wording (`updates`/`changes`) to governed prep search tokens
+
+- Trigger:
+  - frontier milestones `4` and `5` require diary, contacts, heat, and return-lane continuity to behave as one governed lane in campaign workspace and GM prep search.
+  - prep-library query matching is token-intersection based, so shorthand like `contact updates`, `contacts changed`, `heat changes`, and `diary update` could over-constrain queries when packets expose stable continuity nouns but not mutation verbs.
+  - this left a false-negative seam for real operator/player phrasing around relationship and diary change tracking.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - when query scope includes diary/session-log or relationship/heat tokens, mutation verbs (`update*`, `change*`, `delta*`, `shift*`, `mutation*`) are stripped during alias rewrite.
+    - keeps continuity search anchored to governed lane semantics (`diary`, `connection`, `heat`, `return`) instead of brittle verb coupling.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingCollapsesContactHeatAndDiaryMutationShorthand`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ListPrepAssets_QueryCollapsesContactHeatAndDiaryMutationShorthand`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryMatchingCollapsesContactHeatAndDiaryMutationShorthand|FullyQualifiedName~ListPrepAssets_QueryCollapsesContactHeatAndDiaryMutationShorthand" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`432` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` (not yet pushed in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests missing desktopTupleCoverage metadata and missing promotedPlatformHeads mapping fail-close
 
 - Trigger:
