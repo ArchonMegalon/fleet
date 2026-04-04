@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-1/3 publish lane now fail-closes future-skewed startup-smoke receipts for promoted desktop install media
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/startup proof that cannot lie when publish-time evidence timestamps are skewed into the future.
+  - `scripts/publish-download-bundle.sh` verified startup-smoke staleness but accepted future-dated receipt timestamps after age clamping.
+  - this left a release-shelf seam where promoted install media could pass publish verification with time-skewed startup-smoke evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/publish-download-bundle.sh`:
+    - added bounded future-skew validation for startup-smoke receipt timestamps during promoted install-media publish verification.
+    - added env controls:
+      - `CHUMMER_PUBLISH_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
+      - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added compliance guards for publish-time future-skew fail-close reason text and new env knob usage.
+  - patched `/docker/chummercomplete/chummer6-ui/docs/SELF_HOSTED_DOWNLOADS_RUNBOOK.md`:
+    - documented publish-time startup-smoke future-skew policy and override knobs alongside max-age controls.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/publish-download-bundle.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1` test).
+- Current trusted state:
+  - publish-time startup-smoke verification now rejects excessive future-skewed timestamps instead of treating them as fresh evidence.
+  - milestone-1/3 proof honesty is tighter on the publish lane while required promoted Windows/macOS install tuple coverage remains a separate open frontier gap.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign-spine creator publication build now normalizes whitespace-padded publication ids before dedup
 
 - Trigger:
@@ -91,6 +117,36 @@
   - campaign return-loop recap ordering and freshness cues stay aligned with governed aftermath package truth even with whitespace-padded recap projection ids.
 - Push status:
   - `chummer.run-services`: push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing, non-passing, or unexpected per-locale domain coverage in registry verification
+
+- Trigger:
+  - the previous BLK-009 hardening added global localization `domainCoverage`, but proof could still pass without showing that each shipping locale covered each required domain.
+  - this left a fail-open seam where domain-level claims were not locale-specific across trust-critical surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - normalized `uiLocalizationReleaseGate.localeDomainCoverage` from object/list forms.
+    - canonical release proof defaults now include `localeDomainCoverage`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage` to be an object.
+    - verifier now fail-closes missing shipping locales, unexpected locale keys, missing required domain ids per locale, unexpected domain ids per locale, and non-passing per-locale domain statuses.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - canonical fixture now includes passing `locale_domain_coverage` for all shipping locales.
+    - added negative regressions for missing locale row, non-passing locale/domain status, and unexpected locale key.
+    - canonical assertions now verify materialized `localeDomainCoverage` exactness.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel localization contract now documents required passing per-locale domain coverage.
+  - committed and pushed in `chummer-hub-registry`:
+    - `fb61ed3` — `Require per-locale localization domain coverage proof`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new per-locale domain-coverage negative regressions).
+- Current trusted state:
+  - registry-owned localization proof now fail-closes domain parity drift at both levels: overall required domain posture and per-shipping-locale domain posture.
+  - milestone-2 `BLK-009` remains globally open pending real cross-surface localization completion, but release-shelf proof shape is stricter and less gameable.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `fb61ed3`; includes `6df5047` + `fb61ed3` in this momentum window).
   - `fleet`: pending (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing, non-passing, or unexpected localization domain coverage in registry verification
