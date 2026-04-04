@@ -30,6 +30,50 @@
   - milestone-2 hub parity verification no longer depends on shared fixed temp paths for run-services helper binaries and runtimeconfigs.
   - hub verify baseline is green again after re-synchronizing desktop workflow execution gate receipt timestamps with nested SR4/SR6 workflow evidence.
 
+## 2026-04-04: follow-up on W3 league/community `ctl` compact shorthand fail-close slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `eaf1f219` (`fix(w3): fail-close league ctl shorthand across gm ops lanes`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 GM operations lane now fail-closes compact and split `league/community ctl` shorthand across prep-query canonicalization, unresolved-domain routing, and live script-lock journeys
+
+- Trigger:
+  - milestone-4/5 GM operations shorthand already fail-closed `league/community` ops/control and compact `ctrl` forms, but compact `ctl` family aliases (`leaguectl`, `leaguectls`, `communityctl`, `communityctls`) were still outside canonical prep-query alias rewriting and unresolved-domain phrase rails.
+  - this left a residual wording seam where operator shorthand could drift from governed event-control prep retrieval and unresolved-item prioritization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias canonicalization for:
+      - `leaguectl`, `leaguectls`, `leaguectrls`
+      - `communityctl`, `communityctls`, `communityctrls`
+    - expanded split-token rewrite guards so `league/community + ctl` collapses to governed event-control tokens alongside existing `ctrl/control/ctls/ctrls` paths.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `ResolveGmOpsDomain(...)` now treats compact/split/hyphen/underscore `league/community ctl/ctls/ctrls` phrasing as `event_control` cues.
+  - expanded unit coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - split-ops/control prep-query matching now asserts compact and split-hyphen `league/community ctl(s)` and compact plural `ctrls` variants.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - unresolved-domain regression now asserts `leaguectls` and `communityctls` prioritization inside the event-control lane.
+      - prep-library query regressions now assert compact/split-hyphen `league/community ctl(s)` matching across both compact and ctl-focused shorthand suites.
+  - patched live journey script-lock checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added governed workspace checks for:
+      - `prepQuery=leaguectl`
+      - `prepQuery=leaguectls`
+      - `prepQuery=communityctl`
+      - `prepQuery=communityctls`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs` script-lock markers for all newly added audit and Playwright strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatCtlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCtlShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 GM operations shorthand now fail-closes compact and split `league/community ctl` wording through the same canonicalization, unresolved-domain routing, and workspace journey proof rails already governing event/season and GM control aliases.
+
 ## 2026-04-04: follow-up on W3 GM ops singular `ctl` shorthand fail-close slice (commit and push status)
 
 - Commits landed:
