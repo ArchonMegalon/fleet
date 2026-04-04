@@ -18,8 +18,12 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k 'stale_passing_non_promoted_platform_gate_receipts or stale_linux_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch'` -> FAIL (`No module named pytest`).
 - Commits landed:
   - `fleet`: `5ac8e08` (`fix(w1): fail-close stale linux desktop tuple receipts in readiness`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - test runner dependency missing in this environment (`pytest` unavailable as command and module).
+  - environment blockers remain:
+    - missing GitHub HTTPS credentials for push (`fatal: could not read Username for 'https://github.com': No such device or address`).
+    - test runner dependency missing (`pytest` unavailable as command and module).
 
 
 ## 2026-04-04: milestone-2 registry verify lane now mutation-tests blocking-findings alias drift fail-close in verifier and materializer
