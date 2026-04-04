@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-1 install journey stale-proof seam closed for hub/mobile local release receipts
+
+- Trigger:
+  - install journey gate remained blocked by stale local proof receipts even when hub/mobile local evidence was re-materialized, because both local proof materializers preserved previous `generated_at` on no-content-change runs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/materialize_hub_local_release_proof.py`:
+    - removed no-op early-return behavior that skipped writing when payload body matched existing file.
+    - now always refreshes `generated_at` for each materialization run.
+  - patched `/docker/chummercomplete/chummer6-mobile/scripts/materialize_mobile_local_release_proof.py`:
+    - removed timestamp-preservation/no-op logic for unchanged payloads.
+    - now always writes a fresh `generated_at` timestamp on each run.
+  - regenerated local receipts:
+    - `/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json`
+    - `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
+  - regenerated Fleet gate output:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - install journey blockers no longer include stale hub/mobile proof reasons.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && python3 -m py_compile scripts/materialize_hub_local_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && python3 scripts/materialize_hub_local_release_proof.py .codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json "https://chummer.run" "docker-compose.release.yml" 90 true` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 -m py_compile scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .blocking_reasons' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (remaining blockers are now only missing registry windows/macos tuple coverage plus failing UI desktop executable gate).
+- Commits landed:
+  - `chummer6-hub`: `55fb6399` (`fix(w1-1): always refresh hub local-release proof timestamp`).
+  - `chummer6-mobile`: `0593094` (`fix(w1-1): refresh mobile local-release proof timestamp on materialize`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for hub/mobile pushes.
+
 ## 2026-04-04: milestone-8/9 creator publication packets now preserve Build Lab rule-environment diffs and grounded decision rails
 
 - Trigger:
