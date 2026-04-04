@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-5 roster movement lane now fail-closes split singular shorthand (`crew transfer/handoff/move`, `roster transfer/handoff/move`) across prep-library API, signed-in workspace routes, and GM ops prep search
+
+- Trigger:
+  - milestone `5` already fail-closed compact, hyphen, and split plural roster shorthand, but split singular operator phrasing was not explicitly covered in live API/browser audits and script-lock assertions.
+  - this left a drift seam where natural singular wording (`crew transfer`, `roster handoff`) could regress without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=crew%20transfer`, `crew%20handoff`, `crew%20move`, `roster%20transfer`, `roster%20handoff`, `roster%20move`.
+    - added signed-in workspace route checks for the same six split singular aliases under `prepQuery=...`, with route/body proof and governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey assertions for the same six split singular prep queries with encoded-route preservation and non-empty governed packet checks.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - expanded prep-library token matching coverage for split singular roster shorthand.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - expanded GM prep-asset query coverage for split singular roster shorthand.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions to lock all new split singular query checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`404` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement search proof now fail-closes split singular shorthand across API, signed-in workspace routes, and browser journey checks, aligned with existing compact/hyphen/split-plural coverage.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for whitespace-padded `releaseProof.baseUrl`/`proofRoutes` and non-slash-led proof routes
 
 - Trigger:
