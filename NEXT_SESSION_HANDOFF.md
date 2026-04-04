@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4 recap semantic dedupe now ignores artifact/publication id drift so return-loop and workspace summary counts stay count-honest
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires recap/diary continuity to project unique governed truth even when upstream publication identities rotate.
+  - recap semantic dedupe still included `ArtifactId` and `CreatorPublicationId` in `BuildPublicationRecapSemanticDedupeKey(...)`, so semantically identical recap rows could still double-count when projection id drift arrived as publication/artifact id drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - updated `BuildPublicationRecapSemanticDedupeKey(...)` to drop identity-only recap fields:
+      - `ArtifactId`
+      - `CreatorPublicationId`
+    - recap semantic dedupe now anchors on recap meaning (kind/label/summary/audience/state/trust/discoverability/publication summaries/provenance/audit) rather than rotating publication identities.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignWorkspaceSummaryDeduplicatesSemanticallyIdenticalRecapRows_WhenArtifactAndPublicationIdsDiffer`.
+    - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalDiaryRecapVersions_WhenArtifactAndPublicationIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceSummaryDeduplicatesSemanticallyIdenticalRecapRows_WhenArtifactAndPublicationIdsDiffer|FullyQualifiedName~CampaignReturnPacketDeduplicatesSemanticallyIdenticalDiaryRecapVersions_WhenArtifactAndPublicationIdsDiffer" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`271` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 workspace summary and campaign-return recap lanes now resist duplicate inflation when recap publication/artifact ids drift while recap semantics remain unchanged.
+  - campaign workspace and GM ops suites remain green after recap semantic-key hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign return and GM ops packet synthesis now deduplicates semantically identical aftermath/prep-launch/travel rows when ids drift
 
 - Trigger:
