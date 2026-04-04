@@ -20,6 +20,35 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes non-canonical promotedPlatformHeads platform keys (whitespace/casing drift)
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-channel tuple coverage receipts that cannot silently normalize platform-key shape drift in desktop head inventory.
+  - executable gate still normalized `desktopTupleCoverage.promotedPlatformHeads` platform keys without fail-closing whitespace-padded or casing-drift aliases, which could coerce non-canonical key spellings into passing inventory.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - hardened `normalize_promoted_platform_heads(...)` to fail-close `promotedPlatformHeads` keys when:
+      - key has leading/trailing whitespace.
+      - key is non-canonical (does not exactly match its normalized lowercase token).
+    - added evidence fields:
+      - `desktopTupleCoverage.promotedPlatformHeads_whitespace_padded_platform_keys`
+      - `desktopTupleCoverage.promotedPlatformHeads_non_canonical_platform_keys`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock the new fail-close reason markers and evidence keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only:
+    - missing required desktop install media for `windows`.
+    - missing required desktop install media for `macos`.
+    - missing required platform/head tuples `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+- Current trusted state:
+  - release-channel `desktopTupleCoverage.promotedPlatformHeads` platform keys now fail-close whitespace and casing drift instead of silently normalizing to canonical tokens.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace change-packet projection now normalizes whitespace-padded scene/objective ids before packet-id hashing
 
 - Trigger:
