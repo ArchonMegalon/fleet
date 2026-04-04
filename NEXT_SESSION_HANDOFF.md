@@ -25,7 +25,9 @@
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS; remaining blocker is now only external host proof capture for required macOS/Windows tuples.
 - Commits landed:
   - `fleet`: `968250e` (`fix(w1-1-3): fail-close external-proof tuple metadata and case counters`).
+  - `fleet`: `8e76d1d` (`docs(handoff): record w1-1-3 tuple-contract commit and push blocker`).
 - Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - release closure still requires external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
