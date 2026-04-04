@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-15 utility parity now fail-closes dice/initiative/roster/watch-folder/dashboard route markers in campaign-session journey gates
+
+- Trigger:
+  - frontier milestone `15` requires one obvious Chummer6 route for dice, initiative, roster/watch-folder, and dashboard/operator utility surfaces on the promoted desktop/head path.
+  - `campaign_session_recover_recap` gate already covered campaign/GM/offline continuity, but it did not fail-close the concrete utility-route markers that prove those utility lanes are still wired and governed.
+- Landed:
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - expanded `campaign_session_recover_recap` `repo_source_proof` with utility parity markers:
+      - `chummer6-ui/scripts/audit-ui-parity.sh` requires `dice_roller` and `character_roster` command parity rows.
+      - `chummer6-ui/Chummer.Presentation/Overview/DesktopDialogFactory.cs` requires `dice_roller` and `character_roster` dialog route markers.
+      - `chummer6-ui/Chummer.Blazor/Components/Shared/GmBoardFeed.razor` requires initiative rail markers (`Initiative Rail`, `gm-board-initiative-strip`, `data-gm-board-initiative-pill`).
+      - `chummer6-ui/Chummer/Forms/Utility Forms/CharacterRoster.cs` requires watch-folder `FileSystemWatcher` + watch-folder trace marker coverage.
+      - `chummer6-hub/Chummer.Run.Contracts/CompatCore/Presentation/WorkflowSurfaceContracts.cs` requires canonical `dashboard` and `session-dashboard` surface constants.
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same utility parity requirements.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - extended `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` to fail-close all new utility parity marker contracts.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() ... PY` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select((.repo=="chummer6-ui" and (.path=="scripts/audit-ui-parity.sh" or .path=="Chummer.Presentation/Overview/DesktopDialogFactory.cs" or .path=="Chummer.Blazor/Components/Shared/GmBoardFeed.razor" or .path=="Chummer/Forms/Utility Forms/CharacterRoster.cs")) or (.repo=="chummer6-hub" and .path=="Chummer.Run.Contracts/CompatCore/Presentation/WorkflowSurfaceContracts.cs"))' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS.
+- Commits landed:
+  - `chummer6-design`: `daa6d49` (`feat(w2-15): fail-close utility parity markers in campaign journey gate`).
+  - `fleet`: `83b8baf` (`feat(w2-15): enforce utility parity marker contract in journey gates`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push from both `chummer6-design` and `fleet`.
+
 ## 2026-04-04: milestone-3 journey-gate output now separates external host blockers from repo-local blockers
 
 - Trigger:
