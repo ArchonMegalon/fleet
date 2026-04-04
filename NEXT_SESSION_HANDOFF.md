@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-5 event-control fallback now classifies singular compact `seasonop` shorthand
+
+- Trigger:
+  - frontier milestone `5` requires compact GM event/season control shorthand to stay on the same governed lane across unresolved triage and campaign workspace packet synthesis.
+  - `GmOpsBoardService` already recognized both `seasonops` and `seasonop`, but `CampaignWorkspaceServerPlaneService` compact event-control tokens only included `seasonops`, so singular `seasonop` signals could under-classify.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `seasonop` to `EventControlCompactWordTokens`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `EventControlPacketFallsBackToCompactSeasonOpSignalWhenPluralVariantIsMissing`.
+    - added fixture helper `BuildWorkspaceWithCompactSeasonOpSignalOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~EventControlPacketFallsBackToCompactSeasonOpSignalWhenPluralVariantIsMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`359` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign workspace event-control packet fallback now stays aligned with GM unresolved triage for singular/plural compact season-op shorthand.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes on receipt freshness (`generatedAt`) to block stale-pass familiarity proof
 
 - Trigger:
