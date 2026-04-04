@@ -29,6 +29,30 @@
   - environment lacks GitHub HTTPS credentials for push.
   - local environment is missing configured private package feeds required to restore Chummer contract/ui packages, so mobile regression checks cannot execute end-to-end here.
 
+## 2026-04-04: milestone-1 install journey now fail-closes on release-channel contract identity and fresh local-release proof recency
+
+- Trigger:
+  - frontier milestone `1` requires installer truth, public shelf truth, and release truth to stay aligned as one coherent install/update/recovery lane.
+  - install gate already checked tuple coverage, publish posture, and desktop executable proof shape, but still allowed stale Hub/mobile local-release receipts and a missing release-channel contract identity field to pass without explicit block reasons.
+- Landed:
+  - patched Fleet mirror gate canon `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` install journey proof:
+    - `chummer6-hub` local release proof now requires freshness (`max_age_hours: 48` with generated-at field enforcement).
+    - `chummer6-mobile` local release proof now requires freshness (`max_age_hours: 48` with generated-at field enforcement).
+    - `chummer6-hub-registry` release channel proof now requires non-empty `contract_name` and non-empty `releaseProof.generatedAt`.
+  - patched canonical design source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same install-gate constraints.
+  - patched Fleet canon assertions `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - install-gate registry test now pins the new release-channel non-empty fields and the 48-hour freshness constraints for Hub, Hub-registry, and mobile proof rows.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq -r '.journeys[] | select(.id=="install_claim_restore_continue") | .blocking_reasons[]' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (now explicitly includes:
+    - stale hub/mobile local-release proof blockers,
+    - release-channel `contract_name` non-empty blocker,
+    - existing tuple/executable blockers).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof or json_field_not_non_empty_string"` -> FAIL (`No module named pytest`).
+
 ## 2026-04-04: follow-up on W1 trust-summary gate hardening (handoff commit + push status)
 
 - Commits landed:
@@ -207,6 +231,33 @@
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials, so push remains blocked.
+
+## 2026-04-04: milestone-8 deterministic build-route answers now carry explicit rule-environment diff evidence
+
+- Trigger:
+  - milestone `8` requires explain receipts and rule-environment diffs to surface wherever users make real decisions.
+  - deterministic AI Build route responses already surfaced crew-fit and role pressure evidence, but did not include explicit rule-environment diff evidence on the same build decision answer.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.Application/AI/AiTurnScaffoldFactory.cs`:
+    - deterministic Build route model now derives rule-environment before/after fingerprints and status from runtime grounding facts.
+    - structured build evidence now includes `Rule-environment diff` with explicit summary text.
+    - deterministic build risks now add `Rule-environment diff requires review` when the grounded before/after fingerprints drift.
+  - patched regression coverage:
+    - `/docker/chummercomplete/chummer-core-engine/Chummer.CoreEngine.Tests/Program.cs`
+      - both deterministic provider-scaffold and gateway build-route assertions now fail-prove `Rule-environment diff` evidence.
+    - `/docker/chummercomplete/chummer-core-engine/Chummer.Tests/AiGatewayServiceTests.cs`
+      - `Not_implemented_ai_gateway_routes_build_turns_through_deterministic_build_lab_outputs` now asserts `Rule-environment diff` evidence.
+    - `/docker/chummercomplete/chummer-core-engine/Chummer.Tests/AiProviderCatalogTests.cs`
+      - `Not_implemented_ai_provider_build_route_uses_deterministic_build_lab_outputs` now asserts `Rule-environment diff` evidence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Not_implemented_ai_gateway_routes_build_turns_through_deterministic_build_lab_outputs|FullyQualifiedName~Not_implemented_ai_provider_build_route_uses_deterministic_build_lab_outputs" -c Release -nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered test execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in current baseline).
+- Commits landed:
+  - `chummer6-core`: `7439b5b5` (`feat(w4-8): expose rule-environment diff evidence on build route`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-core-engine && git push` -> PASS (`fleet/core` updated to `7439b5b5`).
+- Exact blocker:
+  - no repo-local implementation blocker for this milestone-8 build-route evidence slice; filtered `Chummer.Tests` execution is still blocked by pre-existing compile/reference instability in this workspace baseline.
 
 ## 2026-04-04: milestone-8 Build Lab now carries explicit rule-environment before/after diff receipts on governed export payloads
 
