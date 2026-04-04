@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock plural `postmortems` / `post-mortems`, `postsessions` / `post-sessions`, and `postruns` / `post-runs` recap shorthand across API/workspace and browser journey proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to stay one governed lane across canonical query rewrite, unresolved routing, and signed-in proof rails.
+  - contract/service tests already cover plural post-mortem/post-session/post-run shorthand families, but live API/workspace/browser proof rails only locked singular variants.
+  - this left a proof drift seam where plural recap wording could regress without failing journey audits.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API and signed-in workspace checks for plural compact/split/hyphen recap queries:
+      - `postmortems`, `post mortems`, `post-mortems`
+      - `postsessions`, `post sessions`, `post-sessions`
+      - `postruns`, `post runs`, `post-runs`
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added signed-in browser prep journey checks for the same plural post-mortem/post-session/post-run variant set.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPostGameContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatHotWashContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatLessonLearntContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`8` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `f8cc8dbc` (`test(w3): script-lock plural postmortem/session/run continuity journeys`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - pending push attempt.
+
 ## 2026-04-04: milestone-1/3 executable gate now tolerates bounded startup-smoke completed/recorded timestamp jitter so Linux promoted-head proof no longer false-fails on installer receipts
 
 - Trigger:
