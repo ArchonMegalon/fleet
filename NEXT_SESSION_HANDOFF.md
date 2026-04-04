@@ -119,6 +119,39 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 visual/workflow gate materializers now fail-close non-canonical or duplicate-normalized per-head proof keys
+
+- Trigger:
+  - frontier milestone `2` requires per-head proof truth for legacy-familiar workbench visuals and workflows to fail closed under key-shape drift.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` and `materialize-desktop-workflow-execution-gate.sh` normalized `UI_FLAGSHIP_RELEASE_GATE` `headProofs` keys with dict comprehensions, allowing non-canonical aliases and duplicate-normalized collisions to be silently coalesced.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - added `normalize_head_proof_statuses(...)` with fail-close checks for:
+      - non-string keys,
+      - whitespace-padded keys,
+      - non-canonical keys after normalization,
+      - duplicate normalized keys,
+      - non-object proof payloads,
+      - non-string/whitespace-padded status values.
+    - replaced direct `headProofs` dict-comprehension normalization with the strict helper.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - added matching `normalize_head_proof_statuses(...)` strict helper and replaced direct dict-comprehension normalization.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended visual/workflow gate compliance assertions to lock:
+      - `normalize_head_proof_statuses(...)` usage,
+      - `flagship_gate.headProofs.status` field-label enforcement,
+      - non-canonical and duplicate-normalized key fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts|FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`3` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking; one transient Avalonia PDB file-lock rerun recovered).
+- Current trusted state:
+  - visual and workflow Milestone 2 exit gates now fail-close per-head proof key canonicalization/collision drift instead of silently collapsing aliases.
+  - required desktop-head proof status derivation remains explicit and evidence-backed under stricter map hygiene.
+- Push status:
+  - `chummer6-ui` (`chummer-presentation` repo): local changes pending commit/push in this environment (credential-dependent).
+  - `fleet`: handoff update pending commit/push in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes non-canonical catalog token aliases instead of silently coalescing them
 
 - Trigger:
