@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5 carry-forward and campaign-memory anchors now prefer newest aftermath/ops receipts instead of list-order first
+
+- Trigger:
+  - frontier milestones `4` and `5` require return-loop carry-forward and campaign-memory anchors to reflect the latest governed aftermath/ops truth.
+  - `BuildNextSessionCarryForward(...)` and `BuildCampaignMemory(...)` still selected lead consequence/transfer/prep/travel/aftermath items with `FirstOrDefault()`, so stale-first ordering could steer summaries and evidence lines to older receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `BuildNextSessionCarryForward(...)` now selects lead consequence/prep/travel/aftermath by newest timestamp (`UpdatedAtUtc`, `LaunchedAtUtc`, `StagedAtUtc`, `GeneratedAtUtc`).
+    - `BuildCampaignMemory(...)` now selects lead consequence/transfer/prep/travel by newest timestamp and selects downtime/non-downtime aftermath anchors from a recency-sorted aftermath set.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineNextSessionCarryForwardPrefersMostRecentAftermathPackage`.
+    - added `CampaignSpineCampaignMemoryPrefersMostRecentAftermathAndDowntimePackages`.
+    - locks stale-first package order to still project newest carry-forward summary/evidence anchors.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineNextSessionCarryForwardPrefersMostRecentAftermathPackage|FullyQualifiedName~CampaignSpineCampaignMemoryPrefersMostRecentAftermathAndDowntimePackages|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentRosterTransferReceipt|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentPrepLaunchReceipt|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsPreferMostRecentTravelPrefetchReceipt|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`312` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - workspace packet projection, next-session carry-forward projection, and campaign-memory projection now all prefer newest governed roster/prep/travel/aftermath anchors under stale list order.
+  - milestone-4 continuity and milestone-5 GM/operator packet lanes stay aligned on recency-safe anchor selection across return and memory surfaces.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace change-packet projection now prefers newest roster/prep/travel receipts instead of list-order first
 
 - Trigger:
