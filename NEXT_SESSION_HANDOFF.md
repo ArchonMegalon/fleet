@@ -186,6 +186,7 @@
   - `chummer6-core`: `8740ca6b` (`fix(w4-7-8): restore core package-canonical contract consumption`).
   - `chummer6-ui`: `7b8dbe31` (`chore(w4-7-8): refresh desktop parity receipts against release-channel proof`).
   - `fleet`: `1a1e34b` (`docs(handoff): record w4 build-explain-publish gate recovery slice`).
+  - `fleet`: `021812c` (`docs(handoff): add commits and push outcomes for w4 gate recovery`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `dc232127..8740ca6b`).
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
