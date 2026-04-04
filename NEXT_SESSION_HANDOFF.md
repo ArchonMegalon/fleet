@@ -54,6 +54,7 @@
 - Landed:
   - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
     - Linux startup-smoke validation now records `primary_receipt_source` and validates startup-smoke provenance from the file-backed receipt payload only.
+    - Linux installer capture proofs (`launch`, `wrapper`, `desktop-entry`, `install-verification`) now require trusted-root path scope, not just path existence.
     - Windows startup-smoke validation now records `startup_smoke_receipt_source`, emits explicit unreadable/non-object receipt failures, and removes fallback reads from `gate_checks` metadata for startup-smoke identity fields.
     - macOS startup-smoke validation now records `startup_smoke_receipt_source`, emits explicit unreadable/non-object receipt failures, and validates from file-backed receipt payload only.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
