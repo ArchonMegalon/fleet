@@ -1,3 +1,14 @@
+## 2026-04-04: follow-up push status for W1 release-channel contract-identity closure
+
+- Commits landed:
+  - `chummer6-hub-registry`: `6278a47` (`feat(w1-1): enforce non-empty release-channel contract identity`).
+  - `fleet`: `fed82d3` (`docs(handoff): record w1 contract-identity closure in release channel gate`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `9a2c286..6278a47`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `fleet` push.
+
 ## 2026-04-04: milestone-1 install journey contract-identity seam closed in hub-registry release channel (materializer + verifier + published receipt)
 
 - Trigger:
