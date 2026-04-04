@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T23:00:03Z",
+  "generated_at": "2026-04-04T23:01:12Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -34,35 +34,35 @@
       "available": true,
       "at": "2026-04-04T23:00:03Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 69
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T21:38:31Z",
       "state": "fresh",
-      "age_seconds": 4892
+      "age_seconds": 4961
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T21:38:14Z",
       "state": "fresh",
-      "age_seconds": 4909
+      "age_seconds": 4978
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T21:38:14Z",
       "state": "fresh",
-      "age_seconds": 4909
+      "age_seconds": 4978
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T23:00:03Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 69
     }
   },
   "journeys": [
@@ -1417,9 +1417,9 @@
       }
     },
     {
-      "id": "",
-      "title": "",
-      "user_promise": "",
+      "id": "report_cluster_release_notify",
+      "title": "Report, cluster, release, notify",
+      "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
       "state": "blocked",
       "recommended_action": "Run the missing macos, windows host proof lane for 4 desktop tuple(s) and ingest receipts before widening promotion or trust claims.",
       "blocking_reasons": [
@@ -1583,9 +1583,34 @@
         }
       ],
       "warning_reasons": [],
-      "owner_repos": [],
-      "canonical_journeys": [],
-      "scorecard_refs": {},
+      "owner_repos": [
+        "chummer6-hub",
+        "chummer6-ui",
+        "chummer6-hub-registry",
+        "fleet",
+        "executive-assistant"
+      ],
+      "canonical_journeys": [
+        "journeys/claim-install-and-close-a-support-case.md",
+        "journeys/install-and-update.md"
+      ],
+      "scorecard_refs": {
+        "slos": [
+          "support_and_closure_honesty",
+          "install_and_update_coherence",
+          "golden_journey_proof"
+        ],
+        "release_gates": [
+          "campaign_and_closure_gate",
+          "install_and_update_gate",
+          "golden_journey_gate"
+        ],
+        "health_scorecards": [
+          "golden_journey_health",
+          "support_and_feedback_closure",
+          "control_loop_integrity"
+        ]
+      },
       "fleet_gate": {
         "required_artifacts": [
           "status_plane",
@@ -1659,7 +1684,10 @@
           "progress_report",
           "support_packets"
         ],
-        "canonical_journeys": [],
+        "canonical_journeys": [
+          "journeys/claim-install-and-close-a-support-case.md",
+          "journeys/install-and-update.md"
+        ],
         "external_proof_requests": [
           {
             "tuple_id": "avalonia:osx-arm64:macos",

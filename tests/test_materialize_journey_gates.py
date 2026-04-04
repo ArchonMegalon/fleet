@@ -5,6 +5,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import yaml
@@ -2646,6 +2647,87 @@ def test_report_cluster_release_notify_requires_support_install_truth_contract()
     assert release_channel_proof.get("must_contain") == ['"desktopTupleCoverage"', '"externalProofRequests"']
     assert release_channel_proof.get("max_age_hours") == 48
     assert release_channel_proof.get("generated_at_fields") == ["generated_at", "generatedAt"]
+
+
+def test_evaluate_journey_preserves_report_gate_identity_during_support_external_proof_checks(
+    tmp_path: Path,
+) -> None:
+    registry_root = tmp_path / "registry-root"
+    release_channel_path = registry_root / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json"
+    release_channel_path.parent.mkdir(parents=True, exist_ok=True)
+    release_channel_payload = {
+        "status": "publishable",
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "docker",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "capture-proof-1",
+                        "capture-proof-2",
+                    ],
+                }
+            ],
+        },
+    }
+    release_channel_path.write_text(json.dumps(release_channel_payload, indent=2) + "\n", encoding="utf-8")
+
+    original_repo_roots = deepcopy(JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES)
+    JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-hub-registry"] = (registry_root,)
+    try:
+        result = JOURNEY_GATES_MODULE.evaluate_journey(
+            {
+                "id": "report_cluster_release_notify",
+                "title": "Report, cluster, release, notify",
+                "user_promise": "Support closure stays install-specific.",
+                "owner_repos": ["fleet"],
+                "canonical_journeys": ["journeys/claim-install-and-close-a-support-case.md"],
+                "fleet_gate": {
+                    "required_artifacts": [],
+                    "require_support_install_truth_contract": True,
+                    "repo_source_proof": [
+                        {
+                            "repo": "chummer6-hub-registry",
+                            "path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+                            "json_must_be_one_of": {"status": ["published", "publishable"]},
+                            "must_contain": ['"desktopTupleCoverage"', '"externalProofRequests"'],
+                        }
+                    ],
+                },
+            },
+            projects_by_id={},
+            status_plane_projects_present=False,
+            artifacts={},
+            progress_report={},
+            progress_history={},
+            support_packets={
+                "generated_at": fresh_timestamp(),
+                "summary": {},
+                "packets": [],
+            },
+        )
+    finally:
+        JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES = original_repo_roots
+
+    assert result.get("id") == "report_cluster_release_notify"
+    assert result.get("title") == "Report, cluster, release, notify"
 
 
 def test_materialize_journey_gates_blocks_when_support_tuple_gap_lacks_external_proof_contract(
