@@ -74,6 +74,7 @@ def _infer_fallback_readiness_stage(
     *,
     lifecycle: str = "dispatchable",
     design_doc: str = "",
+    deployment: Dict[str, Any] | None = None,
 ) -> str:
     published_dir = project_root / ".codex-studio" / "published"
     if not published_dir.is_dir():
@@ -81,6 +82,20 @@ def _infer_fallback_readiness_stage(
 
     def _proof_passed(payload: Dict[str, Any]) -> bool:
         return str(payload.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+
+    deployment_row = dict(deployment or {})
+
+    def _is_public_deployment(row: Dict[str, Any]) -> bool:
+        values = {
+            str(row.get("status") or "").strip().lower(),
+            str(row.get("access_posture") or row.get("visibility") or "").strip().lower(),
+            str(row.get("promotion_stage") or "").strip().lower(),
+        }
+        return any(
+            value in {"public", "public_preview", "promoted_preview", "publicly_promoted"}
+            for value in values
+            if value
+        )
 
     if project_id == "hub-registry":
         release_channel = _load_json_file(published_dir / "RELEASE_CHANNEL.generated.json")
@@ -94,6 +109,15 @@ def _infer_fallback_readiness_stage(
         artifact_publication_certification = _load_json_file(published_dir / "ARTIFACT_PUBLICATION_CERTIFICATION.generated.json")
         if _proof_passed(media_local_release_proof) and _proof_passed(artifact_publication_certification):
             return "boundary_pure"
+    elif project_id == "hub":
+        hub_local_release_proof = _load_json_file(published_dir / "HUB_LOCAL_RELEASE_PROOF.generated.json")
+        hub_campaign_os_proof = _load_json_file(published_dir / "HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json")
+        if _is_public_deployment(deployment_row) and _proof_passed(hub_local_release_proof) and _proof_passed(hub_campaign_os_proof):
+            return "publicly_promoted"
+    elif project_id == "mobile":
+        mobile_local_release_proof = _load_json_file(published_dir / "MOBILE_LOCAL_RELEASE_PROOF.generated.json")
+        if _is_public_deployment(deployment_row) and _proof_passed(mobile_local_release_proof):
+            return "publicly_promoted"
     try:
         from admin import readiness as readiness_module
     except Exception:
@@ -143,6 +167,7 @@ def _load_project_config_rows() -> List[Dict[str, Any]]:
                 project_root,
                 lifecycle=lifecycle,
                 design_doc=design_doc,
+                deployment=deployment,
             )
             if project_root
             else "pre_repo_local_complete"

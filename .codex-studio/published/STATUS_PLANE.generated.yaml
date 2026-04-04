@@ -1,6 +1,6 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-04T18:16:50Z'
+generated_at: '2026-04-04T18:20:43Z'
 source_public_status_generated_at: '2026-04-04T00:00:00Z'
 mission_snapshot: {}
 queue_forecast: {}
@@ -11,11 +11,11 @@ deployment_posture:
   promotion_stage: protected_preview
 readiness_summary:
   counts:
-    boundary_pure: 2
-    package_canonical: 4
     pre_repo_local_complete: 1
-    publicly_promoted: 0
     repo_local_complete: 4
+    package_canonical: 2
+    boundary_pure: 2
+    publicly_promoted: 2
   final_claim_ready: 0
   warning_count: 0
 dispatch_policy: {}
@@ -80,7 +80,7 @@ projects:
 - id: hub
   lifecycle: live
   runtime_status: dispatch_pending
-  readiness_stage: package_canonical
+  readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
@@ -110,7 +110,7 @@ projects:
 - id: mobile
   lifecycle: dispatchable
   runtime_status: dispatch_pending
-  readiness_stage: package_canonical
+  readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: false
   readiness_warning_count: 0

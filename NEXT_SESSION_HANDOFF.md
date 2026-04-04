@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-4/5/6 status-plane fallback now promotes Hub/Mobile from public campaign continuity proof receipts
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` remained warning-only in Fleet journey gates because `hub` and `mobile` stayed pinned to `package_canonical` even when public deployment posture and campaign/mobile local release proofs were already passing.
+  - status-plane fallback stage inference only recognized boundary/public promotion heuristics for `hub-registry` and `media-factory`, so campaign continuity journeys carried stale target-stage warning noise for `hub` and `mobile`.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_status_plane.py`:
+    - `_infer_fallback_readiness_stage(...)` now accepts project deployment metadata.
+    - added explicit public-deployment recognition helper.
+    - for `hub`: promotes fallback stage to `publicly_promoted` only when deployment is public/promoted and both `HUB_LOCAL_RELEASE_PROOF.generated.json` and `HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json` pass.
+    - for `mobile`: promotes fallback stage to `publicly_promoted` only when deployment is public/promoted and `MOBILE_LOCAL_RELEASE_PROOF.generated.json` passes.
+  - patched `/docker/fleet/scripts/verify_status_plane_semantics.py` with the same hub/mobile fallback promotion semantics so verifier/materializer remain lockstep.
+  - patched `/docker/fleet/tests/test_materialize_status_plane.py`:
+    - added `test_hub_fallback_stage_uses_campaign_os_and_public_deployment_proofs`.
+    - added `test_mobile_fallback_stage_stays_package_without_public_deployment`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_status_plane.py scripts/verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_status_plane.py -k "hub_fallback_stage_uses_campaign_os_and_public_deployment_proofs or mobile_fallback_stage_stays_package_without_public_deployment"` -> PASS (`2 passed`).
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml --status-json-out state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap" or .id=="recover_from_sync_conflict") | {id,state,warning_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (hub/mobile warnings removed; only ui target-stage warning remains).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
 ## 2026-04-04: milestone-12 status-plane governance now self-heals stale snapshot readiness stages from repo-local compile evidence
 
 - Trigger:

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:17:22Z",
+  "generated_at": "2026-04-04T18:22:06Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:17:17Z",
+      "at": "2026-04-04T18:21:09Z",
       "state": "fresh",
-      "age_seconds": 5
+      "age_seconds": 57
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-04T18:16:50Z",
+      "at": "2026-04-04T18:20:43Z",
       "state": "fresh",
-      "age_seconds": 32
+      "age_seconds": 83
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 3560
+      "age_seconds": 3844
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 3560
+      "age_seconds": 3844
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 3559
+      "age_seconds": 3843
     }
   },
   "journeys": [
@@ -60,18 +60,25 @@
       "blocking_reasons": [
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows']."
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple blazor-desktop:win-x64:windows."
       ],
       "external_blocking_reasons": [
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows']."
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple blazor-desktop:win-x64:windows."
       ],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": true,
       "warning_reasons": [
-        "ui is at repo_local_complete below target stage publicly_promoted.",
-        "hub is at package_canonical below target stage publicly_promoted."
+        "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
         "chummer6-ui",
@@ -254,8 +261,8 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 3,
-        "warning_reason_count": 2,
+        "blocking_reason_count": 7,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -263,7 +270,7 @@
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
-        "external_blocking_reason_count": 3,
+        "external_blocking_reason_count": 7,
         "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": true
       }
@@ -280,8 +287,7 @@
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "core is at repo_local_complete below target stage boundary_pure.",
-        "ui is at repo_local_complete below target stage publicly_promoted.",
-        "hub is at package_canonical below target stage publicly_promoted."
+        "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
         "chummer6-core",
@@ -526,7 +532,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 3,
+        "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -550,8 +556,6 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at package_canonical below target stage publicly_promoted.",
-        "mobile is at package_canonical below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
@@ -755,7 +759,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 3,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -779,8 +783,6 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at package_canonical below target stage publicly_promoted.",
-        "mobile is at package_canonical below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
@@ -866,7 +868,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 3,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -890,7 +892,6 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at package_canonical below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
@@ -982,7 +983,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 2,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -1006,7 +1007,6 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at package_canonical below target stage publicly_promoted.",
         "fleet is at package_canonical below target stage boundary_pure."
       ],
       "owner_repos": [
@@ -1074,7 +1074,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 2,
+        "warning_reason_count": 1,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
