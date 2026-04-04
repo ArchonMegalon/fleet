@@ -1,3 +1,37 @@
+## 2026-04-04: follow-up on milestone-3 external-host blocker truth commit and push status
+
+- Commits landed:
+  - `chummer6-ui`: `32f5232b` (`fix(executable-gate): emit machine-readable external host blockers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so local commits remain unpushed.
+
+## 2026-04-04: milestone-3 executable gate now emits machine-readable external host-capability blockers per tuple and global reason fallback
+
+- Trigger:
+  - desktop executable gate reasons already reported host-capability blockers in free-text, but control-plane automation lacked a stable machine-readable blocker list.
+  - this left a seam where receipts were fail-honest for humans but harder to consume deterministically by downstream orchestration.
+- Landed:
+  - patched executable gate materializer:
+    - `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - added blocker aggregation primitives:
+      - `register_external_blocker(...)`
+      - `infer_external_blockers_from_reasons(...)`
+    - populated `evidence.external_blockers` from:
+      - Linux/Windows/macOS startup-smoke blocker fields per promoted head/rid tuple.
+      - gate reason fallback inference for stale/partial receipts.
+      - global reason fallback inference to preserve blocker truth even when tuple receipts are sparse.
+  - patched compliance script-lock:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - asserts blocker aggregation function markers and `external_blockers` evidence key markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`10` tests).
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected for missing promoted Windows/macOS tuples; emitted `evidence.external_blockers` entries for `missing_windows_host_capability` and `missing_macos_host_capability`.
+- Current trusted state:
+  - milestone-3 gate output now carries explicit machine-readable host blocker tuples (`platform`, `head`, `rid`, `blocker`, `source`) alongside fail-honest reasons.
+  - remaining blocker is still genuine promoted Windows/macOS installer publication plus platform-hosted startup smoke artifacts, not local blocker-classification ambiguity.
+
 ## 2026-04-04: follow-up on strict integer localization parity lock commit and push status
 
 - Commits landed:
