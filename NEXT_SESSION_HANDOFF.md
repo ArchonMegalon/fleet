@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 registry verifier now fail-closes top-level `releaseProof.uiLocalizationReleaseGate` vs `releaseProof.ui_localization_release_gate` alias drift, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic legacy-familiar release proof contracts across the release shelf and installer entry routes.
+  - `scripts/verify_public_release_channel.py` resolved aliases for nested localization-gate fields, but still read only canonical `releaseProof.uiLocalizationReleaseGate` at the top level.
+  - this left a fail-open seam where conflicting canonical vs alias top-level localization-gate payloads could bypass verifier fail-close semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - top-level localization gate now resolves via canonical/alias reconciliation (`uiLocalizationReleaseGate` vs `ui_localization_release_gate`) using `resolve_alias_value(...)`.
+    - verifier now fail-closes top-level alias drift for localization gate payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active mutation that injects conflicting alias values between `releaseProof.uiLocalizationReleaseGate` and `releaseProof.ui_localization_release_gate`.
+    - verify now requires verifier failure on this alias-drift mutation with marker:
+      - `verify gate failed: verifier should reject conflicting alias values between releaseProof.uiLocalizationReleaseGate and releaseProof.ui_localization_release_gate.`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical pipeline contract now explicitly states top-level localization-gate alias drift is fail-closed.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close run for top-level localization-gate alias drift).
+- Commits landed:
+  - `chummer-hub-registry`: `e1b9d3d` (`fix(w1): fail-close release proof localization gate alias drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `5e0c76c..e1b9d3d`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-4/5 continuity lane now fail-closes recap shelf classification drift for `debriefed`/`debriefing`/`debriefings` and split `post-session`/`post-run`/`post-game` shorthand
 
 - Trigger:
