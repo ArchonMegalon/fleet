@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 GM ops prep lane now script-locks compact `leagueop` and `communityop` aliases across API and workspace/browser audits
+
+- Commits landed:
+  - `chummer.run-services`: `34447d03` (`fix(w3): script-lock leagueop and communityop prep aliases`).
+- Trigger:
+  - canonical prep alias rewrite already supports compact singular `leagueop` and `communityop`, but live script-lock rails only covered `leagueops/communityops`, `*-operation`, and split/hyphen forms.
+  - this left a shorthand seam where valid operator queries could drift outside governed API/workspace/browser evidence despite unit canonicalization support.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API probes for `queryText=leagueop` and `queryText=communityop` with HTTP `200` and non-empty governed packet checks.
+    - added workspace probes for `prepQuery=leagueop` and `prepQuery=communityop` with result-body and governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for `leagueop` and `communityop` workspace prep searches, including route preservation and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-lock assertions so verify fail-closes if those new audit/playwright markers disappear.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`395` tests on `net10.0` and `net10.0-windows`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
 ## 2026-04-04: follow-up on milestone-2 localization gate timestamp drift self-heal in chummer6-hub (commit and push status)
 
 - Commits landed:
