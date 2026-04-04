@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-2 registry verify lane now mutation-tests untranslated/override locale-summary alias drift and fixes minimum-override verifier mutation marker text
+
+- Trigger:
+  - frontier milestone `2` still depends on deterministic localization-gate fail-close behavior for flagship workbench release-proof trust.
+  - `scripts/verify_public_release_channel.py` and `scripts/materialize_public_release_channel.py` already fail-close locale-summary row alias drift, but mutation coverage in `scripts/ai/verify.sh` did not actively mutate these seams:
+    - `releaseProof.uiLocalizationReleaseGate.localeSummary[*].untranslatedKeyCount` vs `releaseProof.uiLocalizationReleaseGate.localeSummary[*].untranslated_key_count`
+    - `releaseProof.uiLocalizationReleaseGate.localeSummary[*].overrideCount` vs `releaseProof.uiLocalizationReleaseGate.localeSummary[*].override_count`
+    - `locale_summary[*].untranslated_key_count` vs `locale_summary[*].untranslatedKeyCount`
+    - `locale_summary[*].override_count` vs `locale_summary[*].overrideCount`
+  - while landing this mutation coverage, the newly-added minimum-override mutation block used the right payload seam but had a copy/paste failure message naming the wrong alias pair.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added verifier mutation checks requiring failure for conflicting alias values between:
+      - `releaseProof.uiLocalizationReleaseGate.localeSummary[*].untranslatedKeyCount` and `releaseProof.uiLocalizationReleaseGate.localeSummary[*].untranslated_key_count`
+      - `releaseProof.uiLocalizationReleaseGate.localeSummary[*].overrideCount` and `releaseProof.uiLocalizationReleaseGate.localeSummary[*].override_count`
+    - added materializer mutation checks requiring failure (with explicit fail-close marker assertions) for conflicting alias values between:
+      - `locale_summary[*].untranslated_key_count` and `locale_summary[*].untranslatedKeyCount`
+      - `locale_summary[*].override_count` and `locale_summary[*].overrideCount`
+    - corrected the new minimum-override verifier mutation failure message to reference the actual seam under mutation (`minimumOverrideCount`/`minimum_override_count`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - expanded documented locale-summary alias-drift fail-close examples to include `untranslated_key_count`/`untranslatedKeyCount` and `override_count`/`overrideCount`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - targeted end-to-end mutation harness (materialize fixture, then mutate verifier/materializer payload aliases for `minimumOverrideCount`, `overrideCount`, `untranslatedKeyCount`, `overrideCount`) -> PASS (all four expected fail-close checks tripped with expected markers).
+- Commits landed:
+  - `chummer-hub-registry`: `e3a2497` (`fix(w1): mutation-test additional localization row alias drift seams`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `90de42b..e3a2497`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops prep search now normalizes split plural `return loops` shorthand end to end
 
 - Trigger:
