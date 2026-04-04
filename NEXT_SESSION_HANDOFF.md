@@ -35,11 +35,11 @@
   - `cd /docker/fleet && python3 - <<'PY' ...` -> PASS (`core boundary_pure`, `ui-kit boundary_pure` in `STATUS_PLANE.generated.yaml`).
   - `cd /docker/fleet && jq '{coverage:.coverage, ui_kit_details:.coverage_details.ui_kit_and_flagship_polish}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`ui_kit_and_flagship_polish: ready`).
 - Commits landed:
-  - `chummer6-ui-kit`: `<pending>` (`feat(w1-2): emit ui-kit local release proof in verify lane`).
-  - `fleet`: `<pending>` (`feat(w1-2-3): promote ui-kit boundary stage from local release proof`).
+  - `chummer6-ui-kit`: `417b721` (`feat(w1-2): emit ui-kit local release proof in verify lane`).
+  - `fleet`: `edf19a9` (`feat(w1-2-3): promote ui-kit boundary stage from local release proof`).
 - Push attempts:
-  - `cd /docker/chummercomplete/chummer-ui-kit && git push` -> `<pending>`.
-  - `cd /docker/fleet && git push` -> `<pending>`.
+  - `cd /docker/chummercomplete/chummer-ui-kit && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
