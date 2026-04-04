@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-4/5 return-loop synthesis now survives sparse run hydration when scene/objective projections arrive first
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return and GM event-control continuity to stay on one governed lane during normal ingestion skew.
+  - `CampaignSpineService` still null-forced `leadRun!.Title` in next-session carry-forward and workspace next-safe-action synthesis paths that can be invoked with `activeScene`/`leadObjective` before `leadRun` hydration, risking runtime faults instead of bounded fallback copy.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - removed null-forced `leadRun!` usage in `ResolveWorkspaceNextSafeAction(...)` active-scene branches.
+    - removed null-forced `leadRun!` usage in `BuildNextSessionCarryForward(...)` scene/objective summary and evidence lines.
+    - both paths now fall back to campaign name when run projection is not yet available.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineNextSessionCarryForwardFallsBackToCampaignNameWhenLeadRunMissing`.
+    - extended private reflection helper overload to invoke `BuildNextSessionCarryForward(...)` with explicit `leadRun`/`activeScene`/`leadObjective` fixtures.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineNextSessionCarryForwardFallsBackToCampaignNameWhenLeadRunMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`315` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 return-loop and GM continuity synthesis no longer crash on sparse scene/objective-first timing; packet summary/evidence now stay queryable through campaign-name fallback until run hydration catches up.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 carry-forward and campaign-memory now prefer newest consequence/roster/prep/travel anchors under stale list ordering
 
 - Trigger:
@@ -63,6 +84,30 @@
 - Push status:
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-1/3 UI fallback release-channel truth now mirrors registry-required RID tuple coverage
+
+- Trigger:
+  - milestone `1` requires release truth and installer truth alignment across canonical registry and repo-local fallback lanes.
+  - after hub-registry tuple-coverage hardening, `chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json` and `releases.json` still lagged required RID tuple inventory and missing RID tuple reporting.
+- Landed:
+  - synced fallback release metadata from registry canonical outputs:
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/Docker/Downloads/releases.json`
+  - fallback release-channel metadata now carries:
+    - `requiredDesktopPlatformHeadRidTuples` full required matrix.
+    - `missingRequiredPlatformHeadRidTuples` explicit missing windows/macos RID tuples.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_RELEASE_CHANNEL_PATH=/docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with aligned blocker reasons:
+    - missing required desktop install media for `windows` and `macos`.
+    - missing required platform/head tuples for windows/macos.
+    - missing required platform/head/rid tuples for windows/macos.
+- Current trusted state:
+  - registry-backed canonical release truth and UI repo-local fallback release truth now report the same architecture-aware tuple gaps.
+  - remaining frontier blockers are still external Windows/macOS promoted installer availability.
+- Push status:
+  - `chummer6-ui`: committed locally (`c87c7655`), push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment.
 
 ## 2026-04-04: milestone-1/3 release-channel tuple coverage now publishes required `head:rid:platform` matrix and explicit missing RID tuples
 
