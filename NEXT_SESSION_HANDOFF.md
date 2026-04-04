@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-5 campaign workspace opposition fallback now classifies `op_for` and `opforce` shorthand
+
+- Trigger:
+  - frontier milestone `5` requires opposition and event-control packet synthesis to stay aligned with governed GM shorthand, including underscore/compact opfor variants.
+  - `GmOpsBoardService` unresolved triage already recognized `op_for` and `opforce`, but `CampaignWorkspaceServerPlaneService.ContainsOpforTokenPair(...)` only recognized `opfor`/`op-for` or split `op force`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded `ContainsOpforTokenPair(...)` with direct `op_for` and `opforce` token support.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `OppositionPacketFallsBackToOpForAndOpforceSignalsWhenCanonicalOppositionTermsAreMissing`.
+    - added `EventControlPacketFallsBackToOpForAndOpforceSignalsWhenCanonicalOppositionTermsAreMissing`.
+    - added fixture helper `BuildWorkspaceWithOpForAndOpforceSignalsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~OppositionPacketFallsBackToOpForAndOpforceSignalsWhenCanonicalOppositionTermsAreMissing|FullyQualifiedName~EventControlPacketFallsBackToOpForAndOpforceSignalsWhenCanonicalOppositionTermsAreMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`361` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign workspace opposition and event-control fallback no longer demote `op_for`/`opforce` shorthand and now align with GM unresolved-domain classification.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 event-control fallback now classifies singular compact `seasonop` shorthand
 
 - Trigger:
