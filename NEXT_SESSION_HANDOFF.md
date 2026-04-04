@@ -31,11 +31,15 @@
   - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
 - Commits landed:
-  - pending local commits in `chummer6-core`, `chummer6-design`, and `fleet`.
+  - `chummer6-core`: `64afeeaa` (`feat(w2-13-14-17-18): add explicit master-index parity lane receipts`).
+  - `chummer6-design`: `537a79c` (`docs(w2-13-14-17-18): note explicit master-index parity lane receipts`).
+  - `fleet`: `a647848` (`docs(handoff): record master-index parity lane receipts slice`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `64afeeaa`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - no product blocker for this lane-receipt projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+  - no product blocker for this lane-receipt projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and `chummer6-design`/`fleet` pushes remain credential-gated.
 
 ## 2026-04-04: milestone-9 media-factory creator packet planning now preserves Build Lab portability pillar receipts
 
