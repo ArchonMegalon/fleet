@@ -21,6 +21,31 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity audit now fail-closes screenshot-dir drift by validating required files and timestamp skew on disk
+
+- Trigger:
+  - frontier milestone `2` visual familiarity proof must stay executable, not metadata-only.
+  - Hub parity audit trusted visual receipt screenshot fields (`required_screenshots`, `missing_screenshots`, `invalid_screenshots`) but did not validate that required screenshot files actually existed on disk under `screenshot_dir`.
+  - this left a drift/tamper path where receipt metadata could claim complete screenshot proof while the required files were missing or timestamp-divergent from declared `screenshot_timestamps`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added fail-close checks that `evidence.screenshot_dir` exists as a directory.
+    - added fail-close checks that every required milestone-2 screenshot file exists on disk under `screenshot_dir`.
+    - added fail-close checks that `evidence.screenshot_timestamps` is a valid object and each required screenshot timestamp parses.
+    - added fail-close checks for per-file mtime skew beyond `screenshot_receipt_skew_max_seconds`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock screenshot-dir and on-disk timestamp-skew fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 Hub parity audit now validates that required visual familiarity screenshots are physically present in canonical proof storage, not only listed in JSON evidence fields.
+  - screenshot-proof timestamp drift between receipt metadata and filesystem state now fails closed.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes missing or drifted nested SR4/SR6/Chummer5a/frontier proof receipts
 
 - Trigger:
