@@ -32,6 +32,7 @@
 - Commits landed:
   - `chummer.run-services`: `b512139c` (`fix(campaign-os): fail-close relationships continuity alias`).
   - `fleet`: `c42d4d2` (`docs(handoff): record relationships continuity lock slice`).
+  - `fleet`: `0695f82` (`docs(handoff): record relationships continuity push blocker`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
