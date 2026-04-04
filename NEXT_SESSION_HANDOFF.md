@@ -182,6 +182,29 @@
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-8 signed-in Home Build rail now exposes rule-environment scope diffs beside fingerprint/status diffs
+
+- Trigger:
+  - frontier milestone `8` requires explain receipts and rule-environment diffs to be available wherever users make real decisions.
+  - signed-in Home Build rail already showed fingerprint/status diff posture, but omitted scope-before/scope-after details that Account already exposed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - Build handoff rail now renders:
+      - `Rule diff scope: @handoff.RuleEnvironmentDiff.BeforeScope -> @handoff.RuleEnvironmentDiff.AfterScope.`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - now fail-proves Home Build rail includes:
+      - `Rule diff scope:`
+      - `handoff.RuleEnvironmentDiff.BeforeScope`
+      - `handoff.RuleEnvironmentDiff.AfterScope`
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`6` tests on `net10.0` + `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `7670e837` (`feat(w4-8): expose rule-environment scope diff on home build rail`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push in this environment remains credential-gated for GitHub HTTPS remotes.
+
 ## 2026-04-04: milestone-16 Build Lab now projects explicit sheet/print/export/viewer parity receipts on account and signed-in home rails
 
 - Trigger:
