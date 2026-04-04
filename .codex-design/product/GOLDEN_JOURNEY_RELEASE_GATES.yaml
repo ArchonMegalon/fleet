@@ -189,7 +189,11 @@ journey_gates:
             - 'response["translatorLaneReceipt"]'
             - 'response["importOracleLaneReceipt"]'
             - 'response["importOracleMissingSources"]'
+            - 'response["adjacentSr6OracleReceiptPosture"]'
+            - 'response["adjacentSr6OracleSourcesCovered"]'
             - 'response["sr6SuccessorLaneReceipt"]'
+            - 'response["onlineStorageLanePosture"]'
+            - 'response["onlineStorageReceiptPosture"]'
             - 'firstSourcebook["referenceSnapshotPosture"]'
         - repo: chummer6-core
           path: Chummer.Infrastructure/Xml/XmlToolCatalogService.cs
@@ -201,7 +205,9 @@ journey_gates:
             - BuildTranslatorLaneReceipt
             - BuildImportOracleLaneReceipt
             - ImportOracleMissingSources
+            - ResolveAdjacentSr6OracleCoverage
             - BuildSr6SuccessorLaneReceipt
+            - BuildOnlineStorageSummary
             - ResolveReferenceSnapshotPosture
         - repo: chummer6-core
           path: Chummer.CoreEngine.Tests/Program.cs
