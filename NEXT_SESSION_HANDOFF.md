@@ -1,3 +1,21 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for stale nested `releaseProof.generated_at` alias timestamps
+
+- Trigger:
+  - frontier milestone `2` parity audit enforced stale-proof rejection on nested `releaseProof.generatedAt/generated_at`, but verify mutations only executed stale rejection through camelCase `generatedAt`.
+  - this left the snake_case alias-only stale branch unproven in the end-to-end mutation lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that removes `releaseProof.generatedAt`, sets `releaseProof.generated_at="2000-01-01T00:00:00Z"`, and asserts stale-proof fail-close.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now explicitly proves stale rejection through both nested proof timestamp aliases).
+- Current trusted state:
+  - Hub verify now executes stale nested proof-timestamp fail-close for both `releaseProof.generatedAt` and `releaseProof.generated_at`, not only camelCase payloads.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.generated_at` alias timestamps
 
 - Trigger:
