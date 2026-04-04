@@ -1,15 +1,15 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T22:32:07Z",
+  "generated_at": "2026-04-04T22:39:42Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 5,
+    "ready_count": 4,
     "warning_count": 0,
-    "blocked_count": 1,
-    "blocked_external_only_count": 1,
+    "blocked_count": 2,
+    "blocked_external_only_count": 2,
     "blocked_with_local_count": 0,
     "blocking_mode": "external_only",
     "blocked_external_only_hosts": [
@@ -17,8 +17,8 @@
       "windows"
     ],
     "blocked_external_only_host_counts": {
-      "macos": 2,
-      "windows": 2
+      "macos": 4,
+      "windows": 4
     },
     "blocked_external_only_tuples": [
       "avalonia:osx-arm64:macos",
@@ -32,7 +32,7 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T22:32:07Z",
+      "at": "2026-04-04T22:39:42Z",
       "state": "fresh",
       "age_seconds": 0
     },
@@ -41,26 +41,26 @@
       "available": true,
       "at": "2026-04-04T21:38:31Z",
       "state": "fresh",
-      "age_seconds": 3216
+      "age_seconds": 3671
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T21:38:14Z",
       "state": "fresh",
-      "age_seconds": 3233
+      "age_seconds": 3688
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T21:38:14Z",
       "state": "fresh",
-      "age_seconds": 3233
+      "age_seconds": 3688
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-04T22:32:07Z",
+      "at": "2026-04-04T22:39:42Z",
       "state": "fresh",
       "age_seconds": 0
     }
@@ -407,7 +407,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:32:07Z",
+        "support_packets_generated_at": "2026-04-04T22:39:42Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -867,7 +867,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:32:07Z",
+        "support_packets_generated_at": "2026-04-04T22:39:42Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1273,7 +1273,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:32:07Z",
+        "support_packets_generated_at": "2026-04-04T22:39:42Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1385,7 +1385,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:32:07Z",
+        "support_packets_generated_at": "2026-04-04T22:39:42Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1418,12 +1418,22 @@
       "id": "report_cluster_release_notify",
       "title": "Report, cluster, release, notify",
       "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blocking_reasons": [],
-      "external_blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Run the missing macos, windows host proof lane for 4 desktop tuple(s) and ingest receipts before widening promotion or trust claims.",
+      "blocking_reasons": [
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple blazor-desktop:win-x64:windows. Expected targets: artifactId blazor-desktop-win-x64-installer, installer chummer-blazor-desktop-win-x64-installer.exe, public route /downloads/install/blazor-desktop-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json."
+      ],
+      "external_blocking_reasons": [
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
+        "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple blazor-desktop:win-x64:windows. Expected targets: artifactId blazor-desktop-win-x64-installer, installer chummer-blazor-desktop-win-x64-installer.exe, public route /downloads/install/blazor-desktop-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json."
+      ],
       "local_blocking_reasons": [],
-      "blocked_by_external_constraints_only": false,
+      "blocked_by_external_constraints_only": true,
       "external_proof_requests": [
         {
           "tuple_id": "avalonia:osx-arm64:macos",
@@ -1666,7 +1676,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:32:07Z",
+        "support_packets_generated_at": "2026-04-04T22:39:42Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1824,7 +1834,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 4,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 4,
@@ -1835,9 +1845,9 @@
         "support_unresolved_external_proof_request_count": 4,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
-        "external_blocking_reason_count": 0,
+        "external_blocking_reason_count": 4,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": false,
+        "blocked_by_external_constraints_only": true,
         "external_proof_request_count": 4
       }
     },
@@ -1905,7 +1915,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:32:07Z",
+        "support_packets_generated_at": "2026-04-04T22:39:42Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",

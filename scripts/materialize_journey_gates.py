@@ -774,6 +774,7 @@ def evaluate_journey(
             or (max_age_hours_raw is not None and str(max_age_hours_raw).strip())
         )
         proof_payload: Dict[str, Any] | None = None
+        validate_release_channel_external_proof_contract = False
         if enforce_json_parsing:
             try:
                 decoded = json.loads(text)
@@ -795,6 +796,7 @@ def evaluate_journey(
                 # Support/install contract checks need the tuple backlog whenever release-channel truth is present,
                 # even when this gate only enforces json_must_be_one_of fields.
                 external_proof_requests = _release_channel_external_proof_requests(proof_payload)
+                validate_release_channel_external_proof_contract = True
 
         if json_required:
             assert proof_payload is not None
@@ -804,11 +806,6 @@ def evaluate_journey(
                     blocking_reasons.append(
                         f"repo proof {repo_name}:{relative_path} field '{field_path}' expected {expected!r} but was {actual!r}."
                     )
-            if (
-                repo_name == "chummer6-hub-registry"
-                and relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
-            ):
-                blocking_reasons.extend(_release_channel_external_proof_reasons(proof_payload))
 
         if json_required_one_of:
             assert proof_payload is not None
@@ -870,6 +867,10 @@ def evaluate_journey(
                 blocking_reasons.append(
                     f"repo proof {repo_name}:{relative_path} is stale ({age_seconds}s old > {int(max_age_hours * 3600)}s max)."
                 )
+
+        if validate_release_channel_external_proof_contract:
+            assert proof_payload is not None
+            blocking_reasons.extend(_release_channel_external_proof_reasons(proof_payload))
 
     support_summary = dict(support_packets.get("summary") or {})
     support_packet_contract_violations: List[str] = []
