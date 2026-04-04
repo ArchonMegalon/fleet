@@ -1,3 +1,46 @@
+## 2026-04-04: milestone-1/3 desktop install/startup proof now fail-closes future-skewed timestamps across per-platform and aggregate executable gates
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/startup proof receipts that cannot lie when timestamps are skewed into the future.
+  - desktop gate scripts still clamped negative age to zero, so future-skewed startup-smoke and release-channel timestamps could pass as fresh evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added bounded future-skew validation for startup smoke timestamps.
+    - added env controls:
+      - `CHUMMER_WINDOWS_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
+      - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - added bounded future-skew validation for startup smoke timestamps.
+    - added env controls:
+      - `CHUMMER_MACOS_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
+      - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added bounded future-skew validation for startup smoke timestamps.
+    - added env controls:
+      - `CHUMMER_LINUX_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
+      - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added bounded future-skew validation for:
+      - upstream gate `generated_at` freshness,
+      - per-platform startup smoke receipt timestamps,
+      - release-channel `generated_at` freshness.
+    - added env controls:
+      - `CHUMMER_DESKTOP_EXECUTABLE_PROOF_MAX_FUTURE_SKEW_SECONDS`
+      - `CHUMMER_DESKTOP_EXECUTABLE_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
+      - `CHUMMER_DESKTOP_RELEASE_CHANNEL_PROOF_MAX_FUTURE_SKEW_SECONDS`
+      - plus existing desktop fallback knobs.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added string-level compliance guards for the new future-skew env knobs and fail-close reason text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh scripts/materialize-macos-desktop-exit-gate.sh scripts/materialize-linux-desktop-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_verifies_promoted_startup_smoke_receipts_and_visual_screenshot_recency|FullyQualifiedName~MacOS_exit_gate_prefers_promoted_release_tuple_and_requires_startup_smoke_receipt_integrity|FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes" --nologo -v minimal` -> PASS (`2` matched tests).
+- Current trusted state:
+  - desktop exit-gate proof now rejects excessive future-skewed timestamp evidence instead of silently clamping it to fresh.
+  - milestone-1/3 proof honesty is tighter for startup-smoke and release-channel temporal integrity while the broader promoted Windows/macOS tuple gap remains open.
+- Push status:
+  - `chummer6-ui`: pending (local edits only in this environment).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4 recap shelf timestamps now normalize whitespace-padded recap projection ids before aftermath lookup
 
 - Trigger:
