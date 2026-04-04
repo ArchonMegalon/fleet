@@ -279,9 +279,11 @@
 
 - Commits landed:
   - `chummer6-ui`: `fdbeef8b` (`fix(w1): gate verify on packaged desktop executable proof`).
+  - `chummer6-ui`: `537d25c6` (`docs(w1): bind signoff doc to executable exit gate`).
   - `fleet`: `7356d25` (`docs(handoff): record w1 verifier honesty slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-presentation && git push` (after `537d25c6`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment has no configured GitHub credentials for HTTPS remotes, so new commits remain local-only until auth is restored.
@@ -294,6 +296,10 @@
   - patched verifier lane:
     - `/docker/chummercomplete/chummer-presentation/scripts/ai/verify.sh`
     - added mandatory execution of `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` immediately after B14 flagship UI gate materialization.
+  - patched signoff canon linkage:
+    - `/docker/chummercomplete/chummer-presentation/docs/WORKBENCH_RELEASE_SIGNOFF.md`
+    - added explicit release lane bullet for `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`.
+    - updated verifier doc-presence regex in `scripts/ai/verify.sh` so this exit-gate lane cannot be dropped from signoff copy without failing verification.
 - Verification:
   - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/verify.sh` -> FAIL (expected honest fail, exit `43`) at `desktop-executable-exit-gate`.
   - published fail receipt is explicit and current:
