@@ -17,7 +17,7 @@
   - `cd /docker/fleet && pytest -q tests/test_materialize_flagship_product_readiness.py -k 'stale_passing_non_promoted_platform_gate_receipts or stale_linux_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch'` -> FAIL (`pytest: command not found`).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k 'stale_passing_non_promoted_platform_gate_receipts or stale_linux_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch'` -> FAIL (`No module named pytest`).
 - Commits landed:
-  - pending local Fleet commit.
+  - `fleet`: `5ac8e08` (`fix(w1): fail-close stale linux desktop tuple receipts in readiness`).
 - Exact blocker:
   - test runner dependency missing in this environment (`pytest` unavailable as command and module).
 
