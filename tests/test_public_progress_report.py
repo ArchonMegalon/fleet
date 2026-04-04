@@ -366,6 +366,26 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["method"]["eta_formula_version"], "config_override_v1")
         self.assertTrue(any("configured planning bands" in item for item in payload["method"]["limitations"]))
 
+    def test_active_wave_status_prefers_active_registry_constant_for_next12_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            active_registry_path = root / "ACTIVE.yaml"
+            next12_registry_path = root / "NEXT12.yaml"
+            active_registry_path.write_text("status: active\n", encoding="utf-8")
+            next12_registry_path.write_text("status: planned\n", encoding="utf-8")
+
+            original_active_path = self.progress.ACTIVE_WAVE_REGISTRY_PATH
+            original_next12_path = self.progress.NEXT12_REGISTRY_PATH
+            try:
+                self.progress.ACTIVE_WAVE_REGISTRY_PATH = active_registry_path
+                self.progress.NEXT12_REGISTRY_PATH = next12_registry_path
+                status = self.progress._active_wave_status("Next 12 Biggest Wins")
+            finally:
+                self.progress.ACTIVE_WAVE_REGISTRY_PATH = original_active_path
+                self.progress.NEXT12_REGISTRY_PATH = original_next12_path
+
+        self.assertEqual(status, "active")
+
     def test_published_progress_report_matches_generated_contract(self) -> None:
         repo_root = Path("/docker/fleet")
         published = repo_root / ".codex-studio" / "published"
