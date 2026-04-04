@@ -71,6 +71,41 @@
 - Current trusted state:
   - milestone-2 hub parity verify now auto-recovers once from the full release-channel drift marker family and still fail-closes on non-drift parity failures.
 
+## 2026-04-04: follow-up on W3 league/community split-hyphen `ctl/ctls/ctrls` script-lock closure (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `7e5c63f3` (`fix(w3): script-lock split and hyphen league/community ctls`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 GM operations lane now script-locks split and hyphen `league/community ctl/ctls/ctrls` shorthand across API and workspace/browser audits
+
+- Trigger:
+  - W3 shorthand coverage already fail-closed compact `league/community ctl/ctls/ctrls` variants and select hyphen forms, but split/hyphen permutations for `ctl/ctls/ctrls` were still outside full API `queryText` and workspace/browser script-lock rails.
+  - this left a wording seam where equivalent operator phrasing could drift without failing governed audit proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for:
+      - `queryText=league%20ctl`, `queryText=league-ctl`
+      - `queryText=league%20ctls`, `queryText=league-ctls`
+      - `queryText=league%20ctrls`, `queryText=league-ctrls`
+      - `queryText=community%20ctl`, `queryText=community-ctl`
+      - `queryText=community%20ctls`, `queryText=community-ctls`
+      - `queryText=community%20ctrls`, `queryText=community-ctrls`
+    - added mirrored workspace prep-query checks for all of the above split/hyphen variants.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for split/hyphen `league/community ctl/ctls/ctrls` prep queries, including route preservation and governed packet result assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock marker assertions for the new API `queryText`, workspace `prepQuery`, and Playwright regex/message markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 league/community event-control shorthand now has fail-closed API + workspace/browser script-lock proof for compact, split, and hyphen `ctl/ctls/ctrls` forms.
+
 ## 2026-04-04: follow-up on W3 league/community `ctrls` shorthand script-lock closure (commit and push status)
 
 - Commits landed:
