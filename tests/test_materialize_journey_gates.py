@@ -2503,7 +2503,11 @@ groups: []
         json.dumps(
             {
                 "generated_at": generated_at,
-                "summary": {"external_proof_required_case_count": 1},
+                "summary": {
+                    "external_proof_required_case_count": 1,
+                    "external_proof_required_host_counts": {"windows": 1},
+                    "external_proof_required_tuple_counts": {"avalonia:win-x64:windows": 1},
+                },
                 "packets": [
                     {
                         "packet_id": "packet-a",
@@ -2841,3 +2845,141 @@ groups: []
     reasons = payload["journeys"][0]["blocking_reasons"]
     assert any("does not reference expected installer file" in reason for reason in reasons)
     assert any("does not declare expected host token" in reason for reason in reasons)
+
+
+def test_materialize_journey_gates_blocks_when_support_external_proof_required_summary_host_or_tuple_counts_drift(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: report_cluster_release_notify
+    title: Report, cluster, release, notify
+    user_promise: Support closure stays install-specific.
+    canonical_journeys:
+      - journeys/claim-install-and-close-a-support-case.md
+    owner_repos: [fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report, support_packets]
+      minimum_history_snapshots: 1
+      require_support_install_truth_contract: true
+      required_project_posture:
+        - project_id: hub
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: hub
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "summary": {
+                    "external_proof_required_case_count": 1,
+                    "external_proof_required_host_counts": {"macos": 1},
+                    "external_proof_required_tuple_counts": {"avalonia:osx-arm64:macos": 1},
+                },
+                "packets": [
+                    {
+                        "packet_id": "packet-a",
+                        "status": "accepted",
+                        "install_truth_state": "tuple_not_on_promoted_shelf",
+                        "install_diagnosis": {
+                            "registry_channel_id": "preview",
+                            "registry_release_channel_status": "published",
+                            "registry_release_version": "1.2.3",
+                            "registry_release_proof_status": "passed",
+                            "external_proof_required": True,
+                            "external_proof_request": {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_host": "windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "startup_smoke_receipt_contract": {
+                                    "status_any_of": ["pass", "passed", "ready"],
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "windows",
+                                    "rid": "win-x64",
+                                    "host_class_contains": "windows",
+                                },
+                                "proof_capture_commands": [
+                                    "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                                    "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                                ],
+                            },
+                        },
+                        "fix_confirmation": {"state": "no_fix_recorded", "update_required": False},
+                        "recovery_path": {"action_id": "open_downloads", "href": "/downloads"},
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    reasons = payload["journeys"][0]["blocking_reasons"]
+    assert any("external_proof_required_host_counts does not match" in reason for reason in reasons)
+    assert any("external_proof_required_tuple_counts does not match" in reason for reason in reasons)

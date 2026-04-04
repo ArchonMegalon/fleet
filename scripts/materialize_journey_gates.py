@@ -908,6 +908,36 @@ def evaluate_journey(
             blocking_reasons.append(
                 "support packet summary external_proof_required_case_count does not match packet install_diagnosis facts."
             )
+        expected_external_proof_required_host_counts = _counter_map(
+            [
+                str((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("required_host") or "")
+                .strip()
+                .lower()
+                for item in packets
+                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ]
+        )
+        reported_external_proof_required_host_counts = _normalized_summary_counter(
+            support_summary.get("external_proof_required_host_counts")
+        )
+        if expected_external_proof_required_host_counts != reported_external_proof_required_host_counts:
+            blocking_reasons.append(
+                "support packet summary external_proof_required_host_counts does not match packet install_diagnosis facts."
+            )
+        expected_external_proof_required_tuple_counts = _counter_map(
+            [
+                str((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id") or "").strip()
+                for item in packets
+                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ]
+        )
+        reported_external_proof_required_tuple_counts = _normalized_summary_counter(
+            support_summary.get("external_proof_required_tuple_counts")
+        )
+        if expected_external_proof_required_tuple_counts != reported_external_proof_required_tuple_counts:
+            blocking_reasons.append(
+                "support packet summary external_proof_required_tuple_counts does not match packet install_diagnosis facts."
+            )
         expected_external_proof_backlog_count = len(external_proof_requests)
         reported_external_proof_backlog_count = int(
             support_summary.get("unresolved_external_proof_request_count") or 0
