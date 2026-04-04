@@ -76,8 +76,10 @@ REPO_ROOT_CANDIDATES = {
 EXTERNAL_BLOCKER_MARKERS = (
     "requires a windows-capable host",
     "requires a macos host",
+    "requires a linux host",
     "current host cannot run promoted windows installer smoke",
     "current host cannot run promoted macos installer smoke",
+    "current host cannot run promoted linux installer smoke",
 )
 
 RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS = (

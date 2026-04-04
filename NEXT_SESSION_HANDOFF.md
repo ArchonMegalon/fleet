@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-1/3 install proof classifier now treats Linux host-capability blockers as external-only
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery control-plane receipts to fail honest when platform-host proof is missing, without misclassifying host-capability constraints as repo-local defects.
+  - Fleet journey-gate blocker classification treated Windows/macOS host-capability markers as external constraints but did not classify Linux host-capability markers the same way, risking false local blocker attribution on non-Linux runners.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - expanded `EXTERNAL_BLOCKER_MARKERS` to include:
+      - `requires a linux host`
+      - `current host cannot run promoted linux installer smoke`
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_treats_linux_host_capability_blockers_as_external_only` to fail-close Linux host-proof blocker classification and summary rollups (`blocked_external_only_count`, local/external reason counts).
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "external_only or linux_host_capability_blockers_as_external_only or mixed_blockers"` -> PASS (`3 passed`, `24 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py tests/test_support_external_proof_contract_projection.py` -> PASS (`9 passed`).
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes plural `diaries` unresolved signals into continuity-return domain routing
 
 - Trigger:
