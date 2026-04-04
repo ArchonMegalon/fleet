@@ -38,6 +38,7 @@
       - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
   - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-public-promotion-evidence.py`:
     - added bounded future-skew validation for startup-smoke receipt timestamps used by public promotion evidence synthesis.
+    - fail-closed missing startup-smoke `status` values (must now be explicit passing status).
     - added env controls:
       - `CHUMMER_PUBLIC_PROMOTION_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
       - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
