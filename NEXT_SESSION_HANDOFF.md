@@ -23,6 +23,25 @@
 - Current trusted state:
   - macOS per-head desktop exit gate now evaluates startup-smoke artifact path integrity without runtime NameError failure, preserving milestone-1/3 fail-honest proof behavior when receipts are present.
 
+## 2026-04-04: follow-up on milestone-2 release proof ordering hardening in hub-registry (contract verify script-lock + push status)
+
+- Commits landed:
+  - `chummer-hub-registry`: `93d0d46` (`fix(milestone-2): script-lock release proof ordering in contracts verify`).
+- Trigger:
+  - registry materializer/verifier now fail-close non-canonical `journeysPassed`/`proofRoutes` ordering, but contract-level verify assertions still only checked proof-route membership and journey count.
+  - this left a contract verification seam where ordering drift could bypass the contract verify lane despite stricter runtime/script verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/Chummer.Hub.Registry.Contracts.Verify/Program.cs`:
+    - replaced count/contains checks with canonical-order `SequenceEqual` checks for release proof journeys and proof routes.
+    - contracts verify now fail-closes ordering drift in the same canonical lane as materializer/verifier/runtime checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Hub.Registry.Contracts.Verify/Chummer.Hub.Registry.Contracts.Verify.csproj` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected traceback/error lines are negative mutation probes in script-lock coverage).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated to `93d0d46`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-2 release proof lane now fail-closes non-canonical `journeysPassed` and `proofRoutes` ordering in hub-registry materialization + verification
 
 - Commits landed:
