@@ -94,6 +94,40 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 live audits now fail-close hyphen roster shorthand (`*-move`, `*-transfer`, `*-handoff`) across prep-library API and signed-in workspace journeys
+
+- Trigger:
+  - milestone `5` had strong compact/split/hyphen coverage for ops/control aliases, and compact coverage for roster aliases, but did not explicitly assert hyphen roster shorthand forms in live API/browser journeys.
+  - this left a punctuation drift seam for real operator inputs such as `roster-move`, `crew-transfer`, and `crew-handoff`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for:
+      - `queryText=roster-move`
+      - `queryText=crew-move`
+      - `queryText=roster-transfer`
+      - `queryText=crew-transfer`
+      - `queryText=roster-handoff`
+      - `queryText=crew-handoff`
+    - added signed-in workspace route checks for the same six hyphen roster queries under `prepQuery=...`, with route/body proof and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey assertions for the same six hyphen roster queries with encoded-route preservation and non-empty governed packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended prep-library query matching regression for hyphen move shorthand (`crew-move`, `roster-move`) plus compact plural roster shorthand.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended GM prep-asset query coverage for hyphen move shorthand (`crew-move`, `roster-move`) plus compact plural roster shorthand.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and Playwright marker assertions to lock all six hyphen roster query checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`404` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 live operator journeys now fail-close hyphen roster shorthand on the same governed prep lane as existing compact/split/hyphen event-control and compact roster coverage.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes compact plural `*moves/*transfers/*handoffs` aliases across workspace prep search and GM ops triage
 
 - Trigger:
