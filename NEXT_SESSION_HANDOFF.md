@@ -69,6 +69,26 @@
   - `chummer6-ui`: local commit created in this slice; push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format `releaseProof.generatedAt` timestamps
+
+- Trigger:
+  - frontier milestone `2` parity audit already fail-closed malformed nested `releaseProof.generatedAt` timestamp tokens, but Hub verify mutation coverage still only exercised missing/stale/future generatedAt branches.
+  - this left ISO-format grammar enforcement partially unproven in the end-to-end verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.generatedAt="not-an-iso-timestamp"` and asserted `audit-ui-parity.sh` fail-closes for invalid timestamp shape.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock the new invalid-format generatedAt mutation coverage text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertion for invalid-format `releaseProof.generatedAt`, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves missing, malformed, stale, and future-skewed `releaseProof.generatedAt` fail-close branches in one mutation lane.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-string `releaseProof.journeysPassed` entries and missing `releaseProof.generatedAt`
 
 - Trigger:
