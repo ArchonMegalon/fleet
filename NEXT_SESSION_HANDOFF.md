@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes gate-envelope channel alias drift across Linux head metadata plus Windows/macOS gate payloads
+
+- Trigger:
+  - frontier milestones `1` and `3` require one non-contradictory release-channel identity across promoted artifacts, packaged-head gate receipts, and startup smoke proof.
+  - executable gate already fail-closed channel/version/arch drift in startup smoke and release artifacts, but did not enforce channel alias consistency at the gate-envelope layer itself.
+  - this left a seam where `channelId/channel` drift inside Linux gate `head` metadata or Windows/macOS gate envelopes could slip through while downstream checks still looked green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added alias helpers `payload_channel_id(...)` and `channel_alias_conflicts(...)`.
+    - Linux gate validation now records and fail-closes `head.channelId/channel` mismatch or alias conflict against release-channel `channelId`.
+    - Windows gate validation now records and fail-closes top-level `channelId/channel` mismatch/alias conflict and `checks.release_channel_id` mismatch against release-channel `channelId`.
+    - macOS gate validation now records and fail-closes top-level `channelId/channel` mismatch/alias conflict and `checks.release_channel_id` mismatch against release-channel `channelId`.
+  - patched compliance marker tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - expanded marker assertions for the new channel-alias fail-close reason strings and evidence keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 executable proof now fail-closes channel identity alias drift at every layer that carries release-channel identity: release channel artifacts, startup smoke receipts, Linux gate head metadata, and Windows/macOS gate envelopes.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves alias-only stale/future fail-close for nested/localization `generated_at` release-proof timestamps
 
 - Trigger:
