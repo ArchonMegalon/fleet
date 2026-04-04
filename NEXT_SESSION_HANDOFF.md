@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes finding-array/count drift in registry verification
+
+- Trigger:
+  - frontier milestone 2 remains blocked by `BLK-009`, and release-channel verification enforced `blockingFindingsCount` / `translationBacklogFindingsCount` but did not enforce list/count coherence.
+  - this left a fail-open seam where `releaseProof.uiLocalizationReleaseGate` could report zero counts while still carrying non-empty finding arrays.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - canonical localization proof now emits `blockingFindings` and `translationBacklogFindings` arrays alongside count fields.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires both finding arrays to be present lists.
+    - verifier now fail-closes when array lengths do not match `blockingFindingsCount` / `translationBacklogFindingsCount`.
+    - count requirements remain strict (`0`) for promoted shelf truth.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that injects non-empty `blockingFindings` with `blockingFindingsCount=0` and asserts verifier failure.
+    - added canonical assertions that materialized proofs carry empty `blockingFindings` and `translationBacklogFindings` arrays when counts are zero.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel localization contract now explicitly requires finding-array/count parity for both blocking and backlog findings.
+  - committed and pushed in `chummer-hub-registry`:
+    - `2ec764b` — `Fail-close localization finding count and list drift`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new localization finding-array/count drift negative check).
+- Current trusted state:
+  - registry-owned release-channel localization proof now fail-closes both directions of finding-debt drift: count suppression and array/count mismatch.
+  - milestone-2 `BLK-009` remains globally open pending cross-surface shipping-locale quality closure, but this shelf-truth seam is now tighter.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `2ec764b`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes future-skewed generatedAt values and unexpected localeSummary locale rows in registry verification
 
 - Trigger:
