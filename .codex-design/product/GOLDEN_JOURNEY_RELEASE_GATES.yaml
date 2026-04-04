@@ -433,6 +433,23 @@ journey_gates:
             - "`campaign_offline_continuity_brief`"
             - "`campaign_mobile_companion_brief`"
             - "`campaign_workspace_v4_brief`"
+        - repo: executive-assistant
+          path: ea/app/services/task_contracts.py
+          must_contain:
+            - '"gm_ops_briefing",'
+            - '"campaign_workspace_v4_brief",'
+            - '"gm_ops_briefing": "gm_ops_brief",'
+            - '"campaign_workspace_v4_brief": "campaign_workspace_v4_brief",'
+            - '"workflow_template": "tool_then_artifact",'
+            - '"pre_artifact_capability_key": "structured_generate",'
+        - repo: executive-assistant
+          path: tests/test_task_contract_runtime_policy.py
+          must_contain:
+            - "def test_builtin_w3_campaign_and_gm_contracts_resolve_with_groundwork_runtime_policy("
+            - '("gm_ops_briefing", "gm_ops_brief"),'
+            - '("campaign_workspace_v4_brief", "campaign_workspace_v4_brief"),'
+            - 'assert runtime_policy.workflow_template_key == "tool_then_artifact"'
+            - 'assert runtime_policy.pre_artifact_capability_key == "structured_generate"'
       required_project_posture:
         - project_id: hub
           minimum_stage: pre_repo_local_complete

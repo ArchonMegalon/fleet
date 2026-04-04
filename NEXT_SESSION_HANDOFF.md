@@ -39460,3 +39460,36 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 
 - Current open milestone ids: 4, 5, 6
 - Frontier milestone ids to prioritize first: 4, 5, 6
+
+## 2026-04-04: milestone-5 campaign continuity journey now fail-closes EA runtime-policy proof for GM/workspace-v4 packet contracts
+
+- Trigger:
+  - frontier milestone `5` lists `executive-assistant` as an owner, but Fleet’s `campaign_session_recover_recap` gate only asserted EA surface vocabulary in `SKILLS.md`.
+  - that left a drift seam where EA runtime task-contract policy wiring (the governed GM/workspace-v4 packet lane) could regress while the journey still read as ready.
+- Landed:
+  - patched canonical design gate registry:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `campaign_session_recover_recap.fleet_gate.repo_source_proof` now additionally requires EA executable proof markers from:
+      - `ea/app/services/task_contracts.py`
+      - `tests/test_task_contract_runtime_policy.py`
+  - patched Fleet design mirror gate registry with the same additions:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - patched Fleet regression coverage:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` now fail-closes the two new EA runtime proof rows and required markers.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=3, warning=5, missing=0`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select(.repo=="executive-assistant") | .path' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (now lists `SKILLS.md`, `ea/app/services/task_contracts.py`, and `tests/test_task_contract_runtime_policy.py`).
+- Commits landed:
+  - pending in this session.
+- Push attempts:
+  - pending in this session.
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials for authenticated push.

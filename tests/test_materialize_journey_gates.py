@@ -1910,6 +1910,45 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert "`campaign_mobile_companion_brief`" in executive_assistant_skill_catalog.get("must_contain", [])
     assert "`campaign_workspace_v4_brief`" in executive_assistant_skill_catalog.get("must_contain", [])
 
+    executive_assistant_runtime_contracts = proof_for(
+        "executive-assistant",
+        "ea/app/services/task_contracts.py",
+    )
+    assert '"gm_ops_briefing",' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert '"campaign_workspace_v4_brief",' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert '"gm_ops_briefing": "gm_ops_brief",' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert (
+        '"campaign_workspace_v4_brief": "campaign_workspace_v4_brief",'
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
+    assert '"workflow_template": "tool_then_artifact",' in executive_assistant_runtime_contracts.get("must_contain", [])
+    assert (
+        '"pre_artifact_capability_key": "structured_generate",'
+        in executive_assistant_runtime_contracts.get("must_contain", [])
+    )
+
+    executive_assistant_runtime_policy_tests = proof_for(
+        "executive-assistant",
+        "tests/test_task_contract_runtime_policy.py",
+    )
+    assert (
+        "def test_builtin_w3_campaign_and_gm_contracts_resolve_with_groundwork_runtime_policy("
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert '("gm_ops_briefing", "gm_ops_brief"),' in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    assert (
+        '("campaign_workspace_v4_brief", "campaign_workspace_v4_brief"),'
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        'assert runtime_policy.workflow_template_key == "tool_then_artifact"'
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+    assert (
+        'assert runtime_policy.pre_artifact_capability_key == "structured_generate"'
+        in executive_assistant_runtime_policy_tests.get("must_contain", [])
+    )
+
 
 def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof() -> None:
     registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
