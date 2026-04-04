@@ -152,6 +152,7 @@ def evaluate_journey(
     fleet_gate = dict(row.get("fleet_gate") or {})
     blocking_reasons: List[str] = []
     warning_reasons: List[str] = []
+    now = utc_now()
 
     for artifact_name in fleet_gate.get("required_artifacts") or []:
         artifact = dict(artifacts.get(str(artifact_name)) or {})
@@ -220,6 +221,56 @@ def evaluate_journey(
             if snippet_text and snippet_text not in text:
                 blocking_reasons.append(
                     f"repo proof {repo_name}:{relative_path} is missing required marker '{snippet_text}'."
+                )
+        max_age_hours_raw = proof_row.get("max_age_hours")
+        if max_age_hours_raw is not None and str(max_age_hours_raw).strip():
+            try:
+                max_age_hours = float(max_age_hours_raw)
+            except (TypeError, ValueError):
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} has invalid max_age_hours value '{max_age_hours_raw}'."
+                )
+                continue
+            timestamp_fields = [
+                str(item).strip()
+                for item in (proof_row.get("generated_at_fields") or ["generated_at", "generatedAt"])
+                if str(item).strip()
+            ]
+            max_future_skew_seconds = int(proof_row.get("max_future_skew_seconds") or 300)
+            try:
+                proof_payload = json.loads(text)
+            except json.JSONDecodeError:
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} is not valid json, cannot enforce max_age_hours."
+                )
+                continue
+            if not isinstance(proof_payload, dict):
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} must be a json object to enforce max_age_hours."
+                )
+                continue
+            proof_generated_at = None
+            proof_generated_field = ""
+            for field_name in timestamp_fields:
+                candidate = parse_iso(proof_payload.get(field_name))
+                if candidate is not None:
+                    proof_generated_at = candidate
+                    proof_generated_field = field_name
+                    break
+            if proof_generated_at is None:
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} is missing a parseable timestamp in fields {timestamp_fields}."
+                )
+                continue
+            age_seconds = int((now - proof_generated_at).total_seconds())
+            if age_seconds < -max_future_skew_seconds:
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} timestamp field {proof_generated_field} is too far in the future ({iso(proof_generated_at)})."
+                )
+                continue
+            if age_seconds > int(max_age_hours * 3600):
+                blocking_reasons.append(
+                    f"repo proof {repo_name}:{relative_path} is stale ({age_seconds}s old > {int(max_age_hours * 3600)}s max)."
                 )
 
     support_summary = dict(support_packets.get("summary") or {})

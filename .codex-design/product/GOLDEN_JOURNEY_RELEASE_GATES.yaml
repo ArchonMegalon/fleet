@@ -49,6 +49,21 @@ journey_gates:
           must_contain:
             - BuildSupportPortalRelativePathForInstall
             - BuildSupportPortalRelativePathForWorkspace
+        - repo: chummer6-ui
+          path: .codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+          must_contain:
+            - '"contract_name": "chummer6-ui.desktop_executable_exit_gate"'
+            - '"windows_gate:avalonia:win-x64"'
+            - '"windows_gate:blazor-desktop:win-x64"'
+            - '"linux_gate:avalonia:linux-x64"'
+            - '"linux_gate:blazor-desktop:linux-x64"'
+            - '"macos_gate:avalonia:osx-arm64"'
+            - '"macos_gate:blazor-desktop:osx-arm64"'
+            - '"hub_registry_root_trusted_for_startup_smoke_proof": true'
+          max_age_hours: 48
+          generated_at_fields:
+            - generated_at
+            - generatedAt
         - repo: chummer6-mobile
           path: .codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
           must_contain:
