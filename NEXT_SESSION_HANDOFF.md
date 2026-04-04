@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed per-head inventory token lists from visual/workflow receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require per-head proof contracts that cannot be normalized from malformed receipt inventory metadata.
+  - executable gate still parsed `flagship_required_desktop_heads` from visual/workflow receipts with permissive token coercion, allowing non-list and malformed list entries to collapse silently.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - switched `visual_familiarity.flagship_required_desktop_heads` and `workflow_execution.flagship_required_desktop_heads` parsing to strict `normalize_required_token_list(...)` handling.
+    - malformed/non-list/non-string/blank/duplicate token entries now fail-close with explicit reasons and normalized evidence output.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock strict per-head list parsing markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only.
+- Current trusted state:
+  - per-head desktop inventory metadata now fail-closes on malformed token-list shape drift before cross-gate head-proof checks.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes malformed token drift and reads live core-engine workbench catalogs
 
 - Trigger:
