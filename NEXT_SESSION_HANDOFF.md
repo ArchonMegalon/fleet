@@ -104,6 +104,32 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 Linux gate now defaults to release-channel version and fail-closes promoted installer startup-smoke version drift
+
+- Trigger:
+  - executable milestone-3 gate surfaced Linux startup-smoke version drift against release-channel `version`.
+  - Linux gate still defaulted `VERSION` to `local-hard-gate`, allowing local default/version drift from release-channel truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - added `RELEASE_CHANNEL_VERSION_DEFAULT` resolution from release-channel receipt.
+    - changed `VERSION` default to release-channel `version` when available.
+    - strengthened promoted-installer startup-smoke validation:
+      - fail-closes missing release-channel version.
+      - fail-closes missing startup-smoke receipt version.
+      - fail-closes startup-smoke receipt version mismatch against release-channel version.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended Linux gate compliance assertions to lock release-channel version defaulting and startup-smoke version fail-close markers.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Linux_exit_gate_defaults_to_promoted_release_tuple_when_overrides_are_missing|FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media|FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`5` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> expected FAIL at `promoted_installer_proof_integrity` with explicit reason: `Linux startup smoke receipt version does not match release channel version.` (installer startup-smoke receipt still reports `version=local-hard-gate` while release-channel is `local-docker`).
+- Current trusted state:
+  - Linux gate now uses release-channel version by default and exposes version-drift truth explicitly.
+  - active Linux promoted-installer blocker is now explicit and reproducible, rather than hidden behind default local-hard-gate versioning.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (Linux gate script + compliance tests; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 Windows and macOS gate receipts now emit and validate releaseVersion for startup-smoke identity
 
 - Trigger:
