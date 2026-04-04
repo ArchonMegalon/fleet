@@ -1,3 +1,21 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.uiLocalizationReleaseGate.generated_at` alias timestamps
+
+- Trigger:
+  - frontier milestone `2` parity audit resolves nested localization timestamp aliases (`generatedAt/generated_at`) and enforces ISO grammar, but verify mutations only invalidated camelCase `generatedAt` values.
+  - this left the snake_case alias path (`generated_at` without `generatedAt`) unproven in the end-to-end mutation lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that removes `releaseProof.uiLocalizationReleaseGate.generatedAt`, sets `generated_at="not-an-iso-timestamp"`, and asserts parity-audit fail-close.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now explicitly proves invalid-format rejection through both nested localization timestamp aliases).
+- Current trusted state:
+  - Hub verify now executes invalid-format localization timestamp fail-close for both alias keys, not just camelCase payloads.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 organizer-control search now fail-closes split plural aliases (`league controls`, `community controls`) across campaign prep canonicalization and live API/UI journeys
 
 - Trigger:
