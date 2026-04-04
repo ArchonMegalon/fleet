@@ -1,12 +1,12 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-04-04T17:18:02Z",
+  "generated_at": "2026-04-04T23:56:21Z",
   "as_of": "2026-04-04",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
   "progress_history_source": "products/chummer/PROGRESS_HISTORY.generated.json",
-  "summary": "Next 12 Biggest Wins remains the active wave; journey proof is blocked; overall progress is 100% in 'Public-fit polish'; the longest pole remains Core Engine; support closure is clear.",
+  "summary": "Next 12 Biggest Wins remains the active wave; journey proof is blocked; overall progress is 100% in 'Public-fit polish'; the longest pole remains Core Engine; support closure still needs follow-through.",
   "active_wave": "Next 12 Biggest Wins",
   "active_wave_status": "active",
   "release_health": {
@@ -28,9 +28,9 @@
   },
   "journey_gate_health": {
     "state": "blocked",
-    "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
-    "blocked_count": 3,
-    "warning_count": 3
+    "reason": "Only external host-proof gaps remain: run the missing macos, windows proof lane for 4 desktop tuple(s), ingest receipts, and then republish release truth.",
+    "blocked_count": 2,
+    "warning_count": 0
   },
   "top_support_or_feedback_clusters": [
     {
@@ -65,10 +65,10 @@
     {
       "decision_id": "2026-04-04-focus-next-12-biggest-wins",
       "action": "focus_shift",
-      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 9 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 10 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
       "cited_signals": [
         "overall_progress_percent=100",
-        "history_snapshot_count=9",
+        "history_snapshot_count=10",
         "oldest_blocker_days=0",
         "phase_label=Public-fit polish",
         "longest_pole=Core Engine",
@@ -78,13 +78,13 @@
     {
       "decision_id": "2026-04-04-launch-governance",
       "action": "freeze_launch",
-      "reason": "Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked.",
+      "reason": "Freeze launch expansion while 2 golden journey(s) remain blocked and journey health is blocked.",
       "cited_signals": [
         "journey_gate_state=blocked",
-        "journey_gate_blocked_count=3",
+        "journey_gate_blocked_count=2",
         "local_release_proof_status=unknown",
         "provider_canary_status=Canary evidence is still accumulating",
-        "closure_health_state=clear"
+        "closure_health_state=watch"
       ]
     }
   ],
@@ -109,9 +109,9 @@
     },
     "journey_gate_health": {
       "state": "blocked",
-      "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
-      "blocked_count": 3,
-      "warning_count": 3
+      "reason": "Only external host-proof gaps remain: run the missing macos, windows proof lane for 4 desktop tuple(s), ingest receipts, and then republish release truth.",
+      "blocked_count": 2,
+      "warning_count": 0
     },
     "top_support_or_feedback_clusters": [
       {
@@ -146,10 +146,10 @@
       {
         "decision_id": "2026-04-04-focus-next-12-biggest-wins",
         "action": "focus_shift",
-        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 9 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 10 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
         "cited_signals": [
           "overall_progress_percent=100",
-          "history_snapshot_count=9",
+          "history_snapshot_count=10",
           "oldest_blocker_days=0",
           "phase_label=Public-fit polish",
           "longest_pole=Core Engine",
@@ -159,13 +159,13 @@
       {
         "decision_id": "2026-04-04-launch-governance",
         "action": "freeze_launch",
-        "reason": "Freeze launch expansion while 3 golden journey(s) remain blocked and journey health is blocked.",
+        "reason": "Freeze launch expansion while 2 golden journey(s) remain blocked and journey health is blocked.",
         "cited_signals": [
           "journey_gate_state=blocked",
-          "journey_gate_blocked_count=3",
+          "journey_gate_blocked_count=2",
           "local_release_proof_status=unknown",
           "provider_canary_status=Canary evidence is still accumulating",
-          "closure_health_state=clear"
+          "closure_health_state=watch"
         ]
       }
     ],
@@ -175,9 +175,9 @@
     "current_recommended_wave": "Next 12 Biggest Wins",
     "overall_progress_percent": 100,
     "phase_label": "Public-fit polish",
-    "history_snapshot_count": 9,
+    "history_snapshot_count": 10,
     "longest_pole": "Core Engine",
-    "launch_readiness": "Hold launch expansion pending route-canary validation. 3 golden journey(s) remain blocked.",
+    "launch_readiness": "Hold launch expansion pending route-canary validation. 2 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
       "canary_status": "Canary evidence is still accumulating",
@@ -189,15 +189,11 @@
     "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
     "scorecard_metric_count": 22,
     "automation_alignment": {
-      "state": "aligned",
+      "state": "misaligned",
       "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
       "active_open_milestone_ids": [
         1,
-        2,
         3,
-        4,
-        5,
-        6,
         7,
         8,
         9,
@@ -212,60 +208,45 @@
         18
       ],
       "handoff_frontier_milestone_ids": [
-        1,
-        2,
         4,
         5,
-        3,
-        13,
-        14,
-        17,
-        18,
-        6,
-        7,
-        8,
-        9,
-        16,
-        10,
-        11,
-        12,
-        15
+        6
       ],
-      "out_of_program_frontier_milestone_ids": [],
+      "out_of_program_frontier_milestone_ids": [
+        4,
+        5,
+        6
+      ],
       "handoff_source": "/docker/fleet/NEXT_SESSION_HANDOFF.md",
-      "summary": "Automation frontier aligns with the active program open milestones."
+      "summary": "Automation frontier drifts outside active program open milestones and must be corrected before promotion."
     },
     "closure_health": {
-      "state": "clear",
+      "state": "watch",
       "open_case_count": 0,
       "waiting_closure_count": 0,
-      "pending_human_response_count": 0,
+      "pending_human_response_count": 24,
       "reported_case_count": 0,
-      "materialized_packet_count": 0,
+      "materialized_packet_count": 4,
       "design_impact_count": 0,
-      "summary": "0 waiting closure / 0 pending human response. 0 open support packets across 0 reported cases."
+      "summary": "0 waiting closure / 24 pending human response. 0 open support packets still need closure follow-through."
     },
     "adoption_health": {
       "state": "early",
       "local_release_proof_status": "unknown",
       "proven_journey_count": 0,
       "proven_route_count": 0,
-      "history_snapshot_count": 9,
-      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 9 weekly snapshots are on record for the current public trust posture."
+      "history_snapshot_count": 10,
+      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 10 weekly snapshots are on record for the current public trust posture."
     },
     "progress_trend": {
       "state": "steady",
       "direction": "flat",
       "delta_percent": 0,
-      "from_as_of": "2026-04-02",
-      "to_as_of": "2026-04-03",
-      "summary": "Flat trend 0% from 2026-04-02 to 2026-04-03. Trend window: 2026-03-25 73% -> 2026-03-27 73% -> 2026-03-28 100% -> 2026-03-29 100% -> 2026-03-31 100% -> 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100%.",
+      "from_as_of": "2026-04-03",
+      "to_as_of": "2026-04-04",
+      "summary": "Flat trend 0% from 2026-04-03 to 2026-04-04. Trend window: 2026-03-27 73% -> 2026-03-28 100% -> 2026-03-29 100% -> 2026-03-31 100% -> 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100% -> 2026-04-04 100%.",
       "sample_count": 8,
       "samples": [
-        {
-          "as_of": "2026-03-25",
-          "overall_progress_percent": 73
-        },
         {
           "as_of": "2026-03-27",
           "overall_progress_percent": 73
@@ -292,6 +273,10 @@
         },
         {
           "as_of": "2026-04-03",
+          "overall_progress_percent": 100
+        },
+        {
+          "as_of": "2026-04-04",
           "overall_progress_percent": 100
         }
       ]
