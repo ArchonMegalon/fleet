@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-1/3 support-case packets now canonicalize legacy `head:platform:rid` tuple ids before external-proof routing
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery and packaged-binary proof receipts to fail honest when tuple-proof mapping is stale or malformed.
+  - Support-case packet materialization matched external-proof requests by raw tuple id first; payloads that supplied legacy tuple order (`head:platform:rid`) without `arch` could miss canonical release-channel proof requests (`head:rid:platform`) and under-report required host-proof work.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - added canonical tuple-id normalization that accepts both canonical and legacy tuple ordering.
+    - normalized release-channel promoted tuples and external-proof request tuples to canonical `head:rid:platform`.
+    - normalized case-provided tuple ids before promoted tuple lookup and external-proof request lookup.
+  - patched `/docker/fleet/tests/test_materialize_support_case_packets.py`:
+    - added `test_materialize_support_case_packets_matches_external_proof_request_when_case_uses_legacy_tuple_order` to fail-close external-proof routing when support payloads provide legacy tuple ordering without `arch`.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py -k "external_proof_requests_for_missing_tuple or legacy_tuple_order"` -> PASS (`2 passed`, `8 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_support_case_packets.py` -> PASS (`17 passed`).
+- Commits landed:
+  - `fleet`: `cdf8cea` (`fix(w1-1-3): canonicalize legacy desktop tuple ids in support proof routing`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 completion-review proof paths now preserve configured `chummer6-ui` gate paths across symlinked repo roots
 
 - Trigger:
