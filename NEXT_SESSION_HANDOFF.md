@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release status when desktop tuple coverage is still incomplete
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-channel publishability to match complete per-platform/per-head installer tuple truth.
+  - executable gate already enforced `rolloutState/supportabilityState` expectations for incomplete tuple coverage, but did not explicitly reject a publishable status value when coverage was still incomplete.
+  - this left a drift seam where status could present as publishable while tuple-coverage evidence still declared missing required installer tuples.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added evidence key `release_channel_publishable_status`.
+    - added evidence key `release_channel_publishable_status_with_incomplete_desktop_tuple_coverage`.
+    - gate now fail-closes with reason `Release channel status cannot be publishable while required desktop tuple coverage is incomplete.` when status is publishable and tuple coverage is incomplete.
+    - normalized existing publishable-status checks to use the shared `release_channel_publishable_status` boolean.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded executable-gate marker assertions for the new publishable+incomplete fail-close evidence and reason text.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded migration/compliance marker assertions for the same guardrail coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable proof now rejects release channels that claim publishable status while installer tuple coverage remains incomplete, preventing status truth from outrunning artifact/head/rid proof truth.
+- Push status:
+  - `chummer6-ui`: local commit created in this slice; push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes split singular shorthand (`crew transfer/handoff/move`, `roster transfer/handoff/move`) across prep-library API, signed-in workspace routes, and GM ops prep search
 
 - Trigger:
@@ -24,8 +49,8 @@
 - Current trusted state:
   - milestone-5 roster movement search proof now fail-closes split singular shorthand across API, signed-in workspace routes, and browser journey checks, aligned with existing compact/hyphen/split-plural coverage.
 - Push status:
-  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `chummer.run-services`: committed (`d5ac6a8c`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: handoff committed (`1333a6e`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for whitespace-padded `releaseProof.baseUrl`/`proofRoutes` and non-slash-led proof routes
 
