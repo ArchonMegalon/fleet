@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops live audits now script-lock plural compact return alias `nextsessions` across API/workspace and browser journey proof
+
+- Trigger:
+  - campaign workspace and GM-ops canonicalization already rewrote `nextsessions -> next + session + return`, and unit tests covered it in both server-plane and GM prep matching.
+  - live audit and Playwright script-locks covered `nextsession`, `nextsessionreturn`, and `nextsessionreturns` but omitted `nextsessions`, leaving a regression seam where canonicalized behavior could drift without control-plane failure.
+- Landed:
+  - patched live API/workspace audit:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API check for `queryText=nextsessions`.
+      - added signed-in workspace route check for `prepQuery=nextsessions`.
+  - patched browser journey audit:
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added workspace prep search assertion block for `prepQuery=nextsessions` with route, result-copy, and non-empty governed packet checks.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded hub-live-audit marker assertions for `queryText=nextsessions` and `prepQuery=nextsessions`.
+      - expanded Playwright marker assertions for `?prepQuery=nextsessions` and `compact nextsessions continuity prep query`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity and milestone-5 prep ops now fail-close `nextsessions` parity across canonicalization, API/workspace live audits, browser route proof, and script-lock tests.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (`scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes plural relationship alias `connections` across workspace/GM canonicalization and live API/UI journeys
 
 - Trigger:
