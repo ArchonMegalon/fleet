@@ -25,8 +25,8 @@
   - recap publication and artifact identity remain canonical under whitespace drift even when no creator-publication projection exists yet.
   - milestone-4 campaign return-loop continuity and milestone-5 GM publication lanes keep one normalized recap identity seam across enrichment, projection, and attachment paths.
 - Push status:
-  - `chummer.run-services`: commit landed locally (`2a3ef171`); push not attempted in this slice.
-  - `fleet`: handoff update pending local commit in this slice.
+  - `chummer.run-services`: commit landed locally (`2a3ef171`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff commits landed locally (`c36941a` and follow-up status correction in this slice); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-4/5 recap shelf attachment now normalizes unlinked whitespace-padded creator-publication ids instead of echoing raw drift
 
