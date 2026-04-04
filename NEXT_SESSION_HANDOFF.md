@@ -37,18 +37,29 @@
     - canonicalizes `postmortem`, `postmortems`, `post mortem`, and `post mortems` to governed `recap` semantics.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
     - added `postmortem` to aftermath/recap prep-word tokens so campaign workspace search and generated search terms stay aligned with the new alias lane.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API and workspace probes for `postmortem`, `post mortem`, and `post-mortem`, each fail-closing on non-`200` and empty governed results.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added signed-in browser continuity checks for `?prepQuery=postmortem`, `post mortem`, and `post-mortem` with route-preservation and governed-result assertions.
   - patched tests:
     - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
       - extended continuity alias coverage to include compact/split/hyphen `postmortem` variants and negative guard (`matrixpostmortem`).
     - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
       - extended continuity prep-query coverage so compact/split/hyphen `postmortem` variants must match governed continuity packets.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded script-lock assertions so audit/playwright proof rails fail-close if `postmortem` continuity coverage drifts.
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-4 continuity prep search now treats postmortem/post-mortem vocabulary as first-class aftermath/recap language in the same governed query lane as debrief/afteraction.
 - Push status:
-  - `chummer.run-services` commit: `f7501dab` (`fix(w3): normalize postmortem continuity prep query aliases`).
+  - `chummer.run-services` commits:
+    - `f7501dab` (`fix(w3): normalize postmortem continuity prep query aliases`).
+    - `8515c5a8` (`test(w3): script-lock postmortem continuity query proofs`).
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes compact `crewswap` and `rosterswap` across prep search, GM ops triage, and live audit/browser proof
