@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-3 readiness lane now fail-closes stale Linux non-promoted startup-smoke tuple receipts in flagship materializer evidence
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary desktop proof that cannot lie across promoted head/platform tuples.
+  - `scripts/materialize_flagship_product_readiness.py` already fail-closed stale non-promoted tuple inventory for Windows and macOS, but Linux stale tuple receipts were not ingested from executable-gate evidence.
+  - this left a symmetry gap where stale passing Linux tuple receipts (outside promoted release-channel tuples) could evade materializer fail-close and evidence surfacing.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - added `stale_linux_gate_receipts_without_promoted_tuples` ingestion and normalized tuple-key inventory.
+    - included Linux inventory in derived `stale_passing_platform_gate_receipts_without_promoted_tuples` tokens.
+    - added Linux overlap fail-close check when stale Linux tuple keys intersect promoted Linux tuples.
+    - exposed Linux stale receipt inventory and overlap evidence fields alongside existing Windows/macOS fields.
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - added `test_materialize_flagship_product_readiness_fail_closes_stale_linux_non_promoted_platform_gate_receipts` regression coverage.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_materialize_flagship_product_readiness.py -k 'stale_passing_non_promoted_platform_gate_receipts or stale_linux_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch'` -> FAIL (`pytest: command not found`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k 'stale_passing_non_promoted_platform_gate_receipts or stale_linux_non_promoted_platform_gate_receipts or stale_passing_inventory_mismatch'` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - pending local Fleet commit.
+- Exact blocker:
+  - test runner dependency missing in this environment (`pytest` unavailable as command and module).
+
+
 ## 2026-04-04: milestone-2 registry verify lane now mutation-tests blocking-findings alias drift fail-close in verifier and materializer
 
 - Trigger:

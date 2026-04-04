@@ -973,11 +973,21 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Executable gate marks hub-registry startup-smoke trust as active but omits canonical hub root/channel evidence."
         )
+    stale_linux_gate_receipts_without_promoted_tuples = _normalized_stale_receipt_inventory(
+        executable_gate_evidence.get("stale_linux_gate_receipts_without_promoted_tuples")
+    )
     stale_windows_gate_receipts_without_promoted_tuples = _normalized_stale_receipt_inventory(
         executable_gate_evidence.get("stale_windows_gate_receipts_without_promoted_tuples")
     )
     stale_macos_gate_receipts_without_promoted_tuples = _normalized_stale_receipt_inventory(
         executable_gate_evidence.get("stale_macos_gate_receipts_without_promoted_tuples")
+    )
+    stale_linux_gate_receipt_tuple_keys_without_promoted_tuples = sorted(
+        {
+            str(item.get("tuple") or "").strip().lower()
+            for item in stale_linux_gate_receipts_without_promoted_tuples
+            if str(item.get("tuple") or "").strip()
+        }
     )
     stale_windows_gate_receipt_tuple_keys_without_promoted_tuples = sorted(
         {str(item.get("tuple") or "").strip().lower() for item in stale_windows_gate_receipts_without_promoted_tuples if str(item.get("tuple") or "").strip()}
@@ -990,6 +1000,11 @@ def build_flagship_product_readiness_payload(
     )
     stale_passing_platform_gate_receipts_without_promoted_tuples_derived = sorted(
         set(
+            _derive_stale_passing_platform_receipt_tokens(
+                platform="linux",
+                stale_inventory=stale_linux_gate_receipts_without_promoted_tuples,
+            )
+            +
             _derive_stale_passing_platform_receipt_tokens(
                 platform="windows",
                 stale_inventory=stale_windows_gate_receipts_without_promoted_tuples,
@@ -1065,6 +1080,11 @@ def build_flagship_product_readiness_payload(
         )
         for platform in tuple_occurrence_counts_by_platform
     }
+    stale_linux_receipt_tuples_overlapping_promoted_tuples = sorted(
+        set(stale_linux_gate_receipt_tuple_keys_without_promoted_tuples).intersection(
+            set(promoted_tuple_keys_by_platform["linux"])
+        )
+    )
     stale_windows_receipt_tuples_overlapping_promoted_tuples = sorted(
         set(stale_windows_gate_receipt_tuple_keys_without_promoted_tuples).intersection(
             set(promoted_tuple_keys_by_platform["windows"])
@@ -1452,6 +1472,13 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Executable gate stale passing non-promoted tuple inventory does not match stale receipt status rows."
         )
+    if stale_linux_receipt_tuples_overlapping_promoted_tuples:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Executable gate stale Linux non-promoted tuple inventory overlaps promoted release-channel tuples: "
+            + ", ".join(stale_linux_receipt_tuples_overlapping_promoted_tuples)
+            + "."
+        )
     if stale_windows_receipt_tuples_overlapping_promoted_tuples:
         desktop_hard_fail = True
         desktop_reasons.append(
@@ -1676,11 +1703,17 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_hub_registry_root_trusted_for_startup_smoke_proof": (
                 executable_gate_hub_registry_root_trusted
             ),
+            "ui_executable_gate_stale_linux_gate_receipts_without_promoted_tuples": (
+                stale_linux_gate_receipts_without_promoted_tuples
+            ),
             "ui_executable_gate_stale_windows_gate_receipts_without_promoted_tuples": (
                 stale_windows_gate_receipts_without_promoted_tuples
             ),
             "ui_executable_gate_stale_macos_gate_receipts_without_promoted_tuples": (
                 stale_macos_gate_receipts_without_promoted_tuples
+            ),
+            "ui_executable_gate_stale_linux_gate_receipt_tuple_keys_without_promoted_tuples": (
+                stale_linux_gate_receipt_tuple_keys_without_promoted_tuples
             ),
             "ui_executable_gate_stale_windows_gate_receipt_tuple_keys_without_promoted_tuples": (
                 stale_windows_gate_receipt_tuple_keys_without_promoted_tuples
@@ -1696,6 +1729,9 @@ def build_flagship_product_readiness_payload(
             ),
             "ui_executable_gate_stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch": (
                 stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch
+            ),
+            "ui_executable_gate_stale_linux_receipt_tuples_overlapping_promoted_tuples": (
+                stale_linux_receipt_tuples_overlapping_promoted_tuples
             ),
             "ui_executable_gate_stale_windows_receipt_tuples_overlapping_promoted_tuples": (
                 stale_windows_receipt_tuples_overlapping_promoted_tuples
