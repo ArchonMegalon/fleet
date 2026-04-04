@@ -29,6 +29,40 @@
   - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `be19dce`).
   - `fleet`: pending (credential-dependent in this environment).
 
+## 2026-04-04: milestone-3 workflow and visual desktop exit-gate receipts now fail-close stale or future-skewed proof inputs
+
+- Trigger:
+  - frontier milestone `3` requires per-head desktop proof receipts that cannot lie when upstream evidence is stale.
+  - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` and `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` could still pass without enforcing freshness on their upstream receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - added receipt freshness enforcement for all upstream workflow/parity/flagship receipts.
+    - fail-closes missing/invalid `generatedAt` or `generated_at`, stale timestamps, and excessive future skew.
+    - added env controls:
+      - `CHUMMER_DESKTOP_WORKFLOW_PROOF_MAX_AGE_SECONDS` (fallback `CHUMMER_DESKTOP_PROOF_MAX_AGE_SECONDS`, default `86400`)
+      - `CHUMMER_DESKTOP_WORKFLOW_PROOF_MAX_FUTURE_SKEW_SECONDS` (fallback `CHUMMER_DESKTOP_PROOF_MAX_FUTURE_SKEW_SECONDS`, default `300`)
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - added flagship gate receipt freshness enforcement (stale/future-skew fail-close).
+    - added screenshot freshness enforcement and screenshot-vs-receipt skew enforcement.
+    - added env controls:
+      - `CHUMMER_DESKTOP_VISUAL_PROOF_MAX_AGE_SECONDS` (fallback `CHUMMER_DESKTOP_PROOF_MAX_AGE_SECONDS`, default `86400`)
+      - `CHUMMER_DESKTOP_VISUAL_PROOF_MAX_FUTURE_SKEW_SECONDS` (fallback `CHUMMER_DESKTOP_PROOF_MAX_FUTURE_SKEW_SECONDS`, default `300`)
+      - `CHUMMER_DESKTOP_VISUAL_SCREENSHOT_MAX_AGE_SECONDS` (fallback `CHUMMER_DESKTOP_PROOF_MAX_AGE_SECONDS`, default `86400`)
+      - `CHUMMER_DESKTOP_VISUAL_SCREENSHOT_RECEIPT_SKEW_MAX_SECONDS` (default `900`)
+  - regenerated in `chummer6-ui`:
+    - `.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` (still fail-close for missing Windows/macOS promoted install media)
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL-CLOSE (expected): missing required promoted Windows/macOS installer tuples in release-channel truth.
+- Current trusted state:
+  - milestone-3 visual/workflow proof receipts now independently enforce proof recency and reject future-skewed timestamps.
+  - composite executable gate remains honest on the still-open milestone-1 coverage gap: release channel currently lacks promoted Windows/macOS desktop install media tuples.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes future-skewed generatedAt values and unexpected localeSummary locale rows in registry verification
 
 - Trigger:
