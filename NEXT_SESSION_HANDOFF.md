@@ -27,6 +27,17 @@
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: follow-up on `relationships` continuity lock commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `b512139c` (`fix(campaign-os): fail-close relationships continuity alias`).
+  - `fleet`: `c42d4d2` (`docs(handoff): record relationships continuity lock slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close `relationships` alias across canonicalization plus live API/UI journeys
 
 - Trigger:
@@ -57,8 +68,6 @@
   - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
   - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> FAIL due unrelated pre-existing `Chummer.Run.AI` compile break (`Chummer.Media.Contracts` unresolved and downstream missing `Chummer.Media.*` symbols); not caused by this slice.
-- Push status:
-  - pending commit/push attempt in this environment (credential-dependent).
 
 ## 2026-04-04: follow-up on `debriefing` continuity lock commit and push status
 
