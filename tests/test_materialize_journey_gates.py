@@ -1695,6 +1695,35 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
         in hub_offline_verify.get("must_contain", [])
     )
 
+    ui_parity_audit = proof_for("chummer6-ui", "scripts/audit-ui-parity.sh")
+    assert "dice_roller" in ui_parity_audit.get("must_contain", [])
+    assert "character_roster" in ui_parity_audit.get("must_contain", [])
+
+    ui_dialog_factory = proof_for("chummer6-ui", "Chummer.Presentation/Overview/DesktopDialogFactory.cs")
+    assert '"dice_roller" => new DesktopDialogState(' in ui_dialog_factory.get("must_contain", [])
+    assert '"character_roster" => new DesktopDialogState(' in ui_dialog_factory.get("must_contain", [])
+    assert '"dialog.dice_roller"' in ui_dialog_factory.get("must_contain", [])
+    assert '"dialog.character_roster"' in ui_dialog_factory.get("must_contain", [])
+
+    ui_gm_board = proof_for("chummer6-ui", "Chummer.Blazor/Components/Shared/GmBoardFeed.razor")
+    assert "<header class=\"trace-section-title\">Initiative Rail</header>" in ui_gm_board.get("must_contain", [])
+    assert "<div class=\"gm-board-initiative-strip\">" in ui_gm_board.get("must_contain", [])
+    assert "data-gm-board-initiative-pill=" in ui_gm_board.get("must_contain", [])
+
+    ui_roster_watch_folder = proof_for("chummer6-ui", "Chummer/Forms/Utility Forms/CharacterRoster.cs")
+    assert (
+        "new FileSystemWatcher(GlobalSettings.CharacterRosterPath, \"*.chum5*\")"
+        in ui_roster_watch_folder.get("must_contain", [])
+    )
+    assert (
+        "Log.Trace(\"Populating CharacterRosterTreeNode Watch Folder (MainThread).\")"
+        in ui_roster_watch_folder.get("must_contain", [])
+    )
+
+    hub_dashboard_contracts = proof_for("chummer6-hub", "Chummer.Run.Contracts/CompatCore/Presentation/WorkflowSurfaceContracts.cs")
+    assert 'public const string Dashboard = "dashboard";' in hub_dashboard_contracts.get("must_contain", [])
+    assert 'public const string SessionDashboard = "session-dashboard";' in hub_dashboard_contracts.get("must_contain", [])
+
     executive_assistant_skill_catalog = proof_for("executive-assistant", "SKILLS.md")
     assert "`gm_ops_briefing`" in executive_assistant_skill_catalog.get("must_contain", [])
     assert "`opposition_packet`" in executive_assistant_skill_catalog.get("must_contain", [])

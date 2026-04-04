@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:02:41Z",
+  "generated_at": "2026-04-04T18:04:43Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:01:57Z",
+      "at": "2026-04-04T18:04:35Z",
       "state": "fresh",
-      "age_seconds": 44
+      "age_seconds": 8
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 2633
+      "age_seconds": 2755
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2679
+      "age_seconds": 2801
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2679
+      "age_seconds": 2801
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 2678
+      "age_seconds": 2800
     }
   },
   "journeys": [
@@ -607,6 +607,49 @@
             "must_contain": [
               "offline_sync_snapshot_v1",
               "Snapshot should include reusable campaign prep assets for offline library continuity."
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "scripts/audit-ui-parity.sh",
+            "must_contain": [
+              "dice_roller",
+              "character_roster"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Presentation/Overview/DesktopDialogFactory.cs",
+            "must_contain": [
+              "\"dice_roller\" => new DesktopDialogState(",
+              "\"character_roster\" => new DesktopDialogState(",
+              "\"dialog.dice_roller\"",
+              "\"dialog.character_roster\""
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Blazor/Components/Shared/GmBoardFeed.razor",
+            "must_contain": [
+              "<header class=\"trace-section-title\">Initiative Rail</header>",
+              "<div class=\"gm-board-initiative-strip\">",
+              "data-gm-board-initiative-pill="
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer/Forms/Utility Forms/CharacterRoster.cs",
+            "must_contain": [
+              "new FileSystemWatcher(GlobalSettings.CharacterRosterPath, \"*.chum5*\")",
+              "Log.Trace(\"Populating CharacterRosterTreeNode Watch Folder (MainThread).\")"
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Run.Contracts/CompatCore/Presentation/WorkflowSurfaceContracts.cs",
+            "must_contain": [
+              "public const string Dashboard = \"dashboard\";",
+              "public const string SessionDashboard = \"session-dashboard\";"
             ]
           },
           {
