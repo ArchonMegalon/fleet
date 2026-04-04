@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-5 GM unresolved triage now keeps encounter/enemy pressure in the opposition domain
+
+- Trigger:
+  - frontier milestone `5` requires opposition packet pressure to stay first-class in the governed GM ops lane.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` recognized `opposition/hostile/adversary/threat` tokens but common GM wording (`encounter`, `enemy`) could still fall to `general` and lose priority ordering.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded opposition-domain detection with `encounter`, `encounters`, `enemy`, and `enemies`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatEncounterSignalsAsOppositionDomain`.
+    - regression locks ordering so encounter/enemy unresolved rows stay ahead of newer `event_control` and `general` unresolved rows at equal severity.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GetProjection_UnresolvedItemsTreatEncounterSignalsAsOppositionDomain|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`346` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM unresolved triage no longer depends on literal opposition/hostile wording to keep encounter pressure in the opposition lane.
+  - milestone-5 unresolved ordering remains severity-first, then domain-priority, then recency.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now treats contact-connection mutations as first-class relationship signals
 
 - Trigger:
