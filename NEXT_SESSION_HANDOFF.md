@@ -34,14 +34,16 @@
   - `GmOpsBoardService.ResolveGmOpsDomain(...)` only recognized literal `event control` and `season` tokens, so unresolved prep-launch/travel-prefetch signals could be misclassified as `general` and drop below newer generic unresolved noise.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded opposition domain detection to classify these variants as `opposition`: `opposition`, `hostile`, `adversary`, and `threat`.
     - expanded event-control domain detection to classify these variants as `event_control`: `checkpoint`, `timeline`, `operation(s)`, `prep launch`/`prep_launch`, and `travel prefetch`/`travel_prefetch` (while preserving `opposition` > `event_control` > `roster_movement` > `general` priority).
     - added shared `ContainsAny(...)` helper for normalized token checks.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
     - added `GetProjection_UnresolvedItemsTreatPrepLaunchAndTravelPrefetchSignalsAsEventControlDomain`.
+    - added `GetProjection_UnresolvedItemsTreatHostileSignalsAsOppositionDomain`.
     - test locks ordering so prep-launch/travel-prefetch unresolved rows stay ahead of newer general unresolved items when severity is equal.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`17` tests on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`340` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`18` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`341` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - GM unresolved projection no longer depends on literal `event control` phrasing to keep milestone-5 event-control blockers in the prioritized triage lane.
   - prep-launch and travel-prefetch operator pressure now aligns with the same event-control semantics already used in campaign workspace prep/event packet surfaces.
