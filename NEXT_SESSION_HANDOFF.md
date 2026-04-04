@@ -110,6 +110,35 @@
   - `chummer6-hub`: local change landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-3 executable gate now fail-closes quarantined Windows/macOS installer bytes as non-shippable proof
+
+- Trigger:
+  - milestone-3 executable proof was failing for missing promoted Windows/macOS tuples, but diagnostics did not explicitly distinguish “missing entirely” from “present only in quarantine.”
+  - repo-local state had quarantine-only installer bytes for required tuples, which could hide the true promotion blocker behind generic missing-path failures.
+- Landed:
+  - patched executable gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+      - added deterministic installer filename inference for required tuple placeholders (`head × rid × platform`).
+      - added quarantine search helper across:
+        - `Docker/Downloads/quarantine`
+        - `.codex-studio/quarantine`
+      - added quarantine evidence and explicit fail-close reasons in Windows/macOS validation:
+        - Windows: `Windows promoted installer bytes appear only in quarantine and cannot count as shipped proof: ...`
+        - macOS: `macOS promoted installer bytes appear only in quarantine for head ... and cannot count as shipped proof: ...`
+      - added `evidence["quarantine_roots"]` and per-gate `quarantined_installer_candidates`.
+  - patched compliance script-locks:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+      - script-lock assertions now require quarantine-aware helper/functions/evidence markers and failure reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected for incomplete tuple coverage, now with explicit quarantine-only blocker reasons for Windows/macOS installer tuples.
+- Current trusted state:
+  - milestone-3 executable gate now fails more honestly: quarantine-only installer bytes are explicitly called out as non-shippable and cannot masquerade as promoted proof.
+  - remaining blocker is still real promoted tuple coverage plus platform-hosted startup smoke evidence (Windows/macOS), not hidden local path drift.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops live audits now script-lock plural compact return alias `nextsessions` across API/workspace and browser journey proof
 
 - Trigger:
