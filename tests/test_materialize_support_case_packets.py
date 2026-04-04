@@ -89,6 +89,7 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     }
     assert payload["summary"]["closure_waiting_on_release_truth"] == 0
     assert payload["summary"]["needs_human_response"] == 2
+    assert payload["summary"]["update_required_case_count"] == 0
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -431,9 +432,97 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["closure_waiting_on_release_truth"] == 1
     assert payload["summary"]["needs_human_response"] == 0
     assert payload["summary"]["install_truth_state_counts"]["promoted_tuple_match"] == 2
+    assert payload["summary"]["update_required_case_count"] == 0
     waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
     assert waiting_packet["install_diagnosis"]["tuple_present_on_promoted_shelf"] is True
     assert waiting_packet["recovery_path"]["href"] == "/account/support"
     fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
     assert fix_states == ["awaiting_reporter_verification", "confirmed_fixed"]
+
+
+def test_materialize_support_case_packets_marks_update_required_when_fixed_version_differs_from_installed_version(tmp_path: Path) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "caseId": "support_case_update_required",
+                        "clusterKey": "support:update-required",
+                        "kind": "bug_report",
+                        "status": "fixed",
+                        "title": "Fix published but user still on old build",
+                        "summary": "User install version is behind the fixed version.",
+                        "candidateOwnerRepo": "chummer6-ui",
+                        "designImpactSuspected": False,
+                        "installationId": "install-update-1",
+                        "releaseChannel": "preview",
+                        "headId": "avalonia",
+                        "platform": "linux",
+                        "arch": "x64",
+                        "installedVersion": "1.2.2",
+                        "fixedVersion": "1.2.3",
+                        "fixedChannel": "preview",
+                    }
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "version": "1.2.3",
+                "rolloutState": "published",
+                "supportabilityState": "supported",
+                "desktopTupleCoverage": {
+                    "promotedInstallerTuples": [
+                        {
+                            "tupleId": "avalonia:linux:linux-x64",
+                            "head": "avalonia",
+                            "platform": "linux",
+                            "rid": "linux-x64",
+                            "artifactId": "avalonia-linux-x64-installer",
+                        }
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["open_case_count"] == 1
+    assert payload["summary"]["update_required_case_count"] == 1
+    packet = payload["packets"][0]
+    assert packet["install_diagnosis"]["case_installed_version"] == "1.2.2"
+    assert packet["install_diagnosis"]["case_version_matches_registry_release"] is False
+    assert packet["install_diagnosis"]["case_fixed_version_matches_registry_release"] is True
+    assert packet["fix_confirmation"]["update_required"] is True
+    assert packet["recovery_path"]["action_id"] == "open_downloads"
+    assert packet["recovery_path"]["href"] == "/downloads"

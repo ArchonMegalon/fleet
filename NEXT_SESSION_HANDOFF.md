@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-10 support packets now prove update-required install truth and route recovery to downloads when a fix exists but reporter build is behind
+
+- Trigger:
+  - milestone `10` requires install-specific diagnosis plus fix confirmation to drive the correct recovery path.
+  - support packets already carried channel/tuple and fix metadata, but they did not encode whether the reporter install version was older than the recorded fixed version.
+  - that left recovery guidance ambiguous between "verify in support timeline" versus "update from shelf first".
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - support packet projection now reads install-version evidence from case payload aliases:
+      - `installedVersion`, `installed_version`, `installedBuildVersion`, `installed_build_version`, `currentVersion`, `current_version`.
+    - added install/fix comparison evidence:
+      - packet fields: `installed_version`
+      - `install_diagnosis.case_installed_version`
+      - `install_diagnosis.case_version_matches_registry_release`
+      - `install_diagnosis.case_fixed_version_matches_registry_release`
+      - `fix_confirmation.installed_version`
+      - `fix_confirmation.update_required`
+      - summary field: `update_required_case_count`
+    - recovery-path routing now fail-closes to `/downloads` when a case has both installed and fixed versions and they differ (`update_required=true`), with explicit reason text.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+      - existing packet tests now assert `summary.update_required_case_count`.
+      - added `test_materialize_support_case_packets_marks_update_required_when_fixed_version_differs_from_installed_version`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py` -> PASS.
+  - executable smoke:
+    - `python3 /docker/fleet/scripts/materialize_support_case_packets.py --source <tmp>/source.json --release-channel <tmp>/release.json --out <tmp>/out.json` -> PASS.
+    - rendered packet proved `fix_confirmation.update_required=true`, `install_diagnosis.case_installed_version=1.2.2`, and `recovery_path.action_id=open_downloads`.
+  - `python3 -m pytest -q tests/test_materialize_support_case_packets.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - pending local commit in `fleet` for support-packet install-truth enhancement + tests + handoff refresh.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for this slice; full pytest execution is currently unavailable in this environment because `pytest` is not installed.
+
 ## 2026-04-04: milestone-1/3 executable gate now avoids false corruption claims for macOS quarantine installers by making marker checks platform-aware
 
 - Trigger:
@@ -107,6 +143,45 @@
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - none for this landed canon sync slice; push remains blocked in this environment by missing GitHub HTTPS credentials.
+
+## 2026-04-04: milestone-5 campaign workspace now exposes explicit GM-operations readiness cues for opposition, roster movement, prep, and event controls
+
+- Trigger:
+  - milestone `5` requires GM/operator actions to stay on one governed account/audit backbone, but campaign workspace only exposed prep/travel aggregates and packet lists.
+  - operators could not see a single lane-level readiness verdict for opposition packets, roster movement, prep launches, and season/event controls from the same workspace surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Contracts/CampaignWorkspaceServerPlaneContracts.cs`:
+    - `CampaignWorkspaceServerPlaneProjection` now includes `GmOperations`.
+    - added `GmOperationsReadinessSummary` and `GmOperationsLaneCue`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added deterministic `BuildGmOperationsReadiness(...)` projection from governed campaign evidence:
+      - opposition signals
+      - roster movement signals
+      - prep packet and prep-launch coverage
+      - event/season control signals
+    - lane statuses now emit `missing` / `partial` / `governed` with cue summaries and an explicit account/audit backbone statement.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - campaign workspace GM prep/travel rail now renders:
+      - GM operations posture
+      - opposition and roster signal counts
+      - GM operations summary + account/audit backbone summary
+      - per-lane GM operations readiness cues.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - added `GmOperationsReadinessMarksGovernedWhenOppositionRosterPrepAndEventLanesAreCovered`.
+      - added `GmOperationsReadinessMarksMissingWhenNoGovernedOperatorSignalsExist`.
+      - added reflection helper for `BuildGmOperationsReadiness`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - source guard now requires GM-operations readiness rendering hooks in account workspace.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.GmOperationsReadiness|FullyQualifiedName~AccountBuildLabHandoffViewTests" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`4` tests).
+  - attempted without `-p:StaticWebAssetsEnabled=false` first -> FAIL in concurrent baseline due static-web-assets cache file lock (`Chummer.Run.Api/obj/Debug/net10.0/rpswa.dswa.cache.json` in use by another process).
+- Commits landed:
+  - pending local commit in `chummer.run-services` for this slice.
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - no product blocker for the milestone-5 readiness cue slice; verification requires `StaticWebAssetsEnabled=false` in the current concurrent workspace due active file locks.
 
 ## 2026-04-04: milestone-14 master-index now emits explicit settings-profile and source-toggle posture for governed rules-environment parity
 

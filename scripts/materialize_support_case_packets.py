@@ -335,12 +335,24 @@ def _fix_confirmation_state(item: Dict[str, Any], status: str) -> str:
     return "no_fix_recorded"
 
 
-def _recovery_path(*, status: str, installation_id: str, install_truth_state: str) -> Dict[str, str]:
+def _version_requires_update(installed_version: str, fixed_version: str) -> bool:
+    if not installed_version or not fixed_version:
+        return False
+    return installed_version.strip().lower() != fixed_version.strip().lower()
+
+
+def _recovery_path(*, status: str, installation_id: str, install_truth_state: str, update_required: bool) -> Dict[str, str]:
     if not installation_id:
         return {
             "action_id": "open_account_access",
             "href": "/account/access",
             "reason": "No linked install id is attached, so support should relink or reclaim the affected install first.",
+        }
+    if update_required:
+        return {
+            "action_id": "open_downloads",
+            "href": "/downloads",
+            "reason": "A fix exists, but the linked install still reports an older build; route the user through the current release shelf before verification.",
         }
     if install_truth_state in {"channel_mismatch", "tuple_not_on_promoted_shelf"}:
         return {
@@ -427,7 +439,17 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
     platform = _normalize_platform(item.get("platform"))
     arch = _normalize_text(item.get("arch")).lower()
     installation_id = _normalize_text(item.get("installationId") or item.get("installation_id"))
+    installed_version = _normalize_text(
+        item.get("installedVersion")
+        or item.get("installed_version")
+        or item.get("installedBuildVersion")
+        or item.get("installed_build_version")
+        or item.get("currentVersion")
+        or item.get("current_version")
+    )
     tuple_id = _normalize_text(item.get("desktopTupleId") or item.get("tupleId") or item.get("tuple_id")).lower()
+    fixed_version = _normalize_text(item.get("fixedVersion") or item.get("fixed_version"))
+    fixed_channel = _normalize_text(item.get("fixedChannel") or item.get("fixed_channel"))
     promoted_tuple = _lookup_promoted_tuple(
         index=release_channel_index,
         head=head_id,
@@ -443,7 +465,13 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         tuple_match=bool(promoted_tuple),
     )
     fix_confirmation_state = _fix_confirmation_state(item, status)
-    recovery_path = _recovery_path(status=status, installation_id=installation_id, install_truth_state=install_truth_state)
+    update_required = _version_requires_update(installed_version, fixed_version)
+    recovery_path = _recovery_path(
+        status=status,
+        installation_id=installation_id,
+        install_truth_state=install_truth_state,
+        update_required=update_required,
+    )
 
     return {
         "packet_id": packet_id,
@@ -461,8 +489,9 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         "platform": platform,
         "arch": arch,
         "installation_id": installation_id,
-        "fixed_version": _normalize_text(item.get("fixedVersion") or item.get("fixed_version")),
-        "fixed_channel": _normalize_text(item.get("fixedChannel") or item.get("fixed_channel")),
+        "installed_version": installed_version,
+        "fixed_version": fixed_version,
+        "fixed_channel": fixed_channel,
         "install_truth_state": install_truth_state,
         "install_diagnosis": {
             "registry_channel_id": _normalize_text(release_channel_index.get("channel_id")),
@@ -478,14 +507,27 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "promoted_artifact_id": _normalize_text(promoted_tuple.get("artifact_id")),
             "tuple_present_on_promoted_shelf": bool(promoted_tuple),
             "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
+            "case_installed_version": installed_version,
+            "case_version_matches_registry_release": bool(
+                installed_version
+                and _normalize_text(release_channel_index.get("version"))
+                and installed_version.lower() == _normalize_text(release_channel_index.get("version")).lower()
+            ),
+            "case_fixed_version_matches_registry_release": bool(
+                fixed_version
+                and _normalize_text(release_channel_index.get("version"))
+                and fixed_version.lower() == _normalize_text(release_channel_index.get("version")).lower()
+            ),
         },
         "fix_confirmation": {
             "state": fix_confirmation_state,
             "reporter_verification_state": _normalize_text(
                 item.get("reporterVerificationState") or item.get("reporter_verification_state")
             ).lower(),
-            "fixed_version": _normalize_text(item.get("fixedVersion") or item.get("fixed_version")),
-            "fixed_channel": _normalize_text(item.get("fixedChannel") or item.get("fixed_channel")),
+            "installed_version": installed_version,
+            "fixed_version": fixed_version,
+            "fixed_channel": fixed_channel,
+            "update_required": update_required,
         },
         "recovery_path": recovery_path,
     }
@@ -555,6 +597,9 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "closure_waiting_on_release_truth": sum(1 for item in open_packets if _closure_waiting_on_release_truth(item)),
             "needs_human_response": sum(1 for item in open_packets if _needs_human_response(item)),
             "install_truth_state_counts": _counter_map(item.get("install_truth_state") for item in open_packets),
+            "update_required_case_count": sum(
+                1 for item in open_packets if bool((item.get("fix_confirmation") or {}).get("update_required"))
+            ),
         },
         "packets": packets,
     }
