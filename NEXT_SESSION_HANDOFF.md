@@ -31,6 +31,17 @@
   - `chummer.run-services`: local changes landed in this slice (same continuity file set as above, plus plural `factions` coverage); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: follow-up on `factions` continuity lock commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `854f1b06` (`fix(campaign-os): fail-close factions continuity alias`).
+  - `fleet`: `dd897aa` (`docs(handoff): record factions continuity lock slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local until credentials are restored.
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural continuity aliases `heats` and `journals` across canonicalization plus live API/UI journeys
 
 - Trigger:
