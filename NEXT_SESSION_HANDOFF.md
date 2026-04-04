@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes on receipt schema and required surface coverage (not status-only receipts)
+
+- Trigger:
+  - frontier milestone `2` requires explicit familiarity proof for creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary workflows.
+  - `scripts/audit-ui-parity.sh` validated receipt existence and pass-status only; a structurally degraded receipt could still pass without required milestone-2 family/interaction inventories.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added strict JSON contract checks for `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`:
+      - `evidence.required_workflow_family_ids` must exist and include required milestone-2 family IDs (contacts/diary, gear/vehicles, cyberware, magic/matrix lane family).
+      - `missing_required_workflow_family_ids`, `not_ready_required_workflow_family_ids`, `workflow_execution_missing_receipts`, and `workflow_execution_failing_receipts` must be empty.
+    - added strict JSON contract checks for `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`:
+      - `evidence.required_legacy_interaction_keys` must include required milestone-2 interaction keys for creation, advancement, magic, matrix, gear, cyberware, vehicles, contacts, and diary.
+      - `missing_required_legacy_interaction_keys` and `missing_tests` must be empty.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock the new schema-check/fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, stricter parity audit passed in-path, `run-services in-process smoke passed`).
+- Current trusted state:
+  - Hub parity verification now fail-closes on missing milestone-2 surface-contract payloads inside executable receipts, not only status values.
+  - verify-entrypoint and parity-script regression tests jointly protect this behavior.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff update local commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now classifies compact `streetcred` and `publicawareness` relationship mutations
 
 - Trigger:
