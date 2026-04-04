@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 registry verifier now fail-closes canonical desktop-head requirement drift in tuple coverage
+
+- Trigger:
+  - W1 milestones `1` and `3` require Avalonia and Blazor desktop heads to remain release-blocking in install/update/recovery tuple proof.
+  - `verify_public_release_channel.py` only required `desktopTupleCoverage.requiredDesktopHeads` to be non-empty, so a drifted payload could drop a canonical head (for example `blazor-desktop`) and still pass structural verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added `REQUIRED_DESKTOP_HEADS = ("avalonia", "blazor-desktop")`.
+    - added `verify_required_desktop_heads(...)` and wired it into `verify_desktop_tuple_coverage(...)`.
+    - fail-closes when canonical heads are missing from `requiredDesktopHeads`.
+  - added `/docker/chummercomplete/chummer-hub-registry/scripts/test_verify_public_release_channel.py`:
+    - `test_verify_required_desktop_heads_rejects_missing_blazor_desktop`
+    - `test_verify_required_desktop_heads_accepts_canonical_head_set`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m pytest -q scripts/test_materialize_public_release_channel.py scripts/test_verify_public_release_channel.py` -> PASS (`4 passed`).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py scripts/test_materialize_public_release_channel.py scripts/test_verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+- Commits landed:
+  - `chummer-hub-registry`: `23cc312` (`fix(w1-1-3): require canonical desktop heads in tuple coverage verification`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated to `23cc312`).
+- Exact blocker:
+  - release closure still requires external host execution lane for promoted tuple proofs: `avalonia:osx-arm64:macos`, `blazor-desktop:osx-arm64:macos`, `avalonia:win-x64:windows`, `blazor-desktop:win-x64:windows`.
+
 ## 2026-04-04: milestone-6 travel/offline continuity lane now fail-closes compact `safehouseoffline*` and `mobilesafehouseoffline*` prep shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
