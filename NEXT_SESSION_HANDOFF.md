@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-4/5 workspace change-packet projection now normalizes whitespace-padded transfer/launch/prefetch receipt ids before packet-id hashing
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return and GM operations packet identity to stay one governed lane under formatting drift.
+  - `CampaignSpineService.BuildWorkspaceChangePackets(...)` still hashed raw `TransferId`, `LaunchId`, and `ReceiptId` values when composing `roster_transfer`, `prep_launch`, and `travel_prefetch` change-packet ids.
+  - whitespace-padded aliases of the same roster/prep/travel receipt ids could produce divergent packet ids and weaken return-loop/operator audit continuity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - normalized `rosterTransfer.TransferId`, `prepLaunch.LaunchId`, and `travelPrefetch.ReceiptId` through `ResolveChangePacketIdentity(...)` before change-packet id projection.
+    - preserved stable packet-id hashing while removing whitespace-formatting drift in packet-id seeds.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineWorkspaceChangePacketsNormalizeWhitespacePaddedRosterTransferIdsBeforePacketProjection`.
+    - added `CampaignSpineWorkspaceChangePacketsNormalizeWhitespacePaddedPrepLaunchIdsBeforePacketProjection`.
+    - added `CampaignSpineWorkspaceChangePacketsNormalizeWhitespacePaddedTravelPrefetchReceiptIdsBeforePacketProjection`.
+    - expanded `InvokeCampaignSpineBuildWorkspaceChangePackets(...)` helper overload to pass explicit roster/prep/travel receipt fixtures into the private packet builder.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceChangePacketsNormalizeWhitespacePaddedRosterTransferIdsBeforePacketProjection|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsNormalizeWhitespacePaddedPrepLaunchIdsBeforePacketProjection|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsNormalizeWhitespacePaddedTravelPrefetchReceiptIdsBeforePacketProjection|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedCarryForwardPacketId|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedRecapProjectionIdsWhenAftermathIsMissing" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`303` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - roster movement, GM prep launch, and travel-prefetch change packets now keep stable packet ids when receipt identities differ only by whitespace formatting.
+  - milestone-4 campaign return loop and milestone-5 GM operations packet audit lanes remain aligned on one normalized identity seam.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed release-channel identity/state scalar fields and channel alias drift
 
 - Trigger:
