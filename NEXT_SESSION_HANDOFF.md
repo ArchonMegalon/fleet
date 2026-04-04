@@ -14,11 +14,13 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketDeduplicatesIdenticalAftermathPackageVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenPackageIdsDiffer|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenArtifactIdsDiffer|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`430` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending (local commit not yet created in this handoff entry).
+  - `chummer.run-services`: `85ef50d6` (`fix(w3): dedupe campaign-return signal counts and restore roster-handover query aliasing`).
+  - `fleet`: `efb1890` (`docs(handoff): record w3 campaign-return dedupe and roster-handover alias restore`).
 - Push attempts:
-  - not yet attempted for this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for implementation and verification; push still expected to require GitHub credentials in this environment.
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes nested localization-gate alias drift in source gate payloads
 
