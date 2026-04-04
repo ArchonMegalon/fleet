@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-2 localization materializer now fail-closes normalized key collisions for list-form domain coverage payloads
+
+- Trigger:
+  - after hardening object-form domain maps, `scripts/materialize_public_release_channel.py` still had a list-form seam: `domain_coverage` and `locale_domain_coverage` list inputs could carry whitespace-aliased duplicate ids that collapsed silently after normalization.
+  - this left a bypass where malformed list-form localization payloads could still normalize into apparently-valid release proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - list-form `domain_coverage` now fail-closes duplicate normalized domain ids.
+    - list-form `locale_domain_coverage` now fail-closes duplicate normalized locale ids.
+    - per-locale list-form domain maps now fail-close duplicate normalized domain ids.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression proving materializer rejects list-form `domain_coverage` with duplicate normalized domain ids.
+    - added negative regression proving materializer rejects list-form `locale_domain_coverage` with duplicate normalized locale ids.
+  - committed and pushed in `chummer-hub-registry`:
+    - `892eab2` — `Reject normalized collisions in list-form localization maps`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new list-form normalization-collision negative regressions).
+- Current trusted state:
+  - both object-form and list-form localization domain-map inputs now fail-close normalized key-collision drift before release-channel projection.
+  - milestone-2 localization shelf proof no longer has a list-form normalization bypass for domain or locale-domain coverage maps.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `892eab2`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 campaign-spine change packets now normalize whitespace-padded carry-forward and recap projection ids before packet-id projection
 
 - Trigger:
