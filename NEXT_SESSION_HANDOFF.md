@@ -78,6 +78,23 @@
 - Exact blocker:
   - none for the landed slice; push remains blocked in this environment by missing GitHub credential material.
 
+## 2026-04-04: milestone-1/3 release-pipeline docs now encode startup-smoke future-skew verifier control
+
+- Trigger:
+  - after adding startup-smoke future-skew fail-close verification, the canonical registry pipeline doc still only described stale-age tuning for startup-smoke receipts.
+  - this left operator-facing verifier controls incomplete for W1 install/update/recovery proof maintenance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - startup-smoke verification section now explicitly documents `CHUMMER_VERIFY_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS` and `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS` (default `300s`) alongside max-age tuning.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py && bash -n /docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` -> PASS.
+- Commits landed:
+  - `chummer-hub-registry`: `c2fa852` (`docs(w1): document startup-smoke future-skew verifier knob`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `95d2bd5..c2fa852`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now fail-closes future-dated startup-smoke receipts for promoted installer tuples
 
 - Trigger:
