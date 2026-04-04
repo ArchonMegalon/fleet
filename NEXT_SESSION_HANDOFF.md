@@ -1,3 +1,16 @@
+## 2026-04-04: milestone-1/3 local linux gate artifact cleanup applied to match new retention policy
+
+- Trigger:
+  - after landing run-retention in `materialize-linux-desktop-exit-gate.sh`, the existing workspace still held hundreds of legacy `run.*` directories from prior gate executions.
+- Landed:
+  - performed one-time local cleanup under `/docker/chummercomplete/chummer6-ui/.codex-studio/out/linux-desktop-exit-gate` keeping the newest `40` run roots plus `latest` target semantics.
+- Verification:
+  - cleanup command summary: `total=354 kept=40 removed=314`.
+- Current trusted state:
+  - local linux packaged-proof artifact footprint now matches the bounded-retention policy and is no longer carrying stale run-root bloat.
+- Push status:
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 linux packaged-head gate now auto-prunes stale run roots to keep proof lanes bounded and trustworthy
 
 - Trigger:
