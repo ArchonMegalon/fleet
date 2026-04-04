@@ -44,6 +44,33 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: handoff follow-up commit + push status for W3 plural workspace-v4 compact prep query audit slice
+
+- Commits landed:
+  - `chummer6-hub`: `999dbece` (`test(w3-4-5-6): fail-close plural workspace-v4 compact prep queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 workspace-v4 shorthand lane now fail-closes plural packet/brief compact forms in live audits
+
+- Trigger:
+  - workspace-v4 compact query canonicalization landed, but live API/workspace audits only pinned singular compact forms, leaving plural shorthand (`workspacev4packets`, `campaignworkspacev4packets`, `campaignworkspacev4briefs`) outside fail-close journey proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added plural workspace-v4 compact query probes to both API `queryText` and workspace `prepQuery` coverage matrices.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added plural workspace-v4 compact assertions through `assertWorkspacePrepQuerySearch(...)`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added plural workspace-v4 compact matching assertions for packet and brief variants.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new plural audit and Playwright marker strings.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`2 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 workspace-v4 compact prep query canonicalization slice
 
 - Commits landed:
