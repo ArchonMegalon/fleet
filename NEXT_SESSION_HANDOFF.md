@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-1/3 fleet status lane now preserves shard-local frontier/open-milestone truth on shard-root status and manifest-aware live refresh
+
+- Trigger:
+  - frontier milestones `1` and `3` require control-plane proof receipts to stay shard-accurate under active 5-pack topology.
+  - shard refresh and aggregate-history logic still had drift seams:
+    - status/trace on shard roots could still aggregate sibling shard data.
+    - history could include stale runs from pre-topology frontier packs.
+    - active-shard manifest structured entries were not fully used for refresh overrides.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - added structured active-shard manifest parsers (`_active_shard_manifest_entries`, `_active_shard_manifest_entry_map`) with support for dict rows and per-shard config fields.
+    - `_configured_shard_roots()` now consumes structured manifest rows directly.
+    - `_effective_supervisor_state()` now filters shard history by current manifest frontier pack (`_run_matches_manifest_frontier`) to avoid stale frontier-history contamination.
+    - `derive_context()` now pins both `frontier` and `open_milestones` when explicit `--frontier-id` is supplied.
+    - `_live_shard_summaries()` now prefers structured-manifest shard config (frontier/account/owner/text/worker settings) over env-group defaults.
+    - `status` and `trace` commands now disable shard aggregation when invoked on shard roots (`include_shards=False`), preserving shard-local receipts.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added/updated coverage for structured-manifest acceptance, frontier-history filtering, manifest-preferred live refresh, shard-root status isolation, and explicit frontier pinning of open milestones.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py --help` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status --help` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status --json` -> PASS (reports `frontier_ids` count `18`, `open_milestone_ids` count `18`, shards present on aggregate root).
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "..."` -> BLOCKED in this environment (`pytest: command not found`).
+- Commits landed:
+  - `fleet`: `a8931ce` (`fix(w1): preserve shard-local frontier truth in live status`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment lacks GitHub HTTPS credentials for Fleet remote push.
+
 ## 2026-04-04: milestone-1/3 registry lane now fail-closes tuple coverage coherence drift and localization signoff status alias contradictions
 
 - Trigger:
