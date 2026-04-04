@@ -77,6 +77,33 @@
   - `chummer.run-services`: commit landed locally (`64591a66`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `fleet`: commit landed locally (`4ae4a71`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
+## 2026-04-04: milestone-3 visual screenshot freshness defaults now stay fail-honest without 15-minute receipt skew churn in aggregate executable gating
+
+- Trigger:
+  - frontier milestone `3` requires packaged-binary visual proof to fail on stale evidence, but the default screenshot-to-receipt skew window (`900s`) caused recurring non-substantive gate failures on otherwise fresh screenshot sets.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` and `materialize-desktop-executable-exit-gate.sh` both treated screenshots older than the latest visual receipt by more than `900s` as invalid, even when screenshot age was still inside the canonical proof max-age window.
+  - this kept reintroducing local staleness noise and obscured true remaining milestone-1/3 blockers (missing promoted Windows/macOS tuples).
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - `CHUMMER_DESKTOP_VISUAL_SCREENSHOT_RECEIPT_SKEW_MAX_SECONDS` now defaults to `DESKTOP_VISUAL_SCREENSHOT_MAX_AGE_SECONDS` instead of hardcoded `900`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `CHUMMER_DESKTOP_VISUAL_SCREENSHOT_RECEIPT_SKEW_MAX_SECONDS` now defaults to `DESKTOP_PROOF_MAX_AGE_SECONDS` instead of hardcoded `900`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with only substantive external tuple blockers:
+    - missing required desktop install media for `windows`.
+    - missing required desktop install media for `macos`.
+    - missing required platform/head tuples `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+- Current trusted state:
+  - milestone-3 visual freshness checks still fail-close on genuinely stale screenshot evidence (max-age rules unchanged), but no longer decay into a repeated 15-minute recency churn by default.
+  - aggregate executable gate output is re-narrowed to true external milestone-1/3 publication gaps in this workspace (promoted Windows/macOS installer tuple + startup-smoke proof availability).
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 localization release-proof domain maps now fail-close normalized key-collision drift in materializer and verifier
 
 - Trigger:
