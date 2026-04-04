@@ -21,12 +21,13 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`388` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice (not yet created in this session).
-  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+  - `chummer6-hub` / `chummer.run-services`: `fcb773f1` (`feat(w3-6): expose travel cache freshness and stale readiness`).
+  - `fleet`: no new commit needed in this session because this handoff section already existed on current local `main` before edits.
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this slice; pending pushability depends on GitHub credentials in this environment.
+  - none for the landed milestone-6 slice; remote push is blocked in this environment by missing GitHub credential material.
 
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now exposes governed replay, recap, and run-module artifact lanes alongside export/exchange/viewer/print continuity
 
