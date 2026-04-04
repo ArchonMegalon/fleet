@@ -78,11 +78,13 @@
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | {owner_repos,required_project_posture:.fleet_gate.required_project_posture}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `chummer6-core` owner and `core` boundary-pure posture row).
 - Commits landed:
-  - pending (to be recorded after commit step).
+  - `chummer6-design`: `71350ba` (`feat(w3-4): fail-close campaign gate with core continuity owner proofs`).
+  - `fleet`: `712c7b2` (`feat(w3-4): gate campaign continuity on core owner proof contract`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for repo-local implementation and verification; remote push still depends on missing GitHub HTTPS credentials in this environment.
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: handoff second push retry for milestone-4/5/6 full mobile continuity+gm marker hardening slice
 
