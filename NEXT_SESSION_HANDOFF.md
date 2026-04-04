@@ -54,6 +54,38 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 localization release proof now requires passing smoke-runner evidence in registry shelf verification
+
+- Trigger:
+  - active frontier milestone 2 remains blocked by `BLK-009`, and release-channel localization verification still accepted payloads without explicit smoke-runner pass evidence.
+  - this allowed a fail-open seam where acceptance-gate names could be present while the localization signoff smoke runner itself was missing or non-passing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - localization gate normalization now captures `signoffSmokeRunnerStatus` from:
+      - nested `signoff_smoke_runner.status` / `signoffSmokeRunner.status`
+      - or direct `signoff_smoke_runner_status` / `signoffSmokeRunnerStatus`
+    - default missing-gate projection now sets `signoffSmokeRunnerStatus` to `missing`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate.signoffSmokeRunnerStatus` to be `pass|passed|ready`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture localization payload now includes `signoff_smoke_runner.status=pass`.
+    - added negative verification proving fail-close on missing/non-passing `signoffSmokeRunnerStatus`.
+    - updated canonical assertions to lock `signoffSmokeRunnerStatus=pass` in projected output.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel contract now documents `signoffSmokeRunnerStatus=pass` as required localization shelf proof.
+  - committed and pushed in `chummer-hub-registry`:
+    - `aeb1fb2` — `Require localization smoke-runner proof in release channel`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new smoke-runner negative check).
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` advanced to `aeb1fb2`).
+- Current trusted state:
+  - registry-owned localization shelf proof now fail-closes when localization signoff smoke-runner evidence is absent or non-passing, further tightening BLK-009 release honesty.
+  - `BLK-009` remains globally open pending full cross-surface localization closure, but registry release truth now enforces stronger executable evidence.
+- Push status:
+  - `chummer-hub-registry`: pushed.
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization release proof now preserves explicit finding-count debt during registry materialization
 
 - Trigger:
