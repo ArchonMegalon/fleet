@@ -34,9 +34,10 @@
   - `cd /docker/chummercomplete/chummer-design && bash scripts/ai/verify.sh` -> FAIL on pre-existing non-slice gate (`validate_next20_repo_evidence: Downloads view must expose known-issues and release-notes trust surface language.`).
 - Commits landed:
   - `chummer6-design`: `1e6ba48` (`fix(w5-12): align governor validators and guide manifest to next-12 active wave`).
-  - `fleet`: pending local commit in this slice (handoff + mirrored weekly pulse).
+  - `fleet`: `25290ac` (`docs(handoff): record w5-12 next12 governance alignment and pulse mirror sync`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for push; full design verify still has a pre-existing non-slice failing gate in `validate_next20_repo_evidence`; public-guide check additionally needs `ffmpeg` installed.
 
