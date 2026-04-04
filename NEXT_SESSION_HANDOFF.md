@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed visual screenshot token inventories from visual proof receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-binary proof that cannot lie; executable aggregation still trusted `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` `required_screenshots` too loosely.
+  - screenshot token parsing accepted arbitrary string coercion, path-shaped tokens, and non-`.png` entries, which could mask malformed visual-proof metadata before on-disk screenshot checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `normalize_required_relative_file_list(...)`.
+    - `visual_familiarity.required_screenshots` now fail-closes on non-list shape drift, non-string items, blank tokens, duplicates, non-basename tokens (path traversal/path separators), and non-`.png` entries.
+    - emitted explicit malformed-token evidence keys for basename/suffix failures.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock the new screenshot-token strictness and helper presence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with remaining external tuple blockers only:
+    - missing required desktop install media for `windows`.
+    - missing required desktop install media for `macos`.
+    - missing required platform/head tuples `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+- Current trusted state:
+  - executable gate no longer accepts malformed screenshot inventory tokens from downstream visual receipts; malformed metadata now fails closed with explicit reasons.
+  - frontier blockers in this workspace remain publication/evidence availability for promoted Windows/macOS installer tuples, not screenshot-token normalization drift.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 recap identity projection now normalizes whitespace-padded publication and artifact ids even without creator-publication links
 
 - Trigger:
