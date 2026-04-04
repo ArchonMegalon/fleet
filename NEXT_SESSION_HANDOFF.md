@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 parity checklist now fail-closes non-canonical parity-oracle token ordering with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic legacy-familiar workbench proof, but parity-oracle arrays in `docs/PARITY_ORACLE.json` were normalized into sorted sets during checklist generation.
+  - this allowed source-order drift in oracle token inventories (tabs/actions/catalog-only controls) to pass silently as long as set membership stayed the same.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - `parse_required_token_list(...)` now fail-closes when oracle arrays are not already in canonical sorted token order.
+    - new fail-close marker:
+      - `must preserve canonical token ordering`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active negative mutation probe that swaps the first two `tabs` entries in `docs/PARITY_ORACLE.json` and requires checklist generation to fail-close.
+    - added fail-close verifier message:
+      - `verify gate failed: parity checklist generator should reject non-canonical parity oracle token ordering.`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/generate-parity-checklist.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs/actions/desktop-controls` coverage `17/17`, `47/47`, `29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected mutation fail-close lines, including new parity-oracle ordering mutation probe).
+- Commits landed:
+  - `chummer6-hub`: `5c39b225` (`fix(milestone-2): fail-close parity oracle ordering drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `5c39b225` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `hotwash` / `hot-wash` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
