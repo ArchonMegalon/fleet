@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-4/5 campaign-spine change packets now normalize whitespace-padded carry-forward and recap projection ids before packet-id projection
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return-loop and GM operations packet identity to stay on one governed lane even when upstream ids arrive with formatting drift.
+  - `CampaignSpineService.BuildWorkspaceChangePackets(...)` still projected `NextSessionCarryForward.CarryForwardId` and recap `ProjectionId` with raw strings.
+  - whitespace-padded ids could fork packet identity in campaign return and recap fallback packets, weakening packet continuity and operator audit threading.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added `ResolveChangePacketIdentity(...)` to canonicalize packet identity via trimmed ids with deterministic fallback.
+    - `next_session_carry_forward` packet id now uses normalized carry-forward identity.
+    - recap-fallback packet id now uses normalized recap projection identity before `StableId(...)` projection.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedCarryForwardPacketId`.
+    - added `CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedRecapProjectionIdsWhenAftermathIsMissing`.
+    - expanded reflection helper to pass explicit recap shelf and carry-forward fixtures into `BuildWorkspaceChangePackets(...)`.
+  - committed in `chummer.run-services`:
+    - `64591a66` — `Normalize carry-forward and recap ids in campaign packets`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedCarryForwardPacketId|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedRecapProjectionIdsWhenAftermathIsMissing|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`289` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return-loop and recap-fallback change packets now keep canonical packet ids when carry-forward/recap ids differ only by whitespace formatting.
+  - milestone-4 diary/return continuity and milestone-5 GM packet audit routing remain aligned on one normalized packet identity seam.
+- Push status:
+  - `chummer.run-services`: commit landed locally (`64591a66`); push attempted after this entry in current slice.
+  - `fleet`: pending (this handoff update is local until credentials permit push).
+
 ## 2026-04-04: milestone-2 localization release-proof domain maps now fail-close normalized key-collision drift in materializer and verifier
 
 - Trigger:
