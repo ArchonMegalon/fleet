@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-4/5 campaign return + GM ops packet synthesis now deduplicates semantically identical consequence and objective rows when projection ids drift
+
+- Trigger:
+  - frontier milestones 4 and 5 require diary/contacts/heat return packets plus GM operations packets to reflect unique governed campaign truth without count inflation when upstream projection ids rotate.
+  - `CampaignWorkspaceServerPlaneService` consequence/objective dedupe still keyed on identity ids (`ConsequenceId` / `ObjectiveId`), so semantically identical rows with new ids could double-count return, roster, event-control, opposition, and runboard signals.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - consequence and objective family call sites now use semantic dedupe in milestone-4/5 packet synthesis and summaries:
+      - `BuildCampaignWorkspaceSummary(...)`
+      - `BuildRunboardSummary(...)`
+      - `BuildOppositionPrepPacket(...)`
+      - `BuildCampaignMemoryPrepPacket(...)`
+      - `BuildCampaignReturnPrepPacket(...)`
+      - `BuildRosterMovementPrepPacket(...)`
+      - `BuildEventControlPrepPacket(...)`
+    - added semantic keying helpers:
+      - `BuildCampaignConsequenceSemanticDedupeKey(...)` (drops `ConsequenceId`, normalizes evidence/receipts)
+      - `BuildObjectiveSemanticDedupeKey(...)` (drops `ObjectiveId`)
+      - `NormalizeEvidenceLines(...)`
+      - `NormalizeConsequenceReceipts(...)`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalRelationshipConsequenceVersions_WhenProjectionIdsDiffer`.
+    - added `EventControlPacketDeduplicatesSemanticallyIdenticalConsequenceVersions_WhenProjectionIdsDiffer`.
+    - added `RosterMovementPacketDeduplicatesSemanticallyIdenticalRunPressureObjectiveVersions_WhenProjectionIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDeduplicatesSemanticallyIdenticalRelationshipConsequenceVersions_WhenProjectionIdsDiffer|FullyQualifiedName~EventControlPacketDeduplicatesSemanticallyIdenticalConsequenceVersions_WhenProjectionIdsDiffer|FullyQualifiedName~RosterMovementPacketDeduplicatesSemanticallyIdenticalRunPressureObjectiveVersions_WhenProjectionIdsDiffer" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`261` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 campaign return and runboard surfaces plus milestone-5 opposition/roster/event-control packet synthesis now resist projection-id drift inflation for consequence/objective families the same way recap lanes already do.
+  - campaign workspace + GM ops suites remain green after semantic consequence/objective dedupe expansion.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 recap-family synthesis now deduplicates semantically identical recap rows across summary and return/continuity packet lanes
 
 - Trigger:
