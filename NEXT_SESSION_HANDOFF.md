@@ -1,3 +1,46 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes on receipt freshness (`generatedAt`) to block stale-pass familiarity proof
+
+- Trigger:
+  - frontier milestone `2` requires executable visual/workflow familiarity proof to represent current flagship workbench behavior, not stale historical receipts.
+  - `scripts/audit-ui-parity.sh` already validated receipt status/schema coverage, but it did not enforce timestamp freshness; stale `pass` receipts could still satisfy Hub parity gates.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added strict `generatedAt`/`generated_at` parsing for workflow + visual receipts.
+    - added fail-close checks for stale receipts and future-skewed timestamps.
+    - freshness thresholds are now governed by receipt evidence (`proof_freshness_max_age_seconds`, `proof_freshness_max_future_skew_seconds`) with safe defaults when missing.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock freshness markers/messages and prevent silent freshness-regression.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, parity audit passed, `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 parity proof now requires fresh receipts in addition to pass status and schema completeness.
+  - stale/future receipt drift cannot silently pass the canonical Hub verify lane.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-5 GM prep asset search now keeps compact shorthand (`preplibrary`, `eventcontrol`, `rostermove`) on governed packet lanes
+
+- Trigger:
+  - frontier milestone `5` requires GM prep library, event controls, and roster movement operations to stay first-class when operators search with compact shorthand.
+  - `GmOpsBoardService.ListPrepAssets(...)` query matching depended on whitespace-preserving text; compact terms like `preplibrary`, `eventcontrol`, and `rostermove` could miss canonical packet content rendered as `prep library`, `event-control`, or `roster move`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `MatchesQueryText(...)` now builds and checks a compact alphanumeric projection of searchable prep text in addition to raw text.
+    - token matching now succeeds when either raw or compact searchable projections contain each query token.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation`.
+    - regression locks compact positive matches for `preplibrary`, `eventcontrol`, and `rostermove`, plus negative miss for `matrixlibrary`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`358` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM prep asset search now keeps compact operator shorthand aligned with governed prep/event/roster packet semantics instead of returning false-empty query results.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep-library search now matches compact `preplibrary` shorthand across normalized packet text
 
 - Trigger:
