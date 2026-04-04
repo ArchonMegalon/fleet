@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4 aftermath package semantic dedupe now ignores artifact-id drift across return and aftermath packet lanes
+
+- Trigger:
+  - frontier milestone 4 requires downtime/aftermath continuity packets to stay count-honest when projection identities rotate.
+  - `BuildAftermathRecapPackageSemanticDedupeKey(...)` still included `ArtifactId`, so semantically identical aftermath package rows with rotated artifact ids could inflate `campaign_return_packet` and `aftermath_packet` synthesis.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed `ArtifactId` from `BuildAftermathRecapPackageSemanticDedupeKey(...)`.
+    - aftermath dedupe now anchors on workspace/campaign/run scope, package kind/title/summary, evidence/provenance/audit, and generation timestamp rather than artifact identity drift.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `AftermathPacketDeduplicatesSemanticallyIdenticalPackageVersions_WhenArtifactIdsDiffer`.
+    - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenArtifactIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketDeduplicatesSemanticallyIdenticalPackageVersions_WhenArtifactIdsDiffer|FullyQualifiedName~CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenArtifactIdsDiffer" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`273` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 campaign-return and aftermath packet synthesis now resist artifact-id drift inflation for aftermath recap package families.
+  - campaign workspace and GM ops suites remain green after adjacent semantic-key hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 recap semantic dedupe now ignores artifact/publication id drift so return-loop and workspace summary counts stay count-honest
 
 - Trigger:
