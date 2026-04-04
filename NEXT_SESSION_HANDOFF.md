@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 parity checklist now fail-closes the complete legacy workspace-action and desktop-control token set from parity oracle
+
+- Trigger:
+  - after hardening dense workbench baselines, milestone-2 still permitted action/control drift for several legacy tokens present in `docs/PARITY_ORACLE.json` but not in required fail-close baseline sets.
+  - this left a seam where parity could remain green while dropping high-friction legacy anchors like location-detail actions and skill/combat mutation controls.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - expanded required milestone-2 workspace action baseline with the remaining oracle action tokens:
+      - `armorlocations`, `attributedetails`, `customdatadirectorynames`, `gearlocations`, `limitmodifiers`, `movement`, `vehiclelocations`, `weaponlocations`.
+    - expanded required milestone-2 desktop control baseline with the remaining oracle desktop control tokens:
+      - `combat_damage_track`, `combat_reload`, `contact_connection`, `gear_delete`, `gear_source`, `move_down`, `move_up`, `skill_add`, `skill_group`, `skill_remove`, `skill_specialize`, `toggle_free_paid`.
+    - milestone-2 baseline now fail-closes against the full legacy oracle action/control set (`47/47` actions and `29/29` desktop controls).
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityChecklistMilestone2BaselineTests.cs`:
+    - script-lock assertions now require all newly promoted action/control markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs/actions/desktop-controls` coverage `17/17`, `47/47`, `29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistMilestone2BaselineTests|FullyQualifiedName~VerificationEntryPointTests.ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `bec44c91` (`fix(milestone-2): require full legacy action and control baselines`).
+- Push attempts:
+  - pending below in this slice.
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes dense legacy workbench tab/action/dialog-control baselines (combat/info shell + summary/inventory/validation + dialog factory mutations)
 
 - Trigger:
