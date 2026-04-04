@@ -20,6 +20,30 @@
   - `chummer6-hub` (repo root maps to `/docker/chummercomplete/chummer.run-services` in this workspace): local changes pending commit/push in this environment (`scripts/audit-ui-parity.sh`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 GM unresolved triage now classifies season-schedule pressure as event-control domain signals
+
+- Trigger:
+  - frontier milestone `5` requires event and season operations to remain first-class in GM unresolved triage, not lost to `general` just because operators phrase pressure as schedule/calendar work.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` recognized explicit event-control tokens (`event control`, `season`, `checkpoint`, `prep launch`, `travel prefetch`) but missed common scheduling variants.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added guarded schedule/calendar event-control detection:
+      - schedule terms: `schedule`, `schedules`, `scheduled`, `calendar`, `calendars`
+      - required context terms: `event`, `season`, `operation(s)`, `checkpoint`, `prep`, `travel`, `window`
+    - unresolved rows now classify season-schedule operator pressure as `event_control` without blindly promoting generic scheduling text.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatSeasonScheduleSignalsAsEventControlDomain`.
+    - test locks ordering so season-schedule unresolved rows stay ahead of newer `general` unresolved noise within the same severity tier.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`20` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`344` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM unresolved triage no longer depends on literal `event control` wording to keep season scheduling blockers in the governed event-control lane.
+  - milestone-5 operator queue ordering remains severity-first, then domain-priority, then recency.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: hub public chrome no longer self-loops sign-in routing on auth pages while keeping downloads provider handoff intact
 
 - Trigger:
