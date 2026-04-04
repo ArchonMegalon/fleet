@@ -82,6 +82,37 @@
   - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 workflow receipt enforcement now requires the full family set (creation through recovery), not a subset
+
+- Trigger:
+  - milestone `2` proof requires workflow familiarity across the full flagship journey surface, including creation, advancement, dense workbench rhythm, explain, import/export lifecycle, and recovery lanes.
+  - prior parity hardening enforced key families but still allowed a reduced family inventory to pass if only a subset was present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - expanded required `evidence.required_workflow_family_ids` enforcement to the full expected family set:
+      - `metatype-priorities-karma-entry`
+      - `attributes-skills-skill-groups-specializations-knowledge-languages`
+      - `create-open-import-save-save-as-print-export`
+      - `dense-workbench-affordances-search-add-edit-remove-preview-drill-in-compare`
+      - `improvements-explain-result-parity`
+      - `qualities-contacts-identities-notes-calendar-expenses-lifestyles-sources`
+      - `cyberware-bioware-modular-hierarchies-nested-plugins`
+      - `armor-weapons-gear-vehicles-drones-mods-custom-items-locations-containers`
+      - `magic-adept-resonance-sprites-spells-rituals-spirits-powers-metamagics-echoes-complex-forms`
+      - `recovery-reload-migration-roundtrips`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded parity script regression assertions to lock the new full-family markers (`metatype-priorities-karma-entry`, `recovery-reload-migration-roundtrips`).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, parity audit passed in-path, `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 workflow proof cannot pass with only partial workflow-family coverage in executable receipts.
+  - hub verify now enforces full-family workflow receipt posture plus visual familiarity interaction coverage.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff update local commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes on receipt schema and required surface coverage (not status-only receipts)
 
 - Trigger:
