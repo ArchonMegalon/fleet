@@ -41527,3 +41527,13 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 external-proof channel identity contract slice
+
+- Commits landed:
+  - `fleet`: `f3ee23c` (`feat(w1-1-3): fail-close external-proof channel contract in support and journey gates`).
+  - `fleet`: `2e09ab7` (`docs(handoff): record w1 external-proof channel identity contract slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
