@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for duplicate-normalized `releaseProof.proofRoutes`
+
+- Trigger:
+  - parity audit rejects duplicate canonical routes in `releaseProof.proofRoutes` after lowercase/trailing-slash normalization, but Hub verify mutation coverage still did not exercise that branch.
+  - this left duplicate-route fail-close behavior unproven in Hub’s end-to-end verify entrypoint.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.proofRoutes=["/home/access", "/home/access/"]` and asserted `audit-ui-parity.sh` fails.
+    - preserved release-channel receipt restore before continuing smoke.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertion for duplicate-normalized route mutation, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now proves duplicate-normalized route rejection in the same mutation lane as the other release-proof route grammar fail-close checks.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 live audits now fail-close singular compact `leagueoperation` and `communityoperation` aliases across prep-library API and signed-in workspace prep journeys
 
 - Trigger:
