@@ -1,3 +1,21 @@
+## 2026-04-04: milestone-2 Hub verify now fail-closes `uiLocalizationReleaseGate.blockingFindings` count/list drift
+
+- Trigger:
+  - parity audit enforces `releaseProof.uiLocalizationReleaseGate.blockingFindingsCount` and `blockingFindings` consistency (`length == count`, and count must stay `0`).
+  - verify mutation coverage did not execute that branch, leaving a regression seam in milestone-2 localization release-proof guardrails.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation that sets `blockingFindingsCount = 1` and `blockingFindings = []`.
+    - assert parity-audit rejection marker: `reject releaseProof.uiLocalizationReleaseGate.blockingFindings length/count mismatches`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (new blocking-findings mutation executes and fail-closes as expected).
+- Current trusted state:
+  - milestone-2 verify now script-locks non-zero/mismatched localization blocking findings so malformed release-proof payloads cannot pass parity audit silently.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: follow-up on `debriefing` continuity lock commit and push status
 
 - Commits landed:
