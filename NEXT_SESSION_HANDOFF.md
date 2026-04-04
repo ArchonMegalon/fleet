@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-4/5 campaign and GM packet synthesis now deduplicates semantically identical change-packet rows when packet ids drift
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign return, continuity, event-control, and allied prep packets to reflect unique governed signal truth even when projection packet ids rotate.
+  - change-packet dedupe still keyed on `PacketId`, so semantically identical rows with drifted ids could inflate packet counts and evidence selection across return and GM operations lanes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - switched change-packet synthesis call sites to semantic dedupe (`DeduplicateSemanticChangePacketVersions(...)`) for:
+      - `BuildOppositionPrepPacket(...)`
+      - `BuildContinuityPrepPacket(...)`
+      - `BuildCampaignMemoryPrepPacket(...)`
+      - `BuildCampaignReturnPrepPacket(...)`
+      - `BuildRosterMovementPrepPacket(...)`
+      - `BuildAftermathPrepPacket(...)`
+      - `BuildPrepLaunchPrepPacket(...)`
+      - `BuildEventControlPrepPacket(...)`
+      - `BuildTravelPrefetchPrepPacket(...)`
+    - semantic change-packet key now excludes `PacketId` and anchors on `Kind`, `Label`, `Summary`, and `UpdatedAtUtc`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalSignalVersions_WhenProjectionIdsDiffer`.
+    - added `EventControlPacketDeduplicatesSemanticallyIdenticalSignalVersions_WhenProjectionIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDeduplicatesSemanticallyIdenticalSignalVersions_WhenProjectionIdsDiffer|FullyQualifiedName~EventControlPacketDeduplicatesSemanticallyIdenticalSignalVersions_WhenProjectionIdsDiffer" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`263` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 return/continuity lanes and milestone-5 event-control/opposition/roster-adjacent lanes now resist packet-id drift inflation for change-packet families.
+  - campaign workspace and GM ops suites remain green after semantic change-packet dedupe expansion.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing flagship acceptance-gate families beyond minimal locale-smoke markers
 
 - Trigger:
