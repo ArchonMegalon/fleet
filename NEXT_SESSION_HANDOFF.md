@@ -25359,3 +25359,36 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push status:
   - `chummer.run-services`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-5 roster movement lane now fail-closes compact `crewmove` across workspace prep search and GM ops triage
+
+- Trigger:
+  - after landing `crewtransfer` coverage, compact `crewmove` remained an adjacent shorthand gap for the same governed roster-movement lane in milestone `5`.
+  - without explicit alias and audit coverage, operators using compact `crewmove` could drift out of roster-domain triage/search checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `crewmove` to roster compact token detection.
+    - added prep-library alias rewrite `crewmove -> rostermove`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added prep-asset query alias rewrite `crewmove -> rostermove`.
+    - added `crewmove` to roster-movement domain keyword routing.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API and workspace-route checks for `queryText=crewmove` and `prepQuery=crewmove`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for `?prepQuery=crewmove` with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended compact shorthand matching regression to include `crewmove`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added unresolved-domain regression for `crewmove`.
+    - added compact prep-asset query regression for `queryText=crewmove`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock `crewmove` markers across live audit and Playwright scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`394` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact roster shorthand now fail-closes both `crewtransfer` and `crewmove` across campaign prep retrieval, GM unresolved routing, and signed-in live journey evidence.
+- Push status:
+  - `chummer.run-services`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
