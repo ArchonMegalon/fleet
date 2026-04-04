@@ -1,3 +1,54 @@
+## 2026-04-04: milestone-15 utility parity is now release-gated
+
+- Trigger:
+  - the desktop utility/operator slice had landed in source, but the golden-journey gate was still only checking that `dice_roller` and `character_roster` existed.
+  - that was too soft for no-step-back parity because the release proof could still pass after regressing back to placeholder fields.
+- Landed:
+  - tightened both gate copies:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - the utility/operator block now requires:
+    - richer `DesktopDialogFactory` fields:
+      - `diceThreshold`
+      - `diceUtilityLane`
+      - `initiativePreview`
+      - `rosterOpenCount`
+      - `rosterOpsLane`
+      - `rosterEntries`
+    - `DialogCoordinator` initiative-preview handling via `derive_initiative`
+    - shell-catalog wiring for `Utility Tooling`
+    - focused presentation tests that prove dice/initiative and roster behavior
+- Verification:
+  - both gate YAML files parse cleanly after the expansion.
+
+## 2026-04-04: milestone-4/5/6 mobile workspace-lite now carries first-class GM operations lane cues beside continuity and offline truth
+
+- Trigger:
+  - W3 continuity surfaces already exposed downtime/diary/contacts/heat/aftermath/return plus offline-truth posture, but mobile workspace-lite still lacked an explicit GM operations lane for opposition packets, roster movement, prep library, and event controls.
+  - this made campaign workspace v4 feel split between continuity copy and GM/operator intent instead of one governed mobile return surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs`:
+    - added `GmOperationsSummary` and `GmOperationsLabels` to `PlayCampaignWorkspaceLiteProjection`.
+    - added `BuildGmOperationsSummary(...)` and `BuildGmOperationsLabels(...)` to project opposition/roster-movement/prep-library/event-controls/governance cues from existing workspace-lite runtime state.
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html`:
+    - added `workspace-gm-ops` and `workspace-gm-ops-list` surface elements.
+    - bound both fields in `renderWorkspace(...)` so the GM lane renders beside continuity rail and offline-truth cues on the same shell.
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - `VerifyCampaignWorkspaceLiteProjectionPromotesContinuitySummary` now fail-closes on GM lane summary + labels.
+    - `VerifyIndexShellAccessibilityContractAsync` now requires GM lane DOM ids.
+    - `VerifyIndexShellBindsContextualActionLabelsAsync` now requires GM lane binding lines.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj` -> FAIL (environment package feed not bootstrapped: missing `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, and `Chummer.Ui.Kit` from configured sources).
+  - targeted grep consistency pass:
+    - `cd /docker/chummercomplete/chummer6-mobile && rg -n "GmOperationsSummary|GmOperationsLabels|workspace-gm-ops" ...` -> PASS (projection fields, shell ids, bindings, and regression assertions align).
+- Commits landed:
+  - `chummer6-mobile`: `bf9c367` (`feat(w3-4-5-6): expose gm operations lane in mobile workspace-lite`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+  - local mobile regression execution is additionally blocked by unavailable internal package feeds in this shell session.
+
 ## 2026-04-04: milestone-15 desktop utility lane now exposes first-class dice, initiative preview, and roster operator context
 
 - Trigger:
