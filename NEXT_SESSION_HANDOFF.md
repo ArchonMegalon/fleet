@@ -1,3 +1,42 @@
+## 2026-04-04: milestone-1/3 desktop proof recovery reran UI gate receipts and restored external-only install blocker truth
+
+- Trigger:
+  - frontier milestone `1` + `3` proof lane regressed from external-only blocker posture because install journey started carrying a local blocker from stale UI aggregate executable gate evidence.
+  - `install_claim_restore_continue` must fail honest with only external host-proof gaps while Windows/macOS native-host receipts are still missing.
+- Landed:
+  - reran `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`:
+    - refreshed `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json`.
+  - reran `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - refreshed aggregate and per-platform packaged-binary gate receipts:
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_BLAZOR_DESKTOP_WIN_X64_DESKTOP_EXIT_GATE.generated.json`
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+      - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_BLAZOR_DESKTOP_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - aggregate gate now reports `blocked_by_external_constraints_only: true`, `local_blocking_findings_count: 0`.
+  - reran `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - refreshed `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+    - `install_claim_restore_continue` is again `blocked_by_external_constraints_only: true` with no local blocking reasons.
+  - reran `/docker/fleet/scripts/chummer_design_supervisor.py derive ... --frontier-id 3194227093 ...`:
+    - refreshed completion-review frontier mirrors:
+      - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+      - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+    - shard frontier remains review-required only on external Windows/macOS tuple proof requests.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS (`UI_LINUX_DESKTOP_EXIT_GATE.generated.json` regenerated, startup smoke + install verification passed).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> EXPECTED FAIL (`exit 43`) with only Windows/macOS external host-proof reasons.
+  - `jq '{status,blocked_by_external_constraints_only,local_blocking_findings_count,external_blocking_findings_count}' /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` -> PASS (`status=fail`, `blocked_by_external_constraints_only=true`, `local_blocking_findings_count=0`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,blocked_by_external_constraints_only,local_blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state=blocked`, `blocked_by_external_constraints_only=true`, `local_blocking_reasons=[]`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer-presentation/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer-presentation` -> PASS.
+- Exact blocker:
+  - promoted installer artifact + startup-smoke receipt capture is still missing on native macOS and Windows hosts for required tuples:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+  - environment still cannot run native macOS/Windows startup-smoke capture from this Linux host.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-6 plural stale-cache continuity slice
 
 - Commits landed:
