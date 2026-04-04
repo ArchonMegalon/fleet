@@ -35,6 +35,10 @@
     - requires non-zero exit from `scripts/materialize_public_release_channel.py`.
     - requires explicit fail-close marker assertion:
       - `generated_at alias values drift between generatedAt and generated_at`
+    - added materializer mutation coverage for conflicting nested/top-level signoff status drift:
+      - `signoff_smoke_runner.status` vs `signoff_smoke_runner_status`
+    - requires explicit fail-close marker assertion:
+      - `signoff_smoke_runner status values drift between signoff_smoke_runner.status and signoff_smoke_runner_status`
   - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
     - added `generatedAt`/`generated_at` to the documented malformed localization-gate alias-drift examples under the materializer fail-close contract.
 - Verification:
