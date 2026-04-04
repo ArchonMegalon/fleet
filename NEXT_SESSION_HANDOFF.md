@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-2 localization release-proof domain maps now fail-close normalized key-collision drift in materializer and verifier
+
+- Trigger:
+  - frontier milestone `2` localization proof strictness still had a key-collision seam: `domainCoverage` and `localeDomainCoverage` accepted whitespace/case-variant aliases of the same token and silently overwrote normalized entries.
+  - this could hide malformed source payloads and allow release-proof domain-map drift to appear valid after normalization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `normalize_ui_localization_release_gate_payload(...)` now fail-closes duplicate normalized ids in `domain_coverage`.
+    - `locale_domain_coverage` now fail-closes duplicate normalized locale ids and duplicate normalized domain ids per locale.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now fail-closes duplicate normalized locale ids in `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage`.
+    - verifier now fail-closes duplicate normalized domain ids inside each locale-domain row.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regressions proving verifier rejects duplicate normalized ids in `domainCoverage` and locale-domain rows.
+    - added negative regression proving materializer rejects duplicate normalized locale ids in `locale_domain_coverage` source payloads.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented fail-close behavior for normalization-collision duplicates in `domain_coverage` / `locale_domain_coverage`.
+  - committed and pushed in `chummer-hub-registry`:
+    - `762bc0d` — `Fail-close normalized localization domain key collisions`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new normalization-collision negative regressions).
+- Current trusted state:
+  - milestone-2 localization release-proof checks now reject normalized key-collision drift in both source materialization and release-channel verification paths.
+  - domain-map proof cannot silently normalize whitespace/case alias collisions into seemingly-valid shelf truth.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `762bc0d`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 desktop executable gate now fail-closes malformed desktopTupleCoverage token metadata
 
 - Trigger:
@@ -11,17 +40,19 @@
       - `normalize_required_tuple_list(...)`
       - `normalize_promoted_platform_heads(...)`.
     - `desktopTupleCoverage` token fields now fail-close on non-list/non-object shape drift, non-string items, blank tokens, duplicate tokens, blank platform keys, and malformed tuple token shape.
+    - added platform-allowlist validation so unsupported `promotedPlatformHeads` keys and unsupported platform tokens in `*PlatformHeadRidTuples` are treated as malformed release metadata.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
     - added compliance guards proving strict token/tuple normalization and fail-close reason-text coverage remain present in the executable gate script.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
   - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_RELEASE_CHANNEL_PATH=<temp malformed release-channel fixture> CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected with explicit malformed token reasons (blank/duplicate/malformed tuple entries).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_RELEASE_CHANNEL_PATH=<temp unsupported-platform fixture> CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected with explicit unsupported-platform and malformed tuple-platform reasons.
 - Current trusted state:
   - desktop executable gate no longer silently dedupes or drops malformed tuple metadata before evaluating promoted platform/head/rid coverage.
   - release-channel `desktopTupleCoverage` shape drift is now surfaced as explicit fail-close evidence.
 - Push status:
-  - `chummer6-ui`: pending (commit staged locally in this environment).
+  - `chummer6-ui`: commits landed locally (`838660a1`, `ccc51199`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `fleet`: pending (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-4/5 campaign-spine aftermath package identity now normalizes whitespace-padded package ids across memory and change-packet routing
