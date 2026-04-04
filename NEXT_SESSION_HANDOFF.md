@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-8/9 creator publication packets now preserve Build Lab rule-environment diffs and grounded decision rails
+
+- Trigger:
+  - frontier milestones `8` and `9` require explain receipts and rule-environment diffs to remain explicit on real publication decisions, not only inside Build Lab handoff APIs.
+  - `chummer6-media-factory` creator packet planning already preserved portability-pillar lines but still dropped explicit Build Lab rule-environment diff, source-hint, conditional-state, build-surface, exchange-parity, and crew-fit evidence.
+- Landed:
+  - patched `/docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs`:
+    - when a Build Lab handoff is attached, creator packet evidence now includes explicit rails for:
+      - crew-fit summary,
+      - conditional-state summary + lines,
+      - source-linked hint summary + lines,
+      - rule-environment diff summary plus before/after scope+fingerprint receipts,
+      - build-surface summary + lines,
+      - exchange-parity summary + lines,
+      - existing portability-pillar summary + lines remain intact.
+  - patched `/docker/fleet/repos/chummer-media-factory/Chummer.Media.Factory.Runtime.Verify/Program.cs`:
+    - expanded Build Lab fixture with `RuleEnvironmentDiff`, `CrewFitSummary`, `ConditionalState*`, `SourceHint*`, `BuildSurface*`, and `ExchangeParity*` payloads.
+    - added fail-close assertions proving creator packet evidence preserves each of those rails.
+- Verification:
+  - `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj -c Release` -> PASS (`Media factory runtime verification passed.`).
+- Commits landed:
+  - `chummer6-media-factory`: `5b5e4f7` (`feat(w4-8-9): keep build-lab rule-diff receipts in creator packet evidence`).
+- Push attempts:
+  - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `6c8d1a7..5b5e4f7`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: follow-up push status for W1 release-channel contract-identity closure
 
 - Commits landed:
