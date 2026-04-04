@@ -241,9 +241,19 @@ journey_gates:
           must_contain:
             - chummer.portable-dossier.v1
             - chummer.portable-campaign.v1
+            - chummer.portable-campaign-session.v1
             - foundry-vtt.scene-ledger.v1
             - ReceiptSummary
             - nextSafeAction
+            - session-binding-inferred
+            - session continuity binding
+        - repo: chummer6-hub
+          path: Chummer.Tests/InteropExportServiceTests.cs
+          must_contain:
+            - Export_campaign_scope_infers_session_binding_from_session_assets
+            - Export_character_only_campaign_scope_keeps_unpinned_session_warning
+            - session-binding-inferred
+            - session-binding-required-for-replace
         - repo: chummer6-media-factory
           path: src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs
           must_contain:
