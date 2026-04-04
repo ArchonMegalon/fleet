@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests the remaining desktopTupleCoverage missing-key, string-list, and object-row shape fail-close guards
+
+- Trigger:
+  - W1 milestones `1` and `3` require release-channel tuple-coverage proof to fail honest on every guard branch, not only inventory-drift paths.
+  - after prior tuple-coverage hardening, several verifier fail-close seams in `scripts/verify_public_release_channel.py` still had no active mutation in `scripts/ai/verify.sh`:
+    - missing required coverage key
+    - non-list shapes for `requiredDesktopPlatforms`, `requiredDesktopHeads`, `requiredDesktopPlatformHeadRidTuples`, `promotedPlatformHeadRidTuples`, `missingRequiredPlatformHeadPairs`, and `missingRequiredPlatformHeadRidTuples`
+    - non-object rows in `promotedInstallerTuples`
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` with new negative mutations and explicit marker assertions for all remaining branches above.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close markers for all newly added shape/missing-key/object-row mutations).
+- Commits landed:
+  - `chummer-hub-registry`: `bde7cf2` (`test(w1): mutate remaining desktop tuple coverage shape guards`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `14ada32..bde7cf2`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 fleet status lane now preserves shard-local frontier/open-milestone truth on shard-root status and manifest-aware live refresh
 
 - Trigger:
