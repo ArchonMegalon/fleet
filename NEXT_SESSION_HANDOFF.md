@@ -210,6 +210,28 @@
 - Exact blocker:
   - none for this landed canon sync slice; push remains blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-5 decision notices now raise explicit GM-operations follow-through when readiness is not governed
+
+- Trigger:
+  - campaign workspace now computes GM-operations readiness cues, but decision-notice routing still omitted that posture.
+  - operators could miss partial/missing GM lanes unless they manually inspected prep sections.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildDecisionNotices(...)` now receives `GmOperationsReadinessSummary`.
+    - non-governed GM posture now emits a `gm_operations_readiness` decision notice with lane-follow-through summary and direct workspace anchor (`#prep-launches`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `DecisionNoticesIncludeGmOperationsNoticeWhenReadinessIsNotGoverned`.
+    - added `DecisionNoticesSkipGmOperationsNoticeWhenReadinessIsGoverned`.
+    - updated decision-notice reflection helper to pass/read GM readiness projection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.GmOperationsReadiness|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeGmOperationsNoticeWhenReadinessIsNotGoverned|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesSkipGmOperationsNoticeWhenReadinessIsGoverned" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`4` tests).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `f09d2cb9` (`feat(w3-5): add gm-ops decision notice when readiness is not governed`).
+- Push attempts:
+  - not attempted yet for this increment.
+- Exact blocker:
+  - no product blocker for this slice; concurrent workspace still requires `StaticWebAssetsEnabled=false` for reliable targeted test runs.
+
 ## 2026-04-04: milestone-5 campaign workspace now exposes explicit GM-operations readiness cues for opposition, roster movement, prep, and event controls
 
 - Trigger:
