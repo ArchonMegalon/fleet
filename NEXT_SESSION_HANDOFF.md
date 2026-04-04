@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 continuity-return cues are now first-class unresolved signals in GM ops board prioritization
+
+- Trigger:
+  - W3 campaign continuity canon requires diary/contacts/heat/downtime/aftermath/return to behave like one governed lane, but GM unresolved ranking still treated many continuity-return cues as generic backlog text.
+  - this made pending carry-forward and return-loop continuity risk easier to bury beneath newer generic unresolved notes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `LooksUnresolved(...)` now also recognizes continuity-risk phrasing (`pending`, `carry-forward`, `return lane`, `return loop`) in addition to open/unresolved/todo/threat/heat.
+    - `ResolveGmOpsDomain(...)` now classifies campaign continuity-return cues (`diary`, `contacts/connection/relationship`, `downtime`, `aftermath`, `return lane/loop`, `carry-forward`) into a dedicated `continuity_return` domain when tied to campaign/session return semantics.
+    - `ResolveGmOpsDomainPriority(...)` now includes `continuity_return` at governed-lane priority so these cues outrank generic unresolved notes.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatDiaryContactsDowntimeReturnSignalsAsContinuityReturnDomain`.
+    - added `GetProjection_UnresolvedItemsTreatCarryForwardReturnSignalsAsContinuityReturnDomain`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`57 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`453 passed` on both target frameworks).
+- Commits landed:
+  - none yet (repo contains heavy concurrent edits in the same files; this slice is currently carried as working-tree deltas pending safe isolation/commit split).
+- Push attempts:
+  - none (no new isolated commit created yet for this slice).
+- Exact blocker:
+  - overlapping pre-existing edits in the same files (`GmOpsBoardService.cs`, `GmOpsBoardServiceTests.cs`) make non-interactive, safe, isolated commit slicing non-trivial without risking inclusion of unrelated concurrent changes.
+
+
 ## 2026-04-04: milestone-2/3 ui-kit now emits local release proof and Fleet promotes shared-surface boundary stage from that proof
 
 - Trigger:
