@@ -58,9 +58,10 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer.run-services`: `638b3cc1` (`fix(w3): fail-close outbriefed recap shorthand across continuity and gm ops`).
-  - `fleet`: pending in this slice.
+  - `fleet`: `a3c9952` (`docs(handoff): record w3 outbriefed continuity and gm ops fail-close`).
 - Push attempts:
-  - pending in this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
