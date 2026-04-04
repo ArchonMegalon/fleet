@@ -38890,3 +38890,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - pending.
 - Exact blocker:
   - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
+## 2026-04-04: handoff follow-up push status for extended compact continuity mutation alias matrix
+
+- Commits landed:
+  - `chummer6-hub`: `9c341a1e` (`test(w3-4-6): extend compact mutation alias live-audit matrix`).
+  - `fleet`: `17bdd14` (`docs(handoff): record extended compact mutation alias matrix`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
