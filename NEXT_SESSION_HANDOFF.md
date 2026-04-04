@@ -18,8 +18,10 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_chummer_release_registry_projection.py` -> PASS (`5 passed`).
   - `cd /docker/fleet && python3 -m py_compile scripts/materialize_chummer_release_registry_projection.py tests/test_materialize_chummer_release_registry_projection.py` -> PASS.
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (frontier still blocked only on required external host tuple proof capture).
+- Commits landed:
+  - `fleet`: `d18e0cb` (`fix(w1-1-3): reject future-dated startup-smoke receipts in release projection`).
 - Push attempts:
-  - not attempted in this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - missing native-host promoted installer artifact + startup-smoke receipts for required release-channel tuples:
     - `avalonia:osx-arm64:macos`
