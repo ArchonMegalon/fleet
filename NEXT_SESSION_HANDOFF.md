@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable+complete channels that keep non-promoted rollout posture
+
+- Trigger:
+  - frontier milestones `1` and `3` require publishable desktop release truth to stay aligned with promoted rollout posture once required platform/head/rid installer coverage is complete.
+  - executable gate already blocked `paused/revoked/unpublished/coverage_incomplete` conflicts in that state, but still allowed other non-promoted rollout tokens (for example `local_docker_preview`) to pass as publishable+complete.
+  - this left a drift seam where release truth could claim publishable completeness while rollout posture still read as local preview instead of promoted rollout.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added evidence keys `release_channel_rollout_state_allowed_for_publishable_complete_values` and `release_channel_rollout_state_invalid_for_publishable_complete`.
+    - gate now fail-closes when `status` is publishable, tuple coverage is complete, and `rolloutState` is not one of `promoted_preview`, `release_candidate`, or `public_stable`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded marker assertions for the new publishable+complete rollout allowlist evidence and fail-close reason text.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded migration/compliance marker assertions for the same publishable+complete rollout allowlist guardrail.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable proof now rejects publishable+complete release channels that advertise non-promoted rollout posture, keeping status, tuple completeness, and rollout semantics aligned.
+- Push status:
+  - `chummer6-ui`: committed (`8d7cd1b8`); push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes unrecognized registry rollout/supportability state tokens for desktop install media
 
 - Trigger:
