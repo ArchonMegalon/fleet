@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-5 GM ops board now fail-closes compact `gmops` and `gmop` aliases across prep-asset search tokenization and unresolved-domain triage
+
+- Trigger:
+  - frontier milestone `5` requires GM operations, event controls, and prep-library surfaces to behave as one governed lane.
+  - after wiring `gmops|gmop` into campaign workspace prep retrieval audits, `GmOpsBoardService` still lacked compact alias normalization and unresolved-domain keyword coverage for those same terms.
+  - this left a drift path where GM board search/triage could diverge from campaign workspace retrieval semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - prep-asset query tokenization now rewrites `gmops|gmop` to `eventcontrol + season + operation`.
+    - unresolved-domain classifier now treats `gmops|gmop` as `event_control` lane signals.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded compact shorthand query test to assert `gmops` and `gmop` match event-control prep assets.
+    - added `GetProjection_UnresolvedItemsTreatGmOpsShorthandAsEventControlDomain` to lock unresolved-event ordering against general checklist noise.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatEventCtrlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGmOpsShorthandAsEventControlDomain" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 compact GM-ops shorthand is now aligned across campaign workspace prep retrieval, GM prep-asset search tokenization, and GM unresolved-domain triage.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 GM operations prep retrieval now fail-closes compact `gmops` and `gmop` aliases across packet query normalization, API audit, and workspace route journeys
 
 - Trigger:
