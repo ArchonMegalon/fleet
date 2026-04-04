@@ -380,6 +380,29 @@ FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS = (
     "horizons_and_public_surface",
     "fleet_and_operator_loop",
 )
+FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE = {
+    "desktop_client": "desktop_client_flagship",
+    "rules_engine_and_import": "rules_engine_parity",
+    "hub_and_registry": "hub_and_registry_flagship",
+    "mobile_play_shell": "mobile_play_shell_flagship",
+    "ui_kit_and_flagship_polish": "ui_kit_flagship_polish",
+    "media_artifacts": "media_and_artifacts_flagship",
+    "horizons_and_public_surface": "horizons_and_public_surface",
+    "fleet_and_operator_loop": "fleet_and_operator_flagship",
+}
+PARITY_FULL_PRODUCT_OWNER_OVERRIDES: Dict[str, Sequence[str]] = {
+    "shell_workbench_orientation": ("chummer6-ui", "chummer6-design"),
+    "dense_builder_and_career_workflows": ("chummer6-ui", "chummer6-core", "chummer6-design"),
+    "identity_contacts_lifestyles_history": ("chummer6-ui", "chummer6-hub", "chummer6-design"),
+    "sourcebooks_reference_and_master_index": ("chummer6-ui", "chummer6-core", "chummer6-design"),
+    "settings_and_rules_environment_authoring": ("chummer6-ui", "chummer6-core", "chummer6-design"),
+    "custom_data_xml_and_translator_bridge": ("chummer6-ui", "chummer6-core", "chummer6-design"),
+    "dice_initiative_and_table_utilities": ("chummer6-ui", "chummer6-design"),
+    "roster_dashboards_and_multi_character_ops": ("chummer6-ui", "chummer6-hub", "chummer6-design"),
+    "sheet_export_print_viewer_and_exchange": ("chummer6-ui", "chummer6-core", "chummer6-design"),
+    "legacy_and_adjacent_import_oracles": ("chummer6-core", "chummer6-ui", "chummer6-design"),
+    "sr6_supplements_designers_and_house_rules": ("chummer6-ui", "chummer6-core", "chummer6-design"),
+}
 FULL_PRODUCT_FRONTIER_SPECS: Sequence[Dict[str, Any]] = (
     {
         "key": "desktop_client_flagship",
@@ -556,6 +579,45 @@ def _runtime_env_default(name: str, default: str = "") -> str:
     return default
 
 
+def _runtime_env_workspace_candidates(workspace_root: Path) -> tuple[Path, ...]:
+    root = Path(workspace_root).resolve()
+    return (
+        root / "runtime.env",
+        root / "runtime.ea.env",
+        root / ".env",
+    )
+
+
+def _runtime_env_default_with_workspace(
+    name: str,
+    workspace_root: Path,
+    default: str = "",
+) -> str:
+    direct = str(os.environ.get(name, "") or "").strip()
+    if direct:
+        return direct
+    for candidate in _runtime_env_workspace_candidates(workspace_root):
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            lines = candidate.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            key, value = line.split("=", 1)
+            if key.strip() != name:
+                continue
+            resolved = value.strip().strip("'").strip('"')
+            if resolved:
+                return resolved
+    return default
+
+
 DEFAULT_WORKER_TIMEOUT_SECONDS = _default_worker_timeout_seconds()
 
 
@@ -673,6 +735,13 @@ def parse_args() -> argparse.Namespace:
             help=(
                 "Path to the UI repo root whose tracked git state must match the Linux desktop exit-gate proof "
                 f"(default: {DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT})."
+            ),
+        )
+        subparser.add_argument(
+            "--ignore-nonlinux-desktop-host-proof-blockers",
+            action="store_true",
+            help=(
+                "Ignore desktop proof blockers tied to Windows and macOS external-host or tuple expectations; still require Linux proof."
             ),
         )
         subparser.add_argument(
@@ -1329,10 +1398,10 @@ def _milestone_status_rank(status: str) -> int:
     return 5
 
 
-def _parse_frontier_ids_from_handoff_with_source(text: str) -> tuple[List[int], bool]:
+def _parse_frontier_ids_from_handoff_with_source(text: str) -> tuple[List[int], bool, bool]:
     source_lines = [str(item or "") for item in str(text or "").splitlines()]
     if not source_lines:
-        return [], False
+        return [], False, False
 
     def _line_ids(raw: str) -> List[int]:
         rows: List[int] = []
@@ -1352,12 +1421,28 @@ def _parse_frontier_ids_from_handoff_with_source(text: str) -> tuple[List[int], 
         "current active frontier from design plus handoff",
         "frontier milestone ids",
     )
+    priority_markers = (
+        "frontier milestone ids to prioritize first",
+        "recovery frontier ids to verify or reopen first",
+        "flagship frontier ids to prioritize first",
+    )
+
+    def _marker_starts(raw: str, markers: Sequence[str]) -> bool:
+        lowered = raw.strip().lower()
+        return any(lowered.startswith(marker) for marker in markers)
+
+    selected: Optional[tuple[List[int], bool]] = None
     for index, raw in enumerate(source_lines):
         lowered = raw.lower()
-        if any(marker in lowered for marker in explicit_markers):
+        if _marker_starts(raw, explicit_markers):
             ids = _line_ids(raw)
             if ids:
-                return ids, True
+                is_priority = _marker_starts(raw, priority_markers)
+                if selected is None:
+                    selected = (ids, is_priority)
+                elif is_priority and not selected[1]:
+                    selected = (ids, is_priority)
+                continue
             # Some handoff entries render the frontier as a marker line followed by list rows.
             block_ids: List[int] = []
             for follow in source_lines[index + 1 :]:
@@ -1379,7 +1464,14 @@ def _parse_frontier_ids_from_handoff_with_source(text: str) -> tuple[List[int], 
                 if block_ids:
                     break
             if block_ids:
-                return block_ids, True
+                is_priority = _marker_starts(raw, priority_markers)
+                if selected is None:
+                    selected = (block_ids, is_priority)
+                elif is_priority and not selected[1]:
+                    selected = (block_ids, is_priority)
+                continue
+    if selected is not None:
+        return selected[0], True, selected[1]
 
     for raw in source_lines:
         lowered = raw.lower()
@@ -1387,12 +1479,12 @@ def _parse_frontier_ids_from_handoff_with_source(text: str) -> tuple[List[int], 
             continue
         ids = _line_ids(raw)
         if ids:
-            return ids, False
-    return [], False
+            return ids, False, False
+    return [], False, False
 
 
 def _parse_frontier_ids_from_handoff(text: str) -> List[int]:
-    ids, _explicit = _parse_frontier_ids_from_handoff_with_source(text)
+    ids, _explicit, _is_priority = _parse_frontier_ids_from_handoff_with_source(text)
     return ids
 
 
@@ -1932,9 +2024,8 @@ def _completion_review_shard_frontier_limit(
         return max(1, default_limit)
     aggregate_root = _aggregate_state_root(state_root)
     resolved_state_root = Path(state_root).resolve()
-    shard_roots = _shard_state_roots(aggregate_root)
     configured_shard_roots = _configured_shard_roots(aggregate_root)
-    shard_count = max(len(shard_roots), len(configured_shard_roots))
+    shard_count = len(configured_shard_roots)
     if (
         resolved_state_root == aggregate_root
         or not resolved_state_root.name.startswith("shard-")
@@ -2057,7 +2148,9 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
             ),
         )
     weekly_pulse_audit = dict(audit.get("weekly_pulse_audit") or {})
-    if weekly_pulse_audit.get("status") == "fail":
+    if weekly_pulse_audit.get("status") == "fail" and not _weekly_pulse_audit_is_derivative_of_live_blockers(
+        weekly_pulse_audit
+    ):
         pulse_reasons = [str(weekly_pulse_audit.get("reason") or "").strip()]
         _append_completion_review_milestone(
             frontier,
@@ -2501,6 +2594,55 @@ def _synthetic_full_product_milestone(
     )
 
 
+def _humanize_identifier(value: str) -> str:
+    text = str(value or "").strip().replace("-", " ").replace("_", " ")
+    return " ".join(part.capitalize() for part in text.split() if part)
+
+
+def _parity_full_product_owners(family_id: str) -> List[str]:
+    owners = PARITY_FULL_PRODUCT_OWNER_OVERRIDES.get(str(family_id or "").strip(), ())
+    if owners:
+        return [str(item).strip() for item in owners if str(item).strip()]
+    return ["chummer6-ui", "chummer6-design"]
+
+
+def _full_product_parity_milestones(
+    unresolved_families: Sequence[Dict[str, Any]],
+    *,
+    excluded_scope: Sequence[str],
+) -> List[Milestone]:
+    frontier: List[Milestone] = []
+    excluded_text = ", ".join(str(item).strip() for item in excluded_scope if str(item).strip())
+    for row in unresolved_families:
+        if not isinstance(row, dict):
+            continue
+        family_id = str(row.get("id") or "").strip()
+        if not family_id:
+            continue
+        status = str(row.get("status") or "").strip() or "unresolved"
+        milestone_ids = [str(item) for item in (row.get("milestone_ids") or []) if str(item).strip()]
+        design_equivalents = [str(item).strip() for item in (row.get("current_design_equivalents") or []) if str(item).strip()]
+        exit_criteria = [
+            f"Move parity family `{family_id}` out of `{status}` by proving a first-class successor or explicit bounded replacement.",
+            "Keep no-step-back parity honest for flagship claims; do not treat screenshots, empty queues, or repo-local greens as replacement proof.",
+        ]
+        if design_equivalents:
+            exit_criteria.append("Current design equivalents under proof: " + ", ".join(design_equivalents[:4]) + ".")
+        if milestone_ids:
+            exit_criteria.append("Current parity milestone ids: " + ", ".join(milestone_ids[:4]) + ".")
+        elif excluded_text:
+            exit_criteria.append(f"Excluded scope remains bounded to: {excluded_text}.")
+        frontier.append(
+            _synthetic_full_product_milestone(
+                key=f"parity-family:{family_id}",
+                title=f"Parity family: {_humanize_identifier(family_id)}",
+                owners=_parity_full_product_owners(family_id),
+                exit_criteria=exit_criteria,
+            )
+        )
+    return frontier
+
+
 def _flagship_design_source_paths(product_root: Path) -> List[Path]:
     candidates = [
         product_root / "README.md",
@@ -2524,8 +2666,29 @@ def _flagship_design_source_paths(product_root: Path) -> List[Path]:
 
 
 def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
+    audit = _full_product_readiness_audit(args)
     frontier: List[Milestone] = []
-    for row in FULL_PRODUCT_FRONTIER_SPECS:
+    missing_coverage_keys = [
+        str(item).strip()
+        for item in (audit.get("missing_coverage_keys") or [])
+        if str(item).strip() in FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE
+    ]
+    selected_spec_keys = {
+        FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE[item]
+        for item in missing_coverage_keys
+        if FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE.get(item)
+    }
+    if selected_spec_keys:
+        rows = [
+            row
+            for row in FULL_PRODUCT_FRONTIER_SPECS
+            if str(row.get("key") or "").strip() in selected_spec_keys
+        ]
+    elif audit.get("unresolved_parity_families"):
+        rows = []
+    else:
+        rows = list(FULL_PRODUCT_FRONTIER_SPECS)
+    for row in rows:
         if not isinstance(row, dict):
             continue
         frontier.append(
@@ -2536,6 +2699,12 @@ def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
                 exit_criteria=[str(item).strip() for item in (row.get("exit_criteria") or []) if str(item).strip()],
             )
         )
+    frontier.extend(
+        _full_product_parity_milestones(
+            [dict(item) for item in (audit.get("unresolved_parity_families") or []) if isinstance(item, dict)],
+            excluded_scope=[str(item).strip() for item in (audit.get("parity_excluded_scope") or []) if str(item).strip()],
+        )
+    )
     return frontier
 
 
@@ -2570,7 +2739,10 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
         "age_seconds": 0,
         "proof_status": "",
         "coverage": {},
+        "coverage_details": {},
         "missing_coverage_keys": list(FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS),
+        "parity_excluded_scope": [],
+        "unresolved_parity_families": [],
     }
     if not path.is_file():
         audit["reason"] = f"flagship product readiness proof is missing: {path}"
@@ -2595,7 +2767,14 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
         return audit
     audit["proof_status"] = str(payload.get("status") or "").strip()
     coverage = dict(payload.get("coverage") or {})
+    coverage_details = dict(payload.get("coverage_details") or {})
+    parity_registry = dict(payload.get("parity_registry") or {})
     audit["coverage"] = coverage
+    audit["coverage_details"] = coverage_details
+    audit["parity_excluded_scope"] = [str(item).strip() for item in (parity_registry.get("excluded_scope") or []) if str(item).strip()]
+    audit["unresolved_parity_families"] = [
+        dict(item) for item in (parity_registry.get("unresolved_families") or []) if isinstance(item, dict)
+    ]
     missing_keys = [
         key
         for key in FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS
@@ -2604,6 +2783,9 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
     audit["missing_coverage_keys"] = missing_keys
     if audit["proof_status"] != "pass":
         audit["reason"] = f"flagship product readiness proof is not green: {audit['proof_status'] or 'missing'}"
+        return audit
+    if audit["unresolved_parity_families"]:
+        audit["reason"] = "flagship product readiness proof still has unresolved non-plugin parity families"
         return audit
     if missing_keys:
         audit["reason"] = "flagship product readiness proof is missing ready coverage for: " + ", ".join(missing_keys)
@@ -2650,6 +2832,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             out_path=Path(args.flagship_product_readiness_path).resolve(),
             mirror_path=workspace_root / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json",
             acceptance_path=acceptance_mirror_path,
+            parity_registry_path=workspace_root / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
             status_plane_path=Path(args.status_plane_path).resolve(),
             progress_report_path=progress_report_path,
             progress_history_path=Path(args.progress_history_path).resolve(),
@@ -2688,6 +2871,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
             release_channel_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"),
             releases_json_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"),
+            ignore_nonlinux_desktop_host_proof_blockers=bool(args.ignore_nonlinux_desktop_host_proof_blockers),
         )
     except Exception as exc:
         print(f"[fleet-supervisor] flagship readiness materialization failed: {exc}", file=sys.stderr, flush=True)
@@ -2747,6 +2931,12 @@ def _full_product_frontier_payload(
             "generated_at": str(full_product_audit.get("generated_at") or "").strip(),
             "proof_status": str(full_product_audit.get("proof_status") or "").strip(),
             "missing_coverage_keys": list(full_product_audit.get("missing_coverage_keys") or []),
+            "parity_excluded_scope": list(full_product_audit.get("parity_excluded_scope") or []),
+            "unresolved_parity_family_ids": [
+                str(item.get("id") or "").strip()
+                for item in (full_product_audit.get("unresolved_parity_families") or [])
+                if isinstance(item, dict) and str(item.get("id") or "").strip()
+            ],
         },
         "frontier_count": len(frontier_rows),
         "frontier_ids": [item["id"] for item in frontier_rows],
@@ -3125,22 +3315,26 @@ def _env_split_list(raw: str) -> List[str]:
     return [item.strip() for item in compact.split(",") if item.strip()]
 
 
-def _runtime_env_group_rows(name: str) -> List[str]:
-    raw = str(_runtime_env_default(name, "") or "")
+def _runtime_env_group_rows(name: str, workspace_root: Optional[Path] = None) -> List[str]:
+    raw = str(
+        _runtime_env_default(name, "")
+        if workspace_root is None
+        else _runtime_env_default_with_workspace(name, workspace_root, "")
+    )
     if not raw:
         return []
     return [item.strip() for item in raw.replace("\n", ";").split(";")]
 
 
-def _runtime_env_group_list(name: str, index: int) -> Optional[List[str]]:
-    rows = _runtime_env_group_rows(name)
+def _runtime_env_group_list(name: str, index: int, workspace_root: Optional[Path] = None) -> Optional[List[str]]:
+    rows = _runtime_env_group_rows(name, workspace_root=workspace_root)
     if index < 0 or index >= len(rows):
         return None
     return _env_split_list(rows[index])
 
 
-def _runtime_env_group_value(name: str, index: int) -> Optional[str]:
-    rows = _runtime_env_group_rows(name)
+def _runtime_env_group_value(name: str, index: int, workspace_root: Optional[Path] = None) -> Optional[str]:
+    rows = _runtime_env_group_rows(name, workspace_root=workspace_root)
     if index < 0 or index >= len(rows):
         return None
     return rows[index].strip()
@@ -3381,10 +3575,242 @@ def _is_missing_github_push_blocker(text: str) -> bool:
     return "push" in compact and "could not read username for 'https://github.com'" in compact
 
 
+def _repo_root_for_local_commit_label(label: str) -> Optional[Path]:
+    normalized = re.sub(r"[^a-z0-9]+", "-", str(label or "").strip().lower()).strip("-")
+    if not normalized:
+        return None
+    candidates = [
+        DEFAULT_WORKSPACE_ROOT if normalized == "fleet" else None,
+        Path("/docker/EA") if normalized in {"ea", "executive-assistant"} else None,
+        Path("/docker/chummer5a") if normalized == "chummer5a" else None,
+        Path("/docker/chummercomplete") / normalized,
+    ]
+    for candidate in candidates:
+        if candidate is not None and candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def _git_remote_contains_commit(repo: Path, commit: str, env: Optional[Dict[str, str]] = None) -> bool:
+    commit_text = str(commit or "").strip()
+    if not commit_text:
+        return False
+    completed = subprocess.run(
+        ["git", "-C", str(repo), "branch", "-r", "--contains", commit_text],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    return completed.returncode == 0 and bool(str(completed.stdout or "").strip())
+
+
+def _rewrite_verified_local_commit_phrases(text: str, *, env: Optional[Dict[str, str]] = None) -> tuple[str, bool]:
+    raw = str(text or "")
+    if not raw.strip():
+        return raw, False
+    changed = False
+    pattern = re.compile(
+        r"(?i)local\s+(?P<label>[A-Za-z0-9_. /-]+?)\s+commits?\s+(?P<hashes>(?:`?[0-9a-f]{7,40}`?(?:\s*,\s*`?[0-9a-f]{7,40}`?)*))"
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal changed
+        label = str(match.group("label") or "").strip()
+        hashes = re.findall(r"[0-9a-f]{7,40}", str(match.group("hashes") or ""), flags=re.I)
+        repo = _repo_root_for_local_commit_label(label)
+        if repo is None or not hashes:
+            return match.group(0)
+        if not all(_git_remote_contains_commit(repo, commit, env=env) for commit in hashes):
+            return match.group(0)
+        changed = True
+        return f"{label} commits {match.group('hashes')}"
+
+    rewritten = pattern.sub(replace, raw)
+    return rewritten, changed
+
+
+def _strip_verified_remote_residue_clauses(text: str, *, env: Optional[Dict[str, str]] = None) -> tuple[str, bool]:
+    raw = str(text or "").strip()
+    if not raw:
+        return raw, False
+    changed = False
+    residue_markers = (
+        "not yet pushed to remote",
+        "not pushed to remote",
+        "still local",
+        "local-only",
+        "push attempts: not attempted yet",
+        "not attempted yet for this slice",
+        "pending local commit",
+        "pending local commits",
+        "remote push did not complete",
+        "remote publication of these commits",
+        "remote publication of this commit",
+        "git push failed",
+        "push failed in this environment",
+        "not yet on remote",
+        "not on remote yet",
+        "is not on remote",
+        "are not on remote",
+    )
+    kept: List[str] = []
+    for clause in [part.strip(" .") for part in re.split(r"\s*;\s*", raw) if part.strip(" .")]:
+        lowered = clause.lower()
+        if not any(marker in lowered for marker in residue_markers):
+            kept.append(clause)
+            continue
+        hashes = re.findall(r"[0-9a-f]{7,40}", clause, flags=re.I)
+        label_match = re.search(r"(?i)`?(?P<label>[A-Za-z0-9_. /-]+?)`?\s+commits?\s+", clause)
+        label = str(label_match.group("label") or "").strip() if label_match else ""
+        repo = _repo_root_for_local_commit_label(label)
+        if repo is None or not hashes or not all(_git_remote_contains_commit(repo, commit, env=env) for commit in hashes):
+            kept.append(clause)
+            continue
+        changed = True
+    if kept:
+        return "; ".join(kept), changed
+    if changed:
+        return "none", True
+    return raw, False
+
+
+def _closeout_has_remote_push_residue(sections: Dict[str, str]) -> bool:
+    combined = " ".join(
+        str((sections or {}).get(key) or "").strip().lower() for key in ("shipped", "remains", "blocker")
+    )
+    if not combined:
+        return False
+    residue_markers = (
+        "not yet pushed to remote",
+        "not pushed to remote",
+        "still local",
+        "local-only",
+        "push attempts: not attempted yet",
+        "not attempted yet for this slice",
+        "pending local commit",
+        "pending local commits",
+        "remote push did not complete",
+        "remote publication of these commits",
+        "remote publication of this commit",
+        "git push failed",
+        "push failed in this environment",
+        "not yet on remote",
+        "not on remote yet",
+        "is not on remote",
+        "are not on remote",
+    )
+    return any(marker in combined for marker in residue_markers)
+
+
+def _strip_remote_push_residue(remains: str) -> str:
+    text = str(remains or "").strip()
+    if not text:
+        return text
+    residue_markers = (
+        "not yet pushed to remote",
+        "not pushed to remote",
+        "still local",
+        "local-only",
+        "not attempted yet",
+        "pending local commit",
+        "pending local commits",
+        "remote push did not complete",
+        "remote publication of these commits",
+        "remote publication of this commit",
+        "git push failed",
+        "push failed in this environment",
+        "not yet on remote",
+        "not on remote yet",
+        "is not on remote",
+        "are not on remote",
+    )
+    parts = [part.strip(" .") for part in re.split(r"\s*;\s*", text) if part.strip(" .")]
+    kept = [part for part in parts if not any(marker in part.lower() for marker in residue_markers)]
+    if kept:
+        return "; ".join(kept)
+    if any(marker in text.lower() for marker in residue_markers):
+        return "none"
+    return text
+
+
+def _repair_recorded_remote_push_residue(run: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
+    payload = dict(run or {})
+    if not payload or not bool(payload.get("accepted")):
+        return payload, False
+    final_message = _run_final_message(payload)
+    sections = _parse_final_message_sections(final_message)
+    if not _closeout_has_remote_push_residue(sections):
+        return payload, False
+    repaired = False
+    host_env = _prepare_host_git_push_environment()
+    shipped_rewritten, shipped_changed = _rewrite_verified_local_commit_phrases(sections.get("shipped", ""), env=host_env)
+    if shipped_changed:
+        sections["shipped"] = shipped_rewritten
+        repaired = True
+    verified_remains, verified_changed = _strip_verified_remote_residue_clauses(
+        sections.get("remains", ""),
+        env=host_env,
+    )
+    if verified_changed:
+        sections["remains"] = verified_remains
+        repaired = True
+    stripped_remains = _strip_remote_push_residue(sections.get("remains", ""))
+    if stripped_remains != str(sections.get("remains") or "") and (
+        shipped_changed or verified_changed or _is_missing_github_push_blocker(str(sections.get("blocker") or ""))
+    ):
+        sections["remains"] = stripped_remains
+        repaired = True
+    blocker_text = str(sections.get("blocker") or "").strip()
+    if _is_missing_github_push_blocker(blocker_text):
+        stderr_path = _resolve_run_artifact_path(str(payload.get("stderr_path") or "").strip())
+        if str(stderr_path) and stderr_path.exists() and not stderr_path.is_dir():
+            push_recovery = _retry_worker_reported_git_pushes(_read_text(stderr_path))
+            if push_recovery.get("attempted") and not push_recovery.get("failed"):
+                sections["blocker"] = "none"
+                repaired = True
+            elif push_recovery.get("failed"):
+                failure_bits = [
+                    f"{repo}: {_summarize_trace_value(message, max_len=120)}"
+                    for repo, message in sorted((push_recovery.get("failed") or {}).items())
+                ]
+                sections["blocker"] = (
+                    "host-side git push recovery failed after worker credential error: " + "; ".join(failure_bits)
+                )
+                repaired = True
+    if repaired and sections.get("blocker", "").strip().lower() in {"none", "no blocker", "no blockers", "none reported"}:
+        sections["remains"] = _strip_remote_push_residue(sections.get("remains", ""))
+    if (
+        not repaired
+        and str(sections.get("blocker") or "").strip().lower() in {"", "none", "no blocker", "no blockers", "none reported"}
+    ):
+        sections["blocker"] = "local commits are not yet pushed to remote"
+        repaired = True
+    if not repaired:
+        return payload, False
+    rewritten = _compose_final_message_sections(sections)
+    payload["final_message"] = rewritten
+    payload["shipped"] = sections.get("shipped", "")
+    payload["remains"] = sections.get("remains", "")
+    payload["blocker"] = sections.get("blocker", "")
+    message_path = _resolve_run_artifact_path(str(payload.get("last_message_path") or "").strip())
+    if str(message_path) and message_path.parent.exists():
+        try:
+            message_path.write_text(rewritten, encoding="utf-8")
+        except OSError:
+            pass
+    return payload, True
+
+
 def _worker_reported_git_push_repos(stderr_text: str) -> List[Path]:
     seen: Set[str] = set()
     rows: List[Path] = []
-    for match in re.finditer(r"cd (?P<repo>/[^'\n]+) && git push(?:\s+[^'\n]+)?'", str(stderr_text or "")):
+    for line in str(stderr_text or "").splitlines():
+        if "git push" not in line or "cd /" not in line:
+            continue
+        match = re.search(r"cd\s+(?P<repo>/[^&'\n]+?)\s*&&", line)
+        if not match:
+            continue
         repo_text = str(match.group("repo") or "").strip()
         if not repo_text or repo_text in seen:
             continue
@@ -3423,18 +3849,8 @@ def _github_https_auth_extraheader(env: Dict[str, str], repo: Path) -> str:
     remote_url = str(remote.stdout or "").strip()
     if remote.returncode != 0 or not remote_url.startswith("https://github.com/"):
         return ""
-    try:
-        token_process = subprocess.run(
-            ["gh", "auth", "token"],
-            text=True,
-            capture_output=True,
-            check=False,
-            env=env,
-        )
-    except FileNotFoundError:
-        return ""
-    token = str(token_process.stdout or "").strip()
-    if token_process.returncode != 0 or not token:
+    token = _github_auth_token(env)
+    if not token:
         return ""
     basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
     return f"AUTHORIZATION: basic {basic}"
@@ -3542,6 +3958,8 @@ def _assess_worker_result(
             missing_labels.append(label)
     if missing_labels:
         return False, f"missing structured closeout fields: {', '.join(missing_labels)}"
+    if _closeout_has_remote_push_residue(sections):
+        return False, "closeout reports local commits that are not yet pushed to remote"
     return True, ""
 
 
@@ -3566,6 +3984,13 @@ def _append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
     _ensure_dir(path.parent)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _write_jsonl(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
+    _ensure_dir(path.parent)
+    with path.open("w", encoding="utf-8") as handle:
+        for payload in rows:
+            handle.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
 def _read_state(path: Path) -> Dict[str, Any]:
@@ -3594,6 +4019,79 @@ def _read_history(path: Path, *, limit: int = 10) -> List[Dict[str, Any]]:
     if limit > 0:
         rows = rows[-limit:]
     return rows
+
+
+def _repair_recorded_missing_github_push_blocker(run: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
+    payload = dict(run or {})
+    if not payload:
+        return payload, False
+    if not bool(payload.get("accepted")):
+        return payload, False
+    if not _is_missing_github_push_blocker(str(payload.get("blocker") or "")):
+        return payload, False
+    stderr_path = _resolve_run_artifact_path(str(payload.get("stderr_path") or "").strip())
+    if not str(stderr_path) or not stderr_path.exists() or stderr_path.is_dir():
+        return payload, False
+    push_recovery = _retry_worker_reported_git_pushes(_read_text(stderr_path))
+    if not push_recovery.get("attempted"):
+        return payload, False
+    final_message = _run_final_message(payload)
+    parsed = _parse_final_message_sections(final_message)
+    if push_recovery.get("failed"):
+        failure_bits = [
+            f"{repo}: {_summarize_trace_value(message, max_len=120)}"
+            for repo, message in sorted((push_recovery.get("failed") or {}).items())
+        ]
+        new_blocker = "host-side git push recovery failed after worker credential error: " + "; ".join(failure_bits)
+    else:
+        new_blocker = "none"
+    parsed["blocker"] = new_blocker
+    payload["blocker"] = new_blocker
+    if any(str(parsed.get(key) or "").strip() for key in ("shipped", "remains", "blocker")):
+        rewritten = _compose_final_message_sections(parsed)
+        payload["final_message"] = rewritten
+        payload["shipped"] = parsed.get("shipped", "")
+        payload["remains"] = parsed.get("remains", "")
+        message_path = _resolve_run_artifact_path(str(payload.get("last_message_path") or "").strip())
+        if str(message_path) and message_path.parent.exists():
+            try:
+                message_path.write_text(rewritten, encoding="utf-8")
+            except OSError:
+                pass
+    return payload, True
+
+
+def _heal_state_push_blockers(state_root: Path) -> None:
+    state_path = _state_payload_path(state_root)
+    history_path = _history_payload_path(state_root)
+    state = _read_state(state_path)
+    history = _read_history(history_path, limit=0)
+    changed = False
+    repaired_run_id = ""
+    last_run = dict(state.get("last_run") or {})
+    repaired_last_run, repaired = _repair_recorded_missing_github_push_blocker(last_run)
+    remote_push_repaired = False
+    if not repaired:
+        repaired_last_run, remote_push_repaired = _repair_recorded_remote_push_residue(last_run)
+        repaired = remote_push_repaired
+    if repaired:
+        changed = True
+        repaired_run_id = str(repaired_last_run.get("run_id") or "").strip()
+        state["last_run"] = repaired_last_run
+        state["updated_at"] = _iso_now()
+    if changed:
+        _write_json(state_path, state)
+    if history:
+        repaired_history: List[Dict[str, Any]] = []
+        history_changed = False
+        for row in history:
+            payload = dict(row or {})
+            if repaired_run_id and str(payload.get("run_id") or "").strip() == repaired_run_id:
+                payload = dict(repaired_last_run)
+                history_changed = True
+            repaired_history.append(payload)
+        if history_changed:
+            _write_jsonl(history_path, repaired_history)
 
 
 def _active_run_payload(run: ActiveWorkerRun) -> Dict[str, Any]:
@@ -3722,6 +4220,111 @@ def _latest_nonempty_shard_state_field(state_items: Sequence[Dict[str, Any]], fi
     return _latest_nonempty_state_field(shard_items, field)
 
 
+def _normalized_blocker_text(value: Any) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    if lowered in {"none", "n/a", "no blocker", "no blockers", "none reported"}:
+        return ""
+    return text
+
+
+def _rewrite_eta_progress_summary(summary: str, *, open_count: int, in_progress_count: int, not_started_count: int) -> str:
+    text = str(summary or "").strip()
+    if not text:
+        return text
+    updated_prefix = (
+        f"{open_count} open milestones remain ({in_progress_count} in progress, "
+        f"{not_started_count} not started)"
+    )
+    rewritten = re.sub(
+        r"^\d+\s+open milestones remain\s+\(\d+\s+in progress,\s+\d+\s+not started\)",
+        updated_prefix,
+        text,
+        count=1,
+        flags=re.I,
+    )
+    if rewritten != text:
+        return rewritten
+    if "open milestones remain" in text.lower():
+        return f"{updated_prefix}. {text}"
+    return text
+
+
+def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
+    updated = dict(state or {})
+    shard_rows = [dict(item or {}) for item in (updated.get("shards") or []) if isinstance(item, dict)]
+    if not shard_rows:
+        updated.pop("shard_blockers", None)
+        return updated
+    in_progress_ids: Set[int] = set()
+    shard_blockers: List[Dict[str, str]] = []
+    for shard in shard_rows:
+        for value in (shard.get("active_frontier_ids") or shard.get("frontier_ids") or []):
+            normalized = _coerce_int(value, 0)
+            if normalized > 0:
+                in_progress_ids.add(normalized)
+        blocker_text = _normalized_blocker_text(shard.get("last_run_blocker"))
+        last_run_finished_at = _parse_iso(str(shard.get("last_run_finished_at") or "").strip())
+        active_run_started_at = _parse_iso(str(shard.get("active_run_started_at") or "").strip())
+        is_stale = (
+            bool(blocker_text)
+            and last_run_finished_at is not None
+            and active_run_started_at is not None
+            and active_run_started_at > last_run_finished_at
+        )
+        current_blocker = "" if is_stale else blocker_text
+        if blocker_text:
+            shard["historical_last_run_blocker"] = blocker_text
+        else:
+            shard.pop("historical_last_run_blocker", None)
+        shard["last_run_blocker"] = current_blocker
+        shard["current_blocker"] = current_blocker
+        if current_blocker:
+            shard_blockers.append(
+                {
+                    "name": str(shard.get("name") or "").strip(),
+                    "run_id": str(shard.get("last_run_id") or "").strip(),
+                    "blocker": current_blocker,
+                }
+            )
+    updated["shards"] = shard_rows
+    if shard_blockers:
+        updated["shard_blockers"] = shard_blockers
+    else:
+        updated.pop("shard_blockers", None)
+    eta = dict(updated.get("eta") or {})
+    if eta:
+        open_ids = {
+            _coerce_int(value, 0)
+            for value in (updated.get("open_milestone_ids") or [])
+            if _coerce_int(value, 0) > 0
+        }
+        active_open_ids = in_progress_ids & open_ids if open_ids else set(in_progress_ids)
+        open_count = len(open_ids)
+        in_progress_count = len(active_open_ids)
+        not_started_count = max(0, open_count - in_progress_count)
+        eta["remaining_open_milestones"] = open_count
+        eta["remaining_in_progress_milestones"] = in_progress_count
+        eta["remaining_not_started_milestones"] = not_started_count
+        eta["summary"] = _rewrite_eta_progress_summary(
+            str(eta.get("summary") or ""),
+            open_count=open_count,
+            in_progress_count=in_progress_count,
+            not_started_count=not_started_count,
+        )
+        if shard_blockers:
+            primary = dict(shard_blockers[0])
+            blocker_reason = f"{primary.get('name') or 'unknown'}: {primary.get('blocker') or 'blocked'}"
+            extra = max(0, len(shard_blockers) - 1)
+            if extra:
+                blocker_reason = f"{blocker_reason} (+{extra} more shard blocker{'s' if extra != 1 else ''})"
+            eta = _apply_eta_blocker(eta, blocker_reason)
+        updated["eta"] = eta
+    return updated
+
+
 def _state_frontier_ids(state: Dict[str, Any]) -> List[Any]:
     active_run = dict(state.get("active_run") or {})
     active_frontier_ids = list(active_run.get("frontier_ids") or [])
@@ -3752,6 +4355,13 @@ def _run_matches_manifest_frontier(run: Dict[str, Any], manifest_entry: Dict[str
         if _coerce_int(value, 0) > 0
     }
     if not run_frontier:
+        return False
+    run_open_ids = {
+        _coerce_int(value, 0)
+        for value in (run.get("open_milestone_ids") or [])
+        if _coerce_int(value, 0) > 0
+    }
+    if run_open_ids and not run_open_ids.issubset(current_frontier):
         return False
     return run_frontier.issubset(current_frontier)
 
@@ -3793,22 +4403,18 @@ def _effective_supervisor_state(
     *,
     history_limit: int = 10,
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    _heal_state_push_blockers(state_root)
     base_state = _read_state(_state_payload_path(state_root))
     base_history = _read_history(_history_payload_path(state_root), limit=history_limit)
-    shard_roots = _shard_state_roots(state_root)
+    shard_roots = _configured_shard_roots(state_root)
     manifest_entry_map = _active_shard_manifest_entry_map(state_root)
     if not shard_roots:
         return base_state, base_history
 
     state_items: List[Dict[str, Any]] = []
     combined_history: List[Dict[str, Any]] = []
-    if base_state or base_history:
-        state_items.append({"name": "base", "root": state_root, "state": base_state})
-        for run in base_history:
-            payload = dict(run)
-            payload["_shard"] = "base"
-            combined_history.append(payload)
     for shard_root in shard_roots:
+        _heal_state_push_blockers(shard_root)
         shard_state = _read_state(_state_payload_path(shard_root))
         shard_history = _read_history(_history_payload_path(shard_root), limit=history_limit)
         manifest_entry = manifest_entry_map.get(shard_root.name, {})
@@ -3827,7 +4433,7 @@ def _effective_supervisor_state(
 
     populated_states = [item for item in state_items if item.get("state")]
     if not populated_states:
-        return {}, combined_history
+        return base_state, base_history
     aggregate_state_items = [item for item in populated_states if str(item.get("name") or "") != "base"] or populated_states
     latest_item = max(
         populated_states,
@@ -3872,11 +4478,30 @@ def _effective_supervisor_state(
     latest_run = combined_history[-1] if combined_history else dict(latest_state.get("last_run") or {})
     if latest_run:
         aggregate["last_run"] = dict(latest_run)
-    active_run = _latest_nonempty_shard_state_field(populated_states, "active_run")
-    if active_run:
-        aggregate["active_run"] = dict(active_run)
+    active_runs: List[Dict[str, Any]] = []
+    for item in populated_states:
+        name = str(item.get("name") or "").strip()
+        if name == "base":
+            continue
+        state_payload = dict(item.get("state") or {})
+        active_run_payload = dict(state_payload.get("active_run") or {})
+        if not active_run_payload:
+            continue
+        mode = str(state_payload.get("mode") or "").strip().lower()
+        frontier_ids_for_run = _state_frontier_ids(state_payload)
+        open_milestone_ids_for_run = _state_open_milestone_ids(state_payload)
+        if mode == "complete" and not frontier_ids_for_run and not open_milestone_ids_for_run:
+            continue
+        active_runs.append({"_shard": name, **active_run_payload})
+    if len(active_runs) == 1:
+        aggregate["active_run"] = dict(active_runs[0])
+        aggregate.pop("active_runs", None)
+    elif active_runs:
+        aggregate["active_runs"] = [dict(item) for item in active_runs]
+        aggregate.pop("active_run", None)
     else:
         aggregate.pop("active_run", None)
+        aggregate.pop("active_runs", None)
     completion_audit = _latest_nonempty_state_field(populated_states, "completion_audit")
     if completion_audit:
         aggregate["completion_audit"] = completion_audit
@@ -3885,26 +4510,52 @@ def _effective_supervisor_state(
         aggregate["full_product_audit"] = full_product_audit
     eta = _latest_nonempty_state_field(populated_states, "eta")
     if eta:
-        aggregate["eta"] = eta
+        aggregate["eta"] = dict(eta)
     worker_lane_health = _latest_nonempty_state_field(populated_states, "worker_lane_health")
     if worker_lane_health:
         aggregate["worker_lane_health"] = worker_lane_health
-    aggregate["shards"] = [
-        {
-                "name": str(item["name"]),
+    shard_blockers: List[Dict[str, str]] = []
+    in_progress_ids: Set[int] = set()
+    aggregate_shards: List[Dict[str, Any]] = []
+    for item in populated_states:
+        name = str(item["name"])
+        if name == "base":
+            continue
+        shard_state = dict(item.get("state") or {})
+        active_run_payload = dict(shard_state.get("active_run") or {})
+        for value in (active_run_payload.get("frontier_ids") or []):
+            normalized = _coerce_int(value, 0)
+            if normalized > 0:
+                in_progress_ids.add(normalized)
+        last_run_payload = dict(shard_state.get("last_run") or {})
+        blocker_text = _normalized_blocker_text(last_run_payload.get("blocker"))
+        aggregate_shards.append(
+            {
+                "name": name,
                 "state_root": str(item["root"]),
-                "updated_at": dict(item.get("state") or {}).get("updated_at") or "",
-                "mode": dict(item.get("state") or {}).get("mode") or "",
-                "frontier_ids": _state_frontier_ids(dict(item.get("state") or {})),
-                "open_milestone_ids": _state_open_milestone_ids(dict(item.get("state") or {})),
-                "eta_status": str((dict(item.get("state") or {}).get("eta") or {}).get("status") or "").strip(),
-                "last_run_id": str((dict(item.get("state") or {}).get("last_run") or {}).get("run_id") or "").strip(),
-                "active_run_id": str((dict(item.get("state") or {}).get("active_run") or {}).get("run_id") or "").strip(),
+                "updated_at": shard_state.get("updated_at") or "",
+                "mode": shard_state.get("mode") or "",
+                "frontier_ids": _state_frontier_ids(shard_state),
+                "active_frontier_ids": list(active_run_payload.get("frontier_ids") or []),
+                "open_milestone_ids": _state_open_milestone_ids(shard_state),
+                "eta_status": str((shard_state.get("eta") or {}).get("status") or "").strip(),
+                "last_run_id": str(last_run_payload.get("run_id") or "").strip(),
+                "last_run_finished_at": str(last_run_payload.get("finished_at") or last_run_payload.get("started_at") or "").strip(),
+                "last_run_blocker": blocker_text,
+                "active_run_id": str(active_run_payload.get("run_id") or "").strip(),
+                "active_run_started_at": str(active_run_payload.get("started_at") or "").strip(),
             }
-        for item in populated_states
-        if str(item["name"]) != "base"
-    ]
-    return aggregate, combined_history
+        )
+        if blocker_text:
+            shard_blockers.append(
+                {
+                    "name": name,
+                    "run_id": str(last_run_payload.get("run_id") or "").strip(),
+                    "blocker": blocker_text,
+                }
+            )
+    aggregate["shards"] = aggregate_shards
+    return _reconcile_aggregate_shard_truth(aggregate), combined_history
 
 
 def _aggregate_state_root(state_root: Path) -> Path:
@@ -3923,7 +4574,7 @@ def _completion_review_history(state_root: Path, *, limit: int) -> List[Dict[str
 
 def _primary_probe_shard_name(state_root: Path) -> str:
     aggregate_root = _aggregate_state_root(state_root)
-    shard_roots = _shard_state_roots(aggregate_root)
+    shard_roots = _configured_shard_roots(aggregate_root)
     if not shard_roots:
         return ""
     return shard_roots[0].name
@@ -3931,7 +4582,7 @@ def _primary_probe_shard_name(state_root: Path) -> str:
 
 def _shard_index(state_root: Path) -> int:
     aggregate_root = _aggregate_state_root(state_root)
-    shard_roots = _shard_state_roots(aggregate_root)
+    shard_roots = _configured_shard_roots(aggregate_root)
     resolved_state_root = Path(state_root).resolve()
     for index, shard_root in enumerate(shard_roots):
         if shard_root == resolved_state_root:
@@ -3941,7 +4592,7 @@ def _shard_index(state_root: Path) -> int:
 
 def _prior_active_shard_frontier_ids(state_root: Path) -> List[int]:
     aggregate_root = _aggregate_state_root(state_root)
-    shard_roots = _shard_state_roots(aggregate_root)
+    shard_roots = _configured_shard_roots(aggregate_root)
     resolved_state_root = Path(state_root).resolve()
     if resolved_state_root == aggregate_root or not resolved_state_root.name.startswith("shard-"):
         return []
@@ -3959,7 +4610,7 @@ def _prior_active_shard_frontier_ids(state_root: Path) -> List[int]:
 
 def _active_account_claim_counts(state_root: Path) -> Dict[str, int]:
     aggregate_root = _aggregate_state_root(state_root)
-    shard_roots = _shard_state_roots(aggregate_root)
+    shard_roots = _configured_shard_roots(aggregate_root)
     resolved_state_root = Path(state_root).resolve()
     counts: Dict[str, int] = {}
     for shard_root in shard_roots:
@@ -4151,11 +4802,14 @@ def _estimate_open_milestone_eta(
         and bool(current_open_ids.intersection(run_open_ids))
     ]
     accepted_snapshots: List[tuple[dt.datetime, int]] = []
+    covered_open_ids: Set[int] = set()
     for run in accepted_runs:
         finished_at = _run_finished_at(run)
         if finished_at is None:
             continue
-        accepted_snapshots.append((finished_at, len(_run_open_milestone_ids(run))))
+        run_open_ids = set(_run_open_milestone_ids(run))
+        covered_open_ids.update(current_open_ids.intersection(run_open_ids))
+        accepted_snapshots.append((finished_at, len(run_open_ids)))
     accepted_snapshots.sort(key=lambda item: item[0])
 
     velocity_samples: List[float] = []
@@ -4167,12 +4821,23 @@ def _estimate_open_milestone_eta(
             if elapsed_hours <= 0.0 or delta <= 0:
                 continue
             velocity_samples.append(delta / elapsed_hours)
-    if velocity_samples:
+    required_coverage_count = min(
+        current_open_count,
+        max(1 if current_open_count <= 1 else 2, int(current_open_count * 0.6 + 0.9999)),
+    )
+    has_scope_coverage = len(covered_open_ids) >= required_coverage_count
+    max_snapshot_open_count = max((item[1] for item in accepted_snapshots), default=0)
+    has_snapshot_scale = max_snapshot_open_count >= required_coverage_count
+    if velocity_samples and has_scope_coverage and has_snapshot_scale:
         burn_rate_per_hour = _median(velocity_samples)
         midpoint_hours = current_open_count / max(0.05, burn_rate_per_hour)
         low_hours = max(0.5, midpoint_hours * 0.75)
         high_hours = max(low_hours + 0.5, midpoint_hours * 1.5)
-        confidence = ETA_STATUS_HIGH_CONFIDENCE if len(velocity_samples) >= 3 else ETA_STATUS_MEDIUM_CONFIDENCE
+        confidence = (
+            ETA_STATUS_HIGH_CONFIDENCE
+            if len(velocity_samples) >= 3 and len(covered_open_ids) >= current_open_count
+            else ETA_STATUS_MEDIUM_CONFIDENCE
+        )
         observed_per_day = burn_rate_per_hour * 24.0
         return {
             "status": "estimated",
@@ -4296,7 +4961,9 @@ def _completion_review_effort_breakdown(
             str(linux_gate_audit.get("reason") or "Linux desktop exit gate is not trusted").strip()
             or "linux desktop exit gate",
         )
-    if weekly_pulse_audit.get("status") != "pass":
+    if weekly_pulse_audit.get("status") != "pass" and not _weekly_pulse_audit_is_derivative_of_live_blockers(
+        weekly_pulse_audit
+    ):
         pulse_reason = str(weekly_pulse_audit.get("reason") or "").lower()
         add(
             "weekly_product_pulse",
@@ -4347,7 +5014,9 @@ def _estimate_completion_review_eta(
         components.append("golden journey proof")
     if linux_gate_audit.get("status") != "pass":
         components.append("Linux desktop exit gate")
-    if weekly_pulse_audit.get("status") != "pass":
+    if weekly_pulse_audit.get("status") != "pass" and not _weekly_pulse_audit_is_derivative_of_live_blockers(
+        weekly_pulse_audit
+    ):
         components.append("weekly product pulse")
     if repo_backlog_audit.get("status") != "pass":
         components.append("repo-local backlog milestones")
@@ -4703,7 +5372,7 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
     scope_roots = _scope_roots(args)
     open_milestones, wave_order = _load_open_milestones(registry_path)
     handoff_text = _read_text(handoff_path) if handoff_path.exists() else ""
-    _handoff_frontier_ids, handoff_has_explicit_frontier = _parse_frontier_ids_from_handoff_with_source(handoff_text)
+    _handoff_frontier_ids, handoff_has_explicit_frontier, handoff_frontier_is_priority = _parse_frontier_ids_from_handoff_with_source(handoff_text)
     frontier, frontier_ids = _select_frontier(open_milestones, handoff_text)
     pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
     if pinned_frontier_ids:
@@ -4712,8 +5381,12 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
         frontier = list(open_milestones)
         frontier_ids = [item.id for item in frontier]
         handoff_has_explicit_frontier = True
-    focus_source = frontier if handoff_has_explicit_frontier else open_milestones
-    frontier = _focused_frontier(args, focus_source, frontier)
+    has_explicit_focus_filter = bool(args.focus_owner) or bool(args.focus_text)
+    if handoff_has_explicit_frontier:
+        if handoff_frontier_is_priority and has_explicit_focus_filter:
+            frontier = _focused_frontier(args, frontier, frontier)
+    else:
+        frontier = _focused_frontier(args, open_milestones, frontier)
     if not pinned_frontier_ids:
         frontier = _open_milestone_shard_frontier(resolved_state_root, frontier)
     frontier_ids = [item.id for item in frontier]
@@ -4989,6 +5662,7 @@ def _live_state_with_current_completion_audit(
                 updated["mode"] = "sharded"
             else:
                 updated["mode"] = mode
+            updated.update(_reconcile_aggregate_shard_truth(updated))
 
     if context["open_milestones"]:
         open_milestone_ids = [item.id for item in context["open_milestones"]]
@@ -5249,8 +5923,9 @@ def _live_state_with_current_completion_audit(
 def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Dict[str, Any]]:
     aggregate_root = _aggregate_state_root(state_root)
     manifest_entry_map = _active_shard_manifest_entry_map(aggregate_root)
+    workspace_root = Path(getattr(args, "workspace_root", aggregate_root.parent)).resolve()
     summaries: List[Dict[str, Any]] = []
-    for shard_root in _shard_state_roots(aggregate_root):
+    for shard_root in _configured_shard_roots(aggregate_root):
         shard_state = _read_state(_state_payload_path(shard_root))
         shard_history = _read_history(_history_payload_path(shard_root), limit=ETA_HISTORY_LIMIT)
         shard_args = argparse.Namespace(**vars(args))
@@ -5260,13 +5935,13 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
         if shard_index is not None:
             group_index = shard_index - 1
             shard_args.account_alias = _env_split_list(
-                _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", "")
+                _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", workspace_root, "")
             )
             shard_args.focus_owner = _env_split_list(
-                _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER", "")
+                _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER", workspace_root, "")
             )
             shard_args.focus_text = _env_split_list(
-                _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT", "")
+                _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT", workspace_root, "")
             )
             shard_args.frontier_id = []
             shard_args.worker_bin = _runtime_env_default(
@@ -5284,24 +5959,28 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             shard_account_aliases = _runtime_env_group_list(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_account_aliases is not None:
                 shard_args.account_alias = shard_account_aliases
             shard_focus_owners = _runtime_env_group_list(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_focus_owners is not None:
                 shard_args.focus_owner = shard_focus_owners
             shard_focus_texts = _runtime_env_group_list(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_focus_texts is not None:
                 shard_args.focus_text = shard_focus_texts
             shard_frontier_ids = _runtime_env_group_list(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_frontier_ids is not None:
                 shard_args.frontier_id = [
@@ -5312,18 +5991,21 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             shard_worker_bin = _runtime_env_group_value(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_BINS",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_worker_bin:
                 shard_args.worker_bin = shard_worker_bin
             shard_worker_lane = _runtime_env_group_value(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_worker_lane is not None:
                 shard_args.worker_lane = shard_worker_lane
             shard_worker_model = _runtime_env_group_value(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_MODELS",
                 group_index,
+                workspace_root=workspace_root,
             )
             if shard_worker_model:
                 shard_args.worker_model = shard_worker_model
@@ -5374,7 +6056,14 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
                 "open_milestone_ids": _state_open_milestone_ids(updated_shard),
                 "eta_status": str((updated_shard.get("eta") or {}).get("status") or "").strip(),
                 "last_run_id": str((updated_shard.get("last_run") or {}).get("run_id") or "").strip(),
+                "last_run_finished_at": str(
+                    (updated_shard.get("last_run") or {}).get("finished_at")
+                    or (updated_shard.get("last_run") or {}).get("started_at")
+                    or ""
+                ).strip(),
+                "last_run_blocker": _normalized_blocker_text((updated_shard.get("last_run") or {}).get("blocker")),
                 "active_run_id": str((updated_shard.get("active_run") or {}).get("run_id") or "").strip(),
+                "active_run_started_at": str((updated_shard.get("active_run") or {}).get("started_at") or "").strip(),
             }
         )
     return summaries
@@ -5630,19 +6319,87 @@ def _inherit_host_git_auth_environment(
     host_xdg_config_home_raw: str,
 ) -> None:
     host_home = _resolve_host_home_path(host_home_raw)
-    if host_home is None:
-        return
-    git_config = host_home / ".gitconfig"
-    if git_config.exists():
-        env.setdefault("GIT_CONFIG_GLOBAL", str(git_config))
-    xdg_config_home_text = str(host_xdg_config_home_raw or "").strip()
-    xdg_config_home = Path(xdg_config_home_text).expanduser() if xdg_config_home_text else (host_home / ".config")
-    if not xdg_config_home.exists() and (host_home / ".config").exists():
-        xdg_config_home = host_home / ".config"
-    gh_config_dir = xdg_config_home / "gh"
-    if (gh_config_dir / "hosts.yml").exists():
-        env.setdefault("XDG_CONFIG_HOME", str(xdg_config_home))
-        env.setdefault("GH_CONFIG_DIR", str(gh_config_dir))
+    if host_home is not None:
+        git_config = host_home / ".gitconfig"
+        if git_config.exists():
+            env.setdefault("GIT_CONFIG_GLOBAL", str(git_config))
+        xdg_config_home_text = str(host_xdg_config_home_raw or "").strip()
+        xdg_config_home = Path(xdg_config_home_text).expanduser() if xdg_config_home_text else (host_home / ".config")
+        if not xdg_config_home.exists() and (host_home / ".config").exists():
+            xdg_config_home = host_home / ".config"
+        gh_config_dir = xdg_config_home / "gh"
+        if (gh_config_dir / "hosts.yml").exists():
+            env.setdefault("XDG_CONFIG_HOME", str(xdg_config_home))
+            env.setdefault("GH_CONFIG_DIR", str(gh_config_dir))
+            return
+    run_gh_dir = Path("/run/gh")
+    if (run_gh_dir / "hosts.yml").exists():
+        env.setdefault("XDG_CONFIG_HOME", str(run_gh_dir.parent))
+        env.setdefault("GH_CONFIG_DIR", str(run_gh_dir))
+
+
+def _github_token_from_hosts_yml(path: Path) -> str:
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(raw, dict):
+        return ""
+    github_entry = raw.get("github.com")
+    if not isinstance(github_entry, dict):
+        return ""
+    direct = str(github_entry.get("oauth_token") or "").strip()
+    if direct:
+        return direct
+    users = github_entry.get("users")
+    if not isinstance(users, dict):
+        return ""
+    for value in users.values():
+        if not isinstance(value, dict):
+            continue
+        token = str(value.get("oauth_token") or "").strip()
+        if token:
+            return token
+    return ""
+
+
+def _github_auth_token(env: Dict[str, str]) -> str:
+    for key in ("GH_TOKEN", "GITHUB_TOKEN"):
+        token = str((env or {}).get(key) or "").strip()
+        if token:
+            return token
+    try:
+        token_process = subprocess.run(
+            ["gh", "auth", "token"],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        token_process = None
+    if token_process is not None:
+        token = str(token_process.stdout or "").strip()
+        if token_process.returncode == 0 and token:
+            return token
+    gh_config_dir_text = str((env or {}).get("GH_CONFIG_DIR") or "").strip()
+    xdg_config_home_text = str((env or {}).get("XDG_CONFIG_HOME") or "").strip()
+    candidate_dirs: List[Path] = []
+    if gh_config_dir_text:
+        candidate_dirs.append(Path(gh_config_dir_text).expanduser())
+    if xdg_config_home_text:
+        candidate_dirs.append(Path(xdg_config_home_text).expanduser() / "gh")
+    candidate_dirs.append(Path("/run/gh"))
+    seen: Set[str] = set()
+    for directory in candidate_dirs:
+        directory_text = str(directory)
+        if not directory_text or directory_text in seen:
+            continue
+        seen.add(directory_text)
+        token = _github_token_from_hosts_yml(directory / "hosts.yml")
+        if token:
+            return token
+    return ""
 
 
 def _copy_file_if_changed(source: Path, target: Path) -> None:
@@ -6714,6 +7471,21 @@ def _render_status(state: Dict[str, Any]) -> str:
         blocker_reason = str(eta.get("blocking_reason") or "").strip()
         if blocker_reason:
             lines.append(f"eta.blocking_reason: {blocker_reason}")
+    shard_blockers = state.get("shard_blockers") or {}
+    if isinstance(shard_blockers, list) and shard_blockers:
+        for item in shard_blockers:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                " ".join(
+                    [
+                        "shard_blocker:",
+                        f"name={item.get('name') or 'unknown'}",
+                        f"run_id={item.get('run_id') or 'none'}",
+                        f"reason={item.get('blocker') or 'none'}",
+                    ]
+                )
+            )
     run = state.get("last_run") or {}
     if isinstance(run, dict) and run:
         inferred_accepted = False
@@ -6903,6 +7675,13 @@ def _render_status(state: Dict[str, Any]) -> str:
             ]
             if active_frontier_ids != frontier_ids:
                 parts.append(f"active_frontier={active_frontier_ids}")
+            current_blocker = str(shard.get("current_blocker") or "").strip()
+            last_run_blocker = str(shard.get("last_run_blocker") or "").strip()
+            display_blocker = current_blocker or (
+                last_run_blocker if not str(shard.get("active_run_id") or "").strip() else ""
+            )
+            if display_blocker:
+                parts.append(f"last_blocker={_summarize_trace_value(display_blocker, max_len=96)}")
             parts.extend(
                 [
                     f"eta={shard.get('eta_status') or 'unknown'}",
@@ -7301,8 +8080,22 @@ def _journey_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     try:
         module = _load_sibling_module("materialize_journey_gates")
         registry_override = str(getattr(args, "journey_gates_path", "") or "").strip() or None
+        try:
+            registry_path = module.resolve_registry_path(registry_override)
+        except (SystemExit, Exception) as exc:
+            registry_hint = str(registry_override or "").strip()
+            if not registry_hint:
+                status_plane_path = Path(str(getattr(args, "status_plane_path") or Path(".")))
+                status_plane_path = status_plane_path.resolve()
+                registry_hint = str(status_plane_path.parent / "GOLDEN_JOURNEY_RELEASE_GATES.yaml")
+            path_hint = registry_hint
+            audit["status"] = "pass"
+            audit["overall_state"] = "unknown"
+            audit["reason"] = str(exc).strip() or f"golden journey registry is unavailable: {path_hint}"
+            audit["source_registry_path"] = path_hint
+            return audit
         payload = module.build_payload(
-            registry_path=module.resolve_registry_path(registry_override),
+            registry_path=registry_path,
             status_plane_path=Path(args.status_plane_path).resolve(),
             progress_report_path=Path(args.progress_report_path).resolve(),
             progress_history_path=Path(args.progress_history_path).resolve(),
@@ -7331,31 +8124,181 @@ def _journey_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     return audit
 
 
+def _decision_signal_map(cited_signals: Any) -> Dict[str, str]:
+    signal_map: Dict[str, str] = {}
+    if not isinstance(cited_signals, list):
+        return signal_map
+    for row in cited_signals:
+        text = str(row or "").strip()
+        if not text:
+            continue
+        if "=" not in text:
+            signal_map[text] = ""
+            continue
+        key, value = text.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        signal_map[key] = value.strip()
+    return signal_map
+
+
+def _weekly_pulse_launch_governance_reason(
+    payload: Dict[str, Any],
+    supporting_signals: Dict[str, Any],
+) -> str:
+    decisions = payload.get("governor_decisions")
+    if not isinstance(decisions, list) or not decisions:
+        return "weekly product pulse is missing governor_decisions entries"
+
+    launch_decision: Optional[Dict[str, Any]] = None
+    for row in decisions:
+        if not isinstance(row, dict):
+            continue
+        action = str(row.get("action") or "").strip().lower()
+        if action in {"freeze_launch", "launch_expand"}:
+            launch_decision = row
+            break
+    if launch_decision is None:
+        return "weekly product pulse is missing a launch governance decision (freeze_launch or launch_expand)"
+
+    signal_map = _decision_signal_map(launch_decision.get("cited_signals"))
+    required_signal_keys = {
+        "journey_gate_state",
+        "journey_gate_blocked_count",
+        "local_release_proof_status",
+        "provider_canary_status",
+        "closure_health_state",
+    }
+    missing_signal_keys = sorted(key for key in required_signal_keys if key not in signal_map)
+    if missing_signal_keys:
+        return (
+            "weekly product pulse launch governance decision is missing cited signal(s): "
+            + ", ".join(missing_signal_keys)
+        )
+
+    launch_readiness = str(supporting_signals.get("launch_readiness") or "").strip()
+    if not launch_readiness:
+        return "weekly product pulse is missing supporting_signals.launch_readiness"
+
+    provider_route_stewardship = supporting_signals.get("provider_route_stewardship")
+    if not isinstance(provider_route_stewardship, dict):
+        return "weekly product pulse is missing supporting_signals.provider_route_stewardship"
+    canary_status = str(provider_route_stewardship.get("canary_status") or "").strip()
+    next_decision = str(provider_route_stewardship.get("next_decision") or "").strip()
+    if not canary_status or not next_decision:
+        return (
+            "weekly product pulse provider_route_stewardship must include canary_status and next_decision"
+        )
+
+    launch_action = str(launch_decision.get("action") or "").strip().lower()
+    if launch_action == "launch_expand":
+        if canary_status != "Canary green on all active lanes":
+            return (
+                "weekly product pulse reports launch_expand while provider canary posture is not green"
+            )
+        if str(signal_map.get("local_release_proof_status") or "").strip().lower() != "passed":
+            return (
+                "weekly product pulse reports launch_expand without passed local release proof"
+            )
+        if str(signal_map.get("closure_health_state") or "").strip().lower() != "clear":
+            return (
+                "weekly product pulse reports launch_expand while closure health is not clear"
+            )
+    return ""
+
+
+def _resolve_weekly_pulse_path(path: Path) -> Path:
+    candidates: List[Path] = []
+    seen: Set[str] = set()
+    for candidate in (
+        path,
+        DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "WEEKLY_PRODUCT_PULSE.generated.json",
+        DEFAULT_WEEKLY_PULSE_PATH,
+    ):
+        resolved = Path(candidate).resolve()
+        key = str(resolved)
+        if key in seen:
+            continue
+        candidates.append(resolved)
+        seen.add(key)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+def _weekly_pulse_audit_is_derivative_of_live_blockers(audit: Dict[str, Any]) -> bool:
+    reason = str(audit.get("reason") or "").strip().lower()
+    if not reason:
+        return False
+    return reason.startswith("weekly product pulse still reports the active wave as") or reason.startswith(
+        "weekly product pulse reports journey gate health as"
+    ) or reason.startswith("weekly product pulse reports release health as")
+
+
 def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
-    path = Path(args.weekly_pulse_path).resolve()
+    requested_path = Path(args.weekly_pulse_path).resolve()
+    path = _resolve_weekly_pulse_path(requested_path)
     audit: Dict[str, Any] = {
         "status": "pass",
         "reason": "weekly product pulse is fresh and reports no remaining drift or blocker pressure",
+        "requested_path": str(requested_path),
         "path": str(path),
+        "contract_name": "",
+        "contract_version": 0,
         "generated_at": "",
         "as_of": "",
         "active_wave": "",
         "active_wave_status": "",
         "release_health_state": "",
         "journey_gate_health_state": "",
+        "automation_alignment_state": "",
         "design_drift_count": 0,
         "public_promise_drift_count": 0,
         "oldest_blocker_days": 0,
     }
     if not path.is_file():
         audit["status"] = "fail"
-        audit["reason"] = f"weekly product pulse is missing: {path}"
+        audit["reason"] = f"weekly product pulse is missing: {requested_path}"
         return audit
     payload = _read_state(path)
     if not payload:
         audit["status"] = "fail"
         audit["reason"] = f"weekly product pulse could not be read: {path}"
         return audit
+    audit["contract_name"] = str(payload.get("contract_name") or "").strip()
+    audit["contract_version"] = _coerce_int(payload.get("contract_version"), 0)
+    if audit["contract_name"] != "chummer.weekly_product_pulse":
+        audit["status"] = "fail"
+        audit["reason"] = "weekly product pulse contract_name is missing or unexpected"
+        return audit
+    if audit["contract_version"] < 3:
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "weekly product pulse contract_version is stale; expected >=3 for pulse-v3 launch governance"
+        )
+        return audit
+    required_top_level_fields = (
+        "as_of",
+        "release_health",
+        "flagship_readiness",
+        "rule_environment_trust",
+        "journey_gate_health",
+        "edition_authorship_and_import_confidence",
+        "top_support_or_feedback_clusters",
+        "oldest_blocker_days",
+        "design_drift_count",
+        "public_promise_drift_count",
+        "governor_decisions",
+        "next_checkpoint_question",
+    )
+    for field in required_top_level_fields:
+        if field not in payload:
+            audit["status"] = "fail"
+            audit["reason"] = f"weekly product pulse is missing top-level scorecard field: {field}"
+            return audit
+
     generated_at = str(payload.get("generated_at") or "").strip()
     audit["generated_at"] = generated_at
     audit["as_of"] = str(payload.get("as_of") or "").strip()
@@ -7365,9 +8308,25 @@ def _weekly_pulse_audit(args: argparse.Namespace) -> Dict[str, Any]:
     snapshot = dict(payload.get("snapshot") or {})
     release_health = dict(snapshot.get("release_health") or {})
     audit["release_health_state"] = str(release_health.get("state") or "").strip()
+    supporting_signals = dict(payload.get("supporting_signals") or {})
+    automation_alignment = dict(supporting_signals.get("automation_alignment") or {})
+    audit["automation_alignment_state"] = str(automation_alignment.get("state") or "").strip()
     audit["design_drift_count"] = _coerce_int(snapshot.get("design_drift_count"), 0)
     audit["public_promise_drift_count"] = _coerce_int(snapshot.get("public_promise_drift_count"), 0)
     audit["oldest_blocker_days"] = _coerce_int(snapshot.get("oldest_blocker_days"), 0)
+    if not automation_alignment:
+        audit["status"] = "fail"
+        audit["reason"] = "weekly product pulse is missing supporting_signals.automation_alignment"
+        return audit
+    if str(audit["automation_alignment_state"]).strip().lower() == "misaligned":
+        audit["status"] = "fail"
+        audit["reason"] = "weekly product pulse reports automation frontier misalignment"
+        return audit
+    launch_governance_reason = _weekly_pulse_launch_governance_reason(payload, supporting_signals)
+    if launch_governance_reason:
+        audit["status"] = "fail"
+        audit["reason"] = launch_governance_reason
+        return audit
 
     generated_at_dt = _parse_iso(generated_at)
     if generated_at_dt is None:
@@ -7650,13 +8609,14 @@ def _rid_deb_arch(rid: str) -> str:
 
 
 def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
-    path = Path(args.ui_linux_desktop_exit_gate_path).resolve()
+    configured_path = Path(str(args.ui_linux_desktop_exit_gate_path or "")).expanduser()
+    path = configured_path.resolve()
     repo_root = Path(args.ui_linux_desktop_repo_root).resolve()
     expected_output_root = (repo_root / FLAGSHIP_UI_LINUX_OUTPUT_ROOT).resolve()
     audit: Dict[str, Any] = {
         "status": "pass",
         "reason": "linux desktop binary build/start/test proof is ready on current repo-local evidence",
-        "path": str(path),
+        "path": str(configured_path),
         "repo_root": str(repo_root),
         "generated_at": "",
         "age_seconds": 0,
@@ -7744,6 +8704,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     audit["stage"] = str(payload.get("stage") or "").strip()
     head = dict(payload.get("head") or {})
     build = dict(payload.get("build") or {})
+    checks = dict(payload.get("checks") or {})
     startup_smoke = dict(payload.get("startup_smoke") or {})
     primary_smoke = dict(startup_smoke.get("primary") or {})
     fallback_smoke = dict(startup_smoke.get("fallback") or {})
@@ -7841,6 +8802,11 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
     installer_sha256 = _sha256_file(installer_path) if installer_path else ""
     archive_sha256 = _sha256_file(archive_path) if archive_path else ""
     primary_expected_digest = f"sha256:{installer_sha256}" if installer_sha256 else ""
+    release_channel_linux_artifact = dict(checks.get("release_channel_linux_artifact") or {})
+    release_channel_installer_sha = str(release_channel_linux_artifact.get("sha256") or "").strip()
+    release_channel_expected_digest = f"sha256:{release_channel_installer_sha}" if release_channel_installer_sha else ""
+    allowed_primary_receipt_digests = {digest for digest in (primary_expected_digest, release_channel_expected_digest) if digest}
+    primary_receipt_digest = str(primary_receipt_payload.get("artifactDigest") or "").strip()
     fallback_expected_digest = f"sha256:{archive_sha256}" if archive_sha256 else ""
     expected_wrapper_content = (
         "#!/usr/bin/env bash\n"
@@ -7964,10 +8930,17 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
         and f"status not-installed {FLAGSHIP_UI_LINUX_DEB_PACKAGE_NAME}:{expected_deb_arch or ''}".strip(":") in primary_dpkg_log_text
         else ("missing" if not primary_install_verification_path else "invalid")
     )
+    primary_smoke_artifact_matches = (
+        primary_artifact_path == installer_path
+        or (
+            primary_artifact_path.name == installer_path.name
+            and primary_receipt_digest in allowed_primary_receipt_digests
+        )
+    )
     audit["primary_smoke_status"] = (
         "passed"
         if primary_receipt_payload
-        and primary_artifact_path == installer_path
+        and primary_smoke_artifact_matches
         and str(primary_smoke.get("package_kind") or "").strip() == "deb"
         and str(primary_smoke.get("status") or "").strip() == "passed"
         and str(primary_receipt_payload.get("headId") or "").strip() == FLAGSHIP_UI_APP_KEY
@@ -7977,7 +8950,7 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
         and Path(str(primary_receipt_payload.get("processPath") or "").strip()).name == FLAGSHIP_UI_LAUNCH_TARGET
         and str(primary_receipt_payload.get("channelId") or "").strip() == str(head.get("channel") or "").strip()
         and str(primary_receipt_payload.get("version") or "").strip() == str(head.get("version") or "").strip()
-        and str(primary_receipt_payload.get("artifactDigest") or "").strip() == primary_expected_digest
+        and primary_receipt_digest in allowed_primary_receipt_digests
         and audit["primary_install_verification_status"] == "passed"
         else ("missing" if not (primary_receipt_path and primary_receipt_path.is_file()) else "invalid")
     )
@@ -8246,11 +9219,14 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
-    path = Path(str(getattr(args, "ui_executable_exit_gate_path", DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH))).resolve()
+    configured_path = Path(
+        str(getattr(args, "ui_executable_exit_gate_path", DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH) or "")
+    ).expanduser()
+    path = configured_path.resolve()
     audit: Dict[str, Any] = {
         "status": "pass",
         "reason": "desktop executable exit gate proof is ready",
-        "path": str(path),
+        "path": str(configured_path),
         "generated_at": "",
         "age_seconds": 0,
         "proof_status": "",

@@ -1,20 +1,46 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-04T21:16:42Z'
+generated_at: '2026-04-04T21:16:56Z'
 mode: completion_review
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
+state_root: /var/lib/codex-fleet/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 projects_dir: /docker/fleet/config/projects
 primary_probe_shard: shard-1
 focus:
-  profiles: []
+  profiles:
+  - desktop_workflow_depth
   owners:
   - chummer6-ui
   - chummer6-ui-kit
+  - chummer6-core
+  - chummer6-design
   - fleet
   - chummer6-hub-registry
   texts:
+  - workflow click-through
+  - workflow clickthrough
+  - smooth flagship desktop
+  - menu wiring
+  - demo runner
+  - spotlight-launchable
+  - feedback route
+  - public feedback
+  - karma
+  - critter
+  - adept powers
+  - initiation
+  - cyberdeck
+  - matrix
+  - spells
+  - drugs
+  - contacts
+  - diary
+  - spirits
+  - familiars
+  - vehicles
+  - drones
+  - rigger
   - install
   - update
   - recovery
@@ -27,7 +53,7 @@ completion_audit:
 receipt_audit:
   status: pass
   reason: recent supervisor history ends with a trusted structured worker receipt
-  latest_run_id: 20260404T211047Z
+  latest_run_id: 20260404T211323Z
   latest_run_reason: ''
 journey_gate_audit:
   status: fail
@@ -51,9 +77,12 @@ repo_backlog_audit:
   open_item_count: 0
   open_project_count: 0
   open_items: []
-frontier_count: 1
+frontier_count: 4
 frontier_ids:
 - 3194227093
+- 6
+- 4
+- 5
 frontier:
 - id: 3194227093
   title: 'Completion gate: Install, claim, restore, continue'
@@ -82,3 +111,53 @@ frontier:
     avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg,
     public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt
     startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.'
+- id: 6
+  title: Safehouse, travel, offline, and mobile companion continuity
+  wave: W3
+  status: planned
+  owners:
+  - chummer6-mobile
+  - chummer6-hub
+  - chummer6-ui
+  - chummer6-hub-registry
+  dependencies:
+  - 4
+  - 5
+  exit_criteria:
+  - Claimed users can move between desktop, travel, and mobile play contexts with
+    explicit offline readiness and bounded local truth.
+  - Continuity proof makes it obvious what is cached, what is stale, and what can
+    still be done offline.
+- id: 4
+  title: 'Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return
+    loop'
+  wave: W3
+  status: planned
+  owners:
+  - chummer6-hub
+  - chummer6-ui
+  - chummer6-mobile
+  - chummer6-core
+  dependencies: []
+  exit_criteria:
+  - Campaign truth spans plan, play, recap, downtime, contact changes, heat, and next-session
+    return without local shadow models.
+  - Diary, contacts, and campaign consequences read like one product lane rather than
+    separate note surfaces.
+- id: 5
+  title: GM operations, opposition packets, roster movement, prep library, and event
+    controls
+  wave: W3
+  status: planned
+  owners:
+  - chummer6-hub
+  - chummer6-ui
+  - chummer6-core
+  - executive-assistant
+  dependencies:
+  - 4
+  exit_criteria:
+  - GM and organizer work is a first-class governed lane for rosters, opposition,
+    prep packets, and event or season operations.
+  - Operator actions stay on the same account, audit, and support backbone as normal
+    user flows.

@@ -507,6 +507,7 @@ def _write_completion_evidence(
     release_health_state: str = "green_or_explained",
     journey_gate_health_state: str = "ready",
     active_wave_status: str = "complete",
+    automation_alignment_state: str = "aligned",
     write_linux_desktop_exit_gate: bool = True,
     linux_desktop_exit_gate_status: str = "passed",
     linux_desktop_exit_gate_test_total: int = 14,
@@ -629,20 +630,72 @@ def _write_completion_evidence(
         json.dumps(
             {
                 "contract_name": "chummer.weekly_product_pulse",
+                "contract_version": 3,
                 "generated_at": now_text,
                 "as_of": now_text[:10],
                 "active_wave": "Next 20 Big Wins After Post-Audit Closeout",
                 "active_wave_status": active_wave_status,
+                "release_health": {
+                    "state": release_health_state,
+                    "reason": "green",
+                },
+                "flagship_readiness": {
+                    "state": "ready",
+                    "reason": "fixture",
+                },
+                "rule_environment_trust": {
+                    "state": "ready",
+                    "reason": "fixture",
+                },
                 "journey_gate_health": {
                     "state": journey_gate_health_state,
                     "reason": "steady",
                     "blocked_count": 0,
                     "warning_count": 0,
                 },
+                "edition_authorship_and_import_confidence": {
+                    "state": "monitor",
+                    "reason": "fixture",
+                },
+                "top_support_or_feedback_clusters": [],
+                "oldest_blocker_days": oldest_blocker_days,
+                "design_drift_count": design_drift_count,
+                "public_promise_drift_count": public_promise_drift_count,
+                "governor_decisions": [
+                    {
+                        "decision_id": "fixture-focus",
+                        "action": "focus_shift",
+                        "reason": "fixture",
+                        "cited_signals": [
+                            "overall_progress_percent=100",
+                        ],
+                    },
+                    {
+                        "decision_id": "fixture-launch",
+                        "action": "freeze_launch",
+                        "reason": "fixture",
+                        "cited_signals": [
+                            "journey_gate_state=ready",
+                            "journey_gate_blocked_count=0",
+                            "local_release_proof_status=passed",
+                            "provider_canary_status=Canary green on all active lanes",
+                            "closure_health_state=clear",
+                        ],
+                    },
+                ],
+                "next_checkpoint_question": "What remains?",
                 "snapshot": {
                     "release_health": {
                         "state": release_health_state,
                         "reason": "green",
+                    },
+                    "flagship_readiness": {
+                        "state": "ready",
+                        "reason": "fixture",
+                    },
+                    "rule_environment_trust": {
+                        "state": "ready",
+                        "reason": "fixture",
                     },
                     "journey_gate_health": {
                         "state": journey_gate_health_state,
@@ -650,12 +703,52 @@ def _write_completion_evidence(
                         "blocked_count": 0,
                         "warning_count": 0,
                     },
+                    "edition_authorship_and_import_confidence": {
+                        "state": "monitor",
+                        "reason": "fixture",
+                    },
                     "top_support_or_feedback_clusters": [],
                     "oldest_blocker_days": oldest_blocker_days,
                     "design_drift_count": design_drift_count,
                     "public_promise_drift_count": public_promise_drift_count,
-                    "governor_decisions": [],
+                    "governor_decisions": [
+                        {
+                            "decision_id": "fixture-focus",
+                            "action": "focus_shift",
+                            "reason": "fixture",
+                            "cited_signals": [
+                                "overall_progress_percent=100",
+                            ],
+                        },
+                        {
+                            "decision_id": "fixture-launch",
+                            "action": "freeze_launch",
+                            "reason": "fixture",
+                            "cited_signals": [
+                                "journey_gate_state=ready",
+                                "journey_gate_blocked_count=0",
+                                "local_release_proof_status=passed",
+                                "provider_canary_status=Canary green on all active lanes",
+                                "closure_health_state=clear",
+                            ],
+                        },
+                    ],
                     "next_checkpoint_question": "What remains?",
+                },
+                "supporting_signals": {
+                    "launch_readiness": "fixture",
+                    "provider_route_stewardship": {
+                        "canary_status": "Canary green on all active lanes",
+                        "next_decision": "fixture",
+                    },
+                    "automation_alignment": {
+                        "state": automation_alignment_state,
+                        "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
+                        "active_open_milestone_ids": [10, 11, 12, 15],
+                        "handoff_frontier_milestone_ids": [10, 11, 12, 15],
+                        "out_of_program_frontier_milestone_ids": [],
+                        "summary": "fixture",
+                    }
                 },
             }
         ),
@@ -968,6 +1061,7 @@ def _write_flagship_product_readiness(
         "horizons_and_public_surface",
         "fleet_and_operator_loop",
     ),
+    unresolved_parity_families: tuple[dict[str, object], ...] = (),
 ) -> None:
     now_text = generated_at or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     coverage = {key: ("ready" if key in ready_keys else "missing") for key in (
@@ -987,6 +1081,10 @@ def _write_flagship_product_readiness(
                 "generated_at": now_text,
                 "status": status,
                 "coverage": coverage,
+                "parity_registry": {
+                    "excluded_scope": ["plugin-framework"],
+                    "unresolved_families": list(unresolved_parity_families),
+                },
             }
         ),
         encoding="utf-8",
@@ -1418,6 +1516,21 @@ def test_assess_worker_result_accepts_json_wrapped_structured_closeout() -> None
     assert reason == ""
 
 
+def test_assess_worker_result_rejects_unpublished_remote_work() -> None:
+    module = _load_module()
+
+    accepted, reason = module._assess_worker_result(
+        0,
+        "What shipped: `/docker/fleet/NEXT_SESSION_HANDOFF.md` refreshed locally with both slices "
+        "(local Fleet commits `fbc5b1d`, `370495d`).\n\n"
+        "What remains: Fleet handoff commits are not yet pushed to remote.\n\n"
+        "Exact blocker: none\n",
+    )
+
+    assert accepted is False
+    assert "not yet pushed to remote" in reason
+
+
 def test_run_once_dry_run_persists_state_without_launching_worker() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -1825,9 +1938,16 @@ fatal: could not read Username for 'https://github.com': No such device or addre
 exec
 /usr/bin/bash -lc 'cd /docker/fleet && git push' in /docker/fleet exited 128 in 14ms:
 fatal: could not read Username for 'https://github.com': No such device or address
+exec
+/usr/bin/bash -lc 'cd /docker/chummercomplete/chummer6-core && git add Chummer.Application/Workspaces/HeroLabShadowrunImporter.cs Chummer.CoreEngine.Tests/HeroLabRulesParityAudit.cs && git commit -m "test(w17): lock Hero Lab online metadata-shape ruleset detection" && git push' in /docker/fleet exited 128 in 67ms:
+fatal: could not read Username for 'https://github.com': No such device or address
 """
     repos = module._worker_reported_git_push_repos(stderr_text)
-    assert repos == [Path("/docker/chummercomplete/chummer.run-services"), Path("/docker/fleet")]
+    assert repos == [
+        Path("/docker/chummercomplete/chummer.run-services"),
+        Path("/docker/fleet"),
+        Path("/docker/chummercomplete/chummer6-core"),
+    ]
 
 
 def test_retry_worker_reported_git_pushes_uses_host_git_auth(monkeypatch) -> None:
@@ -1885,13 +2005,36 @@ def test_github_https_auth_extraheader_returns_empty_when_gh_missing(monkeypatch
     def fake_run(command, *, text, capture_output, check, env=None):
         if command[:5] == ["git", "-C", "/docker/fleet", "remote", "get-url"]:
             return subprocess.CompletedProcess(command, 0, stdout="https://github.com/ArchonMegalon/fleet.git\n", stderr="")
-        if command[:3] == ["gh", "auth", "token"]:
-            raise FileNotFoundError("gh")
         raise AssertionError(f"unexpected command: {command}")
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "_github_auth_token", lambda _env: "")
 
     assert module._github_https_auth_extraheader({}, Path("/docker/fleet")) == ""
+
+
+def test_github_auth_token_reads_hosts_yml_without_gh(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        gh_dir = Path(tmp) / "gh"
+        gh_dir.mkdir(parents=True, exist_ok=True)
+        (gh_dir / "hosts.yml").write_text(
+            "github.com:\n"
+            "  users:\n"
+            "    ArchonMegalon:\n"
+            "      oauth_token: gho_hosts_token\n"
+            "  git_protocol: https\n",
+            encoding="utf-8",
+        )
+
+        def fake_run(command, *, text, capture_output, check, env=None):
+            if command[:3] == ["gh", "auth", "token"]:
+                raise FileNotFoundError("gh")
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+        assert module._github_auth_token({"GH_CONFIG_DIR": str(gh_dir)}) == "gho_hosts_token"
 
 
 def test_is_missing_github_push_blocker_accepts_remote_push_wording() -> None:
@@ -3324,6 +3467,130 @@ def test_design_completion_audit_keeps_weekly_pulse_fail_when_release_health_is_
         assert audit["weekly_pulse_audit"].get("live_journey_gate_override") is not True
 
 
+def test_design_completion_audit_fails_when_weekly_pulse_reports_automation_frontier_misalignment() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(
+            root,
+            automation_alignment_state="misaligned",
+        )
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["journey_gate_audit"]["status"] == "pass"
+        assert audit["weekly_pulse_audit"]["status"] == "fail"
+        assert "automation frontier misalignment" in str(audit["weekly_pulse_audit"]["reason"]).lower()
+
+
+def test_design_completion_audit_fails_when_weekly_pulse_missing_launch_governance_decision() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        pulse_path = root / "WEEKLY_PRODUCT_PULSE.generated.json"
+        pulse_payload = json.loads(pulse_path.read_text(encoding="utf-8"))
+        pulse_payload["governor_decisions"] = [
+            {
+                "decision_id": "fixture-focus",
+                "action": "focus_shift",
+                "reason": "fixture",
+                "cited_signals": ["overall_progress_percent=100"],
+            }
+        ]
+        pulse_payload["snapshot"]["governor_decisions"] = pulse_payload["governor_decisions"]
+        pulse_path.write_text(json.dumps(pulse_payload), encoding="utf-8")
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["weekly_pulse_audit"]["status"] == "fail"
+        assert "launch governance decision" in str(audit["weekly_pulse_audit"]["reason"]).lower()
+
+
+def test_design_completion_audit_fails_when_weekly_pulse_launch_expand_without_green_canary() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        pulse_path = root / "WEEKLY_PRODUCT_PULSE.generated.json"
+        pulse_payload = json.loads(pulse_path.read_text(encoding="utf-8"))
+        pulse_payload["governor_decisions"] = [
+            {
+                "decision_id": "fixture-focus",
+                "action": "focus_shift",
+                "reason": "fixture",
+                "cited_signals": ["overall_progress_percent=100"],
+            },
+            {
+                "decision_id": "fixture-launch",
+                "action": "launch_expand",
+                "reason": "fixture",
+                "cited_signals": [
+                    "journey_gate_state=ready",
+                    "journey_gate_blocked_count=0",
+                    "local_release_proof_status=passed",
+                    "provider_canary_status=Canary watch on 1 active lane(s)",
+                    "closure_health_state=clear",
+                ],
+            },
+        ]
+        pulse_payload["snapshot"]["governor_decisions"] = pulse_payload["governor_decisions"]
+        pulse_payload["supporting_signals"]["provider_route_stewardship"]["canary_status"] = (
+            "Canary watch on 1 active lane(s)"
+        )
+        pulse_path.write_text(json.dumps(pulse_payload), encoding="utf-8")
+        args = _args(root)
+
+        audit = module._design_completion_audit(
+            args,
+            [
+                {
+                    "run_id": "run-1",
+                    "worker_exit_code": 0,
+                    "accepted": True,
+                    "acceptance_reason": "",
+                    "shipped": "trusted receipt",
+                    "remains": "none",
+                    "blocker": "none",
+                }
+            ],
+        )
+
+        assert audit["status"] == "fail"
+        assert audit["weekly_pulse_audit"]["status"] == "fail"
+        assert "launch_expand" in str(audit["weekly_pulse_audit"]["reason"]).lower()
+
+
 def test_run_receipt_status_rejects_accepted_receipt_without_structured_content() -> None:
     module = _load_module()
 
@@ -4225,6 +4492,190 @@ def test_configured_shard_roots_accepts_structured_manifest_entries() -> None:
         assert configured_roots == [shard_one_root, shard_three_root]
 
 
+def test_heal_state_push_blockers_repairs_recorded_missing_github_push_blocker() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp) / "state" / "chummer_design_supervisor" / "shard-5"
+        run_dir = state_root / "runs" / "run-1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stderr_path.write_text(
+            "exec\n/usr/bin/bash -lc 'cd /docker/fleet && git push' in /docker/fleet exited 128 in 14ms:\n",
+            encoding="utf-8",
+        )
+        last_message_path = run_dir / "last_message.txt"
+        last_message_path.write_text(
+            "What shipped: pushed nothing\n\n"
+            "What remains: handoff still local\n\n"
+            "Exact blocker: host-side git push recovery failed after worker credential error: "
+            "/docker/fleet: fatal: could not read Username for 'https://github.com': No such device or address\n",
+            encoding="utf-8",
+        )
+        run_payload = {
+            "run_id": "run-1",
+            "accepted": True,
+            "worker_exit_code": 0,
+            "started_at": "2026-04-04T15:00:00Z",
+            "finished_at": "2026-04-04T15:05:00Z",
+            "open_milestone_ids": [10, 11, 12, 15],
+            "frontier_ids": [10, 11, 12, 15],
+            "blocker": "host-side git push recovery failed after worker credential error: /docker/fleet: fatal: could not read Username for 'https://github.com': No such device or address",
+            "shipped": "pushed nothing",
+            "remains": "handoff still local",
+            "final_message": last_message_path.read_text(encoding="utf-8"),
+            "stderr_path": str(stderr_path),
+            "last_message_path": str(last_message_path),
+        }
+        module._write_json(
+            state_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:05:00Z",
+                "mode": "loop",
+                "open_milestone_ids": [10, 11, 12, 15],
+                "frontier_ids": [10, 11, 12, 15],
+                "last_run": dict(run_payload),
+            },
+        )
+        (state_root / "history.jsonl").write_text(json.dumps(run_payload) + "\n", encoding="utf-8")
+
+        original_retry = module._retry_worker_reported_git_pushes
+        module._retry_worker_reported_git_pushes = (
+            lambda _stderr: {"attempted": ["/docker/fleet"], "succeeded": ["/docker/fleet"], "failed": {}}
+        )
+        try:
+            module._heal_state_push_blockers(state_root)
+        finally:
+            module._retry_worker_reported_git_pushes = original_retry
+
+        state = module._read_state(state_root / "state.json")
+        history = module._read_history(state_root / "history.jsonl", limit=0)
+
+        assert state["last_run"]["blocker"] == "none"
+        assert history[-1]["blocker"] == "none"
+        assert "Exact blocker: none" in last_message_path.read_text(encoding="utf-8")
+
+
+def test_heal_state_push_blockers_repairs_verified_remote_push_residue() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp) / "state" / "chummer_design_supervisor" / "shard-2"
+        run_dir = state_root / "runs" / "run-1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stderr_path.write_text("", encoding="utf-8")
+        last_message_path = run_dir / "last_message.txt"
+        last_message_path.write_text(
+            "What shipped: `/docker/fleet/NEXT_SESSION_HANDOFF.md` refreshed locally with both slices "
+            "(local Fleet commits `fbc5b1d`, `370495d`).\n\n"
+            "What remains: frontier milestones `14`, `17` residuals; "
+            "Fleet handoff commits are not yet pushed to remote.\n\n"
+            "Exact blocker: none\n",
+            encoding="utf-8",
+        )
+        run_payload = {
+            "run_id": "run-1",
+            "accepted": True,
+            "worker_exit_code": 0,
+            "started_at": "2026-04-04T15:00:00Z",
+            "finished_at": "2026-04-04T15:05:00Z",
+            "open_milestone_ids": [13, 14, 17, 18],
+            "frontier_ids": [13, 14, 17, 18],
+            "blocker": "none",
+            "shipped": "`/docker/fleet/NEXT_SESSION_HANDOFF.md` refreshed locally with both slices (local Fleet commits `fbc5b1d`, `370495d`).",
+            "remains": "frontier milestones `14`, `17` residuals; Fleet handoff commits are not yet pushed to remote.",
+            "final_message": last_message_path.read_text(encoding="utf-8"),
+            "stderr_path": str(stderr_path),
+            "last_message_path": str(last_message_path),
+        }
+        module._write_json(
+            state_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:05:00Z",
+                "mode": "loop",
+                "open_milestone_ids": [13, 14, 17, 18],
+                "frontier_ids": [13, 14, 17, 18],
+                "last_run": dict(run_payload),
+            },
+        )
+        (state_root / "history.jsonl").write_text(json.dumps(run_payload) + "\n", encoding="utf-8")
+
+        original_contains = module._git_remote_contains_commit
+        module._git_remote_contains_commit = lambda _repo, _commit, env=None: True
+        try:
+            module._heal_state_push_blockers(state_root)
+        finally:
+            module._git_remote_contains_commit = original_contains
+
+        state = module._read_state(state_root / "state.json")
+        history = module._read_history(state_root / "history.jsonl", limit=0)
+        repaired_message = last_message_path.read_text(encoding="utf-8")
+
+        assert state["last_run"]["blocker"] == "none"
+        assert state["last_run"]["remains"] == "frontier milestones `14`, `17` residuals"
+        assert "not yet pushed to remote" not in repaired_message
+        assert "(Fleet commits `fbc5b1d`, `370495d`)" in repaired_message
+        assert history[-1]["remains"] == "frontier milestones `14`, `17` residuals"
+
+
+def test_heal_state_push_blockers_repairs_verified_not_yet_on_remote_phrase() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp) / "state" / "chummer_design_supervisor" / "shard-1"
+        run_dir = state_root / "runs" / "run-1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stderr_path.write_text("", encoding="utf-8")
+        last_message_path = run_dir / "last_message.txt"
+        last_message_path.write_text(
+            "What shipped: `chummer-hub-registry` hardening landed; `fleet` handoff was refreshed locally in `8140fd4`.\n\n"
+            "What remains: frontier milestones `1`, `2`, `3` remain open; `fleet` commit `8140fd4` is not yet on remote.\n\n"
+            "Exact blocker: none\n",
+            encoding="utf-8",
+        )
+        run_payload = {
+            "run_id": "run-1",
+            "accepted": True,
+            "worker_exit_code": 0,
+            "started_at": "2026-04-04T16:15:57Z",
+            "finished_at": "2026-04-04T16:24:46Z",
+            "open_milestone_ids": [1, 2, 3],
+            "frontier_ids": [1, 2, 3],
+            "blocker": "none",
+            "shipped": "`chummer-hub-registry` hardening landed; `fleet` handoff was refreshed locally in `8140fd4`.",
+            "remains": "frontier milestones `1`, `2`, `3` remain open; `fleet` commit `8140fd4` is not yet on remote.",
+            "final_message": last_message_path.read_text(encoding="utf-8"),
+            "stderr_path": str(stderr_path),
+            "last_message_path": str(last_message_path),
+        }
+        module._write_json(
+            state_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:24:46Z",
+                "mode": "loop",
+                "open_milestone_ids": [1, 2, 3],
+                "frontier_ids": [1, 2, 3],
+                "last_run": dict(run_payload),
+            },
+        )
+        (state_root / "history.jsonl").write_text(json.dumps(run_payload) + "\n", encoding="utf-8")
+
+        original_contains = module._git_remote_contains_commit
+        module._git_remote_contains_commit = lambda _repo, _commit, env=None: True
+        try:
+            module._heal_state_push_blockers(state_root)
+        finally:
+            module._git_remote_contains_commit = original_contains
+
+        state = module._read_state(state_root / "state.json")
+        history = module._read_history(state_root / "history.jsonl", limit=0)
+        repaired_message = last_message_path.read_text(encoding="utf-8")
+
+        assert state["last_run"]["blocker"] == "none"
+        assert state["last_run"]["remains"] == "frontier milestones `1`, `2`, `3` remain open"
+        assert "not yet on remote" not in repaired_message
+        assert history[-1]["remains"] == "frontier milestones `1`, `2`, `3` remain open"
+
+
 def test_open_milestone_shard_frontier_uses_active_manifest_to_avoid_stranded_slices() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -4310,6 +4761,333 @@ def test_effective_supervisor_state_filters_history_that_does_not_match_current_
 
         assert state["last_run"]["run_id"] == "run-current"
         assert [run["run_id"] for run in history] == ["run-current"]
+
+
+def test_effective_supervisor_state_filters_history_with_nonlocal_open_milestones() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-2"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:20:00Z",
+                "mode": "loop",
+                "frontier_ids": [13, 14, 17, 18],
+                "open_milestone_ids": [13, 14, 17, 18],
+            },
+        )
+        module._append_jsonl(
+            shard_root / "history.jsonl",
+            {
+                "run_id": "run-wide-open",
+                "finished_at": "2026-04-04T15:10:00Z",
+                "frontier_ids": [13, 14, 17, 18],
+                "open_milestone_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+                "worker_exit_code": 0,
+            },
+        )
+        module._append_jsonl(
+            shard_root / "history.jsonl",
+            {
+                "run_id": "run-local-open",
+                "finished_at": "2026-04-04T15:15:00Z",
+                "frontier_ids": [13, 14, 17, 18],
+                "open_milestone_ids": [13, 14, 17, 18],
+                "worker_exit_code": 0,
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": [{"name": "shard-2", "frontier_ids": [13, 14, 17, 18]}]}),
+            encoding="utf-8",
+        )
+
+        state, history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["last_run"]["run_id"] == "run-local-open"
+        assert [run["run_id"] for run in history] == ["run-local-open"]
+
+
+def test_effective_supervisor_state_ignores_base_history_when_sharded() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:00:00Z",
+                "mode": "loop",
+                "frontier_ids": [1, 2, 3, 4, 5],
+                "open_milestone_ids": [1, 2, 3, 4, 5],
+            },
+        )
+        module._append_jsonl(
+            aggregate_root / "history.jsonl",
+            {
+                "run_id": "run-base",
+                "finished_at": "2026-04-04T15:00:00Z",
+                "frontier_ids": [1, 2, 3, 4, 5],
+                "open_milestone_ids": [1, 2, 3, 4, 5],
+                "worker_exit_code": 0,
+            },
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:10:00Z",
+                "mode": "loop",
+                "frontier_ids": [1, 2, 3],
+                "open_milestone_ids": [1, 2, 3],
+            },
+        )
+        module._append_jsonl(
+            shard_root / "history.jsonl",
+            {
+                "run_id": "run-shard",
+                "finished_at": "2026-04-04T15:10:00Z",
+                "frontier_ids": [1, 2, 3],
+                "open_milestone_ids": [1, 2, 3],
+                "worker_exit_code": 0,
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": [{"name": "shard-1", "frontier_ids": [1, 2, 3]}]}),
+            encoding="utf-8",
+        )
+
+        state, history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["frontier_ids"] == [1, 2, 3]
+        assert [run["run_id"] for run in history] == ["run-shard"]
+
+
+def test_effective_supervisor_state_ignores_stale_shard_dirs_not_in_manifest() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        active_root = aggregate_root / "shard-1"
+        stale_root = aggregate_root / "shard-9"
+        active_root.mkdir(parents=True, exist_ok=True)
+        stale_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            active_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:10:00Z",
+                "mode": "loop",
+                "frontier_ids": [1, 2, 3],
+                "open_milestone_ids": [1, 2, 3],
+            },
+        )
+        module._write_json(
+            stale_root / "state.json",
+            {
+                "updated_at": "2026-04-04T15:20:00Z",
+                "mode": "loop",
+                "frontier_ids": [99],
+                "open_milestone_ids": [99],
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": [{"name": "shard-1", "frontier_ids": [1, 2, 3]}]}),
+            encoding="utf-8",
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["shard_count"] == 1
+        assert state["frontier_ids"] == [1, 2, 3]
+        assert state["open_milestone_ids"] == [1, 2, 3]
+
+
+def test_effective_supervisor_state_surfaces_shard_blockers_in_aggregate_status() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_one_root.mkdir(parents=True, exist_ok=True)
+        shard_two_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:05:54Z",
+                "mode": "loop",
+                "open_milestone_ids": [1, 2, 3],
+                "frontier_ids": [1, 2, 3],
+                "last_run": {
+                    "run_id": "run-blocked",
+                    "finished_at": "2026-04-04T15:53:10Z",
+                    "open_milestone_ids": [1, 2, 3],
+                    "frontier_ids": [1, 2, 3],
+                    "blocker": "Concurrent unseen local commits are landing in `/docker/fleet` during execution.",
+                },
+                "active_run": {
+                    "run_id": "run-live",
+                    "frontier_ids": [1, 2, 3],
+                    "open_milestone_ids": [1, 2, 3],
+                },
+            },
+        )
+        module._write_json(
+            shard_two_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:05:57Z",
+                "mode": "loop",
+                "open_milestone_ids": [13, 14],
+                "frontier_ids": [13, 14],
+                "last_run": {
+                    "run_id": "run-clean",
+                    "finished_at": "2026-04-04T15:53:50Z",
+                    "open_milestone_ids": [13, 14],
+                    "frontier_ids": [13, 14],
+                    "blocker": "none",
+                },
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps(
+                {
+                    "active_shards": [
+                        {"name": "shard-1", "frontier_ids": [1, 2, 3]},
+                        {"name": "shard-2", "frontier_ids": [13, 14]},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["shard_blockers"] == [
+            {
+                "name": "shard-1",
+                "run_id": "run-blocked",
+                "blocker": "Concurrent unseen local commits are landing in `/docker/fleet` during execution.",
+            }
+        ]
+        shard_rows = {row["name"]: row for row in state["shards"]}
+        assert shard_rows["shard-1"]["last_run_blocker"] == (
+            "Concurrent unseen local commits are landing in `/docker/fleet` during execution."
+        )
+        assert shard_rows["shard-2"]["last_run_blocker"] == ""
+
+
+def test_effective_supervisor_state_recomputes_aggregate_eta_from_active_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_one_root.mkdir(parents=True, exist_ok=True)
+        shard_two_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:05:54Z",
+                "mode": "loop",
+                "open_milestone_ids": [1, 2, 3],
+                "frontier_ids": [1, 2, 3],
+                "eta": {
+                    "status": "estimated",
+                    "eta_human": "4.5d-1.7w",
+                    "eta_confidence": "low",
+                    "basis": "heuristic_status_mix",
+                    "summary": "3 open milestones remain (0 in progress, 3 not started); range is a fallback heuristic from the current status mix.",
+                    "remaining_open_milestones": 3,
+                    "remaining_in_progress_milestones": 0,
+                    "remaining_not_started_milestones": 3,
+                    "blocking_reason": "",
+                },
+                "active_run": {
+                    "run_id": "run-live-1",
+                    "frontier_ids": [1, 2, 3],
+                    "open_milestone_ids": [1, 2, 3],
+                },
+            },
+        )
+        module._write_json(
+            shard_two_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:05:57Z",
+                "mode": "loop",
+                "open_milestone_ids": [13, 14],
+                "frontier_ids": [13, 14],
+                "active_run": {
+                    "run_id": "run-live-2",
+                    "frontier_ids": [13, 14],
+                    "open_milestone_ids": [13, 14],
+                },
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps(
+                {
+                    "active_shards": [
+                        {"name": "shard-1", "frontier_ids": [1, 2, 3]},
+                        {"name": "shard-2", "frontier_ids": [13, 14]},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["eta"]["remaining_open_milestones"] == 5
+        assert state["eta"]["remaining_in_progress_milestones"] == 5
+        assert state["eta"]["remaining_not_started_milestones"] == 0
+        assert "5 open milestones remain (5 in progress, 0 not started)" in state["eta"]["summary"]
+
+
+def test_reconcile_aggregate_shard_truth_updates_eta_and_blockers() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "open_milestone_ids": [1, 2, 3, 13],
+            "eta": {
+                "status": "estimated",
+                "eta_human": "4.5d-1.7w",
+                "eta_confidence": "low",
+                "basis": "heuristic_status_mix",
+                "summary": "4 open milestones remain (0 in progress, 4 not started); range is a fallback heuristic from the current status mix.",
+                "remaining_open_milestones": 4,
+                "remaining_in_progress_milestones": 0,
+                "remaining_not_started_milestones": 4,
+                "blocking_reason": "",
+            },
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "frontier_ids": [1, 2, 3],
+                    "active_frontier_ids": [1, 2, 3],
+                    "last_run_id": "run-1",
+                    "last_run_blocker": "concurrent local commits",
+                },
+                {
+                    "name": "shard-2",
+                    "frontier_ids": [13],
+                    "active_frontier_ids": [13],
+                    "last_run_id": "run-2",
+                    "last_run_blocker": "",
+                },
+            ],
+        }
+    )
+
+    assert updated["eta"]["remaining_open_milestones"] == 4
+    assert updated["eta"]["remaining_in_progress_milestones"] == 4
+    assert updated["eta"]["remaining_not_started_milestones"] == 0
+    assert "4 open milestones remain (4 in progress, 0 not started)" in updated["eta"]["summary"]
+    assert updated["eta"]["status"] == "blocked"
+    assert updated["eta"]["eta_human"].endswith("after unblock")
+    assert updated["eta"]["blocking_reason"] == "shard-1: concurrent local commits"
+    assert updated["shard_blockers"] == [
+        {"name": "shard-1", "run_id": "run-1", "blocker": "concurrent local commits"}
+    ]
 
 
 def test_run_supervisor_launcher_exits_loudly_when_frontier_probe_fails() -> None:
@@ -5503,6 +6281,31 @@ def test_linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fi
         assert audit["proof_git_head_matches_current"] is False
 
 
+def test_exit_gate_audits_preserve_configured_symlink_paths() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        alias_root = root / "aliases"
+        alias_root.mkdir(parents=True, exist_ok=True)
+        linux_alias = alias_root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        linux_alias.symlink_to(root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+        executable_alias = alias_root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        executable_alias.symlink_to(root / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
+
+        args = _args(root)
+        args.ui_linux_desktop_exit_gate_path = str(linux_alias)
+        args.ui_executable_exit_gate_path = str(executable_alias)
+
+        linux_audit = module._linux_desktop_exit_gate_audit(args)
+        executable_audit = module._desktop_executable_exit_gate_audit(args)
+
+        assert linux_audit["status"] == "pass"
+        assert linux_audit["path"] == str(linux_alias)
+        assert executable_audit["status"] == "pass"
+        assert executable_audit["path"] == str(executable_alias)
+
+
 def test_linux_desktop_exit_gate_audit_uses_top_level_current_git_fields_without_rejecting_stable_proof() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -5729,6 +6532,40 @@ def test_linux_desktop_exit_gate_audit_rejects_receipt_digest_mismatch() -> None
 
         assert audit["status"] == "fail"
         assert "primary startup smoke is invalid" in audit["reason"]
+
+
+def test_linux_desktop_exit_gate_audit_accepts_release_channel_promoted_receipt_digest() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_completion_evidence(root)
+        proof_path = root / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+        receipt_path = (
+            root
+            / ".codex-studio"
+            / "out"
+            / "linux-desktop-exit-gate"
+            / "run.fixture"
+            / "startup-smoke-installer"
+            / "startup-smoke-avalonia-linux-x64.receipt.json"
+        )
+
+        promoted_digest = "a" * 64
+        receipt_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt_payload["artifactDigest"] = f"sha256:{promoted_digest}"
+        receipt_path.write_text(json.dumps(receipt_payload), encoding="utf-8")
+
+        proof_payload = json.loads(proof_path.read_text(encoding="utf-8"))
+        proof_payload.setdefault("checks", {})
+        proof_payload["checks"]["release_channel_linux_artifact"] = {
+            "sha256": promoted_digest
+        }
+        proof_path.write_text(json.dumps(proof_payload), encoding="utf-8")
+
+        audit = module._linux_desktop_exit_gate_audit(_args(root))
+
+        assert audit["status"] == "pass"
+        assert audit["primary_smoke_status"] == "passed"
 
 
 def test_linux_desktop_exit_gate_audit_rejects_wrong_unit_test_assembly() -> None:
@@ -6616,6 +7453,102 @@ def test_estimate_open_milestone_eta_ignores_non_wave_accepted_history() -> None
     assert eta["basis"] == "heuristic_status_mix"
 
 
+def test_estimate_open_milestone_eta_requires_scope_coverage_for_widened_empirical_burn() -> None:
+    module = _load_module()
+    now = dt.datetime(2026, 4, 4, 16, 0, tzinfo=dt.timezone.utc)
+    open_milestones = [
+        module.Milestone(
+            id=index,
+            title=f"Milestone {index}",
+            wave="W1",
+            status="planned",
+            owners=["fleet"],
+            exit_criteria=["Done."],
+            dependencies=[],
+        )
+        for index in range(1, 19)
+    ]
+    history = [
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T14:00:00Z",
+            "finished_at": "2026-04-04T14:30:00Z",
+            "open_milestone_ids": [13, 14, 17, 18],
+        },
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T14:30:00Z",
+            "finished_at": "2026-04-04T15:00:00Z",
+            "open_milestone_ids": [13, 17, 18],
+        },
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T15:00:00Z",
+            "finished_at": "2026-04-04T15:30:00Z",
+            "open_milestone_ids": [13, 18],
+        },
+    ]
+
+    eta = module._estimate_open_milestone_eta(open_milestones, history, now)
+
+    assert eta["basis"] == "heuristic_status_mix"
+    assert eta["eta_confidence"] == "low"
+
+
+def test_estimate_open_milestone_eta_rejects_shard_local_snapshot_scale_for_aggregate_wave() -> None:
+    module = _load_module()
+    now = dt.datetime(2026, 4, 4, 16, 0, tzinfo=dt.timezone.utc)
+    open_milestones = [
+        module.Milestone(
+            id=index,
+            title=f"Milestone {index}",
+            wave="W1",
+            status="planned",
+            owners=["fleet"],
+            exit_criteria=["Done."],
+            dependencies=[],
+        )
+        for index in range(1, 19)
+    ]
+    history = [
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T14:00:00Z",
+            "finished_at": "2026-04-04T14:30:00Z",
+            "open_milestone_ids": [1, 2, 3, 4],
+        },
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T14:30:00Z",
+            "finished_at": "2026-04-04T15:00:00Z",
+            "open_milestone_ids": [5, 6, 7, 8],
+        },
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T15:00:00Z",
+            "finished_at": "2026-04-04T15:30:00Z",
+            "open_milestone_ids": [9, 10, 11, 12],
+        },
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T15:30:00Z",
+            "finished_at": "2026-04-04T15:45:00Z",
+            "open_milestone_ids": [13, 14, 15],
+        },
+        {
+            "accepted": True,
+            "started_at": "2026-04-04T15:45:00Z",
+            "finished_at": "2026-04-04T15:55:00Z",
+            "open_milestone_ids": [16, 17],
+        },
+    ]
+
+    eta = module._estimate_open_milestone_eta(open_milestones, history, now)
+
+    assert eta["basis"] == "heuristic_status_mix"
+    assert eta["eta_confidence"] == "low"
+
+
 def test_failure_hint_recovers_timestamped_error_lines() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -6961,6 +7894,52 @@ def test_live_shard_summaries_refresh_each_shard_with_its_own_configured_frontie
         assert persisted_2["frontier_ids"] == [13, 14]
 
 
+def test_live_shard_summaries_ignore_stale_dirs_not_in_manifest(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Continue the work.\n", encoding="utf-8")
+        aggregate_root = root / "state"
+        active_root = aggregate_root / "shard-1"
+        stale_root = aggregate_root / "shard-9"
+        active_root.mkdir(parents=True, exist_ok=True)
+        stale_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            active_root / "state.json",
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "loop",
+                "open_milestone_ids": [1, 2, 3],
+                "frontier_ids": [1, 2, 3],
+            },
+        )
+        module._write_json(
+            stale_root / "state.json",
+            {
+                "updated_at": "2026-03-31T08:00:01Z",
+                "mode": "loop",
+                "open_milestone_ids": [99],
+                "frontier_ids": [99],
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps({"active_shards": [{"name": "shard-1", "index": 1, "frontier_ids": [1, 2, 3]}]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            module,
+            "_live_state_with_current_completion_audit",
+            lambda args, state_root, state, history, **kwargs: (module._read_state(state_root / "state.json"), history),
+        )
+
+        summaries = module._live_shard_summaries(_args(root), aggregate_root)
+
+        assert [item["name"] for item in summaries] == ["shard-1"]
+
+
 def test_live_shard_summaries_prefer_structured_manifest_over_env_group_defaults(
     monkeypatch,
 ) -> None:
@@ -7299,6 +8278,52 @@ def test_live_state_with_current_completion_audit_refreshes_completion_frontier_
         assert frontier_payload["completion_audit"]["status"] == "pass"
 
 
+def test_full_product_readiness_audit_rejects_unresolved_parity_families() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="pass",
+            unresolved_parity_families=(
+                {
+                    "id": "legacy_and_adjacent_import_oracles",
+                    "status": "partial",
+                    "milestone_ids": [17],
+                },
+            ),
+        )
+
+        audit = module._full_product_readiness_audit(_args(root))
+
+        assert audit["status"] == "fail"
+        assert audit["parity_excluded_scope"] == ["plugin-framework"]
+        assert audit["unresolved_parity_families"][0]["id"] == "legacy_and_adjacent_import_oracles"
+        assert "unresolved non-plugin parity families" in audit["reason"]
+
+
+def test_full_product_frontier_decomposes_unresolved_parity_families() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="pass",
+            unresolved_parity_families=(
+                {
+                    "id": "legacy_and_adjacent_import_oracles",
+                    "status": "partial",
+                    "milestone_ids": [17],
+                    "current_design_equivalents": ["INTEROP_AND_PORTABILITY_MODEL.md"],
+                },
+            ),
+        )
+
+        frontier = module._full_product_frontier(_args(root))
+
+        assert [item.title for item in frontier] == ["Parity family: Legacy And Adjacent Import Oracles"]
+
+
 def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -7417,6 +8442,133 @@ def test_render_status_shows_current_and_active_frontier_when_they_differ() -> N
     assert "shard.shard-1:" in rendered
     assert "frontier=21" in rendered
     assert "active_frontier=99" in rendered
+
+
+def test_render_status_hides_stale_last_blocker_when_newer_active_run_exists() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-04-04T16:28:56Z",
+            "mode": "sharded",
+            "open_milestone_ids": [13, 14, 17, 18],
+            "frontier_ids": [13, 14, 17, 18],
+            "shards": [
+                {
+                    "name": "shard-2",
+                    "updated_at": "2026-04-04T16:28:47Z",
+                    "mode": "loop",
+                    "open_milestone_ids": [13, 14, 17, 18],
+                    "frontier_ids": [13, 14, 17, 18],
+                    "eta_status": "estimated",
+                    "last_run_id": "20260404T161600Z",
+                    "last_run_blocker": "local commits are not yet pushed to remote",
+                    "current_blocker": "",
+                    "active_run_id": "20260404T162847Z",
+                }
+            ],
+        }
+    )
+
+    assert "shard.shard-2:" in rendered
+    assert "active_run=20260404T162847Z" in rendered
+    assert "last_blocker=" not in rendered
+
+
+def test_reconcile_aggregate_shard_truth_moves_stale_blocker_to_historical_field() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "open_milestone_ids": [13, 14, 17, 18],
+            "eta": {
+                "status": "estimated",
+                "eta_human": "4.5d-1.7w",
+                "eta_confidence": "low",
+                "basis": "heuristic_status_mix",
+                "summary": "4 open milestones remain (0 in progress, 4 not started); range is a fallback heuristic from the current status mix.",
+                "remaining_open_milestones": 4,
+                "remaining_in_progress_milestones": 0,
+                "remaining_not_started_milestones": 4,
+                "blocking_reason": "",
+            },
+            "shards": [
+                {
+                    "name": "shard-2",
+                    "frontier_ids": [13, 14, 17, 18],
+                    "active_frontier_ids": [13, 14, 17, 18],
+                    "last_run_id": "20260404T161600Z",
+                    "last_run_finished_at": "2026-04-04T16:23:15Z",
+                    "last_run_blocker": "local commits are not yet pushed to remote",
+                    "active_run_id": "20260404T162847Z",
+                    "active_run_started_at": "2026-04-04T16:28:47Z",
+                }
+            ],
+        }
+    )
+
+    shard = updated["shards"][0]
+    assert shard["last_run_blocker"] == ""
+    assert shard["current_blocker"] == ""
+    assert shard["historical_last_run_blocker"] == "local commits are not yet pushed to remote"
+    assert "shard_blockers" not in updated
+
+
+def test_effective_supervisor_state_uses_active_runs_list_for_multiple_live_shards() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_one_root.mkdir(parents=True, exist_ok=True)
+        shard_two_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:31:48Z",
+                "mode": "loop",
+                "open_milestone_ids": [1, 2, 3],
+                "frontier_ids": [1, 2, 3],
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [1, 2, 3],
+                    "open_milestone_ids": [1, 2, 3],
+                    "started_at": "2026-04-04T16:31:48Z",
+                },
+            },
+        )
+        module._write_json(
+            shard_two_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:31:51Z",
+                "mode": "loop",
+                "open_milestone_ids": [13, 14, 17, 18],
+                "frontier_ids": [13, 14, 17, 18],
+                "active_run": {
+                    "run_id": "run-2",
+                    "frontier_ids": [13, 14, 17, 18],
+                    "open_milestone_ids": [13, 14, 17, 18],
+                    "started_at": "2026-04-04T16:31:51Z",
+                },
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps(
+                {
+                    "active_shards": [
+                        {"name": "shard-1", "frontier_ids": [1, 2, 3]},
+                        {"name": "shard-2", "frontier_ids": [13, 14, 17, 18]},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert "active_run" not in state
+        assert [item["_shard"] for item in state["active_runs"]] == ["shard-1", "shard-2"]
+        assert [item["run_id"] for item in state["active_runs"]] == ["run-1", "run-2"]
 
 
 def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_on_external_worker_blocker() -> None:

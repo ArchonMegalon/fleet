@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 completion-review proof paths now preserve configured `chummer6-ui` gate paths across symlinked repo roots
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery and packaged-binary proof receipts that cannot lie about proof source roots.
+  - Supervisor Linux/executable gate audits resolved CLI-provided proof paths to realpaths before publishing audit metadata, which collapsed `/docker/chummercomplete/chummer6-ui` into its symlink target `/docker/chummercomplete/chummer-presentation` and leaked legacy-root paths into completion-review frontier mirrors/prompts.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - `_linux_desktop_exit_gate_audit(...)` now preserves the configured gate path string in audit payloads while still resolving the filesystem target for validation.
+    - `_desktop_executable_exit_gate_audit(...)` now preserves the configured gate path string in audit payloads while still resolving the filesystem target for validation.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_exit_gate_audits_preserve_configured_symlink_paths` to fail-close path-display behavior when gate proofs are supplied through symlinked aliases.
+  - refreshed completion-review frontier artifacts with canonical configured UI gate paths:
+    - `/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+    - `/docker/fleet/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "exit_gate_audits_preserve_configured_symlink_paths or linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fingerprint_is_identical or linux_desktop_exit_gate_audit_uses_top_level_current_git_fields_without_rejecting_stable_proof"` -> PASS (`3 passed`, `175 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (prompt and generated frontier mirrors now report `proof_path=/docker/chummercomplete/chummer6-ui/...`).
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4/6 continuity unresolved-lane now recognizes explicit "still active" unresolved wording
 
 - Trigger:
