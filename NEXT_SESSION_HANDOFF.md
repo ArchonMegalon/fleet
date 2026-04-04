@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-4 campaign return lane now treats street-cred/public-awareness mutations as first-class relationship signals
+
+- Trigger:
+  - frontier milestone `4` requires diary, contacts, heat, and campaign consequences to stay one governed return loop across common table vocabulary.
+  - `CampaignWorkspaceServerPlaneService` relationship detection covered contact/connection/heat/favor/loyalty/notoriety/reputation/faction but could miss SR-style relationship pressure phrased as `street cred` and `public awareness` mutations.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - relationship token detection now recognizes paired phrase tokens for `street cred` and `public awareness` without widening to noisy single-token matches.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketCountsRelationshipSignalsFromStreetCredAndPublicAwarenessMutations`.
+    - added fixture helper `BuildWorkspaceWithStreetCredAndPublicAwarenessRelationshipSignalsOnly`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketCountsRelationshipSignalsFromStreetCredAndPublicAwarenessMutations|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`326` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`348` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign return relationship detection no longer drops street-cred/public-awareness mutation language into `0 relationship signal(s)` when legacy contact/heat words are absent.
+  - milestone-4 diary/contact/heat/consequence continuity stays aligned with broader live-table phrasing on the same governed lane.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 GM unresolved triage now classifies opfor/op-force pressure as opposition-domain signals
 
 - Trigger:
