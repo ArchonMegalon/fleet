@@ -121,10 +121,11 @@
   - `chummer6-core`: `47a4948e` (`feat(w17): project import-oracle posture in master index`).
   - `chummer6-design`: `aa33ee5` (`docs(w17): cite master-index import-oracle evidence`).
   - `chummer6-design`: `f21e939` (`docs(w17): sync import-oracle parity registry evidence`).
-  - `fleet`: pending local follow-on commit for mirror registry + handoff refresh.
+  - `fleet`: `cd6bb80` (`docs(handoff): record w17 import-oracle projection slice`), `a994e32` (`docs(handoff): capture w17 registry parity sync`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `6731fa91..47a4948e`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - no blocker for the landed core implementation itself; full `Chummer.Tests` lane remains blocked by existing compile/reference instability, and remote pushes for design/fleet remain credential-gated in this environment.
 
