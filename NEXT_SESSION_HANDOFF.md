@@ -31456,3 +31456,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push status:
   - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
+## 2026-04-04: follow-up on W1 embedded release-artifact generated-at fail-close hardening (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `130e4620` (`fix(w1): fail-close embedded release artifact timestamp drift`).
+  - `fleet`: `8d48062` (`docs(handoff): record W1 executable gate embedded timestamp fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commits remain local-only until auth is restored.
