@@ -1,3 +1,37 @@
+## 2026-04-04: follow-up on W1 startup-smoke timestamp alias fail-close hardening (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `4b5b5821` (`fix(w1): fail-close startup-smoke timestamp alias drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `4b5b5821` remains local-only until auth is restored.
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting startup-smoke timestamp aliases across Linux, Windows, and macOS receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require startup-smoke proof to remain deterministic per promoted tuple.
+  - executable-gate validation accepted startup-smoke timestamp aliases by fallback precedence (`completedAtUtc` / `recordedAtUtc` / `startedAtUtc`) but did not reject contradictory alias values in the same receipt payload.
+  - this left a proof seam where conflicting startup-smoke timestamps could pass if one alias happened to satisfy freshness checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `startup_smoke_timestamp_alias_conflicts(...)` to detect contradictory timestamp alias values (parse-aware when ISO values are valid).
+    - Linux startup-smoke validation now emits `primary_receipt_timestamp_alias_conflict` and fail-closes on alias drift.
+    - Windows startup-smoke validation now emits `startup_smoke_timestamp_alias_conflict` and fail-closes on alias drift.
+    - macOS startup-smoke validation now emits `startup_smoke_receipt_timestamp_alias_conflict` and fail-closes on alias drift.
+  - patched compliance script-lock tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - added assertions for the new helper marker, evidence keys, and Linux/Windows/macOS fail-close reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 startup-smoke proof no longer tolerates contradictory timestamp alias payloads on Linux, Windows, or macOS receipts.
+  - per-tuple executable-gate freshness checks now fail-close timestamp alias drift instead of accepting whichever alias appears first.
+- Push status:
+  - pending commit/push in this slice.
+
 ## 2026-04-04: milestone-2 verify lane now actively mutates visual receipt ordering to prove canonical-order fail-close behavior
 
 - Trigger:
