@@ -16,10 +16,11 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromOutBriefCarryForwardSplitTokensWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromHotWashCarryForwardEvidenceSplitTokensWhenPrimaryFieldsAreSparse|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromCarryForwardSignalsWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - `chummer.run-services`: `<pending>`
-  - `fleet`: `<pending>`
+  - `chummer.run-services`: `2cc66fd2` (`fix(w3): route split out-brief and hot-wash carry-forward cues into aftermath lane`).
+  - `fleet`: `d83f731` (`docs(handoff): record w3 split out-brief and hot-wash carry-forward closure`).
 - Push attempts:
-  - `<pending>`
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
