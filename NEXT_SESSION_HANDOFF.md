@@ -28,24 +28,28 @@
   - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `ffeb522`).
   - `fleet`: pending (credential-dependent in this environment).
 
-## 2026-04-04: milestone-4/5 campaign spine publication posture now fail-closes duplicate creator publication ids and keeps latest trust state
+## 2026-04-04: milestone-4/5 campaign spine publication lanes now fail-close duplicate creator publication ids and deduplicate repeated publication rows
 
 - Trigger:
   - frontier milestones 4/5 require campaign return and GM/publication continuity lanes to stay stable when recap/publication projection rows repeat.
-  - `CampaignSpineService.AttachCreatorPublicationPosture(...)` still used direct `ToDictionary(PublicationId, ...)`, so duplicate publication ids could throw and break campaign workspace publication posture assembly.
+  - `CampaignSpineService` still had two seams under repeated recap/publication projection rows:
+    - `AttachCreatorPublicationPosture(...)` used direct `ToDictionary(PublicationId, ...)`, so duplicate publication ids could throw and break campaign workspace publication posture assembly.
+    - `BuildCreatorPublications(...)` emitted duplicate creator-publication rows when recap entries repeated the same publication id, inflating publication lanes.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
     - replaced direct publication-id dictionary materialization with normalized grouping by `PublicationId`.
     - publication-id lookup now ignores blank ids and keeps the latest `UpdatedAtUtc` row per publication id.
-    - campaign spine recap-publication posture now resists duplicate publication-id projection rows and preserves newest publication/trust state.
+    - `BuildCreatorPublications(...)` now deduplicates repeated publication rows by `PublicationId` (latest `UpdatedAtUtc` wins) before sorting/projecting output.
+    - campaign spine recap-publication posture now resists duplicate publication-id projection rows, preserves newest publication/trust state, and avoids creator-publication lane inflation.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenPublicationIdsRepeat`.
-    - regression proves duplicate creator publication ids no longer break posture assembly and that latest publication status/trust is retained.
+    - added `CampaignSpineBuildCreatorPublicationsDeduplicatesRows_WhenPublicationIdsRepeat`.
+    - regressions prove duplicate creator publication ids no longer break posture assembly, latest publication status/trust is retained, and duplicate creator-publication rows are collapsed.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenPublicationIdsRepeat|FullyQualifiedName~RecapShelfUsesLatestCreatorPublication_WhenPublicationIdsRepeat|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`278` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildCreatorPublicationsDeduplicatesRows_WhenPublicationIdsRepeat|FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenPublicationIdsRepeat|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`279` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
 - Current trusted state:
-  - campaign spine creator-publication posture no longer fails on duplicate publication ids and now deterministically resolves to the newest publication trust/status row.
+  - campaign spine creator-publication posture no longer fails on duplicate publication ids, now deterministically resolves to newest publication trust/status, and no longer inflates creator-publication output under repeated publication ids.
   - milestone-4 return-loop and milestone-5 GM/publication posture projection remain green in workspace + GM ops coverage.
 - Push status:
   - pending in this environment (credential-dependent).
