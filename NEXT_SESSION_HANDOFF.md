@@ -1,3 +1,25 @@
+## 2026-04-04: follow-up on W3-6 EA continuity contracts now fail-proves all four new builtin keys in planner coverage
+
+- Trigger:
+  - the initial W3-6 EA contract slice added four builtin continuity keys, but planner regression coverage only exercised one key.
+  - this left drift risk where one of the other new keys could break without a direct test failure.
+- Landed:
+  - patched `/docker/EA/tests/test_planner.py`:
+    - replaced the single-key mobile continuity planner test with a parameterized regression that fail-proves all four W3-6 builtins compile through `tool_then_artifact`:
+      - `campaign_safehouse_readiness_brief`
+      - `campaign_travel_continuity_packet`
+      - `campaign_offline_continuity_brief`
+      - `campaign_mobile_companion_brief`
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest tests/test_planner.py -q` -> PASS (`15 passed`).
+- Commits landed:
+  - pending local commit in this follow-up slice.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push remains credential-dependent in this environment.
+
+
 ## 2026-04-04: milestone-6 EA now has first-class built-in safehouse/travel/offline/mobile continuity planning contracts
 
 - Trigger:
@@ -12,8 +34,8 @@
       - `campaign_mobile_companion_brief`
     - all new keys resolve to explicit deliverable types and compile through the governed `tool_then_artifact` lane (`structured_generate` + optional `review_light` + artifact save).
   - patched `/docker/EA/tests/test_planner.py`:
-    - added `test_builtin_campaign_mobile_companion_contract_builds_tool_then_artifact_plan`.
-    - fail-proves `campaign_mobile_companion_brief` resolves as builtin and compiles:
+    - added parameterized planner coverage for milestone-6 continuity builtins.
+    - fail-proves each new key resolves as builtin and compiles:
       - `step_input_prepare`
       - `step_structured_generate`
       - `step_reasoned_patch_review`
@@ -100,9 +122,11 @@
   - receipt inspection confirms new blocking reason in `JOURNEY_GATES.generated.json` for install journey desktop proof status mismatch.
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
 - Commits landed:
-  - pending local commits in `fleet` and `chummer6-design`.
+  - `fleet`: `4c50eda` (`feat(w1-3): fail-close journey gates on structured desktop proof status`).
+  - `chummer6-design`: `e3c6469` (`docs(w1-3): require structured desktop exit-gate pass status`).
 - Push attempts:
-  - pending.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
