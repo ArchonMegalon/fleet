@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `diary` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestones `4` and `5` require continuity truth to span diary, contacts, heat, and prep retrieval on the same governed campaign lane.
+  - after closing `heat` and `contacts` live checks, journey audits still lacked explicit fail-close coverage for `diary` prep retrieval in both API and signed-in workspace route flows.
+  - this left a regression path where diary continuity packet retrieval could drift without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=diary` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=diary`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `diary` after `contacts`, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=diary`, `prepQuery=diary`, and playwright `?prepQuery=diary` markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-4/5 audits now fail-close if governed `diary` continuity prep retrieval drifts in API or workspace route flows.
+  - campaign continuity closeout proof now checks `opposition`, `seasonops`, `heat`, `contacts`, and `diary` retrieval lanes.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `contacts` prep retrieval across API and workspace route
 
 - Trigger:
