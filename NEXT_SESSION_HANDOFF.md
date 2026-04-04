@@ -36,6 +36,35 @@
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 organizer event-control lane now fail-closes split/hyphen `event ctrl` aliases across prep retrieval and live journey proof
+
+- Trigger:
+  - the prior milestone-5 slice closed split/hyphen generic `event control(s)` aliases, but `event ctrl` and `event-ctrl` remained unexecuted in live API/workspace/browser audits and query-matrix lock tests.
+  - service token rewrite already handled `event + ctrl`; missing proof coverage left a script-level regression seam for this natural shorthand.
+- Landed:
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added `event ctrl` and `event-ctrl` assertions in split/hyphen shorthand coverage.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added API checks for `queryText=event%20ctrl` and `queryText=event-ctrl`.
+      - added workspace route checks for `prepQuery=event%20ctrl` and `prepQuery=event-ctrl`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `event ctrl` and `event-ctrl` with route-preservation and non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded `queryText`, `prepQuery`, and Playwright marker assertions for split/hyphen `event ctrl` aliases.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control alias proof now includes compact, split, and hyphen `event ctrl` wording alongside existing `event control(s)` and organizer shorthand families.
+- Push status:
+  - `chummer.run-services`: local follow-on changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice.
+
 ## 2026-04-04: milestone-5 organizer event-control lane now fail-closes split/hyphen `event control(s)` aliases across prep canonicalization and live API/UI journeys
 
 - Trigger:
