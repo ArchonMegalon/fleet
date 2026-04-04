@@ -1,3 +1,43 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close plural campaign-memory aliases `memories`, `archives`, `histories`, `timelines`, and `ledgers` across canonicalization plus live API/UI journeys
+
+- Trigger:
+  - continuity script-locks covered singular campaign-memory terms (`memory`, `archive`, `history`, `timeline`, `ledger`), but plural phrasing was not canonicalized.
+  - this left a retrieval seam where workspace and GM prep searches could drift on ordinary plural campaign-memory wording.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrites:
+      - `memories -> memory`
+      - `archives -> archive`
+      - `histories -> history`
+      - `timelines -> timeline`
+      - `ledgers -> ledger`
+  - expanded unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - continuity plural shorthand test now asserts plural campaign-memory aliases.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - continuity plural shorthand test now asserts plural campaign-memory aliases.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=memories|archives|histories|timelines|ledgers`.
+      - added signed-in workspace route checks for `prepQuery=memories|archives|histories|timelines|ledgers`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for the same plural campaign-memory queries with route/copy/non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for plural campaign-memory query markers in API and workspace lanes.
+      - expanded Playwright marker assertions for plural campaign-memory query routes and copy markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity and milestone-5 GM prep now treat singular/plural campaign-memory terms as one governed lane across canonicalization, API/workspace audits, browser journey proof, and script-lock tests.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (same continuity canonicalization/test/audit files above); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: follow-up on handoff push-blocker commit status for `recaps`/`returns` slice
 
 - Additional commit landed:
