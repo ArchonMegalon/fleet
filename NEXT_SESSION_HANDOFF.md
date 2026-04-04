@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4 recap-signal packet synthesis now deduplicates identical diary/downtime recap versions to prevent inflated return counts
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires recap and downtime truth to stay on one governed lane without duplicate-row inflation.
+  - `CampaignWorkspaceServerPlaneService` still counted repeated identical `PublicationSafeProjection` recap rows separately in `campaign_return` and `aftermath` packet synthesis.
+  - duplicate recap rows could overstate diary/downtime signal totals and consume bounded packet evidence slots.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `DeduplicateIdenticalPublicationRecapVersions(...)` and `BuildPublicationRecapDedupeKey(...)`.
+    - applied recap dedupe before bounded `Take(...)` in:
+      - `BuildCampaignReturnPrepPacket(...)`
+      - `BuildAftermathPrepPacket(...)`
+    - recap dedupe key is identity-safe (`projectionId/kind/label/summary`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `AftermathPacketDeduplicatesIdenticalRecapSignalVersions_WhenPayloadRepeatsSameRow`.
+    - added `CampaignReturnPacketDeduplicatesIdenticalDiaryRecapVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketDeduplicatesIdenticalPackageVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignReturnPacketDeduplicatesIdenticalAftermathPackageVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~AftermathPacketDeduplicatesIdenticalRecapSignalVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignReturnPacketDeduplicatesIdenticalDiaryRecapVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`249` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return and aftermath packet synthesis now resists duplicate-row inflation across both aftermath-package and recap-signal families.
+  - milestone-4/5 campaign workspace + GM ops suite remains green after both dedupe hardening slices.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 aftermath packet synthesis now deduplicates identical package versions to prevent inflated downtime/return counts
 
 - Trigger:
