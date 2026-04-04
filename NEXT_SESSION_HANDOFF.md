@@ -1,3 +1,12 @@
+## 2026-04-04: follow-up on fleet handoff sync commit and push status
+
+- Commits landed:
+  - `fleet`: `b6ff51f` (`docs(handoff): record locale-set localization script-lock slice`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: follow-up on milestone-2 localization locale-set script-lock commit and push status
 
 - Commits landed:
