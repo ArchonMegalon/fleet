@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-9 media-factory creator packet planning now preserves Build Lab portability pillar receipts
+
+- Trigger:
+  - frontier milestone `9` requires exchange/replay/recap/module artifacts to remain one governed second pillar through publication and audit packets.
+  - `chummer-media-factory` creator publication packet planning consumed Build Lab handoffs, but did not preserve the new portability-pillar summary/lanes in packet evidence.
+- Landed:
+  - patched `/docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs`:
+    - when a Build Lab handoff is attached, creator packet evidence now includes:
+      - `Portability pillar: {handoff.PortabilityPillarSummary}`
+      - up to three `handoff.PortabilityPillarLines` evidence lines.
+  - patched `/docker/fleet/repos/chummer-media-factory/Chummer.Media.Factory.Runtime.Verify/Program.cs`:
+    - verification handoff fixture now carries portability-pillar summary/lines.
+    - runtime assertions now fail-prove portability-pillar evidence is preserved in creator packet planning output.
+- Verification:
+  - `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj -c Release` -> PASS (`Media factory runtime verification passed.`).
+- Commits landed:
+  - `chummer6-media-factory`: `6c8d1a7` (`feat(w4-9): carry build-lab portability pillar receipts into creator packet plans`).
+- Push attempts:
+  - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated to `6c8d1a7`).
+- Exact blocker:
+  - none for this repo-local slice.
+
 ## 2026-04-04: milestone-9 Build Lab now projects a dedicated exchange/replay/recap/module portability pillar rail on Account and signed-in Home
 
 - Trigger:
