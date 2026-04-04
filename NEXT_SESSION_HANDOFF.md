@@ -44,6 +44,25 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: handoff follow-up commit + push status for W3 workspace-v4 brief-plural alias coverage slice
+
+- Commits landed:
+  - `chummer6-hub`: `cecdc663` (`test(w3-4-5-6): cover workspace-v4 brief plural alias rewrite`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 alias canonicalizer coverage now explicitly fail-closes plural campaign-workspace-v4 brief shorthand
+
+- Trigger:
+  - canonicalization supported `campaignworkspacev4briefs`, but targeted alias unit coverage only asserted the singular brief form, leaving a regression seam on plural compact shorthand.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - `RewriteAliases_CollapsesWorkspaceV4CompactFormsIntoCampaignReturnPacketTokens` now includes and asserts collapse of `campaignworkspacev4briefs`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesWorkspaceV4CompactFormsIntoCampaignReturnPacketTokens" -v minimal` -> PASS (`1 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 plural workspace-v4 compact prep query audit slice
 
 - Commits landed:
