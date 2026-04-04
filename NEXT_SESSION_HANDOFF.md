@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-4/5 campaign return and GM ops packet synthesis now deduplicates semantically identical aftermath/prep-launch/travel rows when ids drift
+
+- Trigger:
+  - frontier milestones 4 and 5 require campaign return, aftermath, prep-launch, and event-control receipts to stay count-honest when projection ids rotate.
+  - remaining dedupe paths still keyed on identity ids (`PackageId`, `LaunchId`, `ReceiptId`) for aftermath packages, governed prep launches, and travel prefetch receipts, allowing semantically identical rows with id drift to inflate return and GM ops packets.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - switched call sites to semantic dedupe for:
+      - `BuildCampaignReturnPrepPacket(...)` aftermath packages
+      - `BuildAftermathPrepPacket(...)` packages
+      - `BuildPrepLaunchOpsPacket(...)` launches
+      - `BuildEventControlPrepPacket(...)` launches + travel prefetch receipts
+      - `BuildTravelPrefetchOpsPacket(...)` travel prefetch receipts
+    - replaced identity-keyed helpers with semantic-keyed helpers:
+      - `DeduplicateSemanticAftermathPackageVersions(...)`
+      - `DeduplicateSemanticPrepLaunchVersions(...)`
+      - `DeduplicateSemanticTravelPrefetchReceiptVersions(...)`
+    - semantic keys now exclude identity ids and anchor on workspace/campaign scope, packet or device semantics, summary/evidence payloads, and event timestamps.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenPackageIdsDiffer`.
+    - added `PrepLaunchPacketDeduplicatesSemanticallyIdenticalLaunchVersions_WhenLaunchIdsDiffer`.
+    - added `TravelPrefetchPacketDeduplicatesSemanticallyIdenticalReceiptVersions_WhenReceiptIdsDiffer`.
+    - added `EventControlPacketDeduplicatesSemanticallyIdenticalPrepAndTravelReceiptVersions_WhenIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenPackageIdsDiffer|FullyQualifiedName~PrepLaunchPacketDeduplicatesSemanticallyIdenticalLaunchVersions_WhenLaunchIdsDiffer|FullyQualifiedName~TravelPrefetchPacketDeduplicatesSemanticallyIdenticalReceiptVersions_WhenReceiptIdsDiffer|FullyQualifiedName~EventControlPacketDeduplicatesSemanticallyIdenticalPrepAndTravelReceiptVersions_WhenIdsDiffer" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`269` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warning observed once).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 campaign-return/aftermath lanes and milestone-5 GM event-control + ops-lifecycle lanes now resist id-drift inflation for aftermath package, prep-launch, and travel-prefetch receipt families.
+  - campaign workspace and GM ops suites remain green after semantic dedupe expansion across the remaining packet families.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 roster-transfer lanes now deduplicate semantically identical transfer rows when transfer ids drift
 
 - Trigger:
