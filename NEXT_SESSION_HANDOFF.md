@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `after action review` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to remain one governed lane across prep-library query canonicalization, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand coverage already handled `after action report` variants and `aar`, but did not canonicalize common table phrasing `after action review` / `after-action review` (and plural forms).
+  - because prep-library matching requires all normalized query tokens, review-form recap queries could drift out of governed continuity packets when `review`/`reviews` remained unnormalized.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `afteractionreview` and `afteractionreviews` to governed `recap`.
+    - `after` + `action` split handling now removes `review` / `reviews` (in addition to `report` / `reports`) before adding `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `afteractionreview` / `afteractionreviews` to aftermath/recap continuity tokens so server-plane matching vocabulary stays aligned with canonical aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact, split, and hyphen `after action review` variants as governed `prep_library` signals.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity shorthand + unresolved-domain regressions and script-lock checks to include `after action review` variants.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added prep-library API/workspace probes and signed-in browser journey checks for compact, split, and hyphen `after action review` variants, each fail-closing on non-`200`, empty governed result, route drift, or missing snippets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `f9a14221` (`fix(w3): canonicalize after action review across continuity and gm ops`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes invalid (non-ISO) `generated_at` timestamps on promoted desktop release artifacts and embedded per-platform release-channel tuples
 
 - Trigger:
