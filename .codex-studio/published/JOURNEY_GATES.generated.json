@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:40:50Z",
+  "generated_at": "2026-04-04T18:46:21Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:39:43Z",
+      "at": "2026-04-04T18:45:44Z",
       "state": "fresh",
-      "age_seconds": 67
+      "age_seconds": 37
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:34:10Z",
       "state": "fresh",
-      "age_seconds": 400
+      "age_seconds": 731
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 917
+      "age_seconds": 1248
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 917
+      "age_seconds": 1248
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-04T17:18:03Z",
+      "at": "2026-04-04T18:45:44Z",
       "state": "fresh",
-      "age_seconds": 4967
+      "age_seconds": 37
     }
   },
   "journeys": [
@@ -77,6 +77,56 @@
       ],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": true,
+      "external_proof_requests": [
+        {
+          "tuple_id": "avalonia:osx-arm64:macos",
+          "required_host": "macos",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "expected_artifact_id": "avalonia-osx-arm64-installer",
+          "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+          "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"
+        },
+        {
+          "tuple_id": "avalonia:win-x64:windows",
+          "required_host": "windows",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "expected_artifact_id": "avalonia-win-x64-installer",
+          "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+          "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"
+        },
+        {
+          "tuple_id": "blazor-desktop:osx-arm64:macos",
+          "required_host": "macos",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
+          "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+          "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json"
+        },
+        {
+          "tuple_id": "blazor-desktop:win-x64:windows",
+          "required_host": "windows",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "expected_artifact_id": "blazor-desktop-win-x64-installer",
+          "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+          "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json"
+        }
+      ],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-ui",
@@ -246,7 +296,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T17:18:03Z",
+        "support_packets_generated_at": "2026-04-04T18:45:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -256,6 +306,56 @@
           "journeys/install-and-update.md",
           "journeys/claim-install-and-close-a-support-case.md",
           "journeys/continue-on-a-second-claimed-device.md"
+        ],
+        "external_proof_requests": [
+          {
+            "tuple_id": "avalonia:osx-arm64:macos",
+            "required_host": "macos",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "avalonia-osx-arm64-installer",
+            "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"
+          },
+          {
+            "tuple_id": "avalonia:win-x64:windows",
+            "required_host": "windows",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "avalonia-win-x64-installer",
+            "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"
+          },
+          {
+            "tuple_id": "blazor-desktop:osx-arm64:macos",
+            "required_host": "macos",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
+            "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json"
+          },
+          {
+            "tuple_id": "blazor-desktop:win-x64:windows",
+            "required_host": "windows",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "blazor-desktop-win-x64-installer",
+            "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json"
+          }
         ]
       },
       "signals": {
@@ -266,11 +366,13 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
+        "support_external_proof_required_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 7,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": true
+        "blocked_by_external_constraints_only": true,
+        "external_proof_request_count": 4
       }
     },
     {
@@ -283,6 +385,7 @@
       "external_blocking_reasons": [],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
+      "external_proof_requests": [],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-core",
@@ -556,7 +659,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T17:18:03Z",
+        "support_packets_generated_at": "2026-04-04T18:45:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -564,7 +667,8 @@
         "canonical_journeys": [
           "journeys/build-and-inspect-a-character.md",
           "journeys/publish-a-grounded-artifact.md"
-        ]
+        ],
+        "external_proof_requests": []
       },
       "signals": {
         "blocking_reason_count": 0,
@@ -574,11 +678,13 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
+        "support_external_proof_required_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": false
+        "blocked_by_external_constraints_only": false,
+        "external_proof_request_count": 0
       }
     },
     {
@@ -591,6 +697,7 @@
       "external_blocking_reasons": [],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
+      "external_proof_requests": [],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
@@ -804,7 +911,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T17:18:03Z",
+        "support_packets_generated_at": "2026-04-04T18:45:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -812,7 +919,8 @@
         "canonical_journeys": [
           "journeys/run-a-campaign-and-return.md",
           "journeys/rejoin-after-disconnect.md"
-        ]
+        ],
+        "external_proof_requests": []
       },
       "signals": {
         "blocking_reason_count": 0,
@@ -822,11 +930,13 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
+        "support_external_proof_required_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": false
+        "blocked_by_external_constraints_only": false,
+        "external_proof_request_count": 0
       }
     },
     {
@@ -839,6 +949,7 @@
       "external_blocking_reasons": [],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
+      "external_proof_requests": [],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
@@ -911,7 +1022,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T17:18:03Z",
+        "support_packets_generated_at": "2026-04-04T18:45:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -919,7 +1030,8 @@
         "canonical_journeys": [
           "journeys/recover-from-sync-conflict.md",
           "journeys/continue-on-a-second-claimed-device.md"
-        ]
+        ],
+        "external_proof_requests": []
       },
       "signals": {
         "blocking_reason_count": 0,
@@ -929,11 +1041,13 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
+        "support_external_proof_required_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": false
+        "blocked_by_external_constraints_only": false,
+        "external_proof_request_count": 0
       }
     },
     {
@@ -946,6 +1060,7 @@
       "external_blocking_reasons": [],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
+      "external_proof_requests": [],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
@@ -1023,7 +1138,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T17:18:03Z",
+        "support_packets_generated_at": "2026-04-04T18:45:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1032,7 +1147,8 @@
         "canonical_journeys": [
           "journeys/claim-install-and-close-a-support-case.md",
           "journeys/install-and-update.md"
-        ]
+        ],
+        "external_proof_requests": []
       },
       "signals": {
         "blocking_reason_count": 0,
@@ -1042,11 +1158,13 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
+        "support_external_proof_required_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": false
+        "blocked_by_external_constraints_only": false,
+        "external_proof_request_count": 0
       }
     },
     {
@@ -1059,6 +1177,7 @@
       "external_blocking_reasons": [],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
+      "external_proof_requests": [],
       "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
@@ -1112,7 +1231,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T17:18:03Z",
+        "support_packets_generated_at": "2026-04-04T18:45:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1121,7 +1240,8 @@
         "canonical_journeys": [
           "journeys/organize-a-community-and-close-the-loop.md",
           "journeys/claim-install-and-close-a-support-case.md"
-        ]
+        ],
+        "external_proof_requests": []
       },
       "signals": {
         "blocking_reason_count": 0,
@@ -1131,11 +1251,13 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
+        "support_external_proof_required_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
         "local_blocking_reason_count": 0,
-        "blocked_by_external_constraints_only": false
+        "blocked_by_external_constraints_only": false,
+        "external_proof_request_count": 0
       }
     }
   ]

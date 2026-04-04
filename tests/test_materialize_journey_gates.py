@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib.util
 import json
 import subprocess
 import sys
@@ -12,10 +13,52 @@ import yaml
 SCRIPT = Path("/docker/fleet/scripts/materialize_journey_gates.py")
 REGISTRY = Path("/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml")
 UTC = dt.timezone.utc
+MODULE_SPEC = importlib.util.spec_from_file_location("materialize_journey_gates_module", SCRIPT)
+assert MODULE_SPEC and MODULE_SPEC.loader
+JOURNEY_GATES_MODULE = importlib.util.module_from_spec(MODULE_SPEC)
+MODULE_SPEC.loader.exec_module(JOURNEY_GATES_MODULE)
 
 
 def fresh_timestamp(hours_ago: int = 1) -> str:
     return (dt.datetime.now(UTC) - dt.timedelta(hours=hours_ago)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["startup_smoke_receipt", "promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                },
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "platform": "windows",
+                    "requiredProofs": ["promoted_installer_artifact"],
+                },
+                {
+                    "tupleId": "blazor-desktop:osx-arm64:macos",
+                    "platform": "macos",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+            ]
+        }
+    }
+
+    requests = JOURNEY_GATES_MODULE._release_channel_external_proof_requests(payload)
+    assert [row.get("tuple_id") for row in requests] == [
+        "avalonia:win-x64:windows",
+        "blazor-desktop:osx-arm64:macos",
+    ]
+    assert requests[0]["required_host"] == "windows"
+    assert requests[0]["required_proofs"] == ["promoted_installer_artifact"]
+    assert requests[1]["required_host"] == "macos"
+    assert requests[1]["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
 
 
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
@@ -2133,3 +2176,232 @@ def test_report_cluster_release_notify_requires_support_install_truth_contract()
     assert fleet_gate.get("require_support_update_required_routes_to_downloads") is True
     assert fleet_gate.get("require_support_install_truth_contract") is True
     assert fleet_gate.get("require_support_recovery_path_contract") is True
+
+
+def test_materialize_journey_gates_blocks_when_support_tuple_gap_lacks_external_proof_contract(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: report_cluster_release_notify
+    title: Report, cluster, release, notify
+    user_promise: Support closure stays install-specific.
+    canonical_journeys:
+      - journeys/claim-install-and-close-a-support-case.md
+    owner_repos: [fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report, support_packets]
+      minimum_history_snapshots: 1
+      require_support_install_truth_contract: true
+      required_project_posture:
+        - project_id: hub
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: hub
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "summary": {"external_proof_required_case_count": 0},
+                "packets": [
+                    {
+                        "packet_id": "packet-a",
+                        "status": "accepted",
+                        "install_truth_state": "tuple_not_on_promoted_shelf",
+                        "install_diagnosis": {
+                            "registry_channel_id": "preview",
+                            "registry_release_channel_status": "published",
+                            "registry_release_version": "1.2.3",
+                            "registry_release_proof_status": "passed",
+                        },
+                        "fix_confirmation": {"state": "no_fix_recorded", "update_required": False},
+                        "recovery_path": {"action_id": "open_downloads", "href": "/downloads"},
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    reasons = payload["journeys"][0]["blocking_reasons"]
+    assert any("external_proof_required" in reason for reason in reasons)
+
+
+def test_materialize_journey_gates_accepts_support_external_proof_contract_when_present(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: report_cluster_release_notify
+    title: Report, cluster, release, notify
+    user_promise: Support closure stays install-specific.
+    canonical_journeys:
+      - journeys/claim-install-and-close-a-support-case.md
+    owner_repos: [fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report, support_packets]
+      minimum_history_snapshots: 1
+      require_support_install_truth_contract: true
+      required_project_posture:
+        - project_id: hub
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: hub
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "summary": {"external_proof_required_case_count": 1},
+                "packets": [
+                    {
+                        "packet_id": "packet-a",
+                        "status": "accepted",
+                        "install_truth_state": "tuple_not_on_promoted_shelf",
+                        "install_diagnosis": {
+                            "registry_channel_id": "preview",
+                            "registry_release_channel_status": "published",
+                            "registry_release_version": "1.2.3",
+                            "registry_release_proof_status": "passed",
+                            "external_proof_required": True,
+                            "external_proof_request": {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_host": "windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                            },
+                        },
+                        "fix_confirmation": {"state": "no_fix_recorded", "update_required": False},
+                        "recovery_path": {"action_id": "open_downloads", "href": "/downloads"},
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    journey = payload["journeys"][0]
+    assert journey["state"] == "ready"
+    assert journey["signals"]["support_external_proof_required_case_count"] == 1

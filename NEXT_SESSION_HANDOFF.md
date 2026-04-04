@@ -81,6 +81,59 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-10 support packets now carry install-tuple external proof-request truth and journey gates fail-close missing linkage
+
+- Trigger:
+  - W5 milestone `10` requires support to prove install-specific truth (build/channel/fix/recovery path), but support packets did not project per-tuple external host-proof obligations from release-channel coverage gaps.
+  - this allowed support packet payloads to omit whether a missing tuple was waiting on explicit Windows/macOS proof requests, creating drift risk between support closure packets and installer/update truth.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - release-channel indexing now ingests `desktopTupleCoverage.externalProofRequests`.
+    - per-case `install_diagnosis` now emits:
+      - `case_tuple_id`
+      - `external_proof_required` (boolean)
+      - `external_proof_request` object (`tuple_id`, `required_host`, `required_proofs`, expected artifact/installer/public-route/startup-smoke targets).
+    - support summary now emits:
+      - `external_proof_required_case_count`
+      - `external_proof_required_host_counts`
+      - `external_proof_required_tuple_counts`
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now fail-closes when support packets missing boolean `install_diagnosis.external_proof_required`.
+    - packets with `install_truth_state == tuple_not_on_promoted_shelf` must now declare `external_proof_required=true` with non-empty `external_proof_request` (`tuple_id`, `required_host`, `required_proofs`).
+    - journey-gate signals now include `support_external_proof_required_case_count`.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`:
+      - expanded install-truth assertions for new external-proof fields.
+      - added `test_materialize_support_case_packets_projects_external_proof_requests_for_missing_tuple`.
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`:
+      - added `test_materialize_journey_gates_blocks_when_support_tuple_gap_lacks_external_proof_contract`.
+      - added `test_materialize_journey_gates_accepts_support_external_proof_contract_when_present`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-studio/published/compile.manifest.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py scripts/materialize_journey_gates.py tests/test_materialize_support_case_packets.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_support_case_packets.py ...` -> FAIL (`No module named pytest`).
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_journey_gates.py ...` -> FAIL (`No module named pytest`).
+  - executable proof checks via temp fixtures:
+    - `python3 /docker/fleet/scripts/materialize_support_case_packets.py ...` with tuple gap + `externalProofRequests` -> PASS (packet emits `external_proof_required=true` and expected tuple/host/proofs).
+    - `python3 /docker/fleet/scripts/materialize_journey_gates.py ...` with missing external-proof contract -> PASS (journey blocked on missing `external_proof_required` linkage).
+    - same journey-gate check with valid external-proof contract + summary parity -> PASS (`state=ready`).
+  - regenerated pipeline:
+    - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+    - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+    - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending (not committed yet in this slice at this handoff checkpoint).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - environment still lacks `pytest` module for local test runner execution.
+  - release closure still externally blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
+
 ## 2026-04-04: milestone-4/5 continuity-return cues are now first-class unresolved signals in GM ops board prioritization
 
 - Trigger:

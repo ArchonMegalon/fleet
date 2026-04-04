@@ -250,9 +250,11 @@ def _load_release_channel(path: str) -> Dict[str, Any]:
 
 def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
     tuple_rows = []
+    external_proof_rows = []
     coverage = release_channel.get("desktopTupleCoverage")
     if isinstance(coverage, dict):
         tuple_rows = coverage.get("promotedInstallerTuples") or []
+        external_proof_rows = coverage.get("externalProofRequests") or []
     rows: List[Dict[str, str]] = []
     for item in tuple_rows:
         if not isinstance(item, dict):
@@ -272,6 +274,44 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 "artifact_id": _normalize_text(item.get("artifactId") or item.get("artifact_id")),
             }
         )
+    external_requests: List[Dict[str, Any]] = []
+    for item in external_proof_rows:
+        if not isinstance(item, dict):
+            continue
+        head = _normalize_text(item.get("head")).lower()
+        platform = _normalize_platform(item.get("platform"))
+        rid = _normalize_text(item.get("rid")).lower()
+        tuple_id = _normalize_text(
+            item.get("tupleId") or item.get("tuple_id"),
+            f"{head}:{rid}:{platform}" if head and rid and platform else "",
+        )
+        required_proofs = [
+            _normalize_text(token)
+            for token in (item.get("requiredProofs") or item.get("required_proofs") or [])
+            if _normalize_text(token)
+        ]
+        if not tuple_id:
+            continue
+        external_requests.append(
+            {
+                "tuple_id": tuple_id,
+                "head": head,
+                "platform": platform,
+                "rid": rid,
+                "required_host": _normalize_platform(item.get("requiredHost") or item.get("required_host")),
+                "required_proofs": required_proofs,
+                "expected_artifact_id": _normalize_text(item.get("expectedArtifactId") or item.get("expected_artifact_id")),
+                "expected_installer_file_name": _normalize_text(
+                    item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
+                ),
+                "expected_public_install_route": _normalize_text(
+                    item.get("expectedPublicInstallRoute") or item.get("expected_public_install_route")
+                ),
+                "expected_startup_smoke_receipt_path": _normalize_text(
+                    item.get("expectedStartupSmokeReceiptPath") or item.get("expected_startup_smoke_receipt_path")
+                ),
+            }
+        )
     return {
         "channel_id": _normalize_text(release_channel.get("channelId") or release_channel.get("channel")).lower(),
         "status": _normalize_text(release_channel.get("status")).lower(),
@@ -287,6 +327,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         ).lower(),
         "fix_availability_summary": _normalize_text(release_channel.get("fixAvailabilitySummary") or release_channel.get("fix_availability_summary")),
         "promoted_tuples": rows,
+        "external_proof_requests": external_requests,
     }
 
 
@@ -301,6 +342,30 @@ def _lookup_promoted_tuple(*, index: Dict[str, Any], head: str, platform: str, a
         key = f"{head}:{platform}:{rid}"
         for row in promoted_rows:
             if _normalize_text(row.get("tuple_id")).lower() == key:
+                return row
+    return {}
+
+
+def _lookup_external_proof_request(
+    *,
+    index: Dict[str, Any],
+    head: str,
+    platform: str,
+    arch: str,
+    tuple_id: str = "",
+) -> Dict[str, Any]:
+    request_rows = [dict(row) for row in (index.get("external_proof_requests") or []) if isinstance(row, dict)]
+    if tuple_id:
+        for row in request_rows:
+            if _normalize_text(row.get("tuple_id")).lower() == tuple_id.lower():
+                return row
+    rid = _rid_for_platform_arch(platform, arch)
+    if head and platform and rid:
+        for row in request_rows:
+            row_head = _normalize_text(row.get("head")).lower()
+            row_platform = _normalize_platform(row.get("platform"))
+            row_rid = _normalize_text(row.get("rid")).lower()
+            if row_head == head and row_platform == platform and row_rid == rid:
                 return row
     return {}
 
@@ -454,6 +519,11 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         or item.get("current_version")
     )
     tuple_id = _normalize_text(item.get("desktopTupleId") or item.get("tupleId") or item.get("tuple_id")).lower()
+    expected_tuple_id = tuple_id
+    if not expected_tuple_id and head_id and platform:
+        expected_rid = _rid_for_platform_arch(platform, arch)
+        if expected_rid:
+            expected_tuple_id = f"{head_id}:{expected_rid}:{platform}"
     fixed_version = _normalize_text(item.get("fixedVersion") or item.get("fixed_version"))
     fixed_channel = _normalize_text(item.get("fixedChannel") or item.get("fixed_channel"))
     promoted_tuple = _lookup_promoted_tuple(
@@ -461,7 +531,14 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         head=head_id,
         platform=platform,
         arch=arch,
-        tuple_id=tuple_id,
+        tuple_id=expected_tuple_id,
+    )
+    external_proof_request = _lookup_external_proof_request(
+        index=release_channel_index,
+        head=head_id,
+        platform=platform,
+        arch=arch,
+        tuple_id=expected_tuple_id,
     )
     has_tuple_context = bool(head_id and platform)
     install_truth_state = _install_truth_state(
@@ -514,6 +591,27 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "promoted_tuple_id": _normalize_text(promoted_tuple.get("tuple_id")),
             "promoted_artifact_id": _normalize_text(promoted_tuple.get("artifact_id")),
             "tuple_present_on_promoted_shelf": bool(promoted_tuple),
+            "case_tuple_id": expected_tuple_id,
+            "external_proof_required": bool(external_proof_request),
+            "external_proof_request": {
+                "tuple_id": _normalize_text(external_proof_request.get("tuple_id")),
+                "required_host": _normalize_text(external_proof_request.get("required_host")),
+                "required_proofs": [
+                    _normalize_text(token)
+                    for token in (external_proof_request.get("required_proofs") or [])
+                    if _normalize_text(token)
+                ],
+                "expected_artifact_id": _normalize_text(external_proof_request.get("expected_artifact_id")),
+                "expected_installer_file_name": _normalize_text(
+                    external_proof_request.get("expected_installer_file_name")
+                ),
+                "expected_public_install_route": _normalize_text(
+                    external_proof_request.get("expected_public_install_route")
+                ),
+                "expected_startup_smoke_receipt_path": _normalize_text(
+                    external_proof_request.get("expected_startup_smoke_receipt_path")
+                ),
+            },
             "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
             "case_installed_version": installed_version,
             "case_version_matches_registry_release": bool(
@@ -619,6 +717,19 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
                 for item in open_packets
                 if bool((item.get("fix_confirmation") or {}).get("update_required"))
                 and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
+            ),
+            "external_proof_required_case_count": sum(
+                1 for item in open_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ),
+            "external_proof_required_host_counts": _counter_map(
+                _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("required_host"))
+                for item in open_packets
+                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ),
+            "external_proof_required_tuple_counts": _counter_map(
+                _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
+                for item in open_packets
+                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
         },
         "packets": packets,

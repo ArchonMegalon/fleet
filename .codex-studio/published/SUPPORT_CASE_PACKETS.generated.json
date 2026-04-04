@@ -1,18 +1,27 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-03-31T14:34:09Z",
+  "generated_at": "2026-04-04T18:45:44Z",
   "packets": [],
   "schema_version": 1,
   "source": {
     "materialized_count": 0,
-    "reported_count": 1,
+    "reported_count": 0,
     "source_kind": "remote_url"
   },
   "summary": {
+    "closure_waiting_on_release_truth": 0,
     "design_impact_count": 0,
+    "external_proof_required_case_count": 0,
+    "external_proof_required_host_counts": {},
+    "external_proof_required_tuple_counts": {},
+    "install_truth_state_counts": {},
     "lane_counts": {},
+    "needs_human_response": 0,
     "open_case_count": 0,
     "owner_repo_counts": {},
-    "status_counts": {}
+    "status_counts": {},
+    "update_required_case_count": 0,
+    "update_required_misrouted_case_count": 0,
+    "update_required_routed_to_downloads_count": 0
   }
 }

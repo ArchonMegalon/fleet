@@ -127,13 +127,13 @@ def _resolve_json_path(payload: Any, path: str) -> Any:
     return current
 
 
-def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
+def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     coverage = dict(payload.get("desktopTupleCoverage") or {})
-    requests = coverage.get("externalProofRequests")
-    if not isinstance(requests, list):
+    source_requests = coverage.get("externalProofRequests")
+    if not isinstance(source_requests, list):
         return []
-    reasons: List[str] = []
-    for item in requests:
+    requests: List[Dict[str, Any]] = []
+    for item in source_requests:
         if not isinstance(item, dict):
             continue
         tuple_id = str(item.get("tupleId") or "").strip()
@@ -144,10 +144,38 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
         proof_tokens = [str(token or "").strip() for token in required_proofs if str(token or "").strip()]
         if not proof_tokens:
             continue
-        expected_artifact_id = str(item.get("expectedArtifactId") or "").strip()
-        expected_installer = str(item.get("expectedInstallerFileName") or "").strip()
-        expected_route = str(item.get("expectedPublicInstallRoute") or "").strip()
-        expected_receipt = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
+        requests.append(
+            {
+                "tuple_id": tuple_id,
+                "required_host": required_host or "required",
+                "required_proofs": sorted(set(proof_tokens)),
+                "expected_artifact_id": str(item.get("expectedArtifactId") or "").strip(),
+                "expected_installer_file_name": str(item.get("expectedInstallerFileName") or "").strip(),
+                "expected_public_install_route": str(item.get("expectedPublicInstallRoute") or "").strip(),
+                "expected_startup_smoke_receipt_path": str(item.get("expectedStartupSmokeReceiptPath") or "").strip(),
+            }
+        )
+    deduped_by_tuple: Dict[str, Dict[str, Any]] = {}
+    for request in requests:
+        tuple_id = str(request.get("tuple_id") or "").strip()
+        if tuple_id:
+            deduped_by_tuple[tuple_id] = request
+    return [deduped_by_tuple[key] for key in sorted(deduped_by_tuple.keys())]
+
+
+def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
+    requests = _release_channel_external_proof_requests(payload)
+    reasons: List[str] = []
+    for item in requests:
+        tuple_id = str(item.get("tuple_id") or "").strip()
+        required_host = str(item.get("required_host") or "").strip().lower()
+        proof_tokens = item.get("required_proofs")
+        if not tuple_id or not isinstance(proof_tokens, list) or not proof_tokens:
+            continue
+        expected_artifact_id = str(item.get("expected_artifact_id") or "").strip()
+        expected_installer = str(item.get("expected_installer_file_name") or "").strip()
+        expected_route = str(item.get("expected_public_install_route") or "").strip()
+        expected_receipt = str(item.get("expected_startup_smoke_receipt_path") or "").strip()
         detail_parts: List[str] = []
         if expected_artifact_id:
             detail_parts.append(f"artifactId {expected_artifact_id}")
@@ -266,6 +294,7 @@ def evaluate_journey(
     fleet_gate = dict(row.get("fleet_gate") or {})
     blocking_reasons: List[str] = []
     warning_reasons: List[str] = []
+    external_proof_requests: List[Dict[str, Any]] = []
     now = utc_now()
 
     for artifact_name in fleet_gate.get("required_artifacts") or []:
@@ -382,6 +411,7 @@ def evaluate_journey(
                 and relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
             ):
                 blocking_reasons.extend(_release_channel_external_proof_reasons(proof_payload))
+                external_proof_requests = _release_channel_external_proof_requests(proof_payload)
 
         if json_required_one_of:
             assert proof_payload is not None
@@ -471,6 +501,7 @@ def evaluate_journey(
             )
     if bool(fleet_gate.get("require_support_install_truth_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
+        support_external_proof_required_count = 0
         for index, packet in enumerate(packets, start=1):
             packet_id = str(packet.get("packet_id") or "").strip() or f"packet#{index}"
             install_truth_state = str(packet.get("install_truth_state") or "").strip().lower()
@@ -502,6 +533,38 @@ def evaluate_journey(
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing install_diagnosis.registry_release_proof_status."
                     )
+                external_proof_required = install_diagnosis.get("external_proof_required")
+                external_proof_request = install_diagnosis.get("external_proof_request")
+                if not isinstance(external_proof_required, bool):
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing boolean install_diagnosis.external_proof_required."
+                    )
+                elif external_proof_required:
+                    support_external_proof_required_count += 1
+                    if not isinstance(external_proof_request, dict):
+                        support_packet_contract_violations.append(
+                            f"support packet {packet_id} is missing install_diagnosis.external_proof_request."
+                        )
+                    else:
+                        if not str(external_proof_request.get("tuple_id") or "").strip():
+                            support_packet_contract_violations.append(
+                                f"support packet {packet_id} is missing install_diagnosis.external_proof_request.tuple_id."
+                            )
+                        if not str(external_proof_request.get("required_host") or "").strip():
+                            support_packet_contract_violations.append(
+                                f"support packet {packet_id} is missing install_diagnosis.external_proof_request.required_host."
+                            )
+                        required_proofs = external_proof_request.get("required_proofs")
+                        if not isinstance(required_proofs, list) or not [
+                            str(token or "").strip() for token in required_proofs if str(token or "").strip()
+                        ]:
+                            support_packet_contract_violations.append(
+                                f"support packet {packet_id} is missing install_diagnosis.external_proof_request.required_proofs."
+                            )
+                if install_truth_state == "tuple_not_on_promoted_shelf" and external_proof_required is not True:
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} with install_truth_state 'tuple_not_on_promoted_shelf' must declare external_proof_required=true."
+                    )
             if not isinstance(fix_confirmation, dict):
                 support_packet_contract_violations.append(
                     f"support packet {packet_id} is missing fix_confirmation."
@@ -529,6 +592,13 @@ def evaluate_journey(
                 blocking_reasons.append(
                     f"support packet install-truth contract has {len(support_packet_contract_violations) - 5} additional violations."
                 )
+        reported_external_proof_required_case_count = int(
+            support_summary.get("external_proof_required_case_count") or 0
+        )
+        if support_external_proof_required_count != reported_external_proof_required_case_count:
+            blocking_reasons.append(
+                "support packet summary external_proof_required_case_count does not match packet install_diagnosis facts."
+            )
     if bool(fleet_gate.get("require_support_recovery_path_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         for index, packet in enumerate(packets, start=1):
@@ -629,6 +699,7 @@ def evaluate_journey(
         "support_packets_generated_at": support_generated_at,
         "required_artifacts": [str(item) for item in (fleet_gate.get("required_artifacts") or []) if str(item).strip()],
         "canonical_journeys": [str(item) for item in (row.get("canonical_journeys") or []) if str(item).strip()],
+        "external_proof_requests": external_proof_requests,
     }
     signals = {
         "blocking_reason_count": len(blocking_reasons),
@@ -642,11 +713,15 @@ def evaluate_journey(
         "support_update_required_misrouted_case_count": int(
             support_summary.get("update_required_misrouted_case_count") or 0
         ),
+        "support_external_proof_required_case_count": int(
+            support_summary.get("external_proof_required_case_count") or 0
+        ),
         "support_install_truth_contract_violation_count": len(support_packet_contract_violations),
         "support_recovery_route_contract_violation_count": len(support_recovery_contract_violations),
         "external_blocking_reason_count": len(external_blocking_reasons),
         "local_blocking_reason_count": len(local_blocking_reasons),
         "blocked_by_external_constraints_only": blocked_by_external_constraints_only,
+        "external_proof_request_count": len(external_proof_requests),
     }
     return {
         "id": str(row.get("id") or "").strip(),
@@ -658,6 +733,7 @@ def evaluate_journey(
         "external_blocking_reasons": external_blocking_reasons,
         "local_blocking_reasons": local_blocking_reasons,
         "blocked_by_external_constraints_only": blocked_by_external_constraints_only,
+        "external_proof_requests": external_proof_requests,
         "warning_reasons": warning_reasons,
         "owner_repos": [str(item) for item in (row.get("owner_repos") or []) if str(item).strip()],
         "canonical_journeys": [str(item) for item in (row.get("canonical_journeys") or []) if str(item).strip()],

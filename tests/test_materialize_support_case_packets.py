@@ -92,6 +92,9 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["update_required_case_count"] == 0
     assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
     assert payload["summary"]["update_required_misrouted_case_count"] == 0
+    assert payload["summary"]["external_proof_required_case_count"] == 0
+    assert payload["summary"]["external_proof_required_host_counts"] == {}
+    assert payload["summary"]["external_proof_required_tuple_counts"] == {}
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -439,14 +442,137 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["update_required_case_count"] == 0
     assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
     assert payload["summary"]["update_required_misrouted_case_count"] == 0
+    assert payload["summary"]["external_proof_required_case_count"] == 0
+    assert payload["summary"]["external_proof_required_host_counts"] == {}
+    assert payload["summary"]["external_proof_required_tuple_counts"] == {}
     waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
     assert waiting_packet["install_diagnosis"]["registry_release_channel_status"] == "published"
     assert waiting_packet["install_diagnosis"]["tuple_present_on_promoted_shelf"] is True
     assert waiting_packet["install_diagnosis"]["registry_release_proof_status"] == "passed"
+    assert waiting_packet["install_diagnosis"]["external_proof_required"] is False
+    assert waiting_packet["install_diagnosis"]["external_proof_request"] == {
+        "tuple_id": "",
+        "required_host": "",
+        "required_proofs": [],
+        "expected_artifact_id": "",
+        "expected_installer_file_name": "",
+        "expected_public_install_route": "",
+        "expected_startup_smoke_receipt_path": "",
+    }
     assert waiting_packet["recovery_path"]["href"] == "/account/support"
     fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
     assert fix_states == ["awaiting_reporter_verification", "confirmed_fixed"]
+
+
+def test_materialize_support_case_packets_projects_external_proof_requests_for_missing_tuple(tmp_path: Path) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "caseId": "support_case_windows_tuple_missing",
+                        "clusterKey": "support:windows-missing",
+                        "kind": "install_help",
+                        "status": "accepted",
+                        "title": "Windows tuple missing from promoted shelf",
+                        "summary": "Support needs host-proof request truth for this install tuple.",
+                        "candidateOwnerRepo": "chummer6-hub",
+                        "designImpactSuspected": False,
+                        "installationId": "install-windows-1",
+                        "releaseChannel": "preview",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "arch": "x64",
+                        "installedVersion": "1.2.3",
+                    }
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "rolloutState": "coverage_incomplete",
+                "supportabilityState": "review_required",
+                "desktopTupleCoverage": {
+                    "promotedInstallerTuples": [
+                        {
+                            "tupleId": "avalonia:linux:linux-x64",
+                            "head": "avalonia",
+                            "platform": "linux",
+                            "rid": "linux-x64",
+                            "artifactId": "avalonia-linux-x64-installer",
+                        }
+                    ],
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "requiredHost": "windows",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                            "expectedArtifactId": "avalonia-win-x64-installer",
+                            "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                            "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                            "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        }
+                    ],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["install_truth_state_counts"]["tuple_not_on_promoted_shelf"] == 1
+    assert payload["summary"]["external_proof_required_case_count"] == 1
+    assert payload["summary"]["external_proof_required_host_counts"] == {"windows": 1}
+    assert payload["summary"]["external_proof_required_tuple_counts"] == {"avalonia:win-x64:windows": 1}
+    packet = payload["packets"][0]
+    assert packet["install_truth_state"] == "tuple_not_on_promoted_shelf"
+    assert packet["install_diagnosis"]["case_tuple_id"] == "avalonia:win-x64:windows"
+    assert packet["install_diagnosis"]["external_proof_required"] is True
+    assert packet["install_diagnosis"]["external_proof_request"] == {
+        "tuple_id": "avalonia:win-x64:windows",
+        "required_host": "windows",
+        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+        "expected_artifact_id": "avalonia-win-x64-installer",
+        "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+        "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+    }
+    assert packet["recovery_path"]["action_id"] == "open_downloads"
 
 
 def test_materialize_support_case_packets_marks_update_required_when_fixed_version_differs_from_installed_version(tmp_path: Path) -> None:
