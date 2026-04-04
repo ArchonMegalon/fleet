@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes missing nested release-proof journey and route coverage in release-channel receipts
+
+- Trigger:
+  - frontier milestone `2` requires workflow and visual familiarity receipts to bind to release-channel shelf proof that is both canonical and complete, not just id/version/timestamp aligned.
+  - `chummer6-hub/scripts/audit-ui-parity.sh` already fail-closed release-channel path/id/version/generated-at drift, but did not independently fail-close missing or weakened nested `releaseProof` journey/route evidence inside that linked release-channel receipt.
+  - this left a drift path where a receipt could stay cross-linked yet carry incomplete milestone-2 release-proof coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added explicit nested `releaseProof` validation for linked release-channel receipts in both workflow and visual contract paths.
+    - added fail-close checks for missing/non-passing `releaseProof.status`.
+    - added fail-close checks for required baseline `releaseProof.journeysPassed` coverage:
+      - `install_claim_restore_continue`
+      - `build_explain_publish`
+      - `campaign_session_recover_recap`
+      - `report_cluster_release_notify`
+    - added canonical route normalization and fail-close checks for malformed/duplicate `releaseProof.proofRoutes` entries.
+    - added required flagship `releaseProof.proofRoutes` coverage checks:
+      - `/downloads/install/avalonia-linux-x64-installer`
+      - `/home/access`
+      - `/home/work`
+      - `/account/work`
+      - `/account/support`
+      - `/contact`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended script-marker assertions to lock new nested release-proof fail-close checks in `audit-ui-parity.sh`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit now requires linked release-channel receipts to carry passing, complete baseline journey proof and canonical flagship proof-route coverage, closing a nested release-proof drift window behind previously aligned path/id/version/time evidence.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release proof route canonicalization now fail-closes query/fragment drift, dot-segment traversal, and normalized duplicate route variants
 
 - Trigger:
