@@ -1,3 +1,39 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 compact return-brief continuity canonicalization slice
+
+- Commits landed:
+  - `chummer6-hub`: `2cd4882c` (`feat(w3-4-5-6): canonicalize compact return brief continuity forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 continuity lane now fail-closes compact `campaign/aftermath/downtime return brief(s)` forms across canonicalization and live journey audits
+
+- Trigger:
+  - W3 continuity canon requires return/recap wording to stay in one governed packet lane, but compact `*returnbrief(s)` forms were not explicitly canonicalized or audited.
+  - this left a compact-query seam where recap-style brief phrasing could miss the same campaign return packet lane already used by `*returnpacket(s)` forms.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `campaignreturnbrief(s)`
+      - `aftermathreturnbrief(s)`
+      - `downtimereturnbrief(s)`
+    - all map into governed return packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with return-brief assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` to assert matches for all new compact return-brief forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` and workspace `prepQuery=` probes for all new return-brief compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for all new return-brief compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed audit and Playwright marker assertions for each new return-brief probe.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 compact aftermath/downtime return packet continuity proof slice
 
 - Commits landed:
