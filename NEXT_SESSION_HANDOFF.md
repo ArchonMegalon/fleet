@@ -1,3 +1,33 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 singular opposition/event compact packet live-proof slice
+
+- Commits landed:
+  - `chummer6-hub`: `a2cc8f70` (`test(w3-4-5-6): fail-close singular compact opposition and event packet queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 compact prep-packet proof now fail-closes singular opposition and event-control packet forms in API/workspace journey audits
+
+- Trigger:
+  - compact governed packet canonicalization already supported singular `oppositionpacket` and `eventcontrolpacket`, but live query/audit proofs only pinned plural variants.
+  - this left a regression seam where singular compact GM shorthand could drift outside journey-level fail-close verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens` with singular `oppositionpacket` and `eventcontrolpacket` assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms` with singular match assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added singular `queryText=` and workspace `prepQuery=` probes for `oppositionpacket` and `eventcontrolpacket`.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added singular workspace assertions via `assertWorkspacePrepQuerySearch(...)`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new singular markers for live-audit and Playwright script expectations.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`5 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 singular diary-contact-heat compact packet proof slice
 
 - Commits landed:
