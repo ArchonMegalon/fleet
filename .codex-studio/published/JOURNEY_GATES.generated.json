@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:47:27Z",
+  "generated_at": "2026-04-04T17:49:24Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:47:08Z",
+      "at": "2026-04-04T17:49:03Z",
       "state": "fresh",
-      "age_seconds": 19
+      "age_seconds": 21
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 1719
+      "age_seconds": 1836
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 1765
+      "age_seconds": 1882
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 1765
+      "age_seconds": 1882
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 1764
+      "age_seconds": 1881
     }
   },
   "journeys": [
@@ -333,6 +333,7 @@
               "response[\"settingsLaneReceipt\"]",
               "response[\"sourceToggleLaneReceipt\"]",
               "response[\"customDataLaneReceipt\"]",
+              "response[\"xmlBridgeLaneReceipt\"]",
               "response[\"translatorLaneReceipt\"]",
               "response[\"importOracleLaneReceipt\"]",
               "response[\"importOracleMissingSources\"]",
@@ -352,6 +353,7 @@
               "BuildSettingsLaneReceipt",
               "BuildSourceToggleLaneReceipt",
               "BuildCustomDataLaneReceipt",
+              "BuildXmlBridgeLaneReceipt",
               "BuildTranslatorLaneReceipt",
               "BuildImportOracleLaneReceipt",
               "ImportOracleMissingSources",

@@ -186,6 +186,7 @@ journey_gates:
             - 'response["settingsLaneReceipt"]'
             - 'response["sourceToggleLaneReceipt"]'
             - 'response["customDataLaneReceipt"]'
+            - 'response["xmlBridgeLaneReceipt"]'
             - 'response["translatorLaneReceipt"]'
             - 'response["importOracleLaneReceipt"]'
             - 'response["importOracleMissingSources"]'
@@ -202,6 +203,7 @@ journey_gates:
             - BuildSettingsLaneReceipt
             - BuildSourceToggleLaneReceipt
             - BuildCustomDataLaneReceipt
+            - BuildXmlBridgeLaneReceipt
             - BuildTranslatorLaneReceipt
             - BuildImportOracleLaneReceipt
             - ImportOracleMissingSources
