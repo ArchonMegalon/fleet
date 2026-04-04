@@ -419,6 +419,36 @@ journey_gates:
             - '"character_roster" => new DesktopDialogState('
             - '"dialog.dice_roller"'
             - '"dialog.character_roster"'
+            - '"diceThreshold"'
+            - '"diceUtilityLane"'
+            - '"initiativePreview"'
+            - '"rosterOpenCount"'
+            - '"rosterOpsLane"'
+            - '"rosterEntries"'
+        - repo: chummer6-ui
+          path: Chummer.Presentation/Overview/DialogCoordinator.cs
+          must_contain:
+            - '"derive_initiative"'
+            - '"diceThreshold"'
+            - '"initiativePreview"'
+            - "BuildInitiativePreview(dialog)"
+        - repo: chummer6-ui
+          path: Chummer.Presentation/Shell/CatalogOnlyRulesetShellCatalogResolver.cs
+          must_contain:
+            - 'WorkflowDefinitionIds.DiceTool'
+            - '"Utility Tooling"'
+            - '["dice_roller"]'
+            - '["character_roster"]'
+        - repo: chummer6-ui
+          path: Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs
+          must_contain:
+            - "CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context"
+            - "CreateCommandDialog_character_roster_summarizes_open_workspaces"
+        - repo: chummer6-ui
+          path: Chummer.Tests/Presentation/DialogCoordinatorTests.cs
+          must_contain:
+            - "CoordinateAsync_roll_adds_result_field_to_dice_dialog"
+            - "CoordinateAsync_derive_initiative_updates_preview_without_closing_dialog"
         - repo: chummer6-ui
           path: Chummer.Blazor/Components/Shared/GmBoardFeed.razor
           must_contain:
@@ -441,6 +471,10 @@ journey_gates:
             - '"contract_name": "chummer6-mobile.local_release_proof"'
             - '"campaign_session_recover_recap"'
             - 'Assert(projection.OfflineTruthSummary.Contains(\"Stale:\", StringComparison.Ordinal)'
+            - 'Assert(projection.OfflineTruthSummary.Contains(\"Can do now:\", StringComparison.Ordinal)'
+            - 'Assert(projection.OfflineTruthSummary.Contains(\"Needs online:\", StringComparison.Ordinal)'
+            - 'Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\"Can-do-now lane:\", StringComparison.Ordinal))'
+            - 'Assert(projection.OfflineTruthLabels.Any(item => item.Contains(\"Needs-online lane:\", StringComparison.Ordinal))'
             - 'Assert(plan.TravelCompanionSummary.Contains(\"Cached:\", StringComparison.Ordinal)'
             - 'Assert(plan.TravelCompanionSummary.Contains(\"Offline actions:\", StringComparison.Ordinal)'
             - 'id=\"workspace-offline-truth\"'

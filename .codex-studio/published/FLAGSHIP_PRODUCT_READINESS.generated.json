@@ -1,11 +1,11 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T18:48:32Z",
+  "generated_at": "2026-04-04T18:51:01Z",
   "status": "fail",
   "summary": {
-    "ready_count": 4,
-    "warning_count": 4,
+    "ready_count": 2,
+    "warning_count": 6,
     "missing_count": 0,
     "history_snapshot_count": 10
   },
@@ -32,8 +32,8 @@
     "desktop_client": "warning",
     "rules_engine_and_import": "ready",
     "hub_and_registry": "warning",
-    "mobile_play_shell": "ready",
-    "ui_kit_and_flagship_polish": "ready",
+    "mobile_play_shell": "warning",
+    "ui_kit_and_flagship_polish": "warning",
     "media_artifacts": "ready",
     "horizons_and_public_surface": "warning",
     "fleet_and_operator_loop": "warning"
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
-        "ui_executable_gate_age_seconds": 2249,
+        "ui_executable_gate_age_seconds": 2397,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -256,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T18:37:08Z",
-        "release_channel_age_seconds": 684,
+        "release_channel_age_seconds": 833,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -518,27 +518,31 @@
       }
     },
     "mobile_play_shell": {
-      "status": "ready",
-      "summary": "Mobile play-shell continuity and reconnect proof are current.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Mobile and live-play flagship proof is still incomplete.",
+      "reasons": [
+        "Campaign/recover/recap journey is blocked, not ready."
+      ],
       "evidence": {
         "mobile_stage": "publicly_promoted",
         "mobile_promotion": "public",
         "mobile_local_release_status": "passed",
-        "campaign_session_recover_recap": "ready",
+        "campaign_session_recover_recap": "blocked",
         "recover_from_sync_conflict": "ready"
       }
     },
     "ui_kit_and_flagship_polish": {
-      "status": "ready",
-      "summary": "Shared UI, accessibility, and flagship polish proof is current across heads.",
-      "reasons": [],
+      "status": "warning",
+      "summary": "Shared UI and flagship polish proof is still incomplete.",
+      "reasons": [
+        "Campaign/recover/recap journey is blocked, not ready."
+      ],
       "evidence": {
         "ui_kit_stage": "boundary_pure",
         "ui_stage": "publicly_promoted",
         "mobile_stage": "publicly_promoted",
         "build_explain_publish": "ready",
-        "campaign_session_recover_recap": "ready"
+        "campaign_session_recover_recap": "blocked"
       }
     },
     "media_artifacts": {
@@ -582,7 +586,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T18:48:10Z",
+        "supervisor_updated_at": "2026-04-04T18:49:50Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -594,13 +598,13 @@
   },
   "ready_keys": [
     "rules_engine_and_import",
-    "mobile_play_shell",
-    "ui_kit_and_flagship_polish",
     "media_artifacts"
   ],
   "warning_keys": [
     "desktop_client",
     "hub_and_registry",
+    "mobile_play_shell",
+    "ui_kit_and_flagship_polish",
     "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
@@ -612,7 +616,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260404T163340Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",

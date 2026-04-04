@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-6 offline continuity gate now fail-closes mobile can-do-now vs needs-online proof markers
+
+- Trigger:
+  - after adding explicit offline capability split in mobile workspace-lite, journey-gate contracts still only required generic cached/stale/offline-action strings.
+  - this left a regression path where release gates could pass while re-collapsing allowed-vs-online-required action boundaries.
+- Landed:
+  - patched canonical gate contract:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - patched Fleet mirror gate contract:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+  - `campaign_session_recover_recap` mobile proof requirements now additionally fail-close on:
+    - `Assert(projection.OfflineTruthSummary.Contains("Can do now:", ...))`
+    - `Assert(projection.OfflineTruthSummary.Contains("Needs online:", ...))`
+    - `Assert(projection.OfflineTruthLabels.Any(item => item.Contains("Can-do-now lane:", ...)))`
+    - `Assert(projection.OfflineTruthLabels.Any(item => item.Contains("Needs-online lane:", ...)))`
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=2, warning=6, missing=0`).
+- Commits landed:
+  - `chummer6-design`: `a2f4d68` (`feat(w3-6): fail-close mobile offline can-do-now vs needs-online markers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-6 mobile workspace-lite now fail-closes explicit offline capability split (can-do-now vs needs-online)
 
 - Trigger:
