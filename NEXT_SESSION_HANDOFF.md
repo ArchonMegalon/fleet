@@ -1,3 +1,35 @@
+## 2026-04-04: follow-up on milestone-2 releaseProof timestamp drift self-heal in chummer6-hub (commit and push status)
+
+- Commits landed:
+  - `chummer6-hub`: `7db544aa` (`fix(milestone-2): self-heal stale releaseProof timestamp drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-2 hub parity verify now auto-recovers stale/future nested releaseProof.generatedAt drift from canonical release-channel generated_at
+
+- Trigger:
+  - `chummer6-hub/scripts/ai/verify.sh` retried parity for workflow/visual release-channel drift and self-healed nested localization-gate timestamp freshness, but still failed hard when only nested `releaseProof.generatedAt/generated_at` freshness drifted stale/future.
+  - this left a manual repair seam in the flagship workbench parity lane for milestone-2 release proof evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added release-proof timestamp drift markers for stale/future `releaseProof.generatedAt` and `releaseProof.generated_at`.
+    - added `sync_release_channel_proof_timestamp_from_release_channel_receipt`, which:
+      - resolves the active release-channel receipt path from canonical `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` evidence.
+      - syncs nested `releaseProof.generatedAt` (and `generated_at` when present) from the release-channel receipt `generated_at/generatedAt`.
+    - verify now performs one parity retry after this targeted release-proof timestamp sync when those drift markers appear.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs` script-lock assertions so verify must keep:
+    - new release-proof timestamp marker constants.
+    - the new sync helper hook and retry note.
+    - the release-channel generated timestamp guardrail marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (baseline parity passes; repeated `parity audit failed: ...` lines are expected negative mutation probes; final `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 parity verify now self-heals three drift classes before fail-close: workflow/visual release-channel drift, nested localization-gate timestamp drift, and nested release-proof timestamp drift.
+
 ## 2026-04-04: W1/W3 executable gate now classifies quarantined installer bytes as startup-smoke-blocked vs payload-invalid for per-tuple fail-honest proof
 
 - Commits landed:
