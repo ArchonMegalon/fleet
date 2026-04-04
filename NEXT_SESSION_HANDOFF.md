@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `heat` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestones `4` and `5` require diary/contact/heat continuity and GM prep retrieval to stay on one governed campaign lane in both API and signed-in workspace flows.
+  - live journey audits previously verified compact `seasonops` and `opposition` prep retrieval, but did not fail-close on `heat` continuity search paths.
+  - this left a regression window where `heat` prep retrieval could drift in API/UI routes without breaking CI closeout audits.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=heat` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=heat`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `heat` after `seasonops`, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=heat`, `prepQuery=heat`, and playwright `?prepQuery=heat` markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-4/5 audits now fail-close if governed `heat` continuity prep retrieval drifts in API or workspace route flows.
+  - campaign continuity proof now covers `opposition`, `seasonops`, and `heat` retrieval lanes end-to-end in closeout automation.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now verify compact `seasonops` prep search across API and workspace route
 
 - Trigger:
