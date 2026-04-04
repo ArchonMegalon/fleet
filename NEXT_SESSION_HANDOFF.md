@@ -38,8 +38,8 @@
   - desktop exit-gate proof now rejects excessive future-skewed timestamp evidence instead of silently clamping it to fresh.
   - milestone-1/3 proof honesty is tighter for startup-smoke and release-channel temporal integrity while the broader promoted Windows/macOS tuple gap remains open.
 - Push status:
-  - `chummer6-ui`: pending (local edits only in this environment).
-  - `fleet`: pending (credential-dependent in this environment).
+  - `chummer6-ui`: commit landed locally (`b699607b`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: commit landed locally (`3dc8237`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-4 recap shelf timestamps now normalize whitespace-padded recap projection ids before aftermath lookup
 
