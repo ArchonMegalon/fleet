@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-5 GM unresolved triage now classifies opfor/op-force pressure as opposition-domain signals
+
+- Trigger:
+  - frontier milestone `5` requires opposition packet pressure to remain first-class in governed GM operations triage even when operators use common shorthand.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` already recognized opposition/hostile/adversary/encounter/enemy/threat variants, but common table shorthand (`opfor`, `op-force`) could still fall to `general` and lose priority ordering.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded opposition-domain detection with `opfor`, `op-force`, and `op force`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatOpforSignalsAsOppositionDomain`.
+    - regression locks ordering so unresolved `op-force` rows stay ahead of newer `event_control` and `general` unresolved rows at equal severity.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`347` tests on `net10.0` and `net10.0-windows`).
+  - note: an earlier parallel-targeted run of `FullyQualifiedName~GmOpsBoardServiceTests` hit a transient concurrent file-lock (`Chummer.Media.Contracts.deps.json`) under active local activity; follow-on verification passed cleanly.
+- Current trusted state:
+  - GM unresolved triage no longer depends on literal opposition/encounter/enemy wording to keep opfor shorthand in the opposition lane.
+  - milestone-5 unresolved ordering remains severity-first, then domain-priority, then recency.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 GM unresolved triage now keeps encounter/enemy pressure in the opposition domain
 
 - Trigger:
