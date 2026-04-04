@@ -1,3 +1,17 @@
+## 2026-04-04: hub-registry release-channel pipeline canon now explicitly states `baseUrl/base_url` alias-drift fail-close
+
+- Trigger:
+  - verifier hardening now rejects conflicting `releaseProof.baseUrl` and `releaseProof.base_url`, but the pipeline doc did not state alias-drift fail-close explicitly.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md` to require exact agreement when both origin aliases are present.
+- Verification:
+  - doc-only canonical clarification (runtime behavior already exercised by `scripts/ai/verify.sh` in the prior slice).
+- Current trusted state:
+  - registry pipeline canon and verifier behavior now match on origin-alias drift posture.
+- Push status:
+  - `chummer-hub-registry`: local doc change landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2/3 registry verifier now fail-closes conflicting `releaseProof.baseUrl` vs `releaseProof.base_url` alias drift
 
 - Trigger:
