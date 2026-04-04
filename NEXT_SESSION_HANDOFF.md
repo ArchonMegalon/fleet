@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-3 desktop executable gate now fail-closes unexpected `desktopTupleCoverage` key drift in release-channel receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-channel, installer, and packaged-head proof contracts to stay deterministic across platform/head tuple policy.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` consumed known `desktopTupleCoverage` fields but did not reject unknown keys.
+  - this left a fail-open seam where non-canonical `desktopTupleCoverage` key expansion could bypass UI-side release proof validation and weaken “proof cannot lie” posture.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added canonical `allowed_desktop_tuple_coverage_keys` contract.
+    - added `release_channel_tuple_coverage_unexpected_keys` evidence emission.
+    - added fail-close reason:
+      - `Release channel desktopTupleCoverage has unexpected keys: ...`
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Desktop_executable_gate_fail_closes_unexpected_desktop_tuple_coverage_keys` script-lock coverage for the new fail-close contract and evidence marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`12` tests on `net10.0`).
+- Commits landed:
+  - pending local commit in `chummer6-ui` for this slice.
+- Push attempts:
+  - not run yet for this slice.
+- Exact blocker:
+  - none for implementation or verification; push auth blocker still expected when attempting `git push`.
+
 ## 2026-04-04: milestone-2 registry verifier now fail-closes unexpected `releaseProof` and `releaseProof.uiLocalizationReleaseGate` key drift, with active verify mutation coverage
 
 - Trigger:
