@@ -23,7 +23,7 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer6-hub` / `chummer.run-services`: `bed2b3b3` (`feat(w4-9-16): add governed replay recap module handoff lanes`).
-  - `fleet`: `91cc3b2` (`docs: refresh handoff for build-lab artifact lanes slice`).
+  - `fleet`: `91cc3b2` (`docs: refresh handoff for build-lab artifact lanes slice`), `b989c9f` (`docs: record push results for build-lab artifact lanes slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
