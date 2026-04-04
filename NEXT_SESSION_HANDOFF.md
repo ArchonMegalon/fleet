@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-1/3 registry verifier lane now mutation-tests desktop tuple coverage missing-inventory drift fail-close
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/recovery release truth to fail closed when promoted desktop tuple coverage inventories drift from canonical artifact-derived coverage.
+  - `scripts/verify_public_release_channel.py` already fail-closed these seams:
+    - `desktopTupleCoverage.missingRequiredPlatforms does not match promoted tuple coverage`
+    - `desktopTupleCoverage.missingRequiredHeads does not match promoted tuple coverage`
+    - `desktopTupleCoverage.missingRequiredPlatformHeadPairs does not match promoted tuple coverage`
+    - `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples does not match promoted tuple coverage`
+  - `scripts/ai/verify.sh` did not run active mutations for those four inventory fields, leaving regression room where fail-close checks could weaken while verify stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added four active verifier mutations that tamper tuple-coverage missing-inventory fields and require non-zero verifier exit:
+      - append `tampered-platform` to `desktopTupleCoverage.missingRequiredPlatforms`
+      - append `tampered-head` to `desktopTupleCoverage.missingRequiredHeads`
+      - append `tampered-head:tampered-platform` to `desktopTupleCoverage.missingRequiredPlatformHeadPairs`
+      - append `tampered-head:tampered-rid:tampered-platform` to `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples`
+    - each mutation now asserts explicit fail-close expectation text in the verify lane.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close marker emissions for all four inventory-drift mutations).
+- Commits landed:
+  - `chummer-hub-registry`: `7e8ec15` (`fix(w1): mutation-test tuple coverage inventory drift in verifier lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6a87172..7e8ec15`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-4/5 campaign continuity query lane now normalizes diary/contact/heat mutation wording (`updates`/`changes`) to governed prep search tokens
 
 - Trigger:
@@ -33704,6 +33732,40 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Current trusted state:
   - do not raise live `CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS` above `3` yet.
   - a future EA-only fifth shard is now supported by launcher config, but it should wait until the active frontier widens beyond the tightly-coupled `1-5` tranche.
+
+## 2026-04-04: widened the active-wave frontier to the full 18-milestone pack so Fleet can shard beyond the old 5-id bottleneck
+
+- Trigger:
+  - operator explicitly authorized widening the frontier as far as safely possible to unlock more concurrent shard work.
+  - the old top-of-handoff explicit frontier still pinned live steering to milestones `1,2,4,5,3`, which hard-capped useful shard fanout.
+- Landed:
+  - active shard topology now targets five explicit milestone packs:
+    - shard-1: `1, 2, 3`
+    - shard-2: `13, 14, 17, 18`
+    - shard-3: `4, 5, 6`
+    - shard-4: `7, 8, 9, 16`
+    - shard-5: `10, 11, 12, 15`
+  - supervisor/launcher now support shard-local frontier-id packs rather than relying only on broad owner/text steering.
+- Current active frontier from design plus handoff:
+  - `1` Gold install, update, and recovery lane across macOS, Windows, and Linux
+  - `2` Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models
+  - `3` Packaged-binary desktop exit tests and per-head proof that cannot lie
+  - `13` Sourcebook, master-index, rule-snippet, and governed reference parity
+  - `14` Settings, source toggles, custom-data, XML, and translator successor lane
+  - `17` Chummer4/5a/Hero Lab/Genesis/CommLink import-oracle closeout
+  - `18` SR6 supplement, designer-tool, house-rule, and online-storage successor lane
+  - `4` Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop
+  - `5` GM operations, opposition packets, roster movement, prep library, and event controls
+  - `6` Safehouse, travel, offline, and mobile companion continuity
+  - `7` Build Lab from creation to advancement to crew-fit
+  - `8` Explain receipts and rule-environment diffs everywhere that drive real decisions
+  - `9` Portable dossier and campaign exchange plus replay, recap, and module artifacts
+  - `16` Sheet, print, export, viewer, and adjacent exchange parity
+  - `10` Public trust and support loop with install-specific diagnosis and fix confirmation
+  - `11` Creator publication, discovery, moderation, and shelf posture that survives growth
+  - `12` Product pulse v3 with adoption truth, canaries, launch or freeze decisions, and auto-implementation governance
+  - `15` Utility and operator parity for dice, initiative, roster, and dashboard work
+- Frontier milestone ids to prioritize first: 1, 2, 3, 13, 14, 17, 18, 4, 5, 6, 7, 8, 9, 16, 10, 11, 12, 15
 
 ## 2026-04-04: shard suppression now writes an explicit active-shard manifest and frontier-probe failures fail closed instead of silently disabling concurrency
 
