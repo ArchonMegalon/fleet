@@ -41,8 +41,8 @@
 - Current trusted state:
   - milestone-1/3 executable proof can no longer report publishable desktop release truth with complete tuple coverage while rollout state still says `paused` or `revoked`.
 - Push status:
-  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+  - `chummer6-ui`: committed (`3b00de7f`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: handoff committed (`0f5de6a`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release status when desktop tuple coverage is still incomplete
 
