@@ -28,6 +28,42 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commit `cc8cda2c` remains local-only until auth is restored.
 
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `outbriefed`/`outbriefing`/`outbriefings` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to remain one governed lane across canonical rewrite, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand already fail-closed `outbrief` and `outbriefs`, but common tense variants (`outbriefed`, `outbriefing`, `outbriefings`) were still outside the governed continuity lane.
+  - this left a drift seam where those variants could miss `recap` canonicalization, route outside `prep_library` triage, and evade full API/workspace/browser proof coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes compact `outbriefed` / `outbriefing` / `outbriefings` to governed `recap`.
+    - expanded split-token canonicalization to include `out briefed` / `out briefing` / `out briefings`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `outbriefed` / `outbriefing` / `outbriefings` to aftermath recap token coverage.
+    - expanded out-brief pair detection to include `briefed` / `briefing` / `briefings`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact/split/hyphen `outbriefed`/`outbriefing`/`outbriefings` phrasing as governed `prep_library`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity matching coverage and script-lock assertions for compact/split/hyphen outbriefed variant families.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added prep-library API and signed-in workspace/browser checks for compact/split/hyphen `outbriefed`/`outbriefing`/`outbriefings` queries.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `638b3cc1` (`fix(w3): fail-close outbriefed recap shorthand across continuity and gm ops`).
+  - `fleet`: pending in this slice.
+- Push attempts:
+  - pending in this slice.
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `debriefed` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
@@ -32436,3 +32472,23 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commits `d709779c` and `4e70cf76` remain local-only until auth is restored.
+
+## 2026-04-04: milestone-1/3 flagship gate now includes explicit startup-smoke lifecycle receipt test coverage (`TryHandleAsync_writes_receipt_when_requested`) and closes b14 fail-honest regression
+
+- Trigger:
+  - frontier milestones `1` and `3` rely on `b14-flagship-ui-release-gate.sh` as a hard precondition for executable per-head proof.
+  - the gate fail-closed on a required lifecycle runtime marker (`TryHandleAsync_writes_receipt_when_requested`) that was referenced by contract checks but missing in `DesktopStartupSmokeRuntimeTests`.
+  - this created a deterministic false-stop in the release lane before workflow/visual parity materialization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/DesktopStartupSmokeRuntimeTests.cs`:
+    - added explicit lifecycle regression test `TryHandleAsync_writes_receipt_when_requested` that runs startup smoke with receipt env wiring and asserts receipt emission.
+    - enabled nullable context (`#nullable enable`) in this file to keep nullability posture explicit for the updated test body.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/test.sh Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopStartupSmokeRuntimeTests" -v minimal` -> PASS (`2` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/sr4-sr6-desktop-parity-frontier-receipt.sh` -> PASS.
+- Current trusted state:
+  - milestone-1/3 flagship gate no longer fails on missing lifecycle-runtime test marker and can progress into full workflow/visual/executable parity materialization.
+- Push status:
+  - `chummer6-ui`: local change landed in working tree for this slice; commit/push not attempted in this pass due heavy concurrent in-flight repo-local modifications.
+  - `fleet`: handoff updated locally in this slice; commit/push not attempted in this pass.
