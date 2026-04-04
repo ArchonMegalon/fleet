@@ -142,6 +142,27 @@
   - `chummer-hub-registry`: local changes landed in this slice (`scripts/verify_public_release_channel.py`, `scripts/materialize_public_release_channel.py`, `scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-3 stale non-promoted tuple detection is now script-locked for Windows and macOS (not just Linux)
+
+- Trigger:
+  - desktop executable gate already enforced stale passing tuple receipts across Linux/Windows/macOS in `materialize-desktop-executable-exit-gate.sh`, but compliance script-locks only pinned Linux-specific markers plus the aggregate stale list.
+  - this left a regression seam where Windows/macOS stale tuple evidence paths could drift without failing compliance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded `Desktop_executable_gate_fail_closes_stale_passing_linux_windows_and_macos_tuple_receipts_that_are_not_promoted`.
+    - now script-locks Windows/macOS stale-receipt marker coverage in addition to existing Linux checks:
+      - tuple scan patterns for `UI_WINDOWS*_DESKTOP_EXIT_GATE.generated.json` and `UI_MACOS*_DESKTOP_EXIT_GATE.generated.json`
+      - promoted tuple sets `promoted_windows_tuples`, `promoted_macos_tuples`
+      - evidence keys `stale_windows_gate_receipts_without_promoted_tuples`, `stale_macos_gate_receipts_without_promoted_tuples`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_fail_closes_stale_passing_linux_windows_and_macos_tuple_receipts_that_are_not_promoted" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`10` tests on `net10.0`).
+- Current trusted state:
+  - milestone-3 compliance now explicitly fails if script-lock markers for stale non-promoted tuple detection disappear for Windows or macOS, tightening per-platform proof integrity for packaged-binary exit-gate evidence.
+- Push status:
+  - `chummer6-ui`: local change landed in this slice (`Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops prep lanes now script-lock plural return aliases `returnloops`, `nextsessionreturns`, and `sessionreturns`
 
 - Trigger:
