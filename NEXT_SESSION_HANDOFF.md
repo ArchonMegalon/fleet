@@ -25,6 +25,30 @@
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4/5 support closures and known-issue rows now prioritize reporter action before verify-fix and background cases
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return and GM operations support follow-through surfaces to foreground immediate reporter actions before lower-urgency or informational support rows.
+  - `CampaignWorkspaceServerPlaneService.BuildSupportClosures(...)` and `BuildKnownIssues(...)` still consumed digest list order from recency, so non-action rows could stay ahead of reporter-action cases in account workspace support panels.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `OrderSupportDigestsByActionPriority(...)` and `ResolveSupportDigestPriority(...)` to rank support digests deterministically (`ReporterActionNeeded` > `CanVerifyFix` > open non-closed > closed).
+    - wired `BuildSupportClosures(...)` to use the shared action-priority order before `Take(4)`.
+    - wired `BuildKnownIssues(...)` to use the same action-priority order before filter/`Take(4)`.
+    - aligned known-issue severity labeling with action priority (`ReporterActionNeeded` -> `attention`, `CanVerifyFix` -> `warning`, else `info`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `SupportClosuresPreferReporterActionCaseOverEarlierNonActionCase`.
+    - added `KnownIssuesPreferReporterActionCaseOverEarlierCanVerifyCase`.
+    - added reflection helpers `InvokeBuildSupportClosures(...)` and `InvokeBuildKnownIssues(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~SupportClosuresPreferReporterActionCaseOverEarlierNonActionCase|FullyQualifiedName~KnownIssuesPreferReporterActionCaseOverEarlierCanVerifyCase|FullyQualifiedName~DecisionNoticesPreferReporterActionSupportCaseOverEarlierNonActionCase|FullyQualifiedName~DecisionNoticesPreferCanVerifySupportCaseOverEarlierNonActionCase|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`321` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - workspace support closures and known-issue rows now surface reporter-action follow-through before verify-fix and passive cases, instead of depending on digest recency order.
+  - milestone-4 return-loop and milestone-5 operations support cues now share explicit action-priority behavior across decision notice, next-safe-action, workspace-state, closure, and known-issue surfaces.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignWorkspaceServerPlaneService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 local linux gate artifact cleanup applied to match new retention policy
 
 - Trigger:
