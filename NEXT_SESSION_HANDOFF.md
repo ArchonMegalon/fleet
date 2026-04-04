@@ -1,3 +1,39 @@
+## 2026-04-04: follow-up on W3 `opforces` prep-query parity script-lock slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `4ed46b15` (`fix(w3): script-lock opforces prep-query parity journeys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 live campaign workspace and GM ops parity now script-lock `opforces` opposition packet wording across API and browser journeys
+
+- Trigger:
+  - shared prep-query alias canonicalization and unit tests already covered `opfor`/`opforce`, but live parity journeys and script-lock marker assertions still omitted plural `opforces` query phrasing.
+  - this left a W3 proof seam where opposition packet continuity could regress in audit/e2e lanes without failing verification receipts.
+- Landed:
+  - patched live API/workspace audit checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - added governed prep-library and workspace checks for:
+      - `queryText=opforces`
+      - `prepQuery=opforces`
+  - patched browser journey checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added workspace prep search journey for `opforces` with route, copy, and non-empty result assertions.
+  - patched verification script-lock markers:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - added required markers for:
+      - `queryText=opforces`
+      - `prepQuery=opforces`
+      - `?prepQuery=opforces` and `opforces prep query` in Playwright script-lock checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 opposition packet search parity now fail-closes plural `opforces` phrasing through the same live-audit and browser-e2e proof lanes as existing `opfor`/`opforce` coverage, with script-lock tests guarding the new journey markers.
+
 ## 2026-04-04: follow-up on milestone-2 opfor-plural prep-query canonicalization (commit and push status)
 
 - Commits landed:
