@@ -49,6 +49,35 @@
   - `chummer.run-services`: local changes landed in this slice (same continuity canonicalization/test/audit files above); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-3 executable gate now fail-closes Linux quarantine-only installer bytes as non-shippable proof
+
+- Trigger:
+  - milestone-3 executable proof already fail-closed quarantine-only installer bytes for Windows/macOS, but Linux tuple validation did not enforce the same quarantine-only guard.
+  - this left a parity seam where Linux installer evidence could drift from shipped-shelf truth if bytes only existed in quarantine.
+- Landed:
+  - patched executable gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+      - extended `validate_linux_gate(...)` to accept desktop shelf and quarantine roots.
+      - added inferred Linux installer filename + quarantine candidate scan.
+      - added Linux gate evidence keys:
+        - `expected_installer_file_name`
+        - `quarantined_installer_candidates`
+        - `expected_linux_shelf_path`
+      - added explicit fail-close reason:
+        - `Linux promoted installer bytes appear only in quarantine for head ... and cannot count as shipped proof: ...`
+  - patched compliance script-lock:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+      - asserts Linux quarantine fail-close marker text and shelf-path evidence marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected for real missing Windows/macOS promoted tuples; gate remains fail-honest.
+- Current trusted state:
+  - milestone-3 executable proof now applies quarantine-only non-shippable enforcement consistently across Linux/Windows/macOS tuple families.
+  - remaining blocker is still genuine promoted Windows/macOS tuple publication and platform-hosted startup smoke, not quarantine masquerade.
+- Push status:
+  - `chummer6-ui`: commit landed (`09d6fab0`, `fix(executable-gate): fail-close linux quarantine installer bytes`); `git push` attempted and failed (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: follow-up on handoff push-blocker commit status for `recaps`/`returns` slice
 
 - Additional commit landed:
