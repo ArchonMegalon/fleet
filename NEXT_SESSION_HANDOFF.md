@@ -24,6 +24,15 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .blocking_reasons' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (contract-name blocker removed; remaining blockers are stale hub/mobile proofs + missing windows/macos tuple and failing UI executable gate).
 - Commits landed:
   - `chummer6-hub-registry`: `6278a47` (`feat(w1-1): enforce non-empty release-channel contract identity`).
+## 2026-04-04: follow-up on W2-17/18 build-explain marker hardening handoff commit (push status)
+
+- Commits landed:
+  - `fleet`: `a4dcc8e` (`docs(handoff): record w2-17-18 build-explain gate marker hardening`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: milestone-17/18 build-explain gate now fail-closes on adjacent SR6 oracle and online-storage parity markers
 
 - Trigger:
