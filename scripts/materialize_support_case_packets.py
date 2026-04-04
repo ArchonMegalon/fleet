@@ -236,6 +236,40 @@ def _rid_for_platform_arch(platform: str, arch: str) -> str:
     return ""
 
 
+def _is_platform_token(value: str) -> bool:
+    return _normalize_platform(value) in {"windows", "macos", "linux"}
+
+
+def _canonical_tuple_id(
+    tuple_id: Any,
+    *,
+    head: str = "",
+    platform: str = "",
+    rid: str = "",
+) -> str:
+    head_token = _normalize_text(head).lower()
+    platform_token = _normalize_platform(platform)
+    rid_token = _normalize_text(rid).lower()
+    if head_token and platform_token and rid_token:
+        return f"{head_token}:{rid_token}:{platform_token}"
+
+    raw = _normalize_text(tuple_id).lower()
+    if not raw:
+        return ""
+    parts = [segment.strip() for segment in raw.split(":")]
+    if len(parts) != 3:
+        return raw
+
+    part_head, part_mid, part_last = parts
+    mid_platform = _normalize_platform(part_mid)
+    last_platform = _normalize_platform(part_last)
+    if _is_platform_token(part_mid) and not _is_platform_token(part_last):
+        return f"{part_head}:{part_last}:{mid_platform}"
+    if _is_platform_token(part_last):
+        return f"{part_head}:{part_mid}:{last_platform}"
+    return raw
+
+
 def _load_release_channel(path: str) -> Dict[str, Any]:
     if not str(path or "").strip():
         return {}
@@ -397,7 +431,12 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         head = _normalize_text(item.get("head")).lower()
         platform = _normalize_platform(item.get("platform"))
         rid = _normalize_text(item.get("rid")).lower()
-        tuple_id = _normalize_text(item.get("tupleId") or item.get("tuple_id"), f"{head}:{platform}:{rid}" if head and platform and rid else "")
+        tuple_id = _canonical_tuple_id(
+            item.get("tupleId") or item.get("tuple_id"),
+            head=head,
+            platform=platform,
+            rid=rid,
+        )
         if not tuple_id:
             continue
         rows.append(
@@ -423,9 +462,11 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
             platform=platform,
             required_host=required_host,
         )
-        tuple_id = _normalize_text(
+        tuple_id = _canonical_tuple_id(
             item.get("tupleId") or item.get("tuple_id"),
-            f"{head}:{rid}:{platform}" if head and rid and platform else "",
+            head=head,
+            platform=platform,
+            rid=rid,
         )
         required_proofs = [
             _normalize_text(token)
@@ -500,8 +541,9 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
 def _lookup_promoted_tuple(*, index: Dict[str, Any], head: str, platform: str, arch: str, tuple_id: str = "") -> Dict[str, str]:
     promoted_rows = [dict(row) for row in (index.get("promoted_tuples") or []) if isinstance(row, dict)]
     if tuple_id:
+        canonical_tuple_id = _canonical_tuple_id(tuple_id)
         for row in promoted_rows:
-            if _normalize_text(row.get("tuple_id")).lower() == tuple_id.lower():
+            if _canonical_tuple_id(row.get("tuple_id")) == canonical_tuple_id:
                 return row
     rid = _rid_for_platform_arch(platform, arch)
     if head and platform and rid:
@@ -522,8 +564,9 @@ def _lookup_external_proof_request(
 ) -> Dict[str, Any]:
     request_rows = [dict(row) for row in (index.get("external_proof_requests") or []) if isinstance(row, dict)]
     if tuple_id:
+        canonical_tuple_id = _canonical_tuple_id(tuple_id)
         for row in request_rows:
-            if _normalize_text(row.get("tuple_id")).lower() == tuple_id.lower():
+            if _canonical_tuple_id(row.get("tuple_id")) == canonical_tuple_id:
                 return row
     rid = _rid_for_platform_arch(platform, arch)
     if head and platform and rid:
@@ -685,7 +728,7 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         or item.get("current_version")
     )
     tuple_id = _normalize_text(item.get("desktopTupleId") or item.get("tupleId") or item.get("tuple_id")).lower()
-    expected_tuple_id = tuple_id
+    expected_tuple_id = _canonical_tuple_id(tuple_id)
     if not expected_tuple_id and head_id and platform:
         expected_rid = _rid_for_platform_arch(platform, arch)
         if expected_rid:

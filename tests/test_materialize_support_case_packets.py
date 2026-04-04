@@ -642,6 +642,102 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
     assert packet["recovery_path"]["action_id"] == "open_downloads"
 
 
+def test_materialize_support_case_packets_matches_external_proof_request_when_case_uses_legacy_tuple_order(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "caseId": "support_case_windows_tuple_legacy_order",
+                        "clusterKey": "support:windows-legacy-order",
+                        "kind": "install_help",
+                        "status": "accepted",
+                        "title": "Windows tuple captured in legacy tuple order",
+                        "summary": "Case payload provides head:platform:rid without arch metadata.",
+                        "candidateOwnerRepo": "chummer6-hub",
+                        "designImpactSuspected": False,
+                        "installationId": "install-windows-legacy-1",
+                        "releaseChannel": "preview",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "tupleId": "avalonia:windows:win-x64",
+                        "installedVersion": "1.2.3",
+                    }
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "rolloutState": "coverage_incomplete",
+                "supportabilityState": "review_required",
+                "desktopTupleCoverage": {
+                    "promotedInstallerTuples": [
+                        {
+                            "tupleId": "avalonia:linux:linux-x64",
+                            "head": "avalonia",
+                            "platform": "linux",
+                            "rid": "linux-x64",
+                            "artifactId": "avalonia-linux-x64-installer",
+                        }
+                    ],
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "requiredHost": "windows",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        }
+                    ],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["external_proof_required_case_count"] == 1
+    assert payload["summary"]["external_proof_required_tuple_counts"] == {"avalonia:win-x64:windows": 1}
+    packet = payload["packets"][0]
+    assert packet["install_diagnosis"]["case_tuple_id"] == "avalonia:win-x64:windows"
+    assert packet["install_diagnosis"]["external_proof_required"] is True
+    assert packet["install_diagnosis"]["external_proof_request"]["tuple_id"] == "avalonia:win-x64:windows"
+
+
 def test_materialize_support_case_packets_reports_release_channel_external_proof_backlog_without_open_cases(
     tmp_path: Path,
 ) -> None:
