@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T20:13:30Z",
+  "generated_at": "2026-04-04T20:19:24Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T20:13:29.867285Z",
-        "ui_executable_gate_age_seconds": 0,
+        "ui_executable_gate_age_seconds": 354,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -256,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T20:06:45Z",
-        "release_channel_age_seconds": 405,
+        "release_channel_age_seconds": 759,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -435,6 +435,7 @@
         "install_claim_restore_continue_external_proof_requests": [
           {
             "tuple_id": "avalonia:osx-arm64:macos",
+            "channel_id": "docker",
             "required_host": "macos",
             "required_proofs": [
               "promoted_installer_artifact",
@@ -466,6 +467,7 @@
           },
           {
             "tuple_id": "avalonia:win-x64:windows",
+            "channel_id": "docker",
             "required_host": "windows",
             "required_proofs": [
               "promoted_installer_artifact",
@@ -497,6 +499,7 @@
           },
           {
             "tuple_id": "blazor-desktop:osx-arm64:macos",
+            "channel_id": "docker",
             "required_host": "macos",
             "required_proofs": [
               "promoted_installer_artifact",
@@ -528,6 +531,7 @@
           },
           {
             "tuple_id": "blazor-desktop:win-x64:windows",
+            "channel_id": "docker",
             "required_host": "windows",
             "required_proofs": [
               "promoted_installer_artifact",
@@ -725,11 +729,11 @@
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T20:13:29Z",
+        "support_packets_generated_at": "2026-04-04T20:19:23Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T20:11:47Z",
+        "supervisor_updated_at": "2026-04-04T20:16:35Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

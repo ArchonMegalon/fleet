@@ -2546,6 +2546,7 @@ groups: []
                             "external_proof_required": True,
                             "external_proof_request": {
                                 "tuple_id": "avalonia:win-x64:windows",
+                                "channel_id": "preview",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                 "expected_artifact_id": "avalonia-win-x64-installer",
@@ -2680,6 +2681,7 @@ groups: []
                             "external_proof_required": True,
                             "external_proof_request": {
                                 "tuple_id": "avalonia:win-x64:windows",
+                                "channel_id": "preview",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                 "expected_artifact_id": "avalonia-win-x64-installer",
@@ -2813,6 +2815,7 @@ groups: []
                             "external_proof_required": True,
                             "external_proof_request": {
                                 "tuple_id": "avalonia:win-x64:windows",
+                                "channel_id": "preview",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                 "expected_artifact_id": "avalonia-win-x64-installer",
@@ -2950,6 +2953,7 @@ groups: []
                             "external_proof_required": True,
                             "external_proof_request": {
                                 "tuple_id": "avalonia:win-x64:windows",
+                                "channel_id": "preview",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                 "expected_artifact_id": "avalonia-win-x64-installer",

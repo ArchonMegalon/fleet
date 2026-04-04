@@ -88,6 +88,7 @@ def test_support_packets_project_startup_smoke_receipt_contract(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     request = payload["packets"][0]["install_diagnosis"]["external_proof_request"]
+    assert request["channel_id"] == "docker"
     assert request["startup_smoke_receipt_contract"]["ready_checkpoint"] == "pre_ui_event_loop"
     assert request["startup_smoke_receipt_contract"]["host_class_contains"] == "windows"
     assert request["proof_capture_commands"] == [
@@ -166,6 +167,7 @@ groups: []
                             "external_proof_required": True,
                             "external_proof_request": {
                                 "tuple_id": "avalonia:win-x64:windows",
+                                "channel_id": "preview",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                 "expected_artifact_id": "avalonia-win-x64-installer",

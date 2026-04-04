@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-04T20:13:29Z",
+  "generated_at": "2026-04-04T20:19:23Z",
   "packets": [],
   "schema_version": 1,
   "source": {
@@ -31,6 +31,7 @@
     ],
     "unresolved_external_proof_request_specs": {
       "avalonia:osx-arm64:macos": {
+        "channel_id": "docker",
         "expected_artifact_id": "avalonia-osx-arm64-installer",
         "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
         "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
@@ -58,6 +59,7 @@
         }
       },
       "avalonia:win-x64:windows": {
+        "channel_id": "docker",
         "expected_artifact_id": "avalonia-win-x64-installer",
         "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
@@ -85,6 +87,7 @@
         }
       },
       "blazor-desktop:osx-arm64:macos": {
+        "channel_id": "docker",
         "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
         "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
@@ -112,6 +115,7 @@
         }
       },
       "blazor-desktop:win-x64:windows": {
+        "channel_id": "docker",
         "expected_artifact_id": "blazor-desktop-win-x64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",

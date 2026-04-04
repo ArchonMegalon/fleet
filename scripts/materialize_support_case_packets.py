@@ -383,6 +383,7 @@ def _derive_proof_capture_commands(
 
 
 def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
+    channel_id = _normalize_text(release_channel.get("channelId") or release_channel.get("channel")).lower()
     tuple_rows = []
     external_proof_rows = []
     coverage = release_channel.get("desktopTupleCoverage")
@@ -436,6 +437,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         external_requests.append(
             {
                 "tuple_id": tuple_id,
+                "channel_id": channel_id,
                 "head": head,
                 "platform": platform,
                 "rid": rid,
@@ -477,7 +479,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     return {
-        "channel_id": _normalize_text(release_channel.get("channelId") or release_channel.get("channel")).lower(),
+        "channel_id": channel_id,
         "status": _normalize_text(release_channel.get("status")).lower(),
         "version": _normalize_text(release_channel.get("version") or release_channel.get("releaseVersion")),
         "rollout_state": _normalize_text(release_channel.get("rolloutState") or release_channel.get("rollout_state")).lower(),
@@ -759,6 +761,7 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "external_proof_required": bool(external_proof_request),
             "external_proof_request": {
                 "tuple_id": _normalize_text(external_proof_request.get("tuple_id")),
+                "channel_id": _normalize_text(external_proof_request.get("channel_id")),
                 "required_host": _normalize_text(external_proof_request.get("required_host")),
                 "required_proofs": [
                     _normalize_text(token)
@@ -828,6 +831,7 @@ def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
         if _normalize_text(token)
     ]
     return {
+        "channel_id": _normalize_text(row.get("channel_id")).lower(),
         "required_host": _normalize_platform(row.get("required_host")),
         "required_proofs": sorted(set(required_proofs)),
         "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),

@@ -16,6 +16,7 @@ MODULE_SPEC.loader.exec_module(JOURNEY_GATES_MODULE)
 
 def test_external_proof_requests_include_startup_smoke_contract_fields() -> None:
     payload = {
+        "channelId": "stable",
         "desktopTupleCoverage": {
             "externalProofRequests": [
                 {
@@ -28,6 +29,7 @@ def test_external_proof_requests_include_startup_smoke_contract_fields() -> None
     }
 
     requests = JOURNEY_GATES_MODULE._release_channel_external_proof_requests(payload)
+    assert requests[0]["channel_id"] == "stable"
     assert requests[0]["head_id"] == "avalonia"
     assert requests[0]["rid"] == "win-x64"
     assert requests[0]["platform"] == "windows"
@@ -153,6 +155,7 @@ def test_install_journey_blocks_when_support_external_proof_backlog_summary_drif
     release_channel.write_text(
         json.dumps(
             {
+                "channelId": "stable",
                 "status": "published",
                 "desktopTupleCoverage": {
                     "externalProofRequests": [

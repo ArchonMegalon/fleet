@@ -132,6 +132,8 @@ def _resolve_json_path(payload: Any, path: str) -> Any:
 
 
 def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    release_channel_id = str(payload.get("channelId") or payload.get("channel") or "").strip().lower()
+
     def _default_installer_file_name(head: str, rid: str, platform: str) -> str:
         platform_token = str(platform or "").strip().lower()
         if platform_token == "windows":
@@ -244,6 +246,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         requests.append(
             {
                 "tuple_id": tuple_id,
+                "channel_id": release_channel_id,
                 "required_host": required_host or "required",
                 "required_proofs": sorted(set(proof_tokens)),
                 "head_id": head,
@@ -701,6 +704,7 @@ def evaluate_journey(
                     if str(token or "").strip()
                 ]
                 normalized[tuple_id] = {
+                    "channel_id": str(raw_spec.get("channel_id") or "").strip().lower(),
                     "required_host": str(raw_spec.get("required_host") or "").strip().lower(),
                     "required_proofs": required_proofs,
                     "expected_artifact_id": str(raw_spec.get("expected_artifact_id") or "").strip(),
@@ -770,6 +774,10 @@ def evaluate_journey(
                         if not str(external_proof_request.get("tuple_id") or "").strip():
                             support_packet_contract_violations.append(
                                 f"support packet {packet_id} is missing install_diagnosis.external_proof_request.tuple_id."
+                            )
+                        if not str(external_proof_request.get("channel_id") or "").strip():
+                            support_packet_contract_violations.append(
+                                f"support packet {packet_id} is missing install_diagnosis.external_proof_request.channel_id."
                             )
                         if not str(external_proof_request.get("required_host") or "").strip():
                             support_packet_contract_violations.append(
@@ -862,6 +870,7 @@ def evaluate_journey(
                                 )
                             else:
                                 for required_key in (
+                                    "channel_id",
                                     "required_host",
                                     "expected_artifact_id",
                                     "expected_installer_file_name",
@@ -1089,6 +1098,7 @@ def evaluate_journey(
             )
         expected_external_proof_backlog_specs = {
             tuple_id: {
+                "channel_id": str(item.get("channel_id") or "").strip().lower(),
                 "required_host": str(item.get("required_host") or "").strip().lower(),
                 "required_proofs": sorted(
                     set(str(token or "").strip() for token in (item.get("required_proofs") or []) if str(token or "").strip())

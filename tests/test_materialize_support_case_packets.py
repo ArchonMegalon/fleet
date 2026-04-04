@@ -468,6 +468,7 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert waiting_packet["install_diagnosis"]["external_proof_required"] is False
     assert waiting_packet["install_diagnosis"]["external_proof_request"] == {
         "tuple_id": "",
+        "channel_id": "",
         "required_host": "",
         "required_proofs": [],
         "expected_artifact_id": "",
@@ -591,6 +592,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
     assert payload["summary"]["unresolved_external_proof_request_tuples"] == ["avalonia:win-x64:windows"]
     assert payload["summary"]["unresolved_external_proof_request_specs"] == {
         "avalonia:win-x64:windows": {
+            "channel_id": "preview",
             "required_host": "windows",
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "avalonia-win-x64-installer",
@@ -617,6 +619,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
     assert packet["install_diagnosis"]["external_proof_required"] is True
     assert packet["install_diagnosis"]["external_proof_request"] == {
         "tuple_id": "avalonia:win-x64:windows",
+        "channel_id": "preview",
         "required_host": "windows",
         "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
         "expected_artifact_id": "avalonia-win-x64-installer",
@@ -713,6 +716,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
     ]
     assert payload["summary"]["unresolved_external_proof_request_specs"] == {
         "avalonia:win-x64:windows": {
+            "channel_id": "preview",
             "required_host": "windows",
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "",
@@ -733,6 +737,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
             ],
         },
         "blazor-desktop:osx-arm64:macos": {
+            "channel_id": "preview",
             "required_host": "macos",
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "",
