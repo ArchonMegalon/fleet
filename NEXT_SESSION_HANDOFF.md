@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 release verifier now fail-closes free-form `releaseProof.journeysPassed` placeholders
+
+- Trigger:
+  - frontier milestone `2` release-proof provenance depends on journey evidence being canonical machine-readable ids, not free-form labels.
+  - `chummer6-hub-registry` verifier already required non-empty, string-only, duplicate-free `releaseProof.journeysPassed`, but still accepted arbitrary free-form strings.
+  - this left a drift path where placeholder journey labels could pass as proof coverage without canonical token discipline.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - `releaseProof.journeysPassed[*]` now must match canonical journey token shape `[a-z0-9][a-z0-9_-]*`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving verifier fail-close on non-canonical journey id entry (`"journey one"`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented canonical journey-token requirement alongside existing non-empty/duplicate-free route/journey constraints.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - release-channel verifier now rejects free-form journey placeholders and only accepts canonical journey-id tokens in release-proof provenance.
+- Push status:
+  - `chummer6-hub-registry`: local commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release verifier now fail-closes non-route `releaseProof.proofRoutes` placeholders
 
 - Trigger:
