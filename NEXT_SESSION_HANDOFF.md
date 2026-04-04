@@ -31426,3 +31426,33 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push status:
   - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes stale or alias-conflicted embedded release-channel `generated_at` across Linux, Windows, and macOS per-head receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require per-head packaged-binary proof that cannot lie across release-channel truth, installer tuple truth, and startup-smoke proof.
+  - executable gate already compared embedded per-platform release artifact `channelId/channel`, `version/releaseVersion`, and `arch/architecture`, but did not require embedded artifact `generated_at/generatedAt` integrity against promoted release-channel timestamp.
+  - that allowed stale copied embedded release artifact payloads to look structurally valid even when their publication timestamp diverged from the canonical promoted release-channel receipt.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Linux gate (`release_channel_linux_artifact`) now records and validates:
+      - `release_channel_linux_artifact_generated_at`
+      - `release_channel_linux_artifact_generated_at_alias_conflict`
+    - Windows gate (`release_channel_windows_artifact`) now records and validates:
+      - `release_channel_windows_artifact_generated_at`
+      - `release_channel_windows_artifact_generated_at_alias_conflict`
+    - macOS gate (`release_channel_macos_artifact`) now records and validates:
+      - `release_channel_macos_artifact_generated_at`
+      - `release_channel_macos_artifact_generated_at_alias_conflict`
+    - all three platform validators now fail-close when embedded artifact `generated_at/generatedAt` is missing, alias-conflicted, or does not match promoted release-channel `generated_at`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added script-lock assertions for the new generated-at evidence keys and fail-close reason markers so regressions fail fast.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`11` tests on `net10.0`; analyzer warnings only).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) from missing promoted Windows/macOS artifacts in this environment; no runtime regression in materializer path.
+- Current trusted state:
+  - per-head executable gate now treats embedded platform release artifact timestamp drift as a first-class integrity failure, closing a stale-proof seam in milestone-1/3 packaged-binary evidence.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
