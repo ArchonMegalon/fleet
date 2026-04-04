@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-16/9 creator publication packets now fail-close sheet-viewer and print/PDF parity evidence retention
+
+- Trigger:
+  - frontier milestones `16` and `9` require sheet/viewer/print/export parity and adjacent exchange evidence to stay explicit on publication packets, not only in raw Build Lab handoff payloads.
+  - `chummer6-media-factory` already preserved character-template parity lines, but evidence selection could still drop `Sheet viewer` and `Print PDF` lanes when only the first two parity lines were retained.
+- Landed:
+  - patched `/docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs`:
+    - exchange parity evidence retention now explicitly preserves three governed lane markers when present: `Sheet viewer:`, `Print PDF:`, and `Character template export:`.
+    - added helper `PreserveParityLine(...)` so parity-line retention stays deterministic and reusable.
+  - patched `/docker/fleet/repos/chummer-media-factory/Chummer.Media.Factory.Runtime.Verify/Program.cs`:
+    - added fail-close assertions requiring `Sheet viewer:` and `Print PDF:` evidence lines in creator publication packet output.
+- Verification:
+  - `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj -c Release` -> PASS (`Media factory runtime verification passed.`).
+- Commits landed:
+  - `chummer6-media-factory`: `c36b571` (`feat(w4-16): preserve sheet and print parity evidence in creator packets`).
+- Push attempts:
+  - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `cc21bd5..c36b571`).
+- Exact blocker:
+  - none.
+
 ## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
 
 - Trigger:
