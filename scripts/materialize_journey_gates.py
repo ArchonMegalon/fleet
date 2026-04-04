@@ -630,6 +630,59 @@ def evaluate_journey(
                 tokens.append(token.lower() if lower else token)
             return sorted(set(tokens))
 
+        def _normalized_smoke_contract_map(contract: Any) -> Dict[str, Any]:
+            if not isinstance(contract, dict):
+                return {}
+            status_any_of = [
+                str(token or "").strip().lower()
+                for token in (contract.get("status_any_of") or [])
+                if str(token or "").strip()
+            ]
+            return {
+                "ready_checkpoint": str(contract.get("ready_checkpoint") or "").strip(),
+                "head_id": str(contract.get("head_id") or "").strip().lower(),
+                "platform": str(contract.get("platform") or "").strip().lower(),
+                "rid": str(contract.get("rid") or "").strip().lower(),
+                "host_class_contains": str(contract.get("host_class_contains") or "").strip().lower(),
+                "status_any_of": sorted(set(status_any_of)),
+            }
+
+        def _normalized_external_proof_summary_specs(value: Any) -> Dict[str, Dict[str, Any]]:
+            if not isinstance(value, dict):
+                return {}
+            normalized: Dict[str, Dict[str, Any]] = {}
+            for raw_tuple, raw_spec in value.items():
+                tuple_id = str(raw_tuple or "").strip()
+                if not tuple_id or not isinstance(raw_spec, dict):
+                    continue
+                required_proofs = sorted(
+                    set(
+                        str(token or "").strip()
+                        for token in (raw_spec.get("required_proofs") or [])
+                        if str(token or "").strip()
+                    )
+                )
+                proof_capture_commands = [
+                    str(token or "").strip()
+                    for token in (raw_spec.get("proof_capture_commands") or [])
+                    if str(token or "").strip()
+                ]
+                normalized[tuple_id] = {
+                    "required_host": str(raw_spec.get("required_host") or "").strip().lower(),
+                    "required_proofs": required_proofs,
+                    "expected_artifact_id": str(raw_spec.get("expected_artifact_id") or "").strip(),
+                    "expected_installer_file_name": str(raw_spec.get("expected_installer_file_name") or "").strip(),
+                    "expected_public_install_route": str(raw_spec.get("expected_public_install_route") or "").strip(),
+                    "expected_startup_smoke_receipt_path": str(
+                        raw_spec.get("expected_startup_smoke_receipt_path") or ""
+                    ).strip(),
+                    "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                        raw_spec.get("startup_smoke_receipt_contract")
+                    ),
+                    "proof_capture_commands": proof_capture_commands,
+                }
+            return {key: normalized[key] for key in sorted(normalized)}
+
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         support_external_proof_required_count = 0
         expected_external_proof_request_by_tuple = {
@@ -1000,6 +1053,39 @@ def evaluate_journey(
         if expected_external_proof_backlog_tuples != reported_external_proof_backlog_tuples:
             blocking_reasons.append(
                 "support packet summary unresolved_external_proof_request_tuples does not match release-channel external proof backlog."
+            )
+        expected_external_proof_backlog_specs = {
+            tuple_id: {
+                "required_host": str(item.get("required_host") or "").strip().lower(),
+                "required_proofs": sorted(
+                    set(str(token or "").strip() for token in (item.get("required_proofs") or []) if str(token or "").strip())
+                ),
+                "expected_artifact_id": str(item.get("expected_artifact_id") or "").strip(),
+                "expected_installer_file_name": str(item.get("expected_installer_file_name") or "").strip(),
+                "expected_public_install_route": str(item.get("expected_public_install_route") or "").strip(),
+                "expected_startup_smoke_receipt_path": str(item.get("expected_startup_smoke_receipt_path") or "").strip(),
+                "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                    item.get("startup_smoke_receipt_contract")
+                ),
+                "proof_capture_commands": [
+                    str(token or "").strip()
+                    for token in (item.get("proof_capture_commands") or [])
+                    if str(token or "").strip()
+                ],
+            }
+            for item in external_proof_requests
+            for tuple_id in [str(item.get("tuple_id") or "").strip()]
+            if tuple_id
+        }
+        expected_external_proof_backlog_specs = {
+            key: expected_external_proof_backlog_specs[key] for key in sorted(expected_external_proof_backlog_specs)
+        }
+        reported_external_proof_backlog_specs = _normalized_external_proof_summary_specs(
+            support_summary.get("unresolved_external_proof_request_specs")
+        )
+        if expected_external_proof_backlog_specs != reported_external_proof_backlog_specs:
+            blocking_reasons.append(
+                "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
             )
     if bool(fleet_gate.get("require_support_recovery_path_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]

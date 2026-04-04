@@ -739,6 +739,48 @@ def _counter_map(values: Iterable[str]) -> Dict[str, int]:
     return {key: counter[key] for key in sorted(counter)}
 
 
+def _normalized_smoke_contract_map(contract: Any) -> Dict[str, Any]:
+    if not isinstance(contract, dict):
+        return {}
+    status_any_of = [
+        _normalize_text(token).lower()
+        for token in (contract.get("status_any_of") or [])
+        if _normalize_text(token)
+    ]
+    normalized: Dict[str, Any] = {
+        "ready_checkpoint": _normalize_text(contract.get("ready_checkpoint")),
+        "head_id": _normalize_text(contract.get("head_id")).lower(),
+        "platform": _normalize_platform(contract.get("platform")),
+        "rid": _normalize_text(contract.get("rid")).lower(),
+        "host_class_contains": _normalize_text(contract.get("host_class_contains")).lower(),
+        "status_any_of": sorted(set(status_any_of)),
+    }
+    return normalized
+
+
+def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
+    required_proofs = [
+        _normalize_text(token)
+        for token in (row.get("required_proofs") or [])
+        if _normalize_text(token)
+    ]
+    proof_capture_commands = [
+        _normalize_text(token)
+        for token in (row.get("proof_capture_commands") or [])
+        if _normalize_text(token)
+    ]
+    return {
+        "required_host": _normalize_platform(row.get("required_host")),
+        "required_proofs": sorted(set(required_proofs)),
+        "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
+        "expected_installer_file_name": _normalize_text(row.get("expected_installer_file_name")),
+        "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
+        "expected_startup_smoke_receipt_path": _normalize_text(row.get("expected_startup_smoke_receipt_path")),
+        "startup_smoke_receipt_contract": _normalized_smoke_contract_map(row.get("startup_smoke_receipt_contract")),
+        "proof_capture_commands": proof_capture_commands,
+    }
+
+
 def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
     request_rows = [
         dict(row)
@@ -753,6 +795,12 @@ def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Di
         "tuple_counts": tuple_counts,
         "hosts": sorted(host_counts.keys()),
         "tuples": sorted(tuple_counts.keys()),
+        "specs": {
+            tuple_id: _external_proof_request_spec(row)
+            for row in sorted(request_rows, key=lambda item: _normalize_text(item.get("tuple_id")))
+            for tuple_id in [_normalize_text(row.get("tuple_id"))]
+            if tuple_id
+        },
     }
 
 
@@ -849,6 +897,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "unresolved_external_proof_request_tuple_counts": dict(unresolved_external_proof["tuple_counts"]),
             "unresolved_external_proof_request_hosts": list(unresolved_external_proof["hosts"]),
             "unresolved_external_proof_request_tuples": list(unresolved_external_proof["tuples"]),
+            "unresolved_external_proof_request_specs": dict(unresolved_external_proof["specs"]),
         },
         "packets": packets,
     }

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T19:37:05Z",
+  "generated_at": "2026-04-04T19:41:45Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
-        "ui_executable_gate_age_seconds": 5161,
+        "ui_executable_gate_age_seconds": 5442,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -256,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T18:37:08Z",
-        "release_channel_age_seconds": 3597,
+        "release_channel_age_seconds": 3877,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -580,7 +580,8 @@
       "status": "warning",
       "summary": "Hub and registry flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked, not ready."
+        "Install/claim/restore journey is blocked, not ready.",
+        "Report/cluster/release/notify journey is blocked, not ready."
       ],
       "evidence": {
         "hub_stage": "publicly_promoted",
@@ -590,7 +591,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
         "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "ready"
+        "report_cluster_release_notify": "blocked"
       }
     },
     "mobile_play_shell": {
@@ -632,13 +633,14 @@
       "status": "warning",
       "summary": "Horizons and public-surface flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked, not ready."
+        "Install/claim/restore journey is blocked, not ready.",
+        "Report/cluster/release/notify journey is blocked, not ready."
       ],
       "evidence": {
         "public_group_deployment_status": "public",
         "progress_report_generated_at": "2026-04-04T18:25:33Z",
         "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "ready",
+        "report_cluster_release_notify": "blocked",
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
       }
     },
@@ -654,11 +656,11 @@
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:41:43Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T19:32:48Z",
+        "supervisor_updated_at": "2026-04-04T19:39:55Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

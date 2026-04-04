@@ -1,53 +1,53 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T19:37:04Z",
+  "generated_at": "2026-04-04T19:41:42Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 5,
+    "ready_count": 4,
     "warning_count": 0,
-    "blocked_count": 1,
+    "blocked_count": 2,
     "blocked_external_only_count": 1,
-    "blocked_with_local_count": 0,
+    "blocked_with_local_count": 1,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T19:35:34Z",
+      "at": "2026-04-04T19:40:15Z",
       "state": "fresh",
-      "age_seconds": 90
+      "age_seconds": 87
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 2616
+      "age_seconds": 2894
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 4291
+      "age_seconds": 4569
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 4291
+      "age_seconds": 4569
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T19:34:01Z",
       "state": "fresh",
-      "age_seconds": 183
+      "age_seconds": 461
     }
   },
   "journeys": [
@@ -1362,11 +1362,15 @@
       "id": "report_cluster_release_notify",
       "title": "Report, cluster, release, notify",
       "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
-      "state": "ready",
-      "recommended_action": "Keep the journey under routine weekly proof.",
-      "blocking_reasons": [],
+      "state": "blocked",
+      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
+      "blocking_reasons": [
+        "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
+      ],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
+      ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [
         {
@@ -1728,7 +1732,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 0,
+        "blocking_reason_count": 1,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1740,7 +1744,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 4
       }

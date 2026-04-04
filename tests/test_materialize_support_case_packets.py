@@ -103,6 +103,7 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {}
     assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
     assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
+    assert payload["summary"]["unresolved_external_proof_request_specs"] == {}
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -458,6 +459,7 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {}
     assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
     assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
+    assert payload["summary"]["unresolved_external_proof_request_specs"] == {}
     waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
     assert waiting_packet["install_diagnosis"]["registry_release_channel_status"] == "published"
@@ -579,6 +581,28 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
     assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {"avalonia:win-x64:windows": 1}
     assert payload["summary"]["unresolved_external_proof_request_hosts"] == ["windows"]
     assert payload["summary"]["unresolved_external_proof_request_tuples"] == ["avalonia:win-x64:windows"]
+    assert payload["summary"]["unresolved_external_proof_request_specs"] == {
+        "avalonia:win-x64:windows": {
+            "required_host": "windows",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+            "expected_artifact_id": "avalonia-win-x64-installer",
+            "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+            "startup_smoke_receipt_contract": {
+                "head_id": "",
+                "host_class_contains": "",
+                "platform": "",
+                "ready_checkpoint": "",
+                "rid": "",
+                "status_any_of": [],
+            },
+            "proof_capture_commands": [
+                "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+            ],
+        }
+    }
     packet = payload["packets"][0]
     assert packet["install_truth_state"] == "tuple_not_on_promoted_shelf"
     assert packet["install_diagnosis"]["case_tuple_id"] == "avalonia:win-x64:windows"
@@ -672,6 +696,48 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
         "avalonia:win-x64:windows",
         "blazor-desktop:osx-arm64:macos",
     ]
+    assert payload["summary"]["unresolved_external_proof_request_specs"] == {
+        "avalonia:win-x64:windows": {
+            "required_host": "windows",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+            "expected_artifact_id": "",
+            "expected_installer_file_name": "",
+            "expected_public_install_route": "",
+            "expected_startup_smoke_receipt_path": "",
+            "startup_smoke_receipt_contract": {
+                "head_id": "",
+                "host_class_contains": "",
+                "platform": "",
+                "ready_checkpoint": "",
+                "rid": "",
+                "status_any_of": [],
+            },
+            "proof_capture_commands": [
+                "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+            ],
+        },
+        "blazor-desktop:osx-arm64:macos": {
+            "required_host": "macos",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+            "expected_artifact_id": "",
+            "expected_installer_file_name": "",
+            "expected_public_install_route": "",
+            "expected_startup_smoke_receipt_path": "",
+            "startup_smoke_receipt_contract": {
+                "head_id": "",
+                "host_class_contains": "",
+                "platform": "",
+                "ready_checkpoint": "",
+                "rid": "",
+                "status_any_of": [],
+            },
+            "proof_capture_commands": [
+                "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+            ],
+        },
+    }
 
 
 def test_materialize_support_case_packets_marks_update_required_when_fixed_version_differs_from_installed_version(tmp_path: Path) -> None:
