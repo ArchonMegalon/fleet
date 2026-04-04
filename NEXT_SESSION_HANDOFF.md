@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-2 registry materializer now fail-closes unexpected `locale_summary` row keys before release-channel projection, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic release-proof contract boundaries at projection time, not only at verifier time.
+  - `scripts/materialize_public_release_channel.py` normalized `ui_localization_release_gate.locale_summary` rows by selecting known fields but silently ignored unknown row keys.
+  - this left a fail-open seam where non-canonical locale-summary row payload growth could be dropped during materialization instead of fail-closing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical `ALLOWED_LOCALIZATION_LOCALE_SUMMARY_ROW_KEYS`.
+    - added fail-close validation for unexpected keys in `locale_summary` row objects.
+    - added fail-close marker:
+      - `locale_summary rows have unexpected keys`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active materializer mutation injecting `bonus_noncanonical_locale_summary_key` into `ui-localization-release-gate.json` `de-de` locale-summary row.
+    - verify now requires materializer failure with marker:
+      - `verify gate failed: materializer should reject localization proof with unexpected locale_summary row keys.`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical pipeline now states materializer fail-close posture for unexpected `locale_summary` row keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected materializer fail-close mutation run for unexpected locale-summary row keys).
+- Commits landed:
+  - `chummer-hub-registry`: `06e3e3a` (`fix(w1): fail-close unexpected locale-summary row keys in materializer`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `60e5af4..06e3e3a`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-2 registry verifier now fail-closes unexpected `releaseProof.uiLocalizationReleaseGate.localeSummary` row keys, with active verify mutation coverage
 
 - Trigger:
