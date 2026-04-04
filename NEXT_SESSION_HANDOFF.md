@@ -92,7 +92,7 @@
   - milestone-1/3 executable proof now treats architecture aliases the same way as channel/version aliases: contradictory `arch` vs `architecture` payloads fail-close instead of being silently normalized away.
 - Push status:
   - `chummer6-ui`: committed locally on branch `fix/windows-installer-payload-20260401` as `757b5108`; `git push` failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
-  - `fleet`: committed locally on branch `main` as `7416837`; `git push` failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: committed locally on branch `main` as `7416837` and `c10804e`; `git push` failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.uiLocalizationReleaseGate.generated_at` alias timestamps
 
