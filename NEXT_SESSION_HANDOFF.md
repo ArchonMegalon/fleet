@@ -1,3 +1,59 @@
+## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests missingRequiredPlatformHeadPairs/missingRequiredPlatforms/missingRequiredHeads inventory drift fail-close
+
+- Trigger:
+  - frontier milestone `3` requires desktop tuple-coverage receipts to fail honest when release-channel inventory fields drift from promoted installer truth.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` already fail-closed these inventory seams:
+    - `desktopTupleCoverage.missingRequiredPlatformHeadPairs`
+    - `desktopTupleCoverage.missingRequiredPlatforms`
+    - `desktopTupleCoverage.missingRequiredHeads`
+  - `scripts/ai/verify.sh` had no active mutation checks exercising these three markers, leaving regression room where fail-close behavior could silently weaken while verify stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/verify.sh`:
+    - added fail-close mutations for each inventory seam:
+      - `missingRequiredPlatformHeadPairs` (appends `tampered-head:tampered-platform`)
+      - `missingRequiredPlatforms` (appends `tampered-platform`)
+      - `missingRequiredHeads` (appends `tampered-head`)
+    - each mutation requires non-zero exit from `materialize-desktop-executable-exit-gate.sh`.
+    - each mutation requires explicit marker assertions for:
+      - `Release channel desktopTupleCoverage missingRequiredPlatformHeadPairs inventory does not match promoted installer tuples.`
+      - `Release channel desktopTupleCoverage missingRequiredPlatforms inventory does not match promoted installer tuples.`
+      - `Release channel desktopTupleCoverage missingRequiredHeads inventory does not match promoted installer tuples.`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added:
+      - `Verify_entrypoint_runs_active_mutation_for_missing_required_platform_head_pairs_inventory_drift`
+      - `Verify_entrypoint_runs_active_mutation_for_missing_required_platforms_inventory_drift`
+      - `Verify_entrypoint_runs_active_mutation_for_missing_required_heads_inventory_drift`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`24` tests on `net10.0`).
+- Commits landed:
+  - `chummer6-ui`: `2b9f65ea` (`fix(w1): mutation-test tuple coverage inventory drift fail-close seams`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-04: milestone-2 registry verifier lane now mutation-tests `untranslatedKeyCount` locale-summary alias drift fail-close
+
+- Trigger:
+  - frontier milestone `2` requires localization-gate fail-close behavior to stay actively mutation-tested for flagship workbench trust.
+  - verifier logic already fail-closed `releaseProof.uiLocalizationReleaseGate.localeSummary[*].untranslatedKeyCount` vs `releaseProof.uiLocalizationReleaseGate.localeSummary[*].untranslated_key_count` alias drift.
+  - `scripts/ai/verify.sh` had a duplicate `minimumOverrideCount` verifier mutation block occupying this slot, so untranslated row alias drift could regress without active verifier-mutation coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - replaced the duplicate `minimumOverrideCount` verifier mutation payload with conflicting `untranslatedKeyCount`/`untranslated_key_count` values for the `de-de` locale-summary row.
+    - corrected the associated fail message to assert untranslated alias drift specifically.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py scripts/materialize_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected verifier-side fail-close mutation run for `untranslatedKeyCount`/`untranslated_key_count` alias drift).
+- Commits landed:
+  - `chummer-hub-registry`: `e24a726` (`fix(w1): mutation-test untranslated locale-summary alias drift in verifier`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `1b24aaf..e24a726`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests missingRequiredPlatformHeadRidTuples inventory drift fail-close
 
 - Trigger:
@@ -33412,6 +33468,27 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Current trusted state:
   - do not raise live `CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS` above `3` yet.
   - a future EA-only fifth shard is now supported by launcher config, but it should wait until the active frontier widens beyond the tightly-coupled `1-5` tranche.
+
+## 2026-04-04: live shard account groups now fan out across three distinct Codex accounts; horizons/mobile widening still does not justify shards 4-7 yet
+
+- Trigger:
+  - operator asked whether widening scope to horizons/mobile could safely unlock more shards and noted that live shard selection should stop landing on the same small account set.
+- Landed:
+  - patched `/docker/fleet/runtime.env`:
+    - `CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS=acct-chatgpt-b,acct-chatgpt-archon;acct-chatgpt-archon,acct-chatgpt-core;acct-chatgpt-core,acct-chatgpt-b`
+  - patched `/docker/fleet/runtime.env.example` to mirror the safer three-way Codex account fanout.
+- Verification:
+  - account inventory in `/docker/fleet/config/accounts.yaml` confirms three distinct Codex auth-json aliases suitable for current shard fanout:
+    - `acct-chatgpt-b`
+    - `acct-chatgpt-archon`
+    - `acct-chatgpt-core`
+  - horizon registry audit shows current horizons are mostly future product lanes across `chummer6-ui/core/hub/mobile/media-factory`, not a clean near-term `fleet`/`executive-assistant`-only frontier.
+  - active frontier overlap audit for milestones `1,3,4,5,2` still shows every pair shares at least one owner, so wider shard counts would mostly amplify repo contention today.
+- Current trusted state:
+  - live three-shard topology is now less likely to pin all work on the same two Codex accounts.
+  - do not enable shards `4-7` until either:
+    - the active frontier broadens beyond the tightly-coupled `1-5` tranche, or
+    - new open milestones/horizon promotions create genuinely disjoint EA/fleet/mobile/media-factory lanes.
 
 ## 2026-04-04: milestone-1/3 flagship gate now includes explicit startup-smoke lifecycle receipt test coverage (`TryHandleAsync_writes_receipt_when_requested`) and closes b14 fail-honest regression
 
