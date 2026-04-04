@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes duplicate localeSummary locale rows in registry verification
+
+- Trigger:
+  - frontier milestone 2 remains blocked by `BLK-009`, and registry localization verification accepted duplicate locale rows in `releaseProof.uiLocalizationReleaseGate.localeSummary`.
+  - duplicate locale keys created ambiguity about which row represented shipping-locale truth and left room for silent proof drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now rejects duplicate locale keys in `localeSummary` and requires one canonical row per locale.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that duplicates the `de-de` locale row and asserts verifier fail-close.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel localization contract now explicitly requires unique `localeSummary` locale rows.
+  - committed and pushed in `chummer-hub-registry`:
+    - `0547e4f` — `Reject duplicate localization localeSummary rows`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes duplicate-locale negative check).
+- Current trusted state:
+  - registry localization proof now fail-closes ambiguous duplicate locale rows and enforces one authoritative summary row per shipping locale.
+  - milestone-2 localization release-truth integrity is stricter for locale-summary shape correctness.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `0547e4f`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes stale localization gate timestamps in registry verification
 
 - Trigger:
