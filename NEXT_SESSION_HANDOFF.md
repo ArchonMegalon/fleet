@@ -138,8 +138,17 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && python3 - <<'PY' ... test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() ... PY` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-ui" and (.path=="Chummer.Presentation/Overview/DesktopDialogFactory.cs" or .path=="Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs"))' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS.
+- Commits landed:
+  - `chummer6-ui`: `93f5a32c` (`feat(w2-13-14-17-18): surface master-index receipt lanes on desktop dialogs`).
+  - `chummer6-design`: `0ce5128` (`docs(w2-13-14-17-18): gate and describe desktop receipt-lane parity`).
+  - `fleet`: `b8310da` (`docs(handoff): record desktop master-index parity receipt projection slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - MSTest fine-grained filter execution for these new presentation test names did not resolve in this environment; verification relied on compile + direct fleet gate regression invocation.
+  - environment lacks GitHub HTTPS credentials for `chummer6-ui`, `chummer6-design`, and `fleet` pushes.
 
 ## 2026-04-04: milestone-3 readiness evidence now carries journey external-vs-local blocker counts
 
