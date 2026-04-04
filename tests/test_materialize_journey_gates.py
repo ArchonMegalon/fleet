@@ -1653,7 +1653,11 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert 'new DesktopDialogField("masterIndexImportOracleReceipt"' in dialog_factory.get("must_contain", [])
     assert 'new DesktopDialogField("masterIndexAdjacentSr6OracleLane"' in dialog_factory.get("must_contain", [])
     assert 'new DesktopDialogField("masterIndexOnlineStorageLane"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexOnlineStorageCoverage"' in dialog_factory.get("must_contain", [])
     assert 'new DesktopDialogField("masterIndexOnlineStorageReceipt"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexSr6SupplementLane"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexSr6DesignerCoverage"' in dialog_factory.get("must_contain", [])
+    assert 'new DesktopDialogField("masterIndexHouseRuleLane"' in dialog_factory.get("must_contain", [])
     assert 'new DesktopDialogField("masterIndexSr6SuccessorReceipt"' in dialog_factory.get("must_contain", [])
 
     dialog_factory_tests = proof_for("chummer6-ui", "Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs")
@@ -1678,7 +1682,23 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
         in dialog_factory_tests.get("must_contain", [])
     )
     assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageCoverage")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
         'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageReceipt")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSr6SupplementLane")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSr6DesignerCoverage")'
+        in dialog_factory_tests.get("must_contain", [])
+    )
+    assert (
+        'DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexHouseRuleLane")'
         in dialog_factory_tests.get("must_contain", [])
     )
     assert (
@@ -1720,6 +1740,9 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'Kind: "campaign_diary_packet"' in hub_workspace_tests.get("must_contain", [])
     assert 'Kind: "heat_pressure_lane"' in hub_workspace_tests.get("must_contain", [])
     assert 'Kind: "downtime_brief"' in hub_workspace_tests.get("must_contain", [])
+    assert 'Kind: "opposition_packet"' in hub_workspace_tests.get("must_contain", [])
+    assert 'Kind: "roster_movement_packet"' in hub_workspace_tests.get("must_contain", [])
+    assert 'Kind: "event_control_packet"' in hub_workspace_tests.get("must_contain", [])
     assert 'InvokeBuildTokens("next-session-return-loops")' in hub_workspace_tests.get("must_contain", [])
 
     hub_gm_ops_verify = proof_for("chummer6-hub", "tests/RunServicesVerification/GmOpsBoardVerification.cs")

@@ -1,53 +1,53 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:15:07Z",
+  "generated_at": "2026-04-04T18:16:54Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
     "ready_count": 0,
-    "warning_count": 4,
-    "blocked_count": 2,
+    "warning_count": 5,
+    "blocked_count": 1,
     "blocked_external_only_count": 1,
-    "blocked_with_local_count": 1,
+    "blocked_with_local_count": 0,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:14:54Z",
+      "at": "2026-04-04T18:16:50Z",
       "state": "fresh",
-      "age_seconds": 13
+      "age_seconds": 4
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-04T18:11:14Z",
+      "at": "2026-04-04T18:16:50Z",
       "state": "fresh",
-      "age_seconds": 233
+      "age_seconds": 4
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 3425
+      "age_seconds": 3532
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 3425
+      "age_seconds": 3532
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 3424
+      "age_seconds": 3531
     }
   },
   "journeys": [
@@ -71,7 +71,7 @@
       "blocked_by_external_constraints_only": true,
       "warning_reasons": [
         "ui is at repo_local_complete below target stage publicly_promoted.",
-        "hub is at repo_local_complete below target stage publicly_promoted."
+        "hub is at package_canonical below target stage publicly_promoted."
       ],
       "owner_repos": [
         "chummer6-ui",
@@ -281,7 +281,7 @@
       "warning_reasons": [
         "core is at repo_local_complete below target stage boundary_pure.",
         "ui is at repo_local_complete below target stage publicly_promoted.",
-        "hub is at repo_local_complete below target stage publicly_promoted."
+        "hub is at package_canonical below target stage publicly_promoted."
       ],
       "owner_repos": [
         "chummer6-core",
@@ -459,7 +459,11 @@
               "new DesktopDialogField(\"masterIndexImportOracleReceipt\"",
               "new DesktopDialogField(\"masterIndexAdjacentSr6OracleLane\"",
               "new DesktopDialogField(\"masterIndexOnlineStorageLane\"",
+              "new DesktopDialogField(\"masterIndexOnlineStorageCoverage\"",
               "new DesktopDialogField(\"masterIndexOnlineStorageReceipt\"",
+              "new DesktopDialogField(\"masterIndexSr6SupplementLane\"",
+              "new DesktopDialogField(\"masterIndexSr6DesignerCoverage\"",
+              "new DesktopDialogField(\"masterIndexHouseRuleLane\"",
               "new DesktopDialogField(\"masterIndexSr6SuccessorReceipt\""
             ]
           },
@@ -472,7 +476,11 @@
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexImportOracleReceipt\")",
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexAdjacentSr6OracleLane\")",
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexOnlineStorageLane\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexOnlineStorageCoverage\")",
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexOnlineStorageReceipt\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexSr6SupplementLane\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexSr6DesignerCoverage\")",
+              "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexHouseRuleLane\")",
               "DesktopDialogFieldValueParser.GetValue(dialog, \"masterIndexSr6SuccessorReceipt\")"
             ]
           }
@@ -542,8 +550,8 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at repo_local_complete below target stage publicly_promoted.",
-        "mobile is at repo_local_complete below target stage publicly_promoted.",
+        "hub is at package_canonical below target stage publicly_promoted.",
+        "mobile is at package_canonical below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
@@ -606,6 +614,9 @@
               "Kind: \"campaign_diary_packet\"",
               "Kind: \"heat_pressure_lane\"",
               "Kind: \"downtime_brief\"",
+              "Kind: \"opposition_packet\"",
+              "Kind: \"roster_movement_packet\"",
+              "Kind: \"event_control_packet\"",
               "InvokeBuildTokens(\"next-session-return-loops\")"
             ]
           },
@@ -768,8 +779,8 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at repo_local_complete below target stage publicly_promoted.",
-        "mobile is at repo_local_complete below target stage publicly_promoted.",
+        "hub is at package_canonical below target stage publicly_promoted.",
+        "mobile is at package_canonical below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
@@ -879,7 +890,7 @@
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at repo_local_complete below target stage publicly_promoted.",
+        "hub is at package_canonical below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
       ],
       "owner_repos": [
@@ -988,18 +999,15 @@
       "id": "organize_community_and_close_loop",
       "title": "Organize community and close the loop",
       "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blocking_reasons": [
-        "fleet is at repo_local_complete below minimum stage package_canonical."
-      ],
+      "state": "warning",
+      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "blocking_reasons": [],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [
-        "fleet is at repo_local_complete below minimum stage package_canonical."
-      ],
+      "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "warning_reasons": [
-        "hub is at repo_local_complete below target stage publicly_promoted."
+        "hub is at package_canonical below target stage publicly_promoted.",
+        "fleet is at package_canonical below target stage boundary_pure."
       ],
       "owner_repos": [
         "chummer6-hub",
@@ -1065,8 +1073,8 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 1,
-        "warning_reason_count": 1,
+        "blocking_reason_count": 0,
+        "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,
@@ -1075,7 +1083,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 1,
+        "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": false
       }
     }

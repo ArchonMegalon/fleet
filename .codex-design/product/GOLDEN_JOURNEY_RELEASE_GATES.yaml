@@ -273,7 +273,11 @@ journey_gates:
             - new DesktopDialogField("masterIndexImportOracleReceipt"
             - new DesktopDialogField("masterIndexAdjacentSr6OracleLane"
             - new DesktopDialogField("masterIndexOnlineStorageLane"
+            - new DesktopDialogField("masterIndexOnlineStorageCoverage"
             - new DesktopDialogField("masterIndexOnlineStorageReceipt"
+            - new DesktopDialogField("masterIndexSr6SupplementLane"
+            - new DesktopDialogField("masterIndexSr6DesignerCoverage"
+            - new DesktopDialogField("masterIndexHouseRuleLane"
             - new DesktopDialogField("masterIndexSr6SuccessorReceipt"
         - repo: chummer6-ui
           path: Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs
@@ -283,7 +287,11 @@ journey_gates:
             - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexImportOracleReceipt")
             - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexAdjacentSr6OracleLane")
             - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageLane")
+            - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageCoverage")
             - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexOnlineStorageReceipt")
+            - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSr6SupplementLane")
+            - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSr6DesignerCoverage")
+            - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexHouseRuleLane")
             - DesktopDialogFieldValueParser.GetValue(dialog, "masterIndexSr6SuccessorReceipt")
       required_project_posture:
         - project_id: core
@@ -352,6 +360,9 @@ journey_gates:
             - 'Kind: "campaign_diary_packet"'
             - 'Kind: "heat_pressure_lane"'
             - 'Kind: "downtime_brief"'
+            - 'Kind: "opposition_packet"'
+            - 'Kind: "roster_movement_packet"'
+            - 'Kind: "event_control_packet"'
             - 'InvokeBuildTokens("next-session-return-loops")'
         - repo: chummer6-hub
           path: tests/RunServicesVerification/GmOpsBoardVerification.cs
