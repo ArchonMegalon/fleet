@@ -1,3 +1,51 @@
+## 2026-04-04: milestone-12 pulse-v3 now carries scorecard-required top-level truth and automation-frontier alignment receipts
+
+- Trigger:
+  - frontier milestone `12` requires launch/freeze governance from measured truth and explicit automation/frontier alignment instead of hand-maintained prose.
+  - weekly pulse payload and fleet audit did not fail-close on scorecard-required top-level weekly fields or automation-frontier drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py`:
+    - upgraded pulse contract to `contract_version: 3`.
+    - added scorecard-compatible top-level weekly aliases:
+      - `release_health`
+      - `flagship_readiness`
+      - `rule_environment_trust`
+      - `edition_authorship_and_import_confidence`
+      - `top_support_or_feedback_clusters`
+      - `oldest_blocker_days`
+      - `design_drift_count`
+      - `public_promise_drift_count`
+    - added `supporting_signals.automation_alignment` from active-wave open milestone IDs vs parsed fleet handoff frontier IDs.
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py`:
+    - now fails when pulse contract version is below `3`.
+    - now requires `supporting_signals.automation_alignment` fields.
+    - now requires scorecard `weekly_snapshot.required_fields` at pulse top level.
+  - patched fleet local control-plane checks:
+    - `/docker/fleet/scripts/chummer_design_supervisor.py`
+      - `_weekly_pulse_audit` now fail-closes on:
+        - non-v3 pulse contract
+        - missing scorecard top-level fields
+        - missing `supporting_signals.automation_alignment`
+        - `automation_alignment.state == misaligned`
+    - `/docker/fleet/tests/test_chummer_design_supervisor.py`
+      - completion-evidence fixture now emits pulse-v3 required fields.
+      - added `test_design_completion_audit_fails_when_weekly_pulse_reports_automation_frontier_misalignment`.
+  - regenerated:
+    - `/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json`
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py /docker/chummercomplete/chummer-design/scripts/ai/validate_product_invariants.py` -> PASS.
+  - `python3 -m py_compile /docker/fleet/scripts/chummer_design_supervisor.py /docker/fleet/tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --as-of 2026-04-04 --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --as-of 2026-04-04 --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json --check` -> PASS (`weekly product pulse ok`).
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/validate_product_invariants.py` -> FAIL on pre-existing roadmap expectation (`ROADMAP.md must name Next 20 Big Wins After Post-Audit Closeout as the active follow-on wave.`).
+  - `cd /docker/fleet && python3 -m pytest ...` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - `chummer6-design`: `45e08c5` (`feat(w5-12): harden weekly product pulse v3 contract and alignment signals`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - GitHub HTTPS credentials are unavailable for push in this environment; fleet test execution is additionally blocked by missing `pytest`.
+
 ## 2026-04-04: follow-up on W3-6 EA continuity contracts now fail-proves all four new builtin keys in planner coverage
 
 - Trigger:
