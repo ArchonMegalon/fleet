@@ -22,6 +22,39 @@
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity checklist now fail-closes unacknowledged catalog-only tabs/actions so new workbench surfaces cannot drift silently
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar shell/workbench proof to stay fail-honest across dense workflow surfaces.
+  - parity checklist generation still allowed new core-engine tab/action ids to appear only as passive `catalog_only` rows, without an explicit oracle acknowledgment step.
+  - this left a fail-open seam where significant workbench surface expansion could bypass parity-governance intent and still look green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - added `fail_on_unacknowledged_catalog_only(...)` enforcement.
+    - added required oracle lists:
+      - `acknowledgedCatalogOnlyTabs`
+      - `acknowledgedCatalogOnlyWorkspaceActions`
+    - checklist generation now fails if catalog-only ids are unacknowledged, or if acknowledged ids are stale (no longer catalog-only).
+    - checklist row status for catalog-only items now projects as `catalog_only_acknowledged`.
+  - patched `/docker/chummercomplete/chummer6-hub/docs/PARITY_ORACLE.json`:
+    - added explicit acknowledgements for current catalog-only ids:
+      - tabs: `tab-create`, `tab-rules`
+      - workspace actions: `build-lab`, `data_exporter`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `ParityChecklistGeneratorFailClosesMalformedParityTokens` assertions to lock the new acknowledgment fail-close seam.
+  - regenerated `/docker/chummercomplete/chummer6-hub/docs/PARITY_CHECKLIST.md`.
+  - committed in `chummer6-hub`:
+    - `3b0f6d3f` — `Fail-close unacknowledged catalog-only parity checklist ids`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~AuditComplianceUsesSupportedVerificationScript" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity evidence now requires explicit design intent for any catalog-only workbench surface ids; silent drift from new tabs/actions is fail-closed.
+  - parity checklist remains fully covered for legacy tabs/actions while preserving explicit visibility of acknowledged non-legacy catalog growth.
+- Push status:
+  - `chummer6-hub`: local commit landed (`3b0f6d3f`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff update pending local commit in this slice.
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed per-head inventory token lists from visual/workflow receipts
 
 - Trigger:
