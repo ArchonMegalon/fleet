@@ -25,6 +25,30 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-4/5 continuity lane now fail-closes recap shelf drift for compact `aar`/`retro`/`afteractionreview` publication kinds while preserving `downtime` category precedence
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign continuity shorthand to project one governed lane across prep-query canonicalization, GM unresolved routing, and recap shelf categorization.
+  - recap shelf classification had just been expanded for debrief/post-session families, but compact shorthand kinds (`aar`, `aars`, `retro`, `retrospectives`, `afteractionreview`) were still outside `IsAftermathRecapPublicationKind(...)` even though those tokens were already accepted in query canonicalization and workspace/GM continuity matching.
+  - this left a category drift seam where compact continuity recap publication kinds could fall through to `other` and miss creator-shelf treatment.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `IsAftermathRecapPublicationKind(...)` now derives from `ContainsAftermathRecapToken(...)` and excludes `downtime` to preserve explicit downtime category routing.
+    - expanded `AftermathRecapWordTokens` with missing debrief variants: `debriefs`, `debriefing`, `debriefings`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath` theory with:
+      - `aar`, `aars`, `retro`, `retrospectives`, `afteractionreview`.
+    - added `BoundedRecapShelfCategoryKeepsDowntimeClassification` regression guard to fail-close category-precedence drift.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryKeepsDowntimeClassification|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryDoesNotActivateFromRecapitalizationKindWithoutRecapIdentity|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryKeepsCampaignRecapBundleClassification|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode" --nologo -v minimal` -> PASS (`15` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+- Commits landed:
+  - `chummer.run-services`: `449c994c` (`fix(w3): classify aar and retro recap kinds on aftermath shelf`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-4/5 continuity lane now fail-closes recap shelf classification drift for `debriefed`/`debriefing`/`debriefings` and split `post-session`/`post-run`/`post-game` shorthand
 
 - Trigger:
