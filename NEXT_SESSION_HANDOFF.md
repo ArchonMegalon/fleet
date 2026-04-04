@@ -38,6 +38,39 @@
 - Exact blocker:
   - no product blocker for milestone-13 snapshot lane projection; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and design/fleet pushes remain credential-gated.
 
+## 2026-04-04: milestone-4/5 EA builtins now include a first-class campaign return-loop planning contract
+
+- Trigger:
+  - milestone `4` requires downtime/diary/contacts/heat/aftermath/return continuity to behave as one governed product lane, and milestone `5` depends on operator lanes being first-class instead of ad hoc prompts.
+  - EA already had builtin GM-ops packets, but campaign return-loop packet generation still required manual task-contract setup.
+- Landed:
+  - patched `/docker/EA/ea/app/services/task_contracts.py`:
+    - expanded builtin groundwork contract family with campaign-v4 keys:
+      - `campaign_downtime_plan`
+      - `campaign_diary_packet`
+      - `campaign_contacts_update`
+      - `campaign_heat_brief`
+      - `campaign_aftermath_packet`
+      - `campaign_return_loop_brief`
+    - each key now resolves to explicit deliverable types and compiles through the governed `tool_then_artifact` lane (`structured_generate` + optional `review_light` + artifact save).
+  - patched `/docker/EA/tests/test_planner.py`:
+    - added `test_builtin_campaign_return_loop_contract_builds_tool_then_artifact_plan`.
+    - fail-proves `campaign_return_loop_brief` resolves as builtin and compiles:
+      - `step_input_prepare`
+      - `step_structured_generate`
+      - `step_reasoned_patch_review`
+      - `step_artifact_save`
+  - patched `/docker/EA/SKILLS.md`:
+    - added `campaign_return_loop_brief` row in initial catalog so skill docs include the campaign continuity packet lane.
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest tests/test_planner.py -q` -> PASS (`11 passed`).
+- Commits landed:
+  - `executive-assistant`: `4ce4fd3` (`feat(w3-4): add builtin campaign return-loop planning contract`).
+- Push attempts:
+  - `cd /docker/EA && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - remote push is blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-6 restore planning now exposes explicit travel-companion cached/stale/offline-action truth
 
 - Trigger:
