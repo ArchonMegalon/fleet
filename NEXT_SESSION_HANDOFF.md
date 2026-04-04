@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5 continuity and GM prep search now canonicalize compact session-return-loop shorthand
+
+- Trigger:
+  - after adding compact `nextsessionreturnloop` and `nextsessionloop` alias handling, an adjacent gap remained for compact `sessionreturnloop` forms.
+  - frontier milestones `4` and `5` require campaign-return continuity search to behave consistently across compact, split, and hyphen query forms in both workspace matching and GM prep listing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for `sessionreturnloop` and `sessionreturnloops` to canonical `session` + `return` + `loop`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation` with `sessionreturnloop` and `sessionreturnloops` assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended `ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation` with `sessionreturnloop` and `sessionreturnloops` query coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`534` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `4b9f1141` (`fix(w3): canonicalize compact session-return-loop prep aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-4/5 continuity and GM prep search now normalize compact next-session return-loop shorthand end to end
 
 - Trigger:
