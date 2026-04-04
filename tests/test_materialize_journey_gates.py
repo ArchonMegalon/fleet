@@ -107,6 +107,31 @@ def test_release_channel_external_proof_reasons_reject_required_host_tuple_platf
     assert "requiredHost' must match tuple platform" in reasons[0]
 
 
+def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() -> None:
+    payload = {
+        "desktopTupleCoverage": {
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                },
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact"],
+                },
+            ]
+        }
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert len(reasons) == 1
+    assert "must contain unique tupleId entries" in reasons[0]
+    assert "appeared 2 times" in reasons[0]
+
+
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"

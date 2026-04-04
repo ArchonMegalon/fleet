@@ -287,11 +287,18 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             }
         )
     deduped_by_tuple: Dict[str, Dict[str, Any]] = {}
+    tuple_occurrence_counts: Dict[str, int] = {}
     for request in requests:
         tuple_id = str(request.get("tuple_id") or "").strip()
         if tuple_id:
+            tuple_occurrence_counts[tuple_id] = tuple_occurrence_counts.get(tuple_id, 0) + 1
             deduped_by_tuple[tuple_id] = request
-    return [deduped_by_tuple[key] for key in sorted(deduped_by_tuple.keys())]
+    deduped_requests = [deduped_by_tuple[key] for key in sorted(deduped_by_tuple.keys())]
+    for item in deduped_requests:
+        tuple_id = str(item.get("tuple_id") or "").strip()
+        item["tuple_entry_count"] = tuple_occurrence_counts.get(tuple_id, 0)
+        item["tuple_unique"] = tuple_occurrence_counts.get(tuple_id, 0) <= 1
+    return deduped_requests
 
 
 def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
@@ -307,6 +314,13 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
                 f"must be canonical 'head:rid:platform' but was {tuple_id!r}."
+            )
+            continue
+        if not bool(item.get("tuple_unique")):
+            duplicate_count = int(item.get("tuple_entry_count") or 0)
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests' "
+                f"must contain unique tupleId entries, but tuple {tuple_id!r} appeared {duplicate_count} times."
             )
             continue
         if not bool(item.get("required_host_matches_tuple_platform")):
