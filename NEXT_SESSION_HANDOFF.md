@@ -35,6 +35,29 @@
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/materialize-linux-desktop-exit-gate.sh`, `Chummer.Tests/Compliance/MigrationComplianceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4/5 decision notices now prioritize actionable support follow-through instead of first-list digest order
+
+- Trigger:
+  - frontier milestones `4` and `5` require workspace return and GM-ops decision lanes to foreground actionable support closure when present.
+  - `CampaignWorkspaceServerPlaneService.BuildDecisionNotices(...)` still picked `supportDigests[0]`, so informational first rows could hide later `ReporterActionNeeded`/`CanVerifyFix` items in decision notices.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ResolvePrioritySupportDigest(...)` helper to centralize support-case action priority (`ReporterActionNeeded` first, then `CanVerifyFix`).
+    - wired `BuildDecisionNotices(...)` to use the helper instead of first-list digest selection.
+    - wired `BuildNextSafeActionCue(...)` and workspace-state support selection to the same helper seam for deterministic consistency.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `DecisionNoticesPreferReporterActionSupportCaseOverEarlierNonActionCase`.
+    - added `DecisionNoticesPreferCanVerifySupportCaseOverEarlierNonActionCase`.
+    - added helper fixtures/reflection seams for `BuildDecisionNotices(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DecisionNoticesPreferReporterActionSupportCaseOverEarlierNonActionCase|FullyQualifiedName~DecisionNoticesPreferCanVerifySupportCaseOverEarlierNonActionCase|FullyQualifiedName~CampaignSpineWorkspaceDigestWatchoutsPreferAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineWorkspaceDigestWatchoutsPreferWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`319` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - decision-notice support follow-through no longer depends on source list ordering when actionable cases are present.
+  - workspace-state, next-safe-action, and decision-notice support prioritization now share one deterministic action-priority contract across milestone-4/5 return and ops lanes.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignWorkspaceServerPlaneService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace digest watchouts now prioritize highest-severity readiness cues before list-order review notes
 
 - Trigger:
