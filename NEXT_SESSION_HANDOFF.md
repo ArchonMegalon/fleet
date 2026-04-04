@@ -81,6 +81,40 @@
 - Push status:
   - pending commit/push in this slice (credential-dependent in this environment).
 
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `afteractionreport` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require aftermath/return continuity and GM prep operations to remain one governed lane across canonical query aliasing, unresolved-domain routing, and signed-in proof rails.
+  - continuity shorthand coverage handled `debrief`, `postmortem`, `postsession`, `postrun`, and `afteraction`, but did not fail-close common table shorthand `afteractionreport` / `after action report` / `after-action report` (and plural forms).
+  - because prep-library matching requires all normalized query tokens, report-form queries could drift out of governed continuity packets when `report(s)` was left unnormalized.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `afteractionreport` and `afteractionreports` to governed `recap` semantics.
+    - canonicalizes split/hyphen `after action report(s)` and `after-action report(s)` by normalizing `after/action(+report)` token families to `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `afteractionreport`/`afteractionreports` to aftermath/recap token vocabulary so continuity signal detection and prep-query matching stay aligned with alias canonicalization.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats `afteractionreport` compact/split/hyphen variants as governed `prep_library` signals.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended continuity shorthand matching to cover compact/split/hyphen `afteractionreport` variants and matrix-prefixed negative coverage.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - extended prep-asset continuity shorthand coverage for compact/split/hyphen `afteractionreport` variants.
+      - expanded unresolved-domain regression so `after-action report` routes to governed prep-library domain.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded script-lock assertions so audit and Playwright proof rails fail-close if `afteractionreport` coverage drifts.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API and workspace probes for compact/split/hyphen `afteractionreport` queries (singular/plural), each fail-closing on non-`200`, empty governed result, or missing route/snippet evidence.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added signed-in browser continuity journey checks for the same compact/split/hyphen `afteractionreport` variants with route-preservation and governed-result assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPostSessionPostRunAndAfterActionReportSignalsAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 aftermath continuity search now treats `afteractionreport` shorthand as a first-class governed recap lane across canonical query rewrite, GM unresolved routing, and signed-in API/workspace/browser proof rails.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `postsession` / `post-run` shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
