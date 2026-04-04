@@ -29,9 +29,11 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
                         "summary": "Save explodes in preview.",
                         "candidateOwnerRepo": "chummer6-ui",
                         "designImpactSuspected": False,
+                        "installationId": "install-alpha",
                         "releaseChannel": "preview",
                         "headId": "avalonia",
-                        "platform": "linux-x64",
+                        "platform": "linux",
+                        "arch": "x64",
                     },
                     {
                         "caseId": "support_case_b",
@@ -85,12 +87,24 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
         "chummer6-hub": 1,
         "chummer6-ui": 1,
     }
+    assert payload["summary"]["closure_waiting_on_release_truth"] == 0
+    assert payload["summary"]["needs_human_response"] == 2
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     canon_packet = next(item for item in payload["packets"] if item["target_repo"] == "chummer6-design")
     assert bug_packet["primary_lane"] == "code"
     assert bug_packet["target_repo"] == "chummer6-ui"
+    assert bug_packet["install_truth_state"] in {
+        "registry_unavailable",
+        "channel_mismatch",
+        "promoted_tuple_match",
+        "tuple_not_on_promoted_shelf",
+        "insufficient_install_context",
+    }
+    assert isinstance(bug_packet["install_diagnosis"], dict)
+    assert isinstance(bug_packet["fix_confirmation"], dict)
+    assert isinstance(bug_packet["recovery_path"], dict)
     assert canon_packet["primary_lane"] == "canon"
     assert "FEEDBACK_AND_SIGNAL_OODA_LOOP.md" in canon_packet["affected_canon_files"]
     assert "reporter_subject_id" not in bug_packet
@@ -317,3 +331,109 @@ def test_materialize_support_case_packets_reads_source_from_runtime_env_file(tmp
     rendered = json.loads(out_path.read_text(encoding="utf-8"))
     assert rendered["source"]["source_kind"] == "local_file"
     assert rendered["summary"]["open_case_count"] == 1
+
+
+def test_materialize_support_case_packets_enriches_install_truth_from_release_channel(tmp_path: Path) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "caseId": "support_case_release_waiting",
+                        "clusterKey": "support:release",
+                        "kind": "bug_report",
+                        "status": "fixed",
+                        "title": "Fix is staged",
+                        "summary": "Reporter still needs to verify.",
+                        "candidateOwnerRepo": "chummer6-ui",
+                        "designImpactSuspected": False,
+                        "installationId": "install-release-1",
+                        "releaseChannel": "preview",
+                        "headId": "avalonia",
+                        "platform": "linux",
+                        "arch": "x64",
+                        "fixedVersion": "1.2.3",
+                        "fixedChannel": "preview",
+                    },
+                    {
+                        "caseId": "support_case_confirmed",
+                        "clusterKey": "support:confirmed",
+                        "kind": "install_help",
+                        "status": "user_notified",
+                        "title": "Confirmed fix",
+                        "summary": "Reporter confirmed the fix.",
+                        "candidateOwnerRepo": "chummer6-hub",
+                        "designImpactSuspected": False,
+                        "installationId": "install-release-2",
+                        "releaseChannel": "preview",
+                        "headId": "avalonia",
+                        "platform": "linux",
+                        "arch": "x64",
+                        "fixedVersion": "1.2.3",
+                        "fixedChannel": "preview",
+                        "reporterVerificationState": "confirmed_fixed",
+                    },
+                ]
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "version": "1.2.3",
+                "rolloutState": "published",
+                "supportabilityState": "supported",
+                "fixAvailabilitySummary": "Fix is on the preview shelf.",
+                "desktopTupleCoverage": {
+                    "promotedInstallerTuples": [
+                        {
+                            "tupleId": "avalonia:linux:linux-x64",
+                            "head": "avalonia",
+                            "platform": "linux",
+                            "rid": "linux-x64",
+                            "artifactId": "avalonia-linux-x64-installer",
+                        }
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["open_case_count"] == 2
+    assert payload["summary"]["closure_waiting_on_release_truth"] == 1
+    assert payload["summary"]["needs_human_response"] == 0
+    assert payload["summary"]["install_truth_state_counts"]["promoted_tuple_match"] == 2
+    waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
+    assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
+    assert waiting_packet["install_diagnosis"]["tuple_present_on_promoted_shelf"] is True
+    assert waiting_packet["recovery_path"]["href"] == "/account/support"
+    fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
+    assert fix_states == ["awaiting_reporter_verification", "confirmed_fixed"]
