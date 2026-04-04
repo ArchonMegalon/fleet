@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-4/5 recap publication fallbacks now canonicalize whitespace-padded recap projection ids before publication/artifact identity projection
+
+- Trigger:
+  - frontier milestones `4` and `5` require recap, diary, and GM packet publication lanes to stay one governed identity seam under formatting drift.
+  - `CampaignSpineService` still used raw `PublicationSafeProjection.ProjectionId` when synthesizing fallback `CreatorPublicationId` in recap-shelf enrichment and fallback `ArtifactId` in creator-publication projection.
+  - whitespace-padded projection ids could fork generated publication/artifact identities across otherwise identical recap rows, weakening campaign-to-publication continuity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added `ResolveRecapProjectionIdentity(...)` that canonicalizes recap projection identity via trimmed ids with deterministic fallback.
+    - recap-shelf fallback `CreatorPublicationId` now uses canonical recap projection identity.
+    - creator-publication fallback `ArtifactId` now uses canonical recap projection identity.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineEnrichWorkspaceRecapShelfUsesCanonicalProjectionIdForFallbackPublicationId`.
+    - added `CampaignSpineBuildCreatorPublicationsUsesCanonicalProjectionIdForFallbackArtifactId`.
+    - added reflection helper `InvokeCampaignSpineEnrichWorkspaceRecapShelf(...)` for direct regression coverage of recap-shelf enrichment.
+  - committed in `chummer.run-services`:
+    - `c9677b6e` — `Canonicalize recap projection ids in publication fallbacks`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineEnrichWorkspaceRecapShelfUsesCanonicalProjectionIdForFallbackPublicationId|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsUsesCanonicalProjectionIdForFallbackArtifactId|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedCarryForwardPacketId|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsTrimWhitespacePaddedRecapProjectionIdsWhenAftermathIsMissing" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`291` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - recap publication fallback identities now remain canonical when recap projection ids differ only by whitespace formatting.
+  - milestone-4 recap/diary continuity and milestone-5 GM publication lanes keep one normalized identity seam across recap shelf, creator publication projection, and packet routing.
+- Push status:
+  - `chummer.run-services`: commit landed locally (`c9677b6e`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff update pending local commit in this slice.
+
 ## 2026-04-04: milestone-2 localization materializer now fail-closes normalized key collisions for list-form domain coverage payloads
 
 - Trigger:
