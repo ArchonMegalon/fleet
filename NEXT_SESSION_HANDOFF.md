@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-6 travel/offline/mobile continuity lane now fail-closes compact `mobiletravelreadiness` forms across workspace matching and live journey audits
+
+- Trigger:
+  - W3 milestone `6` continuity proof requires travel and offline readiness posture to remain explicit in mobile companion search continuity.
+  - compact forms (`mobiletravelreadiness`, `mobiletravelreadinesses`) were canonicalized but not exercised by live-audit and Playwright continuity probes, leaving a journey-proof seam.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesPluralTravelOfflineSafehouseAndMobileCompactForms` with compact `mobiletravelreadinesses` assertion coverage.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand` with `mobiletravelreadiness` and `mobiletravelreadinesses` matching assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace compact query probes for both compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for both compact forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for both compact forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesPluralTravelOfflineSafehouseAndMobileCompactForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `bf7e310d` (`feat(w3-6): fail-close compact mobile travel readiness queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 desktop proof recovery reran UI gate receipts and restored external-only install blocker truth
 
 - Trigger:
