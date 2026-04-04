@@ -1,3 +1,16 @@
+## 2026-04-04: handoff follow-up commit + push status for milestone-4/5/6 full mobile continuity+gm marker hardening slice
+
+- Commits landed:
+  - `chummer6-mobile`: `391cec5` (`feat(w3-4-5-6): fail-close full mobile continuity and gm lane markers`).
+  - `chummer6-design`: `b65ae11` (`feat(w3-4-5-6): require full mobile continuity and gm marker set`).
+  - `fleet`: `2555e5e` (`feat(w3-4-5-6): harden campaign gate mobile continuity gm proof markers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes full continuity rail + GM lane marker set in mobile proof
 
 - Trigger:
