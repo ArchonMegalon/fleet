@@ -1,3 +1,34 @@
+## 2026-04-04: follow-up on milestone-2 localization acceptance-gate ordering fail-close slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `e437fb23` (`fix(milestone-2): fail-close localization acceptance gate ordering`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 parity audit now fail-closes non-canonical localization acceptance-gate ordering drift
+
+- Trigger:
+  - milestone-2 legacy-familiar release proof already fail-closed localization gate membership (`missing`/`unexpected` acceptance gate ids), but set-equivalent reordering could still pass.
+  - this left a deterministic-proof seam where canonical localization acceptance progression could drift in nested release proof without parity failure.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/audit-ui-parity.sh`:
+    - added explicit order enforcement for `releaseProof.uiLocalizationReleaseGate.acceptanceGates` against required canonical sequence.
+    - added fail-close reason: `acceptanceGates must preserve canonical gate ordering`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh`:
+    - added mutation branch that reorders `acceptanceGates` while preserving membership.
+    - verification now requires parity audit rejection for non-canonical ordering.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock marker assertion for the new verify branch text (`reject non-canonical ... acceptanceGates ordering`).
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && bash -n scripts/audit-ui-parity.sh && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (`run-services in-process smoke passed`; mutation-failure logs are expected negative probes).
+- Current trusted state:
+  - milestone-2 localization gate proof now rejects set-equivalent but non-canonical acceptance-gate ordering drift.
+  - nested release-proof localization acceptance sequencing is deterministic and script-locked across parity audit and verify mutation lanes.
+
 ## 2026-04-04: follow-up on W3 `afteraction` prep-query continuity parity script-lock slice (commit and push status)
 
 - Commits landed:
