@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-5 event-control plural shorthand now fail-closes compact `eventcontrols` alias across campaign and GM prep query tokenization
+
+- Trigger:
+  - milestone `5` live API/UI audits already assert `eventcontrols` prep retrieval, but query tokenization in campaign workspace and GM prep asset search did not explicitly canonicalize `eventcontrols` to the same base event-control token.
+  - this left a drift path where plural shorthand behavior could depend on incidental packet text instead of governed alias normalization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - prep-library alias rewrite now canonicalizes `eventcontrols` to `eventcontrol` before bounded token matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - GM prep-asset query tokenization now canonicalizes `eventcontrols` to `eventcontrol`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded compact event-control shorthand assertions to require `eventcontrols` query matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded compact shorthand prep-asset query test to require `eventcontrols` matches against governed event-control assets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsEventCtrlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`377` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control prep search now treats singular/plural compact forms (`eventcontrol`/`eventcontrols`) through one explicit canonicalization seam across campaign and GM retrieval lanes.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 season-control shorthand now fail-closes compact `seasoncontrol`, `seasoncontrols`, and `seasonctrl` aliases across campaign prep query normalization, GM unresolved-domain triage, and live API/UI journey audits
 
 - Trigger:
@@ -33,6 +56,35 @@
 - Push status:
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
+## 2026-04-04: milestone-2 release-proof canon now fail-closes non-lowercase journey/route casing across hub parity audit and registry materialize/verify gates
+
+- Trigger:
+  - milestone-2 route/journey inventory checks were exact on membership, but casing drift still normalized silently (`Install_claim...`, `/Home/access`) in registry materialization/verification and hub nested release-proof audit.
+  - this left a false-green path where non-canonical case variants could pass while expanding receipt grammar beyond one governed token lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - release-proof journey validation now fail-closes leading/trailing whitespace, non-lowercase journey ids, and non-canonical journey-id token grammar before membership checks.
+    - route normalizer now fail-closes leading/trailing whitespace and non-lowercase route casing before canonical route-set checks.
+  - patched `/docker/chummercomplete/chummer6-hub-registry/scripts/materialize_public_release_channel.py`:
+    - release-proof token-list normalization now fail-closes non-lowercase token casing (in addition to blank/duplicate checks).
+    - release-proof route normalization now fail-closes leading/trailing whitespace and non-lowercase route casing.
+  - patched `/docker/chummercomplete/chummer6-hub-registry/scripts/verify_public_release_channel.py`:
+    - release-proof journey parsing now fail-closes leading/trailing whitespace and non-lowercase journey casing.
+    - token-list parsing and route normalization now fail-close non-canonical casing and whitespace drift consistently with materializer semantics.
+  - patched `/docker/chummercomplete/chummer6-hub-registry/scripts/ai/verify.sh`:
+    - added materializer mutations proving fail-close on non-canonical journey casing and route casing.
+    - added verifier mutations proving fail-close on non-canonical `releaseProof.journeysPassed` and `releaseProof.proofRoutes` casing.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 release-proof validation now fail-closes case-variant journey/route tokens across hub and registry seams; release-channel proof grammar is constrained to canonical lowercase ids/routes instead of normalization-tolerant aliases.
+- Push status:
+  - `chummer6-hub`: local changes landed in working tree; commit/push pending (credential-dependent in this environment).
+  - `chummer6-hub-registry`: local changes landed in working tree; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 release-channel canonical proof now fail-closes unexpected journey and route supersets at registry materialization and verification
 
