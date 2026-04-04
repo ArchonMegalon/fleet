@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-4/5 campaign-spine aftermath package identity now normalizes whitespace-padded package ids across memory and change-packet routing
+
+- Trigger:
+  - frontier milestones `4` and `5` require downtime/aftermath and GM-facing return cues to remain one governed lane when package ids arrive with formatting drift.
+  - `CampaignSpineService` still compared and deduplicated `AftermathRecapPackageProjection.PackageId` values using raw strings in campaign-memory anchor routing and workspace change-packet projection.
+  - whitespace-padded variants of the same package id could be treated as distinct, causing duplicate or conflicting aftermath anchors and packet rows in return-loop surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added `ResolveAftermathPackageIdentity(...)` to canonicalize package identity using trimmed ids with a deterministic fallback.
+    - switched campaign-memory duplicate-anchor guard to normalized package identity comparison.
+    - switched workspace change-packet aftermath dedup and packet-id projection to normalized package identity.
+    - recap-shelf aftermath projection ids and generated provenance text now use normalized package identity.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineCampaignMemoryTreatsWhitespacePaddedDuplicatePackageIdsAsOneAnchor`.
+    - added `CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineCampaignMemoryTreatsWhitespacePaddedDuplicatePackageIdsAsOneAnchor|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds|FullyQualifiedName~CampaignSpineCampaignMemoryTreatsWhitespacePaddedDowntimePackageKindAsDowntimeBrief|FullyQualifiedName~CampaignSpineNextSessionCarryForwardTreatsWhitespacePaddedReplayPackageKindAsReplay" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`287` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - package-id formatting drift no longer creates duplicate aftermath identities across campaign-memory and workspace-change packet lanes.
+  - milestone-4 diary/aftermath return-loop continuity and milestone-5 GM packet posture now stay aligned on one normalized package identity seam.
+- Push status:
+  - `chummer.run-services`: pending (credential-dependent in this environment).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization verifier coverage now includes blank shipping-locale id rejection regression
 
 - Trigger:
