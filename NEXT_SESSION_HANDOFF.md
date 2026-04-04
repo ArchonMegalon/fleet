@@ -43,6 +43,53 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 roster movement lane now fail-closes compact plural `*moves/*transfers/*handoffs` aliases across workspace prep search and GM ops triage
+
+- Trigger:
+  - milestone `5` already covered compact singular roster aliases (`crewmove`, `crewtransfer`) and several ops/control families, but compact plural roster shorthand still had no explicit governed normalization + live journey proof.
+  - this left drift risk where operators typing compact plurals (`crewmoves`, `crewtransfers`, `rostermoves`, `rostertransfers`, `rosterhandoffs`, `crewhandoffs`) could fall off the governed roster lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added plural compact roster aliases to `RosterMovementCompactWordTokens`.
+    - added prep-library query normalization rewrites for plural compact aliases:
+      - `crewtransfers -> crewhandoff`
+      - `crewmoves -> rostermove`
+      - `rostermoves -> rostermove`
+      - `rostertransfers -> rostertransfer`
+      - `rosterhandoffs -> rosterhandoff`
+      - `crewhandoffs -> crewhandoff`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - mirrored plural compact alias rewrites in prep-asset query normalization.
+    - expanded unresolved-domain roster keyword routing to include plural compact aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API and signed-in workspace route checks for:
+      - `queryText/prepQuery=crewmoves`
+      - `queryText/prepQuery=rostermoves`
+      - `queryText/prepQuery=crewtransfers`
+      - `queryText/prepQuery=rostertransfers`
+      - `queryText/prepQuery=rosterhandoffs`
+      - `queryText/prepQuery=crewhandoffs`
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for the same six compact plural prep queries with route-preservation and non-empty governed packet assertions.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended compact roster shorthand matching coverage for `crewtransfers`, `crewmoves`, and `rostermoves`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - added unresolved-domain regression for compact plural `crewtransfers`.
+      - extended prep-asset compact shorthand query coverage for `crewmoves`, `rostermoves`, and `crewtransfers`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions to lock all six plural compact alias checks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatPluralCompactRosterSignalsAsRosterMovementDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`404` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 governed roster movement lane now explicitly fail-closes compact plural roster shorthand across API search, signed-in workspace route journeys, GM unresolved triage, and verification-entrypoint script-lock assertions.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-canonical lowercase and token-shape `releaseProof.journeysPassed` ids
 
 - Trigger:
