@@ -26,6 +26,35 @@
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
+## 2026-04-04: milestone-2 parity audit now fail-closes conflicting `releaseProof.uiLocalizationReleaseGate` vs `releaseProof.ui_localization_release_gate` alias payloads, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic flagship release-proof contracts across legacy-familiar workbench evidence.
+  - `scripts/audit-ui-parity.sh` allowed both `releaseProof.uiLocalizationReleaseGate` and `releaseProof.ui_localization_release_gate` key forms, but only validated the camel-case key.
+  - this left a fail-open alias drift seam where conflicting canonical vs alias localization-gate payloads could bypass parity-audit fail-close semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - `releaseProof.uiLocalizationReleaseGate` now resolves via canonical/alias reconciliation (`uiLocalizationReleaseGate` vs `ui_localization_release_gate`) instead of direct canonical-only lookup.
+    - parity audit now fail-closes conflicting alias values for the nested localization gate object.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active mutation probe that injects conflicting alias payload values between `releaseProof.uiLocalizationReleaseGate` and `releaseProof.ui_localization_release_gate`.
+    - verify now requires parity-audit failure on that alias-drift mutation.
+    - added fail-close verifier marker:
+      - `verify gate failed: parity audit should reject conflicting alias values between releaseProof.uiLocalizationReleaseGate and releaseProof.ui_localization_release_gate.`
+  - patched script-lock tests:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
+    - pinned the new verify mutation marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation run for localization-gate alias drift).
+- Commits landed:
+  - `chummer6-hub`: `c33d4bf0` (`fix(milestone-2): fail-close localization gate alias drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `c33d4bf0` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes unexpected nested `releaseProof.uiLocalizationReleaseGate` keys, with active verify mutation coverage
 
 - Trigger:
