@@ -397,6 +397,9 @@ journey_gates:
             - 'Kind: "roster_movement_packet"'
             - 'Kind: "event_control_packet"'
             - 'InvokeBuildTokens("next-session-return-loops")'
+            - "PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms"
+            - 'InvokeBuildTokens("mobilecompanionreturnloop")'
+            - 'InvokeBuildTokens("campaignmobilecompanionsreturnlanes")'
         - repo: chummer6-hub
           path: tests/RunServicesVerification/GmOpsBoardVerification.cs
           must_contain:
