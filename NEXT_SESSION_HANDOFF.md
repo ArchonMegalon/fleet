@@ -10,8 +10,6 @@
     - added signed-in workspace route checks for `prepQuery=leagueoperation` and `prepQuery=communityoperation` with route/body proof and non-empty governed packet assertions.
   - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
     - added UI prep-library search assertions for compact singular `leagueoperation` and `communityoperation` queries with encoded-route preservation and non-empty governed packet checks.
-  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
-    - expanded live-audit and Playwright marker assertions to lock new singular compact `queryText`/`prepQuery` coverage.
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
   - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
