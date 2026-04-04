@@ -1,3 +1,74 @@
+## 2026-04-04: milestone-2 Hub parity audit now derives required workflow families from SR4/SR6 workflow ledgers
+
+- Trigger:
+  - parity audit scripts in `chummer6-hub` and `chummer.run-services` still hardcoded the milestone-2 required workflow-family IDs while ledger sources in `chummer6-ui` are now canonical.
+- Landed:
+  - `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`
+    - introduced SR4 and SR6 workflow ledger paths as first-class inputs:
+      - `../chummer6-ui/docs/SR4_WORKFLOW_PARITY_LEDGER.json`
+      - `../chummer6-ui/docs/SR6_WORKFLOW_PARITY_LEDGER.json`
+    - added parser validation for both ledger files before running parity checks.
+    - replaced static `expected_families` block with dynamic loading from `requiredFamilies` in both ledgers.
+    - passed ledger paths through python validation arguments and bound them in `workflow_path` execution wiring.
+  - `/docker/chummercomplete/chummer.run-services/scripts/audit-ui-parity.sh`
+    - mirrored ledger-driven required family derivation from SR4/SR6 `requiredFamilies`.
+    - ensured argument/ledger path wiring matches the `chummer6-hub` parity-audit contract.
+  - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
+    - replaced hardcoded family-id assertion lock checks with dynamic contract locks:
+      - `load_required_family_ids`
+      - `requiredFamilies`
+      - `SR4_WORKFLOW_LEDGER_PATH`
+      - `SR6_WORKFLOW_LEDGER_PATH`
+  - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - mirrored same script-lock contract lock for ledger-driven required family derivation.
+- Current trusted state:
+  - milestone-2 workflow receipt validation now follows the ledger-driven `requiredFamilies` contract for both SR4 and SR6 definitions.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `chummer.run-services`: local changes landed in this slice (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes embedded Linux artifact channel/version/arch drift via per-head gate envelopes
+
+- Trigger:
+  - frontier milestones `1` and `3` require one non-contradictory release-channel identity across promoted install media and per-head packaged-binary gate receipts.
+  - Windows/macOS embedded artifact envelopes already fail-closed alias/mismatch drift, but Linux gate receipts could still pass without any embedded `release_channel_linux_artifact` identity proof.
+- Landed:
+  - patched Linux gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`
+    - Linux receipts now emit:
+      - top-level `channelId` and `releaseVersion` from release-channel truth,
+      - `checks.release_channel_id`,
+      - `checks.release_channel_version`,
+      - `checks.release_channel_linux_artifact` (head/rid/platform/channel/version/file/hash/size envelope).
+  - patched executable gate validation:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - Linux per-head validation now fail-closes:
+      - missing embedded `release_channel_linux_artifact`,
+      - embedded `channelId/channel` mismatch or alias conflict,
+      - embedded missing or drifted `version/releaseVersion` plus alias conflict,
+      - embedded arch alias conflict and arch-vs-RID mismatch,
+      - embedded `fileName`/`sha256`/`sizeBytes` drift vs promoted release-channel artifact.
+    - added Linux evidence keys:
+      - `release_channel_linux_artifact_channel_id`
+      - `release_channel_linux_artifact_channel_id_alias_conflict`
+      - `release_channel_linux_artifact_version`
+      - `release_channel_linux_artifact_version_alias_conflict`
+      - `release_channel_linux_artifact_arch`
+      - `release_channel_linux_artifact_arch_alias_conflict`
+  - patched compliance script-lock test:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - expanded marker assertions for the new Linux embedded-artifact fail-close strings and evidence keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 executable proof now enforces embedded artifact identity parity on Linux as well as Windows/macOS, preventing per-head Linux gate envelopes from silently drifting channel/version/arch or artifact bytes from promoted release-channel truth.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice (`scripts/materialize-linux-desktop-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes embedded Windows/macOS artifact channel/version alias drift inside per-head gate envelopes
 
 - Trigger:
