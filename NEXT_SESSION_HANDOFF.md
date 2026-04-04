@@ -34,6 +34,34 @@
 - Push status:
   - pending in this environment (push remains blocked without GitHub HTTPS credentials).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes when flagship release lock stays active after wait window to prevent partial-proof races
+
+- Commits landed:
+  - `chummer6-ui`: `fdd6805b` (`fix(w1): fail-close executable gate when release lock remains active`).
+- Trigger:
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` waits on `.codex-studio/locks/b14-flagship-ui-release-gate.lock`, but previously continued after timeout with no explicit lock-blocked reason.
+  - that could race partial receipt writes from the flagship lane and allow stale/incomplete dependency proofs to be treated as current evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - records `release_gate_lock_blocked` when lock still exists after the configured wait window.
+    - auto-disables dependency rematerialization in that state to avoid racing active writers.
+    - emits explicit fail-close reason and evidence fields:
+      - `release_gate_lock_blocked`
+      - `release_gate_lock_dir`
+      - reason: `Flagship release gate lock remained active after wait window; executable gate skipped dependency rematerialization and fail-closes to prevent partial proof races.`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added script-lock test `Desktop_executable_gate_fail_closes_when_flagship_release_lock_is_still_active_after_wait_window`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`11` tests on `net10.0`).
+  - runtime lock-path probe:
+    - created lock dir and ran materializer with `CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_WAIT_SECONDS=1` and `CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_POLL_SECONDS=1`.
+    - receipt evidence confirms `release_gate_lock_blocked: true`, includes the new fail-close reason, and exits with status `43`.
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `fdd6805b` remains local-only until auth is restored.
+
 ## 2026-04-04: follow-up on W1/W3 macOS per-head exit gate crash-proofing for startup-smoke artifact path verification (commit and push status)
 
 - Commits landed:
