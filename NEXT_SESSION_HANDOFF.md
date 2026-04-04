@@ -45,6 +45,7 @@
   - `chummer6-mobile`: `bf9c367` (`feat(w3-4-5-6): expose gm operations lane in mobile workspace-lite`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `docs(handoff): record w3 mobile gm operations workspace-lite lane`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
   - local mobile regression execution is additionally blocked by unavailable internal package feeds in this shell session.
