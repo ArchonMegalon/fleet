@@ -1,3 +1,42 @@
+## 2026-04-04: milestone-1/3 release-channel proof contract now fail-closes `requiredProofs` drift and normalizes support backlog proof tokens
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery proof receipts that cannot lie, but Fleet only validated tuple/host/channel identity and did not fail-close missing proof-type requirements per tuple.
+  - this left a drift seam where release-channel `desktopTupleCoverage.externalProofRequests.requiredProofs` could omit `startup_smoke_receipt` while remaining structurally valid.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - normalized `externalProofRequests.requiredProofs` tokens to lowercase during projection.
+    - fail-closed release-channel reasons when tuple `requiredProofs` is not exactly `["promoted_installer_artifact", "startup_smoke_receipt"]`.
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - normalized external-proof request `required_proofs` tokens to lowercase and deduped/sorted them in support backlog projection.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+      - added `test_release_channel_external_proof_reasons_reject_required_proofs_contract_drift`.
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+      - added `test_materialize_support_case_packets_normalizes_external_proof_required_proofs_tokens`.
+  - regenerated artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py scripts/materialize_support_case_packets.py tests/test_materialize_journey_gates.py tests/test_materialize_support_case_packets.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "release_channel_external_proof_reasons_reject_required_proofs_contract_drift or release_channel_external_proof_reasons_reject_duplicate_tuple_rows or release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch"` -> PASS (`3 passed`, `30 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py -k "dedupes_duplicate_external_proof_tuples or normalizes_external_proof_required_proofs_tokens or reports_release_channel_external_proof_backlog_without_open_cases"` -> PASS (`3 passed`, `9 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py -k "external_proof or startup_smoke_receipt_contract"` -> PASS (`29 passed`, `27 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (frontier still blocked only on required external host tuple proof capture).
+- Commits landed:
+  - `fleet`: `cd79666` (`fix(w1-1-3): fail-close external-proof required-proofs contract drift`).
+- Push attempts:
+  - pending (credential gate expected to fail in this environment).
+- Exact blocker:
+  - missing native-host promoted installer artifact + startup-smoke receipts for required release-channel tuples:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+
 ## 2026-04-04: milestone-1/3 support-proof contract now fail-closes tuple-uniqueness drift and honors case-backed external-proof summary counters
 
 - Trigger:
