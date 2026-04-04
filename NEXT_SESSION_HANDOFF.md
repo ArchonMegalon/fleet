@@ -181,6 +181,18 @@
   - readiness evidence check:
     - `STATUS_PLANE.generated.yaml`: `core=boundary_pure`, `hub=publicly_promoted`, `ui=publicly_promoted`.
     - `JOURNEY_GATES.generated.json`: `build_explain_publish.state=ready` with no blocking or warning reasons.
+  - `JOURNEY_GATES.generated.json`: `campaign_session_recover_recap`, `recover_from_sync_conflict`, and `report_cluster_release_notify` all moved to `ready`; only `install_claim_restore_continue` remains blocked external-only and `organize_community_and_close_loop` remains warning on Fleet stage.
+- Commits landed:
+  - `chummer6-core`: `8740ca6b` (`fix(w4-7-8): restore core package-canonical contract consumption`).
+  - `chummer6-ui`: `7b8dbe31` (`chore(w4-7-8): refresh desktop parity receipts against release-channel proof`).
+  - `fleet`: `1a1e34b` (`docs(handoff): record w4 build-explain-publish gate recovery slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `dc232127..8740ca6b`).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes in `chummer6-ui` and `fleet`.
+  - remaining install journey blocker is external-only proof capture for promoted Windows/macOS desktop tuples on native hosts.
 
 ## 2026-04-04: milestone-12 status-plane governance now self-heals stale snapshot readiness stages from repo-local compile evidence
 
