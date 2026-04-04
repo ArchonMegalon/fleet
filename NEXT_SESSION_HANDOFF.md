@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-5 GM operations prep retrieval now fail-closes compact `gmops` and `gmop` aliases across packet query normalization, API audit, and workspace route journeys
+
+- Trigger:
+  - frontier milestone `5` requires GM operations and event-control prep retrieval to stay first-class on the same governed lane as opposition and roster movement.
+  - compact operator shorthand `gmops`/`gmop` was not explicitly normalized by prep-library query token rewriting and was also absent from API and signed-in workspace live-audit checks.
+  - this left a drift path where common GM shorthand could regress without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `gmops` and `gmop` to event-control compact token vocabulary.
+    - prep query alias rewrite now canonicalizes `gmops|gmop` to event-control/season-operation tokens (`eventcontrol`, `season`, `operation`) so compact GM shorthand remains on the governed packet lane.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=gmops` and `queryText=gmop`.
+    - added signed-in workspace route checks for `prepQuery=gmops` and `prepQuery=gmop` with non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `gmops` and `gmop`, including route-preservation and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added compact shorthand coverage test `PrepLibraryQueryMatchingSupportsGmOpsShorthandAcrossWhitespaceBoundaries`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint marker assertions to lock `gmops`/`gmop` coverage in live-audit and playwright scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsGmOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 GM operations shorthand retrieval now fail-closes compact `gmops`/`gmop` coverage across query normalization, API audit proof, and signed-in workspace route/browser journey proof.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes drift between UI visual-gate required test canon and hub-enforced visual test coverage
 
 - Trigger:
