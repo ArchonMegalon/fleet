@@ -128,9 +128,12 @@
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
     - added `Desktop_executable_gate_fail_closes_invalid_platform_gate_contract_names`.
     - test locks helper marker and new per-platform invalid-contract fail-close messages.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended the executable-gate migration marker sweep to lock the new invalid `contract_name` fail-close reason strings.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_gate_fail_closes_invalid_platform_gate_contract_names" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> FAIL due pre-existing unrelated assertion in `Windows_and_macos_exit_gate_materializers_do_not_resolve_proof_from_legacy_chummer5a_paths` (legacy-string drift already present in workspace).
 - Current trusted state:
   - milestone-3 executable gate aggregation now binds Linux/Windows/macOS tuple proof to canonical platform gate contract ids, tightening receipt identity and reducing false-green proof ingestion.
