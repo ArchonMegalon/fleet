@@ -113,6 +113,40 @@
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
+## 2026-04-04: milestone-7/8 build-explain-publish gate now closes from canonical core package consumption and fresh UI parity receipts
+
+- Trigger:
+  - frontier milestones `7`/`8` were still effectively degraded in live control-plane truth because `chummer6-core` verify failed package-canon guardrails and `chummer6-hub` parity audit failed on stale nested UI release-channel receipt timestamps.
+  - this left `build_explain_publish` below ready posture in published fleet artifacts even though the underlying implementation lanes were locally recoverable.
+- Landed:
+  - patched active core contract consumers to canonical package references (removed direct `../Chummer.Contracts/Chummer.Contracts.csproj` coupling):
+    - `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Chummer.Infrastructure.csproj`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Rulesets.Hosting/Chummer.Rulesets.Hosting.csproj`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Rulesets.Sr4/Chummer.Rulesets.Sr4.csproj`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Rulesets.Sr5/Chummer.Rulesets.Sr5.csproj`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Rulesets.Sr6/Chummer.Rulesets.Sr6.csproj`
+    - `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj`
+  - refreshed UI parity receipts so hub parity audit nested release-channel evidence is timestamp-synchronized:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+  - regenerated fleet control-plane artifacts:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/state/status-plane.verify.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml --status-json-out state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=8, missing=0`).
+  - readiness evidence check:
+    - `STATUS_PLANE.generated.yaml`: `core=boundary_pure`, `hub=publicly_promoted`, `ui=publicly_promoted`.
+    - `JOURNEY_GATES.generated.json`: `build_explain_publish.state=ready` with no blocking or warning reasons.
+
 ## 2026-04-04: milestone-12 status-plane governance now self-heals stale snapshot readiness stages from repo-local compile evidence
 
 - Trigger:

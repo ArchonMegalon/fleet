@@ -1,11 +1,11 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T18:25:48Z",
+  "generated_at": "2026-04-04T18:27:21Z",
   "status": "fail",
   "summary": {
-    "ready_count": 0,
-    "warning_count": 8,
+    "ready_count": 3,
+    "warning_count": 5,
     "missing_count": 0,
     "history_snapshot_count": 10
   },
@@ -30,11 +30,11 @@
   ],
   "coverage": {
     "desktop_client": "warning",
-    "rules_engine_and_import": "warning",
+    "rules_engine_and_import": "ready",
     "hub_and_registry": "warning",
-    "mobile_play_shell": "warning",
+    "mobile_play_shell": "ready",
     "ui_kit_and_flagship_polish": "warning",
-    "media_artifacts": "warning",
+    "media_artifacts": "ready",
     "horizons_and_public_surface": "warning",
     "fleet_and_operator_loop": "warning"
   },
@@ -91,8 +91,7 @@
         "Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.",
         "Release channel does not publish any promoted Windows installer media.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:macos, avalonia:windows, blazor-desktop:macos, blazor-desktop:windows.",
-        "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts.",
-        "Build/explain/publish journey is warning, not ready."
+        "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -156,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
-        "ui_executable_gate_age_seconds": 885,
+        "ui_executable_gate_age_seconds": 977,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -257,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T18:19:38Z",
-        "release_channel_age_seconds": 370,
+        "release_channel_age_seconds": 463,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -419,7 +418,7 @@
           "blazor-desktop:osx-arm64"
         ],
         "install_claim_restore_continue": "blocked",
-        "build_explain_publish": "warning",
+        "build_explain_publish": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 7,
         "install_claim_restore_continue_local_blocking_reason_count": 0,
         "ui_executable_exit_gate_local_blocking_findings_count": 0,
@@ -430,15 +429,12 @@
       }
     },
     "rules_engine_and_import": {
-      "status": "warning",
-      "summary": "Rules and import flagship proof is still incomplete.",
-      "reasons": [
-        "Core project readiness is repo_local_complete, below boundary-pure rules posture.",
-        "Build/explain/publish journey is warning, not ready."
-      ],
+      "status": "ready",
+      "summary": "Rules parity and import certification are explicitly proven.",
+      "reasons": [],
       "evidence": {
-        "core_stage": "repo_local_complete",
-        "build_explain_publish": "warning",
+        "core_stage": "boundary_pure",
+        "build_explain_publish": "ready",
         "rules_certification_path": "/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json",
         "rules_certification_status": "passed"
       }
@@ -447,8 +443,7 @@
       "status": "warning",
       "summary": "Hub and registry flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked, not ready.",
-        "Report/cluster/release/notify journey is warning, not ready."
+        "Install/claim/restore journey is blocked, not ready."
       ],
       "evidence": {
         "hub_stage": "publicly_promoted",
@@ -458,49 +453,42 @@
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
         "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "warning"
+        "report_cluster_release_notify": "ready"
       }
     },
     "mobile_play_shell": {
-      "status": "warning",
-      "summary": "Mobile and live-play flagship proof is still incomplete.",
-      "reasons": [
-        "Campaign/recover/recap journey is warning, not ready.",
-        "Recover-from-sync-conflict journey is warning, not ready."
-      ],
+      "status": "ready",
+      "summary": "Mobile play-shell continuity and reconnect proof are current.",
+      "reasons": [],
       "evidence": {
         "mobile_stage": "publicly_promoted",
         "mobile_promotion": "public",
         "mobile_local_release_status": "passed",
-        "campaign_session_recover_recap": "warning",
-        "recover_from_sync_conflict": "warning"
+        "campaign_session_recover_recap": "ready",
+        "recover_from_sync_conflict": "ready"
       }
     },
     "ui_kit_and_flagship_polish": {
       "status": "warning",
       "summary": "Shared UI and flagship polish proof is still incomplete.",
       "reasons": [
-        "UI kit readiness is package_canonical, below boundary-pure shared-surface posture.",
-        "Build/explain/publish journey is warning, not ready.",
-        "Campaign/recover/recap journey is warning, not ready."
+        "UI kit readiness is package_canonical, below boundary-pure shared-surface posture."
       ],
       "evidence": {
         "ui_kit_stage": "package_canonical",
         "ui_stage": "publicly_promoted",
         "mobile_stage": "publicly_promoted",
-        "build_explain_publish": "warning",
-        "campaign_session_recover_recap": "warning"
+        "build_explain_publish": "ready",
+        "campaign_session_recover_recap": "ready"
       }
     },
     "media_artifacts": {
-      "status": "warning",
-      "summary": "Media and artifact flagship proof is still incomplete.",
-      "reasons": [
-        "Build/explain/publish journey is warning, not ready."
-      ],
+      "status": "ready",
+      "summary": "Artifact publication and media proof are explicitly green.",
+      "reasons": [],
       "evidence": {
         "media_stage": "boundary_pure",
-        "build_explain_publish": "warning",
+        "build_explain_publish": "ready",
         "media_proof_path": "/docker/fleet/repos/chummer-media-factory/.codex-studio/published/MEDIA_LOCAL_RELEASE_PROOF.generated.json",
         "media_proof_status": "passed"
       }
@@ -510,14 +498,13 @@
       "summary": "Horizons and public-surface flagship proof is still incomplete.",
       "reasons": [
         "Public Chummer group posture is not marked public.",
-        "Install/claim/restore journey is blocked, not ready.",
-        "Report/cluster/release/notify journey is warning, not ready."
+        "Install/claim/restore journey is blocked, not ready."
       ],
       "evidence": {
         "public_group_deployment_status": "",
         "progress_report_generated_at": "2026-04-04T18:25:33Z",
         "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "warning",
+        "report_cluster_release_notify": "ready",
         "acceptance_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
       }
     },
@@ -537,7 +524,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T18:25:42Z",
+        "supervisor_updated_at": "2026-04-04T18:26:39Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -547,14 +534,15 @@
       }
     }
   },
-  "ready_keys": [],
+  "ready_keys": [
+    "rules_engine_and_import",
+    "mobile_play_shell",
+    "media_artifacts"
+  ],
   "warning_keys": [
     "desktop_client",
-    "rules_engine_and_import",
     "hub_and_registry",
-    "mobile_play_shell",
     "ui_kit_and_flagship_polish",
-    "media_artifacts",
     "horizons_and_public_surface",
     "fleet_and_operator_loop"
   ],
@@ -566,7 +554,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-2/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260404T163340Z_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
