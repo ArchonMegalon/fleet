@@ -17,8 +17,10 @@
 - Verification:
   - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "exit_gate_audits_preserve_configured_symlink_paths or linux_desktop_exit_gate_audit_allows_git_head_mismatch_when_worktree_fingerprint_is_identical or linux_desktop_exit_gate_audit_uses_top_level_current_git_fields_without_rejecting_stable_proof"` -> PASS (`3 passed`, `175 deselected`).
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (prompt and generated frontier mirrors now report `proof_path=/docker/chummercomplete/chummer6-ui/...`).
+- Commits landed:
+  - `fleet`: `a7518ca` (`fix(w1-1-3): preserve configured ui gate proof paths in completion audits`).
 - Push attempts:
-  - not attempted in this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
