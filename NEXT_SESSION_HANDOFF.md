@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-2 registry verify lane now mutation-tests blocking-findings alias drift fail-close in verifier and materializer
+
+- Trigger:
+  - frontier milestone `2` depends on deterministic localization-gate release-proof contracts for flagship workbench trust.
+  - `scripts/verify_public_release_channel.py` and `scripts/materialize_public_release_channel.py` already fail-closed `blockingFindings`/`blocking_findings` and `blockingFindingsCount`/`blocking_findings_count` alias drift.
+  - mutation coverage in `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` did not actively mutate these blocking-findings alias seams, leaving regression room where fail-close behavior could weaken without detection.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added verifier mutation requiring failure for conflicting alias values between:
+      - `releaseProof.uiLocalizationReleaseGate.blockingFindings` and `releaseProof.uiLocalizationReleaseGate.blocking_findings`
+    - added materializer mutation checks requiring failure (with explicit marker assertions) for conflicting alias values between:
+      - `blocking_findings` and `blockingFindings`
+      - `blocking_findings_count` and `blockingFindingsCount`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - expanded malformed-payload fail-close examples to explicitly include `blockingFindings`/`blocking_findings` and `blockingFindingsCount`/`blocking_findings_count` alias drift.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected verifier/materializer alias-drift fail-close mutation runs for the newly-added blocking-findings seams).
+- Commits landed:
+  - `chummer-hub-registry`: `90de42b` (`fix(w1): mutation-test blocking findings alias drift fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `1c5b1e4..90de42b`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - fleet push remains blocked by missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-2 registry verify lane now mutation-tests locale-summary minimum-override and legacy-data-xml alias drift fail-close in verifier and materializer
 
 - Trigger:
