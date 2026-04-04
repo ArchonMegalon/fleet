@@ -1,3 +1,50 @@
+## 2026-04-04: milestone-14 xml/translator successor lane now exposes governed bridge posture and enabled-overlay counts in tool catalog responses
+
+- Trigger:
+  - frontier milestone `14` requires a first-class successor lane for custom-data/XML bridge and translator-era localization tooling, not implicit behavior hidden behind file discovery.
+  - `MasterIndexResponse` and `TranslatorLanguagesResponse` already carried posture/count fields (`XmlBridgePosture`, `EnabledDataOverlayCount`, `TranslatorBridgePosture`, `EnabledLanguageOverlayCount`), but `XmlToolCatalogService` still returned only defaults.
+  - result: callers could not distinguish governed overlay-backed XML/translator posture from base-only catalogs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - `GetMasterIndex()` now projects `XmlBridgePosture` plus `EnabledDataOverlayCount` from enabled data overlays.
+    - `GetTranslatorLanguages()` now projects `TranslatorBridgePosture` plus `EnabledLanguageOverlayCount` from enabled language overlays.
+    - added deterministic helpers for posture and enabled-overlay counting to keep XML/translator bridge reporting aligned with overlay catalog truth.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - extended existing master-index and translator tests to assert missing/governed posture plus overlay counts.
+    - added `Master_index_reports_governed_xml_bridge_when_enabled_data_overlay_exists` to fail-close regressions when data overlays are present.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL due pre-existing `Chummer.Tests` compile/reference churn unrelated to this slice (missing `Chummer.Presentation`/desktop/blazor symbols in current repo state).
+- Commits landed:
+  - `chummer6-core`: `ce59984f` (`feat(w14): surface xml and translator bridge posture in tool catalog`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `b255ce32..ce59984f`).
+- Exact blocker:
+  - none for landed milestone-14 code path; focused `Chummer.Tests` execution remains blocked by pre-existing test-project compile/reference instability in current workspace baseline.
+
+## 2026-04-04: milestone-7/8/9/16 build-handoff now fail-closes governed export-lane eviction when carry-forward projections are long
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require Build Lab handoff outputs to always keep governed template/foundry/sheet/print lanes visible where users make real export/exchange/viewer decisions.
+  - `CampaignSpineService.BuildBuildLabOutputs(...)` concatenated dossier projections, recap shelf, and governed exports, then applied a global `.Take(6)`.
+  - result: long carry-forward projection lists could silently evict governed outputs (`character_template`, `foundry_exchange`, `sheet_viewer`, `print_pdf_export`) from the handoff payload.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab output assembly now reserves governed export lanes first and only fills remaining output slots from non-governed carry-forward projections.
+    - added explicit governed-kind guard helper to keep output prioritization deterministic.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineBuildLabHandoffsKeepGovernedOutputsWhenCarryForwardListIsLong` to fail-close regression when carry-forward outputs exceed the cap.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~CampaignSpineBuildLabHandoffsKeepGovernedOutputsWhenCarryForwardListIsLong" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-12 weekly pulse v3 now resolves active-wave registry from roadmap truth and emits explicit measured freeze/launch governance decisions
 
 - Trigger:
@@ -197,6 +244,36 @@
   - not attempted yet for this slice.
 - Exact blocker:
   - none for this slice.
+
+## 2026-04-04: widened 5-shard aggregate state now trusts only the active manifest and shard-local open-set history
+
+- Trigger:
+  - after the earlier 5-shard control-plane repairs, one aggregate drift seam still remained: helper paths were still walking every `shard-*` directory on disk instead of the active shard manifest.
+  - that meant stale shard directories from future topology changes could still pollute:
+    - aggregate `shard_count`
+    - aggregate/live shard summaries
+    - primary probe ordering
+    - prior-active frontier/account-claim helpers
+  - widened ETA had also been overclaiming when old shard-history rows carried full-wave `open_milestone_ids` even though the current manifest pack was narrow.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - aggregate helpers now use `_configured_shard_roots(...)` instead of raw `shard-*` discovery.
+    - `_run_matches_manifest_frontier(...)` now rejects history rows whose recorded `open_milestone_ids` are broader than the current manifest frontier pack.
+    - aggregate reads no longer include base-root history when active shard state exists.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added regressions for ignoring stale shard dirs outside the manifest in aggregate state and live shard summaries.
+    - added regressions for filtering stale wide-open history rows and aggregate-root history pollution.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k 'effective_supervisor_state_ignores_stale_shard_dirs_not_in_manifest or live_shard_summaries_ignore_stale_dirs_not_in_manifest or effective_supervisor_state_filters_history_that_does_not_match_current_manifest_pack or effective_supervisor_state_filters_history_with_nonlocal_open_milestones or effective_supervisor_state_ignores_base_history_when_sharded'` -> PASS (`5 passed`).
+  - live `fleet-design-supervisor` after restart:
+    - `active_shards.json` still reports the intended five packs.
+    - root `status --json` now shows:
+      - `last_run.blocker: none`
+      - `eta.basis: heuristic_status_mix`
+      - `eta_human: 4.5d-1.7w`
+- Exact blocker:
+  - none for the 5-shard control plane; remaining work is product execution, not topology truth.
 
 ## 2026-04-04: widened Fleet push recovery now reads GitHub token from `/run/gh/hosts.yml` when `gh` is unavailable in-container
 
