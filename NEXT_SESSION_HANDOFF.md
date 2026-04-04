@@ -95,6 +95,7 @@
 - Commits landed:
   - `chummer6-ui`: `35bb75ac` (`fix(milestone-3): normalize macos startup-smoke blocker alias`).
   - `fleet`: `b0e3c46` (`docs(handoff): record macos blocker alias normalization slice`).
+  - `fleet`: `fb7b285` (`docs(handoff): add commit hashes for macos blocker alias slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
