@@ -42,6 +42,7 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "design_completion_audit_passes_with_ready_release_proof or design_completion_audit_rejects_release_proof_warning or design_completion_audit_accepts_lagging_weekly_pulse_journey_warning_when_live_proof_is_ready or design_completion_audit_keeps_weekly_pulse_fail_when_release_health_is_not_green"` -> PASS (`4 passed`, `176 deselected`).
 - Commits landed:
   - `fleet`: `c3d7cb8` (`fix(w1-1-3): fail-close executable gate blocker contract in completion audit`).
+  - `fleet`: `2d1cc71` (`docs(handoff): record w1 executable-gate contract audit hardening slice`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
