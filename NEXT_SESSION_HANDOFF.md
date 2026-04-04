@@ -40,6 +40,30 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity gate now fail-closes on executable workflow and visual-familiarity receipts (not catalog parity alone)
+
+- Trigger:
+  - frontier milestone `2` requires workflow and visual familiarity proof for the legacy-familiar flagship workbench, not only tab/action catalog parity.
+  - `scripts/audit-ui-parity.sh` previously passed when `docs/PARITY_CHECKLIST.md` was in sync even if executable desktop workflow/visual receipts were missing or failing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added `CHUMMER_UI_PUBLISHED_DIR` override (defaulting to `../chummer-presentation/.codex-studio/published`) so parity audit resolves current UI published receipts explicitly.
+    - audit now fail-closes unless both receipts exist and are `pass|passed|ready`:
+      - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+      - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - parity pass message now reflects both catalog and executable proof synchronization.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock the new executable-receipt contract and fail-close strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`; receipt checks pass for workflow + visual familiarity).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 parity audit can no longer return green on checklist-only evidence when executable workflow or visual-familiarity proof drifts.
+  - parity gate remains scoped to milestone-2 proof lanes and does not pull milestone-1/3 packaged-startup hardening into this specific check.
+- Push status:
+  - `chummer6-hub`: local changes pending commit/push in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 GM unresolved triage now keeps encounter/enemy pressure in the opposition domain
 
 - Trigger:
