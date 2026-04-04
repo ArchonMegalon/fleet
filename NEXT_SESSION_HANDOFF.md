@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes plural relationship alias `connections` across workspace/GM canonicalization and live API/UI journeys
+
+- Trigger:
+  - continuity query proof already covered `contact`, `contacts`, and `connection`, but plural `connections` was not explicitly canonicalized in prep-library tokenization.
+  - this left a retrieval seam where campaign workspace and GM prep search could drift on plural relationship wording.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrite: `connections -> connection`.
+  - expanded continuity unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation` now asserts `connection` and `connections`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - `ListPrepAssets_QuerySupportsContinuityPluralShorthand` now asserts `connections`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API check for `queryText=connections`.
+      - added signed-in workspace route check for `prepQuery=connections`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey check for `prepQuery=connections`.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit and Playwright marker assertions for `queryText/prepQuery=connections`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - relationship continuity retrieval now fail-closes singular/plural `connection(s)` drift across workspace prep search, GM prep search, API/workspace audits, and browser journey proof.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (same file set above plus `connections` coverage); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes plural continuity aliases `diaries`, `downtimes`, and `aftermaths` across workspace/GM canonicalization and live API/UI journeys
 
 - Trigger:
@@ -69,6 +103,7 @@
       - conflicting `defaultKeyCount/default_key_count`
       - conflicting `blockingFindingsCount/blocking_findings_count`
       - conflicting `localeSummary/locale_summary`
+    - added materializer mutation asserting rejection for conflicting localization fixture aliases `default_key_count/defaultKeyCount`.
 - Verification:
   - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
   - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
