@@ -85,6 +85,17 @@
   - `chummer.run-services`: local changes landed in this slice (same continuity canonicalization/test/audit files above); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: follow-up on milestone-3 Linux quarantine executable-gate lock commit and push status
+
+- Commits landed:
+  - `chummer6-ui`: `09d6fab0` (`fix(executable-gate): fail-close linux quarantine installer bytes`).
+  - `fleet`: `dda11c8` (`docs(handoff): record linux quarantine executable gate lock`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so local commits remain unpushed.
+
 ## 2026-04-04: milestone-3 executable gate now fail-closes Linux quarantine-only installer bytes as non-shippable proof
 
 - Trigger:
