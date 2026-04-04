@@ -28795,6 +28795,53 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push status:
   - pending in this slice (push remains credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub parity audit now fail-closes localization-gate contract drift (shipping locales, acceptance gates, domain coverage, and zero-untranslated locale summary)
+
+- Trigger:
+  - frontier milestone `2` parity lane in `chummer6-hub` validated `releaseProof.uiLocalizationReleaseGate` status and timestamp freshness, but did not enforce the deeper localization contract that Registry already governs (required locale/gate/domain sets, pass-state domain coverage, alias-safe scalar/list fields, and zero untranslated trust-surface keys).
+  - this left a false-green seam where release-channel localization proof could drift structurally and still pass Hub parity until later Registry checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - `releaseProof.uiLocalizationReleaseGate` is now required (not optional).
+    - added fail-close checks for alias-safe localization gate fields:
+      - `defaultKeyCount/default_key_count`
+      - `explicitFallbackRuntime/explicit_fallback_runtime`
+      - `signoffSmokeRunnerStatus/signoff_smoke_runner_status`
+      - `shippingLocales/shipping_locales`
+      - `acceptanceGates/acceptance_gates`
+      - `domainCoverage/domain_coverage`
+      - `localeDomainCoverage/locale_domain_coverage`
+      - `blockingFindingsCount/blocking_findings_count`
+      - `blockingFindings/blocking_findings`
+      - `translationBacklogFindingsCount/translation_backlog_findings_count`
+      - `translationBacklogFindings/translation_backlog_findings`
+      - `localeSummary/locale_summary` and per-locale `untranslatedKeyCount/untranslated_key_count`.
+    - added contract checks:
+      - required shipping locales set and ordering.
+      - required acceptance gates present and no unexpected gate ids.
+      - required localization domains present with pass/passed/ready status.
+      - required locale-domain coverage with pass/passed/ready status per locale/domain pair.
+      - blocking/translation backlog counts must match list lengths and remain `0`.
+      - locale summary must include only required locales and each must have `untranslatedKeyCount=0`.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added negative mutations proving fail-close for:
+      - missing `releaseProof.uiLocalizationReleaseGate`.
+      - conflicting `defaultKeyCount/default_key_count`.
+      - non-passing `explicitFallbackRuntime`.
+      - translation backlog count/list length mismatch.
+      - non-zero `localeSummary[].untranslatedKeyCount`.
+  - script-lock assertions were already present in `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs` for the new marker strings; no additional file delta was needed there in this slice.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (new localization-gate negative mutations fail-close as expected while baseline lane stays green).
+- Current trusted state:
+  - milestone-2 hub parity now enforces the same high-value localization-gate contract families that release-channel verification expects, reducing delayed discovery of localization release-proof drift.
+  - localization parity trust no longer depends solely on status/freshness checks when schema-level localization evidence has drifted.
+- Push status:
+  - `chummer6-hub`: local changes landed (`scripts/audit-ui-parity.sh`, `scripts/ai/verify.sh`); commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-03: UI executable gate now requires explicit release-channel desktop tuple-coverage metadata so platform/head pair truth cannot hide behind inferred fallback
 
 - Trigger:
