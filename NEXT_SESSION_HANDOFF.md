@@ -1,3 +1,60 @@
+## 2026-04-04: milestone-3 executable gate adds concurrency-safe lock-wait controls so tuple blockers surface immediately under parallel runs
+
+- Trigger:
+  - frontier milestones 1 and 3 are blocked on missing promoted Windows/macOS tuples; the aggregate executable gate should report those blockers quickly and honestly.
+  - `materialize-desktop-executable-exit-gate.sh` always waited on the `b14` lock window (`150 x 2s`) before evaluation, even when operators explicitly wanted read-only blocker evaluation during concurrent runs.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT` (default `0`) to bypass waiting on `b14` lock ownership when running receipt-only blocker checks.
+    - added `CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_WAIT_SECONDS` (default `300`) and `CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_POLL_SECONDS` (default `2`) so lock wait posture is explicit and tunable.
+    - hardened env parsing with numeric validation and minimum poll guard.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked new script-contract markers for lock-wait skip/tuning env vars and computed iteration loop.
+  - refreshed generated executable receipt:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) in under a second with only real external blockers:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - aggregate executable gate can now be run in a non-blocking receipt mode during concurrent `b14` activity without waiting out a full lock window.
+  - milestone-1/3 failure posture remains accurately focused on external promoted tuple publication/proof gaps.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-5 prep/event packet synthesis now deduplicates identical roster/prep-launch/travel receipt versions to prevent inflated GM ops counts
+
+- Trigger:
+  - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires governed GM packet counts to reflect unique receipt truth, not payload repetition.
+  - `CampaignWorkspaceServerPlaneService` deduplicated change-packet rows but still counted repeated identical `RosterTransferProjection`, `GovernedPrepLaunchProjection`, and `TravelPrefetchReceiptProjection` rows separately in roster/prep/event packet synthesis.
+  - repeated identical rows could consume bounded evidence slots and overstate ops activity (`roster movement`, `prep launch`, `travel prefetch`, and `event-control receipt(s)` totals).
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added identity-safe dedupe helpers:
+      - `DeduplicateIdenticalRosterTransferVersions(...)`
+      - `DeduplicateIdenticalPrepLaunchVersions(...)`
+      - `DeduplicateIdenticalTravelPrefetchReceiptVersions(...)`
+    - applied dedupe before bounded `Take(...)` in:
+      - `BuildRosterMovementPrepPacket(...)`
+      - `BuildPrepLaunchOpsPacket(...)`
+      - `BuildEventControlPrepPacket(...)`
+      - `BuildTravelPrefetchOpsPacket(...)`
+    - dedupe keys are version-safe and scoped to each receipt family identity plus timestamp.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLaunchPacketDeduplicatesIdenticalLaunchVersions_WhenPayloadRepeatsSameRow`.
+    - added `TravelPrefetchPacketDeduplicatesIdenticalReceiptVersions_WhenPayloadRepeatsSameRow`.
+    - added `EventControlPacketDeduplicatesIdenticalPrepAndTravelReceiptVersions_WhenPayloadRepeatsSameRows`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLaunchPacketDeduplicatesIdenticalLaunchVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~TravelPrefetchPacketDeduplicatesIdenticalReceiptVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalPrepAndTravelReceiptVersions_WhenPayloadRepeatsSameRows|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`243` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 GM packet synthesis now resists duplicate-row inflation across roster-transfer, prep-launch, and travel-prefetch receipt families.
+  - bounded prep/event evidence slots now prefer unique version truth, keeping `event-control` and prep-library summaries aligned with governed activity.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable gate now self-materializes visual/workflow proof dependencies to fail only on real promoted tuple gaps
 
 - Trigger:
