@@ -142,9 +142,9 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
 - Commits landed:
-  - pending local commit in `fleet` for support contract projection and gate fail-close updates.
+  - `fleet`: `bb28d61` (`feat(w1-1-3): fail-close support external-proof startup-smoke contract`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment is missing `pytest`.
   - install journey remains external-only blocked on native Windows/macOS promoted installer + startup-smoke tuple receipts.
