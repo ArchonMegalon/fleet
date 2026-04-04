@@ -46,7 +46,7 @@
 - Current trusted state:
   - registry release verification now fail-closes failed release-proof packets before they can be treated as promoted shelf truth.
 - Push status:
-  - `chummer-hub-registry`: pending in this environment (commit/push not yet attempted for this slice).
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `b7b5f12`; includes `a98e626` + `b7b5f12` for this momentum window).
   - `fleet`: pending (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes duplicate and unexpected acceptance-gate ids in registry verification
@@ -72,7 +72,7 @@
   - registry-owned localization proof now fail-closes acceptance-gate cardinality and vocabulary drift, so shelf truth cannot silently pass with malformed localization acceptance posture.
   - milestone-2 `BLK-009` remains globally open pending real cross-surface locale-completion proof, but localization gate-shape honesty is tighter.
 - Push status:
-  - `chummer-hub-registry`: pending in this environment (commit/push not yet attempted for this slice).
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `b7b5f12`; slice commit `a98e626`).
   - `fleet`: pending (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes finding-array/count drift in registry verification
