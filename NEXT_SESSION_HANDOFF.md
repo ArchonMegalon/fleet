@@ -1,3 +1,32 @@
+## 2026-04-04: follow-up on W1/W3 localization signoff runtimeconfig bootstrap drift fail-close in chummer6-ui (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `32c749f0` (`fix(w1): stabilize b15 localization signoff bootstrap retry`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - full verify lane remains externally blocked by missing promoted Windows/macOS installer artifacts and non-Linux startup-smoke host capability in the current environment.
+
+## 2026-04-04: W1/W3 desktop-proof chain now fail-closes transient localization signoff runtime bootstrap drift instead of emitting flaky false failures
+
+- Trigger:
+  - `scripts/ai/verify.sh` intermittently failed at `b15-localization-release-gate.sh` with `libhostpolicy.so`/missing `runtimeconfig.json` self-contained bootstrap errors even when the signoff runner itself was healthy.
+  - this produced unstable release-proof outcomes and could mask real milestone-3 packaged-head evidence findings behind a local bootstrap race.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b15-localization-release-gate.sh`:
+    - extracted signoff invocation into `run_signoff_runner`.
+    - added deterministic one-time repair retry when log contains runtime bootstrap markers (`libhostpolicy.so`, self-contained app fallback, missing `runtimeconfig.json`).
+    - retry flow executes package-plane `build` then reruns signoff; receipt now records `signoff_smoke_runner.retry_attempted` and `retry_reason`.
+  - patched compliance lock in `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added assertions that the localization gate script retains runtime bootstrap repair markers and receipt fields.
+  - refreshed generated receipt `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json` from the patched gate run.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Localization_release_gate_runs_signoff_runner_without_no_build_runtimeconfig_drift" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh` -> progresses through B15/B14 and fails later at desktop executable exit gate for honest external blockers (missing promoted Windows/macOS install media/startup smoke evidence).
+- Current trusted state:
+  - localization release gate no longer flakes on transient runtime bootstrap drift; failures now continue through to the true W1/W3 packaged-artifact proof blockers.
+
 ## 2026-04-04: follow-up on milestone-2 workflow gate generatedAt drift rematerialization (commit and push status)
 
 - Commits landed:
