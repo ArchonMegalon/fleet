@@ -22,11 +22,11 @@
   - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactCampaignAftermathAndDowntimeReturnShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`4 passed` on both target frameworks).
 - Commits landed:
-  - pending (recorded after commit step below).
+  - `chummer6-hub`: `2175a593` (`feat(w3-4): fail-close compact diary contact heat return aliases`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: milestone-1/3 install proof lane now fail-closes tuple-coverage drift between missing tuple inventory and external-proof request inventory
 
