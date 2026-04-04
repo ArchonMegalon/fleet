@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes singular `diary/contact/heat returnloop/returnlane` shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `4` continuity proof covered plural compact `diaries/contacts/heats returnloop(s)/returnlane(s)` forms, but equivalent singular compact forms (`diary/contact/heat returnloop/returnlane`) were not canonicalized or live-audited.
+  - this left a false-negative seam where singular continuity shorthand could miss governed workspace prep packets while plural variants succeeded.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact singular continuity aliases for `diaryreturn*`, `contactreturn*`, and `heatreturn*` return loop/lane families (`return`, `returns`, `returnloop(s)`, `returnlane(s)`).
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with singular loop/lane forms and negative-token assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` so singular loop/lane forms match governed continuity packets.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for all new singular loop/lane forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same singular loop/lane forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for added singular loop/lane probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms" -v minimal` -> PASS (`2 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `bcd3f015` (`feat(w3-4): fail-close singular diary contact heat return loop shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 release projection now fail-closes future-dated startup-smoke receipts in Fleet wrapper selection
 
 - Trigger:
