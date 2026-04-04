@@ -1,3 +1,42 @@
+## 2026-04-04: milestone-13/14/17/18 master-index now emits explicit bounded-loss lane receipts for parity decisions
+
+- Trigger:
+  - frontier milestones `13`, `14`, `17`, and `18` require first-class governed parity lanes with honest bounded-loss posture, but `master-index` mainly emitted posture/count tokens without explicit receipt text that operators can surface directly.
+  - this left stale/missing parity states machine-readable but not action-explicit on the same API lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes explicit receipt text fields:
+      - `ReferenceLaneReceipt`
+      - `SettingsLaneReceipt`
+      - `SourceToggleLaneReceipt`
+      - `CustomDataLaneReceipt`
+      - `TranslatorLaneReceipt`
+      - `ImportOracleLaneReceipt`
+      - `Sr6SuccessorLaneReceipt`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added deterministic receipt builders for milestone lanes so `missing`/`stale`/`governed` posture always has bounded explanatory text.
+    - wired receipt generation for sourcebook/reference (13), settings/source toggles/custom-data/translator (14), import-oracle (17), and SR6 successor summary across supplement/designer/house-rule/storage signals (18).
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`
+      - baseline and sourcebook/import scenarios now fail-prove receipt fields and representative messages.
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`
+      - `Master_index_endpoint_returns_data` now asserts all new receipt fields are present in API JSON.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - parity matrix rows for milestones `13`, `14`, `17`, and `18` now explicitly cite lane-receipt projection evidence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Contracts/Chummer.Contracts.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+- Commits landed:
+  - pending local commits in `chummer6-core`, `chummer6-design`, and `fleet`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for this lane-receipt projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: milestone-9 media-factory creator packet planning now preserves Build Lab portability pillar receipts
 
 - Trigger:
