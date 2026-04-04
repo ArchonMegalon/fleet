@@ -58,9 +58,10 @@
 - Commits landed:
   - `chummer.run-services`: `b2a8ba9e` (`fix(w3): canonicalize outbrief recap shorthand across continuity and gm ops`).
 - Push attempts:
-  - pending in this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - expected environment blocker remains missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+  - local environment lacks configured GitHub HTTPS credentials, so both commits remain local-only until auth is restored.
 
 ## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock plural `postmortems` / `post-mortems`, `postsessions` / `post-sessions`, and `postruns` / `post-runs` recap shorthand across API/workspace and browser journey proofs
 
