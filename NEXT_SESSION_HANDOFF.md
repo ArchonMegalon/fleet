@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-4/5/6 EA built-in campaign and GM contract matrix is now fully fail-proved and cataloged
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` depend on EA planning contracts for campaign return-loop continuity, GM operations, and mobile/offline continuity lanes.
+  - builtin keys already existed in `task_contracts`, but regression coverage and catalog docs did not enumerate the full milestone matrix, leaving drift risk for untested keys.
+- Landed:
+  - patched `/docker/EA/tests/test_planner.py`:
+    - added `test_builtin_campaign_and_gm_ops_contracts_compile_tool_then_artifact_plan` parameterized across all W3 builtin keys:
+      - GM ops lane: `gm_ops_briefing`, `opposition_packet`, `roster_movement_plan`, `prep_library_packet`, `event_control_brief`
+      - campaign v4 lane: `campaign_downtime_plan`, `campaign_diary_packet`, `campaign_contacts_update`, `campaign_heat_brief`, `campaign_aftermath_packet`, `campaign_return_loop_brief`
+      - mobile continuity lane: `campaign_safehouse_readiness_brief`, `campaign_travel_continuity_packet`, `campaign_offline_continuity_brief`, `campaign_mobile_companion_brief`
+    - assertions fail-prove each key compiles through the governed `tool_then_artifact` flow with:
+      - `step_input_prepare`
+      - `step_structured_generate`
+      - `step_reasoned_patch_review`
+      - `step_artifact_save`
+    - fail-proves expected deliverable mappings, including `gm_ops_briefing -> gm_ops_brief`.
+  - patched `/docker/EA/SKILLS.md`:
+    - expanded initial catalog rows to explicitly include missing W3 keys so docs and runtime builtin matrix stay aligned.
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest tests/test_planner.py -q` -> PASS (`30 passed`).
+- Commits landed:
+  - `EA`: `3576ab3` (`test(w3-4-5-6): fail-prove full campaign and gm built-in contract matrix`).
+- Push attempts:
+  - `cd /docker/EA && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push remains credential-gated for GitHub HTTPS in this environment.
+
 ## 2026-04-04: milestone-6 mobile continuity proof now stays executable when owner package packing is available, and travel-companion restore truth remains explicit across non-travel sibling lanes
 
 - Trigger:
