@@ -54,6 +54,29 @@
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
 
+## 2026-04-04: follow-up on milestone-4/6 return-loop offline lane cue (signal semantics + fail-close assertions)
+
+- Trigger:
+  - initial `return_loop` offline lane cue slice counted carry-forward presence structurally, but signal counting should follow return-loop semantics only.
+  - regression coverage for the new lane existed, but did not fail-close when `OfflineActionabilitySummary` omitted the `return/loop` lane token.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `returnLoopSignalCount` now counts carry-forward only when `IsCampaignReturnCarryForwardSignal(...)` is true.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/TravelModeCacheFreshnessTests.cs`:
+    - now asserts `OfflineActionabilitySummary` contains `return/loop` in degraded cache-pressure paths.
+    - added `BuildTravelMode_CountsReturnLoopCarryForwardOnlyWhenCarryForwardIsReturnSignal` to fail-prove:
+      - return carry-forward increments `return_loop` lane signal count.
+      - non-return carry-forward does not increment `return_loop` lane signal count.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter FullyQualifiedName~TravelModeCacheFreshnessTests -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`4 passed` on `net10.0` and `net10.0-windows` filtered runs).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`389 passed` on `net10.0` and `389 passed` on `net10.0-windows` filtered runs).
+- Commits landed:
+  - `chummer6-hub`: `ff0edc1c` (`test(w3-4-6): fail-close return-loop offline lane signal semantics`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
+
 ## 2026-04-04: milestone-4/6 travel continuity now includes explicit offline return-loop lane cues (downtime/diary + contacts/heat + aftermath + return)
 
 - Trigger:
