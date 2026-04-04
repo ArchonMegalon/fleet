@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for whitespace-padded `releaseProof.baseUrl`/`proofRoutes` and non-slash-led proof routes
+
+- Trigger:
+  - parity audit enforces canonical route/origin grammar including no leading/trailing whitespace and slash-led route paths.
+  - Hub verify mutation coverage still lacked direct probes for those specific branches, leaving route/origin grammar enforcement partially unproven in the end-to-end verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.baseUrl=" https://chummer.run"` and asserted `audit-ui-parity.sh` fail-closes.
+    - added mutation `releaseProof.proofRoutes=[" /home/access"]` and asserted fail-close.
+    - added mutation `releaseProof.proofRoutes=["home/access"]` and asserted fail-close for non-slash-led route paths.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `VerifyEntrypointRunsUiParityAudit` marker assertions for all three new mutation coverage texts.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now emits expected fail-close checks for whitespace-padded origin/routes and non-slash-led route entries before smoke).
+- Current trusted state:
+  - Hub verify entrypoint now explicitly proves canonical release-origin whitespace hygiene and proof-route slash/whitespace grammar, in addition to previously covered release-proof status/freshness, journey grammar, and route inventory checks.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for missing `releaseProof`, blank journey ids, and non-string proof-route entries
 
 - Trigger:
