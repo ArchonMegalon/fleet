@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes on workspace-v4 continuity plus GM/offline verification markers
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign continuity (`downtime`, `diary`, `contacts`, `heat`, `aftermath`, and return loop), GM operations (`opposition`, roster movement lanes), and offline/travel continuity to remain release-blocking proof rather than implied by local behavior.
+  - `campaign_session_recover_recap` gate only required hub/mobile local-release proof artifacts, so loss of the deeper workspace-v4 or GM/offline runtime markers would not block gate materialization.
+- Landed:
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - expanded `campaign_session_recover_recap` `repo_source_proof` with explicit marker checks for:
+      - `Chummer.Run.Api/Services/Community/CampaignSpineService.cs` continuity summaries covering `heat/contact` consequences, `aftermath`/`next-session carry-forward`, and `travel-prefetch` offline inventory posture.
+      - `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs` coverage markers for `campaign_diary_packet`, `heat_pressure_lane`, `downtime_brief`, and `next-session-return-loops`.
+      - `tests/RunServicesVerification/GmOpsBoardVerification.cs` markers for `heat.alert` and opposition packet/roster tags.
+      - `tests/RunServicesVerification/OfflineSyncVerification.cs` markers for canonical `offline_sync_snapshot_v1` and reusable campaign prep asset continuity.
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same marker set.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` to fail-close all newly required markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes new workspace-v4, GM ops, and offline continuity proofs).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`390 passed` on `net10.0` and `390 passed` on `net10.0-windows`).
+
 ## 2026-04-04: milestone-9 Build Lab portability pillar now explicitly includes dossier exchange on hub handoff rails
 
 - Trigger:

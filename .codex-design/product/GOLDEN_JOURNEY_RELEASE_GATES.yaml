@@ -313,6 +313,31 @@ journey_gates:
           must_contain:
             - '"contract_name": "chummer6-hub.local_release_proof"'
             - '"campaign_session_recover_recap"'
+        - repo: chummer6-hub
+          path: Chummer.Run.Api/Services/Community/CampaignSpineService.cs
+          must_contain:
+            - "governed faction, heat, contact, and reputation signal(s)"
+            - "governed aftermath package(s) keep return, replay review, and next-session carry-forward"
+            - "travel-prefetch receipt(s) keep the exact offline inventory deliberate and reviewable per claimed device."
+        - repo: chummer6-hub
+          path: Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs
+          must_contain:
+            - 'Title: "Neon Cradle diary, contacts, and heat return packet"'
+            - 'Kind: "campaign_diary_packet"'
+            - 'Kind: "heat_pressure_lane"'
+            - 'Kind: "downtime_brief"'
+            - 'InvokeBuildTokens("next-session-return-loops")'
+        - repo: chummer6-hub
+          path: tests/RunServicesVerification/GmOpsBoardVerification.cs
+          must_contain:
+            - 'EventType: "heat.alert"'
+            - 'AdditionalTags: ["opposition", "packet"]'
+            - 'AdditionalTags: ["opposition", "roster"]'
+        - repo: chummer6-hub
+          path: tests/RunServicesVerification/OfflineSyncVerification.cs
+          must_contain:
+            - "offline_sync_snapshot_v1"
+            - "Snapshot should include reusable campaign prep assets for offline library continuity."
         - repo: chummer6-mobile
           path: .codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json
           must_contain:

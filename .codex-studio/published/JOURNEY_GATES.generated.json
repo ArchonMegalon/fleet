@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:52:17Z",
+  "generated_at": "2026-04-04T17:53:41Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:49:24Z",
+      "at": "2026-04-04T17:52:17Z",
       "state": "fresh",
-      "age_seconds": 173
+      "age_seconds": 84
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 2009
+      "age_seconds": 2093
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2055
+      "age_seconds": 2139
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2055
+      "age_seconds": 2139
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 2054
+      "age_seconds": 2138
     }
   },
   "journeys": [
@@ -536,6 +536,43 @@
             "must_contain": [
               "\"contract_name\": \"chummer6-hub.local_release_proof\"",
               "\"campaign_session_recover_recap\""
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Run.Api/Services/Community/CampaignSpineService.cs",
+            "must_contain": [
+              "governed faction, heat, contact, and reputation signal(s)",
+              "governed aftermath package(s) keep return, replay review, and next-session carry-forward",
+              "travel-prefetch receipt(s) keep the exact offline inventory deliberate and reviewable per claimed device."
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs",
+            "must_contain": [
+              "Title: \"Neon Cradle diary, contacts, and heat return packet\"",
+              "Kind: \"campaign_diary_packet\"",
+              "Kind: \"heat_pressure_lane\"",
+              "Kind: \"downtime_brief\"",
+              "InvokeBuildTokens(\"next-session-return-loops\")"
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "tests/RunServicesVerification/GmOpsBoardVerification.cs",
+            "must_contain": [
+              "EventType: \"heat.alert\"",
+              "AdditionalTags: [\"opposition\", \"packet\"]",
+              "AdditionalTags: [\"opposition\", \"roster\"]"
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "tests/RunServicesVerification/OfflineSyncVerification.cs",
+            "must_contain": [
+              "offline_sync_snapshot_v1",
+              "Snapshot should include reusable campaign prep assets for offline library continuity."
             ]
           },
           {

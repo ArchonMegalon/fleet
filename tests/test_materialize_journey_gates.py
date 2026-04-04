@@ -1322,6 +1322,54 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert "ChummerPatternBoundary.ExplainChipClass" in rules.get("must_contain", [])
 
 
+def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() -> None:
+    registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    journeys = registry.get("journey_gates") or []
+    continuity_gate = next(
+        row for row in journeys if isinstance(row, dict) and row.get("id") == "campaign_session_recover_recap"
+    )
+    proofs = continuity_gate.get("fleet_gate", {}).get("repo_source_proof") or []
+
+    def proof_for(repo: str, path: str) -> dict:
+        return next(
+            row
+            for row in proofs
+            if isinstance(row, dict)
+            and row.get("repo") == repo
+            and row.get("path") == path
+        )
+
+    hub_spine = proof_for("chummer6-hub", "Chummer.Run.Api/Services/Community/CampaignSpineService.cs")
+    assert "governed faction, heat, contact, and reputation signal(s)" in hub_spine.get("must_contain", [])
+    assert (
+        "governed aftermath package(s) keep return, replay review, and next-session carry-forward"
+        in hub_spine.get("must_contain", [])
+    )
+    assert (
+        "travel-prefetch receipt(s) keep the exact offline inventory deliberate and reviewable per claimed device."
+        in hub_spine.get("must_contain", [])
+    )
+
+    hub_workspace_tests = proof_for("chummer6-hub", "Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs")
+    assert 'Title: "Neon Cradle diary, contacts, and heat return packet"' in hub_workspace_tests.get("must_contain", [])
+    assert 'Kind: "campaign_diary_packet"' in hub_workspace_tests.get("must_contain", [])
+    assert 'Kind: "heat_pressure_lane"' in hub_workspace_tests.get("must_contain", [])
+    assert 'Kind: "downtime_brief"' in hub_workspace_tests.get("must_contain", [])
+    assert 'InvokeBuildTokens("next-session-return-loops")' in hub_workspace_tests.get("must_contain", [])
+
+    hub_gm_ops_verify = proof_for("chummer6-hub", "tests/RunServicesVerification/GmOpsBoardVerification.cs")
+    assert 'EventType: "heat.alert"' in hub_gm_ops_verify.get("must_contain", [])
+    assert 'AdditionalTags: ["opposition", "packet"]' in hub_gm_ops_verify.get("must_contain", [])
+    assert 'AdditionalTags: ["opposition", "roster"]' in hub_gm_ops_verify.get("must_contain", [])
+
+    hub_offline_verify = proof_for("chummer6-hub", "tests/RunServicesVerification/OfflineSyncVerification.cs")
+    assert "offline_sync_snapshot_v1" in hub_offline_verify.get("must_contain", [])
+    assert (
+        "Snapshot should include reusable campaign prep assets for offline library continuity."
+        in hub_offline_verify.get("must_contain", [])
+    )
+
+
 def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof() -> None:
     registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
     journeys = registry.get("journey_gates") or []
