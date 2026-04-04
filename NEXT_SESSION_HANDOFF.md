@@ -1,3 +1,40 @@
+## 2026-04-04: milestone-17 import-oracle lane now projects explicit Genesis/CommLink adjacent coverage posture from certification receipts
+
+- Trigger:
+  - milestone `17` requires no-step-back import-oracle evidence across Chummer4, Chummer5a, Hero Lab, and adjacent SR6 clients (Genesis/CommLink).
+  - master-index import-oracle posture previously treated the certification receipt as one opaque source, so adjacent SR6 oracle coverage was not explicit.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes adjacent SR6 oracle coverage fields:
+      - `AdjacentSr6OracleReceiptPosture`
+      - `AdjacentSr6OracleSourcesCovered`
+      - `AdjacentSr6OracleSourcesExpected`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - import-oracle summary now parses `IMPORT_PARITY_CERTIFICATION.generated.json` for explicit `adjacent_oracles` evidence (`Genesis`, `CommLink6` class tokens).
+    - adjacent receipt posture now projects `missing`/`stale`/`governed` separately from the top-level receipt status.
+    - top-level `ImportOracleSourcesCovered` now only credits the adjacent-oracle lane when both Genesis and CommLink-class coverage are explicitly proven.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - governed import-oracle test now fail-proves full adjacent oracle evidence.
+    - added `Master_index_reports_stale_import_oracle_lane_when_adjacent_oracle_coverage_is_partial`.
+    - baseline missing-lane assertions now include adjacent oracle fields.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - master-index API smoke now requires adjacent SR6 oracle fields.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-17 row now states explicit adjacent SR6 oracle posture projection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_import_oracle_lane_when_fixture_families_and_certification_are_present|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_import_oracle_lane_when_adjacent_oracle_coverage_is_partial|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests run due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+- Commits landed:
+  - pending local commit in `chummer6-core` for adjacent SR6 oracle posture fields and receipt parsing.
+  - pending local doc sync commit in `chummer6-design` and `fleet` mirror.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for this milestone-17 projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: milestone-1/3 journey gates now fail-close on stale per-head desktop executable proof receipts
 
 - Trigger:
