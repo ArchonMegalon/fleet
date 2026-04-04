@@ -46,6 +46,29 @@
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes duplicate promoted installer tuple entries across release-channel desktop install media
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth and installer/startup-smoke proof to stay one-to-one per promoted desktop tuple (`head/rid/platform/channel/version`).
+  - executable gate normalized tuple coverage and proof receipts, but release-channel `artifacts` could still contain duplicate desktop install-media entries for the same tuple.
+  - tuple maps used dict-overwrite behavior for duplicate keys, which left a false-green ambiguity seam where one duplicate could silently shadow another.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `build_install_media_tuple_token(...)` for platform-aware tuple normalization (`macos` uses `rid` fallback from `arch` via existing canonical helper).
+    - added `collect_duplicate_install_media_tuples(...)` to index desktop install-media tuple occurrences by artifact index.
+    - added evidence keys `duplicate_desktop_install_artifact_tuples` and `duplicate_desktop_install_artifact_tuple_tokens`.
+    - executable gate now fail-closes with explicit reason when duplicate promoted desktop install-media tuple entries are present.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded marker assertions to lock duplicate-tuple evidence keys and fail-close reason text.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable proof now rejects duplicate promoted installer tuple entries before downstream per-head gate projection, preventing silent tuple shadowing in release-channel artifact truth.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now proves parity-audit fail-close on malformed `releaseProof.proofRoutes` (`%` and `\\`) before smoke
 
 - Trigger:
