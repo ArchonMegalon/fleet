@@ -35,6 +35,14 @@
   - evidence check:
     - `STATUS_PLANE.generated.yaml` now reports `media-factory.readiness_stage: boundary_pure`.
     - `JOURNEY_GATES.generated.json` now reports `build_explain_publish` as `warning` with no blocking reasons (target-stage warnings remain for `core`, `ui`, and `hub`).
+- Commits landed:
+  - `chummer6-media-factory`: `9c01e8f` (`feat(w4-9-16): materialize media publication proof receipts`).
+  - `fleet`: `4b7cbab` (`feat(w4-9-16): infer media boundary from publication proofs`).
+- Push attempts:
+  - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `c36b571..9c01e8f`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
 ## 2026-04-04: milestone-12 public progress active-wave status now reads from the Next-12 active registry constant (not retired wave alias)
 
