@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-5 roster movement lane now fail-closes compact `crewswap` and `rosterswap` across prep search, GM ops triage, and live audit/browser proof
+
+- Trigger:
+  - frontier milestone `5` requires roster movement to stay a first-class governed lane across prep-library query canonicalization, GM unresolved-domain routing, and signed-in route-proof audits.
+  - compact swap shorthand (`crewswap/crewswaps`, `rosterswap/rosterswaps`) was not covered in shared alias canonicalization, GM domain routing, or script-lock API/workspace/browser proofs, leaving a drift seam for real-table operator vocabulary.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `crewswap`, `crewswaps`, `rosterswap`, and `rosterswaps` to governed roster-movement semantics (`rostermove`/`move` token lane).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added swap verbs and compact swap tokens to roster movement token vocab so campaign workspace prep search treats swap shorthand as first-class roster movement.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added swap shorthand and swap keyword routing to unresolved-domain triage so GM ops classifies swap signals under `roster_movement`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API probes and workspace probes for `queryText/prepQuery` values:
+      - `crewswap`, `crewswaps`
+      - `rosterswap`, `rosterswaps`
+    - each now fail-closes on non-200, missing match snippet, or empty governed packet results.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added signed-in browser journey checks for `?prepQuery=crewswap`, `crewswaps`, `rosterswap`, and `rosterswaps`, including route-preservation and governed-result assertions.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended compact roster shorthand regression to include swap variants.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - added unresolved-triage regression for `crewswap`.
+      - expanded prep-asset query regression coverage for `crewswap(s)` and `rosterswap(s)`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded script-lock marker assertions for audit and Playwright swap shorthand coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatCrewSwapSignalsAsRosterMovementDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QueryTextMatchesSummaryTagsAndChecklist|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 roster movement shorthand now fail-closes compact swap vocabulary across canonical query rewrite, GM ops domain routing, and live signed-in API/workspace/browser proof rails.
+- Push status:
+  - pending in this environment (push remains blocked without GitHub HTTPS credentials).
+
 ## 2026-04-04: follow-up on W1/W3 macOS per-head exit gate crash-proofing for startup-smoke artifact path verification (commit and push status)
 
 - Commits landed:
