@@ -72,6 +72,13 @@
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
   - `cd /docker/fleet && python3 - <<'PY' ... synthetic support packet with linux-host + wrong installer filename ... PY` -> PASS (journey gate blocks on both host token and expected installer filename mismatch).
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_external_proof"` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `fleet`: `e3fae2b` (`feat(w1-1-3): fail-close support proof-capture host and installer drift`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+  - environment is missing `pytest` for direct local pytest execution.
 
 ## 2026-04-04: milestone-1/3 support install-proof contract now fail-closes expected installer target fields
 
