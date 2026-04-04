@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes unexpected nested `releaseProof.uiLocalizationReleaseGate` keys, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` needs deterministic release-proof contracts for legacy-familiar flagship claims.
+  - `scripts/audit-ui-parity.sh` validated many nested localization gate fields but still allowed unknown keys under `releaseProof.uiLocalizationReleaseGate`, leaving a fail-open drift seam for non-canonical payload expansion.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added canonical `ALLOWED_LOCALIZATION_GATE_KEYS` set covering canonical and alias key forms.
+    - fail-closes when `releaseProof.uiLocalizationReleaseGate` includes unexpected keys.
+    - added fail-close marker:
+      - `release-channel nested receipt releaseProof.uiLocalizationReleaseGate has unexpected keys`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active mutation probe injecting `bonus_noncanonical_gate_key` under `releaseProof.uiLocalizationReleaseGate`.
+    - verify now requires parity audit failure on that mutation.
+    - added fail-close verifier marker:
+      - `verify gate failed: parity audit should reject unexpected releaseProof.uiLocalizationReleaseGate keys.`
+  - patched script-lock tests:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
+    - pinned the new audit marker and verify mutation marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation run for unexpected nested localization gate keys).
+- Commits landed:
+  - `chummer6-hub`: `cc8cda2c` (`fix(milestone-2): fail-close unexpected localization gate keys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `cc8cda2c` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `debriefed` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
