@@ -33,6 +33,90 @@
 - Exact blocker:
   - no repo-local blocker for this milestone-8 slice; remote push remains blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-6 mobile workspace-lite now exposes an explicit cached/stale/offline-action truth rail beside continuity lanes
+
+- Trigger:
+  - frontier milestone `6` requires mobile/travel continuity proof to make cache state, stale risk, and offline-safe action boundaries obvious.
+  - workspace-lite already projected continuity lanes (`downtime/diary/contacts/heat/aftermath/return`) but did not expose a dedicated cached-vs-stale-vs-offline-action rail.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs`:
+    - `PlayCampaignWorkspaceLiteProjection` now includes:
+      - `OfflineTruthSummary`
+      - `OfflineTruthLabels`
+    - added deterministic synthesis functions:
+      - `BuildOfflineTruthSummary(...)`
+      - `BuildOfflineTruthLabels(...)`
+    - rail explicitly states:
+      - cached posture (validated bundle present vs missing)
+      - stale posture (cache-pressure warning vs green)
+      - bounded offline action posture (read-only/reconnect-required vs role-safe allowed actions)
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html`:
+    - added shell render targets:
+      - `id="workspace-offline-truth"`
+      - `id="workspace-offline-truth-list"`
+    - wired workspace payload binding for:
+      - `payload.offlineTruthSummary`
+      - `payload.offlineTruthLabels`
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - workspace-lite projection checks now fail-close on offline-truth summary and label tokens.
+    - observer and GM role-depth checks now require role-explicit offline-truth wording.
+    - index-shell accessibility and source-binding checks now require offline-truth IDs and binding lines.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj -c Release` -> FAIL (`NU1101` missing private package ids such as `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, `Chummer.Ui.Kit`; only `nuget.org` source is resolved in this environment).
+- Commits landed:
+  - `chummer6-mobile`: `74f4620` (`feat(w6): expose explicit offline truth rail in workspace-lite`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - private `Chummer.*` package feed/bootstrap is unavailable in this environment, so mobile regression execution cannot restore/build.
+
+## 2026-04-04: milestone-18 master-index now emits explicit online-storage continuity receipt posture and coverage from Hub/mobile release-proof artifacts
+
+- Trigger:
+  - frontier milestone `18` still marked online-storage successor closure as partial in parity canon.
+  - `master-index` already projected supplement/designer/house-rule lanes, but storage continuity evidence remained implicit in separate Hub/mobile release-proof receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes online-storage fields:
+      - `OnlineStorageLanePosture`
+      - `OnlineStorageReceiptPosture`
+      - `OnlineStorageReceiptsCovered`
+      - `OnlineStorageReceiptsExpected`
+      - `OnlineStorageCoveragePercent`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added deterministic online-storage continuity projection rooted at active data-catalog ancestry:
+      - Hub receipt: `chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json`
+      - Mobile receipt: `chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`
+    - receipt coverage requires:
+      - `status = passed`
+      - `journeys_passed` contains `install_claim_restore_continue`
+    - lane posture now fail-closes:
+      - `missing` with zero covered receipts
+      - `stale` with partial/mixed receipt coverage
+      - `governed` only when both expected receipts cover restore continuity
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`
+      - baseline assertions now include new online-storage fields.
+      - added:
+        - `Master_index_reports_governed_online_storage_lane_when_hub_and_mobile_release_receipts_cover_restore_journey`
+        - `Master_index_reports_stale_online_storage_lane_when_only_one_receipt_covers_restore_journey`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`
+      - `Master_index_endpoint_returns_data` now asserts presence of online-storage API fields.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-18 SR6 successor row now cites explicit online-storage continuity projection evidence while keeping full authored-designer/storage UX closure open.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_online_storage_lane_when_hub_and_mobile_release_receipts_cover_restore_journey|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_online_storage_lane_when_only_one_receipt_covers_restore_journey|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+- Commits landed:
+  - pending local commits in `chummer6-core`, `chummer6-design`, and `fleet`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for landed milestone-18 projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: milestone-10 journey gates now fail-close if update-required support cases are not explicitly routed to /downloads
 
 - Trigger:
