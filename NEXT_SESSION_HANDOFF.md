@@ -1,3 +1,36 @@
+## 2026-04-04: follow-up on contact continuity alias canonicalization commit and push status
+
+- Commits landed:
+  - `chummer.run-services`: `e4b62fdb` (`fix(campaign-os): canonicalize contact prep-query continuity aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 campaign workspace and GM ops prep search now fail-close contact/contacts continuity wording through shared canonicalization
+
+- Trigger:
+  - W3 continuity and GM ops prep-query canonicalization already covered diary/downtime/aftermath/debrief/heat/relationship variants, but explicit `contact`/`contacts` wording was not canonicalized through the shared contracts utility.
+  - because prep-query token matching is all-tokens-required, `contact` and `contacts` queries could miss continuity assets that carry canonical `connection` wording.
+- Landed:
+  - patched shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrites:
+      - `contacts -> connection`
+      - `contact -> connection`
+  - expanded campaign workspace continuity test coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation` now asserts `contact` and `contacts` query matching.
+  - expanded GM ops continuity test coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsContinuityPluralShorthand` now executes and asserts `queryText=contact` and `queryText=contacts`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (script-lock mutation probes intentionally emit many `parity audit failed` lines while confirming rejection branches; script exits `0` with `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4/5 prep-library query behavior now treats `contact`/`contacts` as first-class continuity wording in both campaign workspace and GM ops lanes through the same shared contracts canonicalizer.
+
 ## 2026-04-04: follow-up on prep-query canonicalization unification commit and push status
 
 - Commits landed:
