@@ -41,6 +41,41 @@
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes desktop install-media artifact channel drift against release channel truth, including embedded Windows/macOS gate artifacts
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, installer truth, and packaged-head proof to stay aligned by artifact/head/arch/channel.
+  - executable gate enforced artifact tuple and architecture consistency, but did not fail-close desktop install-media artifacts when artifact-level `channelId/channel` drifted from promoted release-channel identity.
+  - embedded `release_channel_windows_artifact` and `release_channel_macos_artifact` checks also lacked explicit channel-binding validation, leaving a channel-truth drift seam in per-head gate receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added desktop install-media artifact channel inventory evidence:
+      - `release_channel_desktop_install_artifact_channel_ids`
+      - `release_channel_desktop_install_artifacts_missing_channel`
+      - `release_channel_desktop_install_artifacts_channel_mismatch`
+    - gate now fail-closes when promoted desktop install-media artifacts are missing `channelId/channel`.
+    - gate now fail-closes when promoted desktop install-media artifact `channelId/channel` differs from release-channel `channelId`.
+    - added embedded gate fail-close checks:
+      - `Windows gate embedded release_channel_windows_artifact channelId/channel does not match promoted release channel.`
+      - `macOS gate embedded release_channel_macos_artifact channelId/channel does not match promoted release channel.`
+    - added embedded artifact channel evidence keys:
+      - `release_channel_windows_artifact_channel_id`
+      - `release_channel_macos_artifact_channel_id`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded script-marker assertions for new desktop install-media channel inventory evidence keys and fail-close reason strings.
+    - expanded marker assertions for embedded Windows/macOS artifact channel-binding fail-close strings.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate marker assertions for desktop install-media channel evidence keys and channel drift fail-close reasons.
+    - expanded marker assertions for embedded Windows/macOS artifact channel-binding fail-close strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable proof now rejects channel-truth drift at both promoted desktop install-media artifact level and embedded per-head Windows/macOS gate artifact evidence, tightening release-channel identity alignment across packaged proof lanes.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for `releaseProof.proofRoutes` query/fragment and dot-segment traversal
 
 - Trigger:
