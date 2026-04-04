@@ -20,6 +20,27 @@
 - Exact blocker:
   - none for this landed follow-on slice; remote push is blocked in this environment by missing GitHub credential material.
 
+## 2026-04-04: milestone-8 signed-in home build rail now emits per-output audit fingerprints alongside next/provenance cues
+
+- Trigger:
+  - frontier milestone `8` requires explain receipts and rule-environment evidence to stay visible where users choose output lanes, not only in deeper account detail.
+  - signed-in home Build Lab rail already showed output next/provenance cues but omitted `AuditSummary`, so rule-fingerprint evidence was hidden at that primary decision surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - per-output build-handoff rendering now includes `Output audit: ...` when `output.AuditSummary` is present.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - source guard now requires `@output.AuditSummary` and `Output audit:` rendering hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `1407e27e` (`feat(w4-8): surface output audit cues on signed-in home build rail`).
+  - `fleet`: handoff refresh for this slice (this update).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for this landed slice; push is blocked in this environment by missing GitHub credential material.
+
 ## 2026-04-04: milestone-6 travel mode now exposes explicit fresh-vs-stale cache freshness proof across workspace server plane and account surface
 
 - Trigger:
