@@ -29,6 +29,39 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 localization release proof now preserves explicit finding-count debt during registry materialization
+
+- Trigger:
+  - active frontier milestone 2 remains blocked by `BLK-009`, and registry localization projection still had a fail-open seam in `materialize_public_release_channel.py`:
+    - `blocking_findings_count` / `translation_backlog_findings_count` provided by upstream UI localization gates were ignored unless matching finding arrays were populated.
+  - this allowed non-zero explicit localization debt counts to be silently collapsed to `0` in `releaseProof.uiLocalizationReleaseGate`, which could let shelf verification pass on incomplete proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - localization normalization now reads explicit count fields:
+      - `blocking_findings_count` / `blockingFindingsCount`
+      - `translation_backlog_findings_count` / `translationBacklogFindingsCount`
+    - materialized counts now fail-close by taking the max of:
+      - parsed explicit count values
+      - structured finding-array lengths
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added regression that mutates UI localization gate input to set `blocking_findings_count=2` with empty arrays.
+    - reruns materialization and asserts verifier failure on non-zero `blockingFindingsCount`.
+    - restores canonical fixture and rematerializes for downstream positive assertions.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - contract text now states count-based localization debt fields are fail-closed during materialization.
+  - committed and pushed in `chummer-hub-registry`:
+    - `e8e573e` — `Fail-close explicit localization finding counts in release proofs`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes the new explicit-count fail-close regression).
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` advanced to `e8e573e`).
+- Current trusted state:
+  - registry release-channel localization proof now resists both acceptance-gate-family drift and explicit finding-count suppression, tightening BLK-009 release honesty for milestone-2 desktop shelf promotion.
+  - `BLK-009` remains open globally pending full shipping-locale quality closure across product surfaces.
+- Push status:
+  - `chummer-hub-registry`: pushed.
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing flagship acceptance-gate families beyond minimal locale-smoke markers
 
 - Trigger:
