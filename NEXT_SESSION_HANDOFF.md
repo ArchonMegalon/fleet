@@ -1,3 +1,68 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes invalid (non-ISO) `generated_at` timestamps on promoted desktop release artifacts and embedded per-platform release-channel tuples
+
+- Trigger:
+  - frontier milestones `1` and `3` require release/install proof that cannot lie by timestamp aliases or malformed metadata.
+  - executable-gate checks already fail-closed missing/mismatched/conflicting `generated_at` aliases, but they still accepted non-empty, non-ISO `generated_at` strings when values happened to match.
+  - this left a deterministic-proof seam where invalid artifact timestamps could pass tuple alignment checks without being parse-valid release evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - desktop install artifact validation now records and fails closed invalid `generated_at`/`generatedAt` values via new evidence key:
+      - `release_channel_desktop_install_artifacts_invalid_generated_at`
+    - Linux/Windows/macOS embedded gate artifact checks now require parse-valid `generated_at` timestamps (not only non-empty strings) and emit fail-close reasons when invalid.
+    - added embedded artifact evidence booleans:
+      - `release_channel_linux_artifact_generated_at_valid`
+      - `release_channel_windows_artifact_generated_at_valid`
+      - `release_channel_macos_artifact_generated_at_valid`
+  - patched script-lock compliance tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - pinned new invalid-`generated_at` evidence marker and updated fail-close reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Commits landed:
+  - `chummer6-ui`: `3ed592c3` (`fix(w1): fail-close invalid generated_at in release artifacts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `3ed592c3` remains local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `retro` / `retrospective` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to stay one governed lane across prep-library query canonicalization, unresolved-domain routing, and signed-in proof rails.
+  - shorthand coverage already handled `debrief`, `postmortem`, `postsession`, `postrun`, `afteractionreport`, and `aar`, but did not canonicalize common table retrospective shorthand (`retro`, `retros`, `retrospective`, `retrospectives`).
+  - this left a seam where retrospective phrasing could miss governed recap packets and unresolved GM triage could classify recap shorthand outside the prep-library lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `retro`, `retros`, `retrospective`, and `retrospectives` to governed `recap` semantics.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added retrospective shorthand tokens to aftermath/recap vocabulary so workspace continuity matching stays aligned with canonical aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats retrospective shorthand as governed `prep_library` signals.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended continuity shorthand matching and negative coverage for retrospective variants.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - widened unresolved-domain regression with a `retrospective` unresolved event and prep-library continuity query coverage for retrospective variants.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded script-lock assertions so audit and Playwright proof rails fail-close if retrospective shorthand coverage drifts.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API and workspace probes for `retro`, `retros`, `retrospective`, and `retrospectives`, each fail-closing on non-`200`, empty governed result, or missing route/snippet evidence.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added signed-in browser continuity journey checks for the same retrospective variants with route-preservation and governed-result assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending commit in this slice.
+- Push attempts:
+  - pending below in this slice.
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes desktop install artifact `generated_at` drift against release-channel truth
 
 - Trigger:
