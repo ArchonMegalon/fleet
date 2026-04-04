@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/6 travel continuity now includes explicit offline return-loop lane cues (downtime/diary + contacts/heat + aftermath + return)
+
+- Trigger:
+  - frontier milestone `4` requires campaign truth to span downtime, diary, contacts, heat, aftermath, and next-session return as one lane.
+  - frontier milestone `6` requires offline continuity proof to state exactly what remains actionable while offline.
+  - `chummer6-hub` travel readiness already emitted offline lane cues for downtime/diary, contacts/heat, and aftermath, but did not emit an explicit return-loop lane cue even though return-loop signal parsing already existed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildTravelOfflineLaneCues(...)` now emits `return_loop` lane cues with `blocked|degraded|ready` status parity.
+    - `return_loop` signal count now derives from governed return change packets plus carry-forward presence.
+    - return-loop offline summary now explicitly states campaign return-loop follow-through posture per travel cache freshness.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/TravelModeCacheFreshnessTests.cs`:
+    - updated expected offline lane cue counts from `4` to `5`.
+    - added explicit assertion that `return_loop` lane is present in degraded travel-cache scenarios.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter FullyQualifiedName~TravelModeCacheFreshnessTests -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`3 passed` on `net10.0` and `net10.0-windows` filtered runs).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`389 passed` on `net10.0` and `389 passed` on `net10.0-windows` filtered runs).
+- Commits landed:
+  - `chummer6-hub`: `5a61949b` (`feat(w3-4-6): add explicit offline return-loop continuity lane cue`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
+
 ## 2026-04-04: milestone-6 mobile workspace-lite now marks cache-pressure continuity lanes as degraded (travel/offline/heat)
 
 - Trigger:
