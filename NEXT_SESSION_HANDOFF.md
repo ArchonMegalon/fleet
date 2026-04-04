@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-6 account workspace now renders per-device travel cache status so stale readiness is actionable
+
+- Trigger:
+  - milestone `6` continuity proof now computes stale-versus-fresh cache status per claimed device, but account workspace device rows still hid the per-device status value.
+  - result: operators could see aggregate freshness counts but could not immediately identify which claimed device was stale in the same travel staging surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - travel prefetch device selector now includes `HumanizeStatus(device.Status, "Status")` per claimed device.
+    - travel mode device evidence list now renders per-device status inline with platform/head/channel context.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`:
+    - source guard now fail-proves `HumanizeStatus(device.Status, "Status")` travel-status rendering hook.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `1c3fb10b` (`feat(w3-6): render per-device travel cache status cues`).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this follow-on slice.
+- Exact blocker:
+  - none for this landed follow-on slice; pushability depends on GitHub credential availability in this environment.
+
 ## 2026-04-04: milestone-6 travel mode now exposes explicit fresh-vs-stale cache freshness proof across workspace server plane and account surface
 
 - Trigger:
@@ -60,6 +81,25 @@
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - none for this landed slice; push is blocked in this environment by missing GitHub credential material.
+
+## 2026-04-04: milestone-18 SR6 designer successor lane now fail-proves `stale` posture when catalog coverage is partial
+
+- Trigger:
+  - milestone-18 SR6 designer posture logic landed, but regression coverage only locked `missing` and `governed`.
+  - partial catalog coverage could regress posture mapping without a dedicated fail-closed test.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - added `Master_index_reports_stale_sr6_designer_tool_posture_when_catalog_coverage_is_partial`.
+    - test fail-proves `Sr6DesignerToolsPosture == "stale"` when only one canonical designer catalog (`spells.xml`) is present (`1/5` coverage).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+- Commits landed:
+  - `chummer6-core`: `199d138d` (`test(w18): lock stale sr6 designer posture on partial coverage`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `ab8c01af..199d138d`).
+- Exact blocker:
+  - none for this hardening slice.
 
 ## 2026-04-04: milestone-18 parity canon now marks SR6 supplement/designer/house-rule family as partial after tool-catalog successor posture landing
 
