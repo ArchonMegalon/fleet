@@ -1,3 +1,41 @@
+## 2026-04-04: milestone-15 desktop utility lane now exposes first-class dice, initiative preview, and roster operator context
+
+- Trigger:
+  - no-step-back parity still marked dice/initiative utilities as the one outright `missing` family even though milestone `15` needs one obvious modern Chummer6 utility/operator route.
+  - the shared desktop shell only exposed placeholder `dice_roller` and `character_roster` dialogs with almost no operator value.
+- Landed:
+  - patched shared desktop utility dialogs in:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopDialogFactory.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/IDesktopDialogFactory.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/OverviewCommandDispatcher.cs`
+  - `dice_roller` now exposes:
+    - ruleset-backed expression roll
+    - threshold / limit / wound modifier fields
+    - initiative base / initiative dice / current pass fields
+    - live initiative preview
+    - current roster-context summary
+  - `character_roster` now exposes:
+    - open-runner count
+    - saved-workspace count
+    - ruleset mix
+    - active workspace
+    - multiline roster entry summary for the current shell
+  - patched action handling in `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DialogCoordinator.cs`:
+    - `roll` now preserves initiative preview and includes threshold/limit/wound context in the result notice.
+    - new `derive_initiative` action updates initiative preview without closing the dialog.
+  - patched shared shell workflow metadata in `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Shell/CatalogOnlyRulesetShellCatalogResolver.cs`:
+    - `WorkflowDefinitionIds.DiceTool` is now the broader `Utility Tooling` lane with both dice and roster surfaces.
+  - updated canonical parity docs:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`
+    - dice/initiative parity moves from `missing` to `partial`; roster/operator wording now names the shared desktop route explicitly.
+- Verification:
+  - targeted presentation tests cover:
+    - factory proof for dice/initiative/roster fields
+    - presenter proof for command-path dialog opening
+    - coordinator proof for roll and initiative-preview actions
+  - exact test command/result recorded after local run in this session.
+
 ## 2026-04-04: milestone-9/16 interop export now auto-pins session-bound portability receipts when continuity evidence is unambiguous
 
 - Trigger:
@@ -39746,3 +39784,25 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-4/5/6 gm ops unresolved prioritization now treats offline/mobile travel-cache drift as continuity-return risk
+
+- Trigger:
+  - W3 continuity/return loop requires travel/offline/mobile readiness drift to stay visible in the same governed queue as diary/contacts/heat return work.
+  - gm unresolved ranking previously depended on explicit `open/unresolved` wording and missed stale cache or sync-drift continuity cues that lacked those exact tokens.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `LooksUnresolved(...)` now also treats continuity-context stale/sync-drift cues as unresolved when tied to campaign/session/offline/mobile/travel/cache/return language.
+    - `ResolveGmOpsDomain(...)` continuity-return cue set now includes offline/mobile/travel/safehouse/cache/sync-drift vocabulary so those records classify to `continuity_return` instead of `general`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatOfflineSafehouseTravelCacheStaleSignalsAsContinuityReturnDomain`.
+    - added `GetProjection_UnresolvedItemsTreatOfflineSyncDriftSignalsAsContinuityReturnDomainWithoutOpenKeyword`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`59 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~GmOpsBoardServiceTests" -v minimal` -> PASS (`455 passed` on both target frameworks).
+- Commits landed:
+  - no isolated `chummer6-hub` commit yet (same files contain overlapping pre-existing in-flight edits beyond this slice; safe non-interactive commit slicing would risk bundling unrelated changes).
+- Push attempts:
+  - not attempted for this slice because no isolated repo commit was created.
+- Exact blocker:
+  - overlapping pre-existing edits in `GmOpsBoardService.cs` and `GmOpsBoardServiceTests.cs` prevent safe isolated commit creation without interactive hunk surgery.
