@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-4/5/6 hub prep-query lane now maps mobile-companion shorthand into offline/travel continuity truth
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign workspace v4 + GM operations + mobile/offline travel continuity to feel like one governed product lane.
+  - Hub prep-library query canonicalization already covered offline/travel/safehouse compact forms, but mobile-companion query forms (`mobile companion`, `mobilecompanion`, `campaign mobile companion`) were not fail-closed into the same continuity token lane.
+  - this left a drift seam where mobile-companion continuity intent could under-match governed prep packets even though equivalent travel/offline terms were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `mobilecompanion`, `mobilecompanions`
+      - `campaignmobilecompanion`, `campaignmobilecompanions`
+    - added continuity canonicalization rule that collapses campaign/mobile companion tokens into the shared continuity search lane:
+      - removes `companion`/`companions`
+      - adds `offline`, `travel`, and `safehouse` continuity tokens (while preserving existing mobile-scope normalization semantics).
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand` with mobile-companion query assertions:
+      - `mobile companion`
+      - `mobile companions`
+      - `mobilecompanion`
+      - `campaign mobile companion`
+      - `campaignmobilecompanions`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - added focused canonicalizer regression `RewriteAliases_CollapsesMobileCompanionFormsIntoTravelOfflineSafehouseContinuityTokens`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesTravelOfflineReadinessShorthand" -v minimal` -> PASS (`6 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `7cc09b09` (`feat(w3-4-5-6): map mobile-companion queries onto offline travel continuity lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4/5/6 EA runtime-policy contracts now fail-close lane-specific memory metadata for campaign/GM/offline continuity
 
 - Trigger:
