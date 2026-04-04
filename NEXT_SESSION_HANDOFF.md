@@ -1,3 +1,93 @@
+## 2026-04-04: milestone-10 journey gates now fail-close if update-required support cases are not explicitly routed to /downloads
+
+- Trigger:
+  - milestone `10` requires install-specific diagnosis and fix confirmation to agree with public recovery paths.
+  - support packets already emitted `update_required_case_count`, but release-journey gating did not prove that those cases were actually routed to `/downloads`.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - support packet summary now projects:
+      - `update_required_routed_to_downloads_count`
+      - `update_required_misrouted_case_count`
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - added support-gate flag `require_support_update_required_routes_to_downloads`.
+    - when enabled, journey evaluation now blocks if:
+      - any update-required case is marked misrouted, or
+      - routed-to-downloads coverage is lower than update-required case count.
+    - journey signals now include the three update-required routing counters.
+  - canon sync:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `report_cluster_release_notify.fleet_gate` now requires `require_support_update_required_routes_to_downloads: true`.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+      - asserts new summary counters for both baseline and update-required scenarios.
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+      - added `test_materialize_journey_gates_blocks_when_update_required_cases_are_not_proven_routed_to_downloads`.
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_support_case_packets.py /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/tests/test_materialize_support_case_packets.py /docker/fleet/tests/test_materialize_journey_gates.py` -> PASS.
+  - executable smoke:
+    - `python3 /docker/fleet/scripts/materialize_support_case_packets.py --source <tmp>/source.json --release-channel <tmp>/release.json --out <tmp>/out.json` -> PASS.
+    - rendered summary included:
+      - `update_required_case_count: 1`
+      - `update_required_routed_to_downloads_count: 1`
+      - `update_required_misrouted_case_count: 0`
+    - `python3 /docker/fleet/scripts/materialize_journey_gates.py --registry <tmp>/registry.yaml --status-plane <tmp>/status.yaml --progress-report <tmp>/progress.json --progress-history <tmp>/history.json --support-packets <tmp>/support.json --out <tmp>/out.json` -> PASS (`overall_state: ready`) when counts agree.
+  - refreshed local published artifacts:
+    - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+    - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py` -> PASS.
+  - `python3 -m pytest -q tests/test_materialize_support_case_packets.py -q` -> FAIL (`No module named pytest`) in this environment.
+  - `python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - pending local commit in `fleet` and `chummer6-design` for update-required route proof + journey gate enforcement + handoff refresh.
+- Push attempts:
+  - none yet for this slice.
+- Exact blocker:
+  - full pytest execution is unavailable in this environment because `pytest` is not installed.
+
+## 2026-04-04: milestone-4/6 mobile workspace-lite now exposes an explicit downtime/diary/contacts/heat/aftermath/return continuity rail
+
+- Trigger:
+  - frontier milestone `4` requires campaign workspace truth to read as one lane across downtime, diary, contacts, heat, aftermath, and return.
+  - milestone `6` requires the same continuity lane to stay explicit on mobile travel/offline surfaces.
+  - `chummer6-mobile` workspace-lite already projected travel/offline and replay/recap posture, but it did not carry a first-class continuity rail for those milestone-4 terms.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs`:
+    - `PlayCampaignWorkspaceLiteProjection` now includes:
+      - `ContinuityRailSummary`
+      - `ContinuityRailLabels`
+    - added deterministic continuity-rail synthesis functions:
+      - `BuildContinuityRailSummary(...)`
+      - `BuildContinuityRailLabels(...)`
+    - rail now always emits explicit lanes for:
+      - downtime
+      - diary
+      - contacts
+      - heat
+      - aftermath
+      - return
+    - wording remains grounded in existing session/checkpoint/runtime/support/cache truth (no local shadow model).
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html`:
+    - added continuity-rail render targets:
+      - `id="workspace-continuity-rail"`
+      - `id="workspace-continuity-rail-list"`
+    - wired workspace payload binding for:
+      - `payload.continuityRailSummary`
+      - `payload.continuityRailLabels`
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - workspace-lite projection checks now fail-close on continuity-rail summary + label coverage for all six lane terms.
+    - observer/gm role-depth checks now require role-specific continuity-rail posture.
+    - index shell accessibility/source-binding checks now require continuity-rail IDs and binding lines.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet build src/Chummer.Play.Core/Chummer.Play.Core.csproj -nologo -v minimal` -> FAIL (`NU1101` for private package ids such as `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts` in current environment feed setup).
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet build src/Chummer.Play.Web/Chummer.Play.Web.csproj -nologo -v minimal` -> FAIL (same `NU1101` package-feed blocker + dependent projects).
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj -c Release` -> FAIL before execution (same restore/feed blocker).
+- Commits landed:
+  - pending local commit in `chummer6-mobile` for continuity-rail projection + shell binding + regression guards.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - private `Chummer.*` package restore is unavailable in this environment (only `nuget.org` source resolved), so build/regression lanes cannot execute until the local feed/bootstrap source is restored.
+
 ## 2026-04-04: milestone-1/3 Windows and macOS per-head exit receipts now always emit non-null failure summaries
 
 - Trigger:
