@@ -60,6 +60,29 @@
   - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now materializes tuple-scoped Windows/macOS receipts before validation
+
+- Trigger:
+  - frontier milestones `1` and `3` require fail-honest per-head packaged-binary proof, but the executable gate validated Windows/macOS tuple paths without first materializing tuple-scoped receipts.
+  - this could leave stale or missing per-head receipts and mask current tuple-lane diagnostics behind single-receipt drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - wired `scripts/materialize-windows-desktop-exit-gate.sh` and `scripts/materialize-macos-desktop-exit-gate.sh` as dependency materializers under the existing `skip_dependency_materialize` gate.
+    - derives required Windows/macOS `head:rid:platform` tuples directly from `desktopTupleCoverage.requiredDesktopPlatformHeadRidTuples` in the active release channel.
+    - materializes tuple-scoped receipts at canonical per-head paths (`UI_WINDOWS_<HEAD>_<RID>_DESKTOP_EXIT_GATE.generated.json`, `UI_MACOS_<HEAD>_<RID>_DESKTOP_EXIT_GATE.generated.json`) before the executable gate evaluates them.
+    - keeps fail-honest behavior: tuple materialization failures are non-blocking for orchestration but still surface as receipt/gate failures in the final executable gate reasons.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added regression assertions that lock tuple-scoped Windows/macOS materializer invocation and required-tuple path synthesis markers in the executable gate script.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`3` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with expanded tuple-scoped reasons for both Windows and macOS heads.
+- Current trusted state:
+  - executable gate now refreshes tuple-scoped Windows/macOS proof receipts before validation instead of relying on stale single-receipt state.
+  - true blocker remains external: promoted Windows/macOS installer bytes + startup-smoke receipts are still missing from release-channel truth/shelf proof.
+- Push status:
+  - `chummer6-ui`: local commit/push pending in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep-library search now matches compact `preplibrary` shorthand across normalized packet text
 
 - Trigger:
