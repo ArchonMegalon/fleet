@@ -47,6 +47,36 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed per-head proof status maps from visual/workflow receipts
+
+- Trigger:
+  - frontier milestone `3` requires per-head proof receipts that cannot lie on head-status payload shape.
+  - executable gate still parsed `flagship_head_proof_statuses` maps with permissive key/value normalization, allowing non-string and whitespace-padded keys/values to collapse silently.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added strict `normalize_required_status_map(...)`.
+    - visual/workflow parsing now fail-closes malformed `flagship_head_proof_statuses` map entries:
+      - non-string keys
+      - whitespace-padded keys
+      - non-string values
+      - whitespace-padded values
+      - blank normalized keys/values
+    - added status-map evidence keys:
+      - `<field>_normalized`
+      - `<field>_malformed_entries`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock strict per-head status-map shape enforcement markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only.
+- Current trusted state:
+  - per-head status-map receipts for visual/workflow proof now fail-close malformed entry shape instead of silently coercing it.
+  - remaining milestone-1/3 blockers in this workspace remain external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes whitespace-padded tokens in required inventory arrays
 
 - Trigger:
