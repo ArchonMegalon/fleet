@@ -72,6 +72,7 @@
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated to `91ad166`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - release closure still requires external host execution lane for promoted tuple proofs:
     - `avalonia:osx-arm64:macos`
