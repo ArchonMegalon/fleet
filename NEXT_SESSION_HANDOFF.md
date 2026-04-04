@@ -69,6 +69,28 @@
 - Exact blocker:
   - no product blocker for the implemented milestone-6 lane-proof slice; commit/push is operationally blocked until concurrent dirty worktree state is isolated for safe scoped commit.
 
+## 2026-04-04: milestone-16 signed-in home Build Lab rail now surfaces explicit output lane kinds (template/exchange/viewer/print/replay/recap/module)
+
+- Trigger:
+  - frontier milestones `7/8/9/16` require Build Lab follow-through decisions to stay explicit at the first signed-in decision rail, not only inside deeper account detail.
+  - signed-in home already showed per-output next/provenance/publication/audit, but did not label the concrete lane kind behind each output.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - added `BuildLabOutputLaneLabel(...)` mapping for governed output kinds:
+      - `character_template`, `json_exchange`, `foundry_exchange`, `sheet_viewer`, `print_pdf_export`, `replay_timeline`, `session_recap`, `run_module`
+    - Build Lab output rows now render `Output lane: ...` on the signed-in home rail.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - source guard now requires `BuildLabOutputLaneLabel(output.Kind)` and `Output lane:` markers.
+    - aligned stale publication-status assertions to the rendered expression form (`output.PublicationState` / `output.TrustBand`).
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `822c8490` (`feat(w4-16): expose build output lane kind cues on signed-in home`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - remote push remains blocked in this environment by missing GitHub HTTPS credentials; local milestone-16 slice and tests are landed.
+
 ## 2026-04-04: sharded root status now reports `active_runs` instead of pretending one shard is the whole fleet
 
 - Trigger:
