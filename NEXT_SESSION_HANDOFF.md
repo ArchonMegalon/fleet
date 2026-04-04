@@ -1,3 +1,45 @@
+## 2026-04-04: milestone-9 Build Lab now projects a dedicated exchange/replay/recap/module portability pillar rail on Account and signed-in Home
+
+- Trigger:
+  - frontier milestone `9` requires exchange, replay, recap, and module publication to read as one real second pillar with compatibility and lineage proof.
+  - Build Lab already emitted governed outputs and milestone-16 exchange parity, but it lacked one dedicated milestone-9 portability pillar summary rail on key decision surfaces.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - `BuildLabHandoffProjection` now includes:
+      - `PortabilityPillarSummary`
+      - `PortabilityPillarLines`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab handoff projection now computes deterministic portability-pillar posture from governed outputs:
+      - `BuildBuildLabPortabilityPillarSummary(...)`
+      - `BuildBuildLabPortabilityPillarLines(...)`
+      - `ResolveBuildLabPortabilityPillar(...)`
+    - portability lanes now explicitly include:
+      - `json_exchange`
+      - `foundry_exchange`
+      - `replay_timeline`
+      - `session_recap`
+      - `run_module`
+  - patched views:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`
+      - build-handoff details now render portability-pillar summary/lines.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`
+      - signed-in Home Build rail now renders portability-pillar summary/lines.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - build-handoff coverage test now fail-proves portability summary plus all five lane lines.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - now asserts Account view includes portability-pillar rendering hooks.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - now asserts signed-in Home build rail includes portability-pillar rendering hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> FAIL on pre-existing upstream compile instability in `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs` (`CS1737 Optional parameters must appear after all required parameters`) before targeted tests execute.
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `fe9b696f` (`feat(w4-9): add build-lab portability pillar receipts across account and home rails`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local blocker for the milestone-9 portability-pillar slice; targeted test execution is currently blocked by pre-existing compile instability in `chummer-core-engine` contracts plus missing GitHub HTTPS credentials for push.
+
 ## 2026-04-04: milestone-12 pulse-v3 now carries scorecard-required top-level truth and automation-frontier alignment receipts
 
 - Trigger:
