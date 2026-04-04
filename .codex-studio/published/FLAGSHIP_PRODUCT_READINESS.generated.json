@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T18:46:21Z",
+  "generated_at": "2026-04-04T18:48:32Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T18:11:03.627115Z",
-        "ui_executable_gate_age_seconds": 2117,
+        "ui_executable_gate_age_seconds": 2249,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -256,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T18:37:08Z",
-        "release_channel_age_seconds": 553,
+        "release_channel_age_seconds": 684,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -421,6 +421,67 @@
         "build_explain_publish": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 7,
         "install_claim_restore_continue_local_blocking_reason_count": 0,
+        "install_claim_restore_continue_external_proof_request_count": 4,
+        "install_claim_restore_continue_external_proof_request_hosts": [
+          "macos",
+          "windows"
+        ],
+        "install_claim_restore_continue_external_proof_request_tuples": [
+          "avalonia:osx-arm64:macos",
+          "avalonia:win-x64:windows",
+          "blazor-desktop:osx-arm64:macos",
+          "blazor-desktop:win-x64:windows"
+        ],
+        "install_claim_restore_continue_external_proof_requests": [
+          {
+            "tuple_id": "avalonia:osx-arm64:macos",
+            "required_host": "macos",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "avalonia-osx-arm64-installer",
+            "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json"
+          },
+          {
+            "tuple_id": "avalonia:win-x64:windows",
+            "required_host": "windows",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "avalonia-win-x64-installer",
+            "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"
+          },
+          {
+            "tuple_id": "blazor-desktop:osx-arm64:macos",
+            "required_host": "macos",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
+            "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json"
+          },
+          {
+            "tuple_id": "blazor-desktop:win-x64:windows",
+            "required_host": "windows",
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "expected_artifact_id": "blazor-desktop-win-x64-installer",
+            "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json"
+          }
+        ],
         "ui_executable_exit_gate_local_blocking_findings_count": 0,
         "install_claim_restore_continue_blocked_by_external_constraints_only": true,
         "build_explain_publish_external_blocking_reason_count": 0,
@@ -521,7 +582,7 @@
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T18:44:41Z",
+        "supervisor_updated_at": "2026-04-04T18:48:10Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

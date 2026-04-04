@@ -88,6 +88,37 @@
     - coordinator proof for roll and initiative-preview actions
   - exact test command/result recorded after local run in this session.
 
+## 2026-04-04: milestone-1/3 desktop install blockers now project structured host-proof request tuples into flagship readiness evidence
+
+- Trigger:
+  - W1 install and packaged-binary proof remained external-only blocked on Windows/macOS tuple receipts, but `FLAGSHIP_PRODUCT_READINESS.generated.json` only carried blocker text/counts and not machine-readable per-tuple host-proof requests.
+  - this forced downstream operator handoff tooling to parse prose instead of consuming deterministic tuple/host/proof rows.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - desktop coverage evidence now projects install-lane `external_proof_requests` from journey gates into explicit fields:
+      - `install_claim_restore_continue_external_proof_request_count`
+      - `install_claim_restore_continue_external_proof_request_hosts`
+      - `install_claim_restore_continue_external_proof_request_tuples`
+      - `install_claim_restore_continue_external_proof_requests`
+  - patched `/docker/fleet/tests/test_materialize_flagship_product_readiness.py`:
+    - expanded `test_materialize_flagship_product_readiness_marks_real_missing_lanes` to assert readiness evidence surfaces the new external proof-request tuple/host projection.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py tests/test_materialize_flagship_product_readiness.py scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && jq '.coverage_details.desktop_client.evidence | {count:.install_claim_restore_continue_external_proof_request_count, hosts:.install_claim_restore_continue_external_proof_request_hosts, tuples:.install_claim_restore_continue_external_proof_request_tuples}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`count=4`, hosts=`["macos","windows"]`, tuples include all four missing promoted Windows/macOS tuples).
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k materialize_flagship_product_readiness_marks_real_missing_lanes` -> FAIL (`No module named pytest` in this environment).
+- Commits landed:
+  - pending commit in `fleet` worktree (this slice only touched Fleet files listed above).
+- Push attempts:
+  - pending post-commit push attempt (expected to remain credential-blocked in this environment).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
 ## 2026-04-04: milestone-9/16 interop export now auto-pins session-bound portability receipts when continuity evidence is unambiguous
 
 - Trigger:

@@ -140,7 +140,23 @@ def test_materialize_flagship_product_readiness_marks_real_missing_lanes(tmp_pat
     _write_yaml(status_plane_path, _base_status_plane())
     _write_json(progress_report_path, {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
-    _write_json(journey_gates_path, _base_journey_gates())
+    journey_gates = _base_journey_gates()
+    install_journey = next(
+        row for row in (journey_gates.get("journeys") or []) if isinstance(row, dict) and row.get("id") == "install_claim_restore_continue"
+    )
+    install_journey["external_proof_requests"] = [
+        {
+            "tuple_id": "avalonia:win-x64:windows",
+            "required_host": "windows",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+        },
+        {
+            "tuple_id": "blazor-desktop:osx-arm64:macos",
+            "required_host": "macos",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+        },
+    ]
+    _write_json(journey_gates_path, journey_gates)
     _write_json(support_packets_path, {"generated_at": "2026-04-01T08:00:00Z"})
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
@@ -264,6 +280,13 @@ def test_materialize_flagship_product_readiness_marks_real_missing_lanes(tmp_pat
     assert payload["coverage"]["desktop_client"] == "missing"
     assert payload["coverage"]["hub_and_registry"] == "ready"
     assert payload["coverage"]["mobile_play_shell"] == "ready"
+    desktop_evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert desktop_evidence["install_claim_restore_continue_external_proof_request_count"] == 2
+    assert desktop_evidence["install_claim_restore_continue_external_proof_request_hosts"] == ["macos", "windows"]
+    assert desktop_evidence["install_claim_restore_continue_external_proof_request_tuples"] == [
+        "avalonia:win-x64:windows",
+        "blazor-desktop:osx-arm64:macos",
+    ]
     assert payload["summary"]["warning_count"] + payload["summary"]["missing_count"] > 0
     assert set(payload["missing_keys"]).issubset(set(payload["coverage"].keys()))
     assert set(payload["missing_keys"]).isdisjoint(set(payload["warning_keys"]))

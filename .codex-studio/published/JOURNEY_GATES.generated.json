@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:46:21Z",
+  "generated_at": "2026-04-04T18:48:32Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:45:44Z",
+      "at": "2026-04-04T18:46:21Z",
       "state": "fresh",
-      "age_seconds": 37
+      "age_seconds": 131
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:34:10Z",
       "state": "fresh",
-      "age_seconds": 731
+      "age_seconds": 862
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 1248
+      "age_seconds": 1379
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 1248
+      "age_seconds": 1379
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T18:45:44Z",
       "state": "fresh",
-      "age_seconds": 37
+      "age_seconds": 168
     }
   },
   "journeys": [
@@ -797,7 +797,49 @@
               "\"dice_roller\" => new DesktopDialogState(",
               "\"character_roster\" => new DesktopDialogState(",
               "\"dialog.dice_roller\"",
-              "\"dialog.character_roster\""
+              "\"dialog.character_roster\"",
+              "\"diceThreshold\"",
+              "\"diceUtilityLane\"",
+              "\"initiativePreview\"",
+              "\"rosterOpenCount\"",
+              "\"rosterOpsLane\"",
+              "\"rosterEntries\""
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Presentation/Overview/DialogCoordinator.cs",
+            "must_contain": [
+              "\"derive_initiative\"",
+              "\"diceThreshold\"",
+              "\"initiativePreview\"",
+              "BuildInitiativePreview(dialog)"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Presentation/Shell/CatalogOnlyRulesetShellCatalogResolver.cs",
+            "must_contain": [
+              "WorkflowDefinitionIds.DiceTool",
+              "\"Utility Tooling\"",
+              "[\"dice_roller\"]",
+              "[\"character_roster\"]"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs",
+            "must_contain": [
+              "CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context",
+              "CreateCommandDialog_character_roster_summarizes_open_workspaces"
+            ]
+          },
+          {
+            "repo": "chummer6-ui",
+            "path": "Chummer.Tests/Presentation/DialogCoordinatorTests.cs",
+            "must_contain": [
+              "CoordinateAsync_roll_adds_result_field_to_dice_dialog",
+              "CoordinateAsync_derive_initiative_updates_preview_without_closing_dialog"
             ]
           },
           {

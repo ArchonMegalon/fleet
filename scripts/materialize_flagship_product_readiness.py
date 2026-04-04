@@ -1541,6 +1541,25 @@ def build_flagship_product_readiness_payload(
         for item in (install_journey.get("local_blocking_reasons") or [])
         if str(item).strip()
     ]
+    install_journey_external_proof_requests = [
+        dict(item)
+        for item in (install_journey.get("external_proof_requests") or [])
+        if isinstance(item, dict)
+    ]
+    install_journey_external_proof_request_hosts = sorted(
+        {
+            str(item.get("required_host") or item.get("requiredHost") or "").strip().lower()
+            for item in install_journey_external_proof_requests
+            if str(item.get("required_host") or item.get("requiredHost") or "").strip()
+        }
+    )
+    install_journey_external_proof_request_tuples = sorted(
+        {
+            str(item.get("tuple_id") or item.get("tupleId") or "").strip()
+            for item in install_journey_external_proof_requests
+            if str(item.get("tuple_id") or item.get("tupleId") or "").strip()
+        }
+    )
     build_journey_external_blockers = [
         str(item).strip()
         for item in (build_journey.get("external_blocking_reasons") or [])
@@ -1814,6 +1833,18 @@ def build_flagship_product_readiness_payload(
             ),
             "install_claim_restore_continue_local_blocking_reason_count": len(
                 install_journey_local_blockers
+            ),
+            "install_claim_restore_continue_external_proof_request_count": len(
+                install_journey_external_proof_requests
+            ),
+            "install_claim_restore_continue_external_proof_request_hosts": (
+                install_journey_external_proof_request_hosts
+            ),
+            "install_claim_restore_continue_external_proof_request_tuples": (
+                install_journey_external_proof_request_tuples
+            ),
+            "install_claim_restore_continue_external_proof_requests": (
+                install_journey_external_proof_requests
             ),
             "ui_executable_exit_gate_local_blocking_findings_count": executable_local_blocking_findings_count,
             "install_claim_restore_continue_blocked_by_external_constraints_only": bool(
