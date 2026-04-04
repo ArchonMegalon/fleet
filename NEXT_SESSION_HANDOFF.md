@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-6 travel/offline continuity lane now fail-closes compact `safehouseoffline*` and `mobilesafehouseoffline*` prep shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `6` requires safehouse/travel/offline/mobile continuity proof to stay governed for compact prep queries used in real operator and mobile workflows.
+  - compact safehouse-offline packet/brief forms (`safehouseoffline*`, `mobilesafehouseoffline*`) were not canonicalized or live-audited, leaving a false-negative seam outside existing `traveloffline*`, `mobileoffline*`, and `safehousetravel*` coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for `safehouseofflinepacket(s)`, `safehouseofflinebrief(s)`, `mobilesafehouseofflinepacket(s)`, and `mobilesafehouseofflinebrief(s)` into governed safehouse/offline packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with the new compact forms and negative-token assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` so compact/split/hyphen safehouse-offline and mobile-safehouse-offline forms match governed continuity packets.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes for compact/split/hyphen safehouse-offline and mobile-safehouse-offline forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for all added safehouse-offline shorthand probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `cf349eb6` (`feat(w3-6): fail-close compact safehouse offline prep shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes singular `diary/contact/heat returnloop/returnlane` shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
