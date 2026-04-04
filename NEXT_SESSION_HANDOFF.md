@@ -1,3 +1,36 @@
+## 2026-04-04: follow-up on milestone-2 canonical shipping-locale ordering fail-close in hub-registry (commit and push status)
+
+- Commits landed:
+  - `chummer-hub-registry`: `db12ce5` (`fix(milestone-2): canonicalize localization shipping locale ordering`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry -> fleet/hub-registry`, `ad894ce..db12ce5`).
+- Exact blocker:
+  - none for this repo/branch in this slice.
+
+## 2026-04-04: milestone-2 hub-registry localization release-gate now fail-closes non-canonical shipping locale ordering drift
+
+- Trigger:
+  - hub-registry materializer/verifier enforced locale membership but still accepted reordered `shipping_locales`/`shippingLocales`.
+  - run-services milestone-2 parity audit already required canonical localization ordering semantics; this left a cross-repo drift seam where registry-generated release proof could pass locally but fail downstream parity.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical `REQUIRED_LOCALIZATION_SHIPPING_LOCALES` sequence.
+    - `normalize_ui_localization_release_gate_payload(...)` now fails when `shipping_locales` order deviates from canonical sequence.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - changed `releaseProof.uiLocalizationReleaseGate.shippingLocales` check from set-equivalent comparison to strict canonical order enforcement.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer negative mutation for reordered `shipping_locales` in localization fixture.
+    - added verifier negative mutation for reordered nested `releaseProof.uiLocalizationReleaseGate.shippingLocales` in generated release-channel fixture.
+    - strengthened canonical fixture assertion to require exact `shippingLocales` ordering instead of sorted set-equivalent comparison.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented canonical-order requirement for shipping locale arrays.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected mutation-failure probes include new shipping-locale ordering checks; script exits `0`).
+- Current trusted state:
+  - hub-registry materialization and verification now enforce canonical shipping locale ordering in the same way they already enforce canonical localization acceptance-gate ordering.
+  - milestone-2 localization release-proof sequencing no longer permits set-equivalent shipping locale reorder drift between registry and downstream parity lanes.
+
 ## 2026-04-04: follow-up on W3 `ctl` event/season control shorthand parity slice (commit and push status)
 
 - Commits landed:
