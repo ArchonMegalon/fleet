@@ -54,6 +54,42 @@
   - `chummer6-hub`: local change landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-5 opposition prep lane now fail-closes hyphen/split aliases `op-force` and `op force` across canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-5 opposition prep search already fail-closed compact `opfor`/`opforce`, but hyphen/split user forms (`op-force`, `op force`) were not explicitly canonicalized or script-locked in workspace prep query lanes.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added opposition alias rewrites:
+      - `op + for|force -> opfor`
+      - `opforce -> opfor`
+  - patched service/query tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - added `PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - added `ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=op-force` and `queryText=op%20force`.
+      - added signed-in workspace route checks for `prepQuery=op-force` and `prepQuery=op%20force`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for hyphen `op-force` and split `op force` queries.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded hub live-audit and Playwright marker assertions for `op-force` and `op force`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition prep search now treats compact, hyphen, and split `op-for` forms as one governed lane (`opfor`, `opforce`, `op-force`, `op force`) across service canonicalization, live audit, and Playwright journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `chummer6-hub`: local mirror changes reflect same landed slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes plural diary query aliases `sessionlogs` and `session logs` across prep canonicalization and live API/UI journeys
 
 - Trigger:
