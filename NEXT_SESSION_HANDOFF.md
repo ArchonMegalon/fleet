@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4 aftermath packet synthesis now deduplicates identical package versions to prevent inflated downtime/return counts
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires diary/aftermath return truth to stay governed without payload-repeat inflation.
+  - `CampaignWorkspaceServerPlaneService` still counted repeated identical `AftermathRecapPackageProjection` rows separately in `aftermath` and `campaign_return` packet synthesis.
+  - repeated identical package rows could consume bounded packet slots and overstate downtime/return signal counts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `DeduplicateIdenticalAftermathPackageVersions(...)` and `BuildAftermathRecapPackageDedupeKey(...)`.
+    - applied dedupe before bounded `Take(...)` in:
+      - `BuildAftermathPrepPacket(...)`
+      - `BuildCampaignReturnPrepPacket(...)`
+    - dedupe key is version-safe and scoped to package identity + summary fields + generated timestamp.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `AftermathPacketDeduplicatesIdenticalPackageVersions_WhenPayloadRepeatsSameRow`.
+    - added `CampaignReturnPacketDeduplicatesIdenticalAftermathPackageVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AftermathPacketDeduplicatesIdenticalPackageVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignReturnPacketDeduplicatesIdenticalAftermathPackageVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`247` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 aftermath and campaign-return packet synthesis now resists duplicate-row inflation for identical aftermath package versions.
+  - bounded downtime/return evidence slots now prefer unique package-version truth and remain green with the existing milestone-4/5 campaign workspace + GM ops test rail.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 visual familiarity materializer now supports non-blocking lock posture under concurrent B14 runs
 
 - Trigger:
@@ -48,19 +72,23 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
-## 2026-04-04: milestone-5 prep/event packet synthesis now deduplicates identical roster/prep-launch/travel receipt versions to prevent inflated GM ops counts
+## 2026-04-04: milestone-5 prep/event packet synthesis now deduplicates identical consequence/roster/prep-launch/travel receipt versions to prevent inflated GM ops counts
 
 - Trigger:
   - frontier milestone 5 (`GM operations, opposition packets, roster movement, prep library, and event controls`) requires governed GM packet counts to reflect unique receipt truth, not payload repetition.
-  - `CampaignWorkspaceServerPlaneService` deduplicated change-packet rows but still counted repeated identical `RosterTransferProjection`, `GovernedPrepLaunchProjection`, and `TravelPrefetchReceiptProjection` rows separately in roster/prep/event packet synthesis.
-  - repeated identical rows could consume bounded evidence slots and overstate ops activity (`roster movement`, `prep launch`, `travel prefetch`, and `event-control receipt(s)` totals).
+  - `CampaignWorkspaceServerPlaneService` deduplicated change-packet rows but still counted repeated identical `CampaignConsequenceProjection`, `RosterTransferProjection`, `GovernedPrepLaunchProjection`, and `TravelPrefetchReceiptProjection` rows separately in roster/prep/event packet synthesis.
+  - repeated identical rows could consume bounded evidence slots and overstate ops activity (`relationship/opposition consequences`, `roster movement`, `prep launch`, `travel prefetch`, and `event-control receipt(s)` totals).
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
     - added identity-safe dedupe helpers:
+      - `DeduplicateIdenticalCampaignConsequenceVersions(...)`
       - `DeduplicateIdenticalRosterTransferVersions(...)`
       - `DeduplicateIdenticalPrepLaunchVersions(...)`
       - `DeduplicateIdenticalTravelPrefetchReceiptVersions(...)`
     - applied dedupe before bounded `Take(...)` in:
+      - `BuildOppositionPrepPacket(...)`
+      - `BuildCampaignMemoryPrepPacket(...)`
+      - `BuildCampaignReturnPrepPacket(...)`
       - `BuildRosterMovementPrepPacket(...)`
       - `BuildPrepLaunchOpsPacket(...)`
       - `BuildEventControlPrepPacket(...)`
@@ -70,11 +98,13 @@
     - added `PrepLaunchPacketDeduplicatesIdenticalLaunchVersions_WhenPayloadRepeatsSameRow`.
     - added `TravelPrefetchPacketDeduplicatesIdenticalReceiptVersions_WhenPayloadRepeatsSameRow`.
     - added `EventControlPacketDeduplicatesIdenticalPrepAndTravelReceiptVersions_WhenPayloadRepeatsSameRows`.
+    - added `CampaignReturnPacketDeduplicatesIdenticalRelationshipConsequenceVersions_WhenPayloadRepeatsSameRow`.
+    - added `EventControlPacketDeduplicatesIdenticalConsequenceVersions_WhenPayloadRepeatsSameRow`.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLaunchPacketDeduplicatesIdenticalLaunchVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~TravelPrefetchPacketDeduplicatesIdenticalReceiptVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalPrepAndTravelReceiptVersions_WhenPayloadRepeatsSameRows|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`243` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignReturnPacketDeduplicatesIdenticalRelationshipConsequenceVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalConsequenceVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~PrepLaunchPacketDeduplicatesIdenticalLaunchVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~TravelPrefetchPacketDeduplicatesIdenticalReceiptVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalPrepAndTravelReceiptVersions_WhenPayloadRepeatsSameRows|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`245` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
 - Current trusted state:
-  - milestone-5 GM packet synthesis now resists duplicate-row inflation across roster-transfer, prep-launch, and travel-prefetch receipt families.
+  - milestone-5 GM packet synthesis now resists duplicate-row inflation across consequence, roster-transfer, prep-launch, and travel-prefetch receipt families.
   - bounded prep/event evidence slots now prefer unique version truth, keeping `event-control` and prep-library summaries aligned with governed activity.
 - Push status:
   - pending in this environment (credential-dependent).
