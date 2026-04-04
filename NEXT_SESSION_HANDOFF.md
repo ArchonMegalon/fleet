@@ -1,3 +1,28 @@
+## 2026-04-04: handoff follow-up for W3 compact return/prep query fail-close plus push status
+
+- Trigger:
+  - verification probes already assert compact `nextsessionsreturn*`, `preplaunches`, and `travelprefetches` forms, so canonicalization must fail-close those compact plurals onto the same governed return/prep token lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for `preplaunch`, `preplaunches`, `travelprefetch`, `travelprefetches`.
+    - added explicit compact `nextsessionsreturn`, `nextsessionsreturns`, `nextsessionsreturnloop(s)`, and `nextsessionsreturnlane(s)` rewrites.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded compact governed packet alias coverage for preplaunch/travelprefetch plural forms.
+    - added `RewriteAliases_CollapsesCompactNextSessionsReturnFormsIntoNextSessionReturnLoopTokens`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingCollapsesCompactPrepLaunchAndTravelPrefetchPluralForms`.
+    - expanded `PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation` with compact `nextsessionsreturn*` assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactNextSessionsReturnFormsIntoNextSessionReturnLoopTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesCompactPrepLaunchAndTravelPrefetchPluralForms" -v minimal` -> PASS (`4 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `3330afef` (`feat(w3-4-6): canonicalize compact preplaunch and travelprefetch plurals`).
+  - `chummer6-hub`: `10c25b47` (`feat(w3-4): fail-close compact nextsessions return query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-4/6 prep continuity lane now fail-closes compact plural `preplaunches` and `travelprefetches` forms
 
 - Trigger:
