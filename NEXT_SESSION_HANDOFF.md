@@ -17,6 +17,32 @@
   - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now suppresses synthetic-tuple artifact-mismatch noise for policy-missing Windows/macOS artifacts
+
+- Trigger:
+  - frontier milestones `1` and `3` require per-head packaged-binary diagnostics that are fail-honest and operator-actionable.
+  - when required Windows/macOS tuples were missing from `desktopTupleCoverage` publication, executable-gate validation used synthetic tuple rows (`source=required_tuple_policy_missing_release_artifact`) but still emitted embedded release-artifact mismatch noise (`head/rid/platform mismatch`) that could obscure the actual blocker.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - in both `validate_windows_gate(...)` and `validate_macos_gate(...)`, added synthetic-tuple source detection:
+      - `expected_artifact_source = normalize_token(expected_artifact.get("source"))`
+      - `policy_missing_release_artifact = expected_artifact_source == "required_tuple_policy_missing_release_artifact"`
+    - when a tuple is synthetic/policy-missing, embedded release-artifact mismatch checks are now skipped; tuple-missing/installer-missing/startup-smoke-missing reasons remain fail-honest.
+    - emits `expected_artifact_source` in per-gate evidence for auditability.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - extended `Desktop_executable_gate_surfaces_windows_and_macos_per_head_diagnostics_from_required_tuple_policy_when_release_artifacts_are_missing` to lock the synthetic-source guard markers.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - still expected-fail (`43`) on missing promoted Windows/macOS tuples, with redundant embedded artifact mismatch noise removed.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`4` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with cleaner tuple-missing blocker reasons.
+- Current trusted state:
+  - executable-gate proof remains fail-honest while reducing synthetic-tuple diagnostics noise, improving milestone-3 operator actionability.
+  - real blocker is unchanged: promoted Windows/macOS installer bytes + startup-smoke receipts are still missing from release-channel truth.
+- Push status:
+  - `chummer6-ui`: local commit/push pending for this slice in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 Windows+macOS exit-gate materializers now forbid legacy chummer5a proof-source fallback
 
 - Trigger:
