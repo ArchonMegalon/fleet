@@ -49,6 +49,28 @@
   - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`, `scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 GM-ops unresolved board now prioritizes high-severity blockers ahead of newer low-severity noise
+
+- Trigger:
+  - frontier milestone `5` requires operator lanes to surface the most urgent opposition/event-control blocker first rather than relying on recency luck.
+  - `GmOpsBoardService.GetProjection(...)` ordered unresolved items by event timestamp only, so a newer low-severity open item could outrank an older high-severity threat.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved item synthesis now computes severity once, orders by explicit severity priority (`high` > `medium` > `low`), then recency (`AtUtc`) and stable `EventId`.
+    - added `ResolveSeverityPriority(...)` helper to keep severity ordering deterministic and explicit.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsPrioritizeHighSeverityBeforeNewerLowSeverity`.
+    - added service helper overload to seed a shared `SessionLedgerService` in tests.
+    - converted the new test to async/await to satisfy xUnit analyzer guidance (`xUnit1031`).
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GetProjection_UnresolvedItemsPrioritizeHighSeverityBeforeNewerLowSeverity|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`15` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM-ops unresolved board no longer demotes older high-severity threat items behind newer low-severity checklist noise.
+  - event-control/opposition readiness in milestone-5 board projection now follows explicit severity-first ranking, consistent with other campaign return and operator priority seams.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`GmOpsBoardService.cs`, `GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 support closures and known-issue rows now prioritize reporter action before verify-fix and background cases
 
 - Trigger:
