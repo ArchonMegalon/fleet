@@ -36,6 +36,43 @@
 - Current trusted state:
   - event/season control prep retrieval now fail-closes both singular and plural compact `ctl` forms (`eventctl`/`eventctls`, `seasonctl`/`seasonctls`) across canonicalization, GM domain routing, API audit, and workspace browser journey proof.
 
+## 2026-04-04: follow-up on milestone-2 localization locale-summary canonical ordering fail-close in hub-registry (commit and push status)
+
+- Commits landed:
+  - `chummer-hub-registry`: `ffee26b` (`fix(milestone-2): fail-close localization locale-summary ordering`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry -> fleet/hub-registry`, `db12ce5..ffee26b`).
+- Exact blocker:
+  - none for this repo/branch in this slice.
+
+## 2026-04-04: milestone-2 hub-registry localization release gate now fail-closes non-canonical locale-summary ordering drift
+
+- Trigger:
+  - milestone-2 localization proof already fail-closed canonical ordering for `shippingLocales` and `acceptanceGates`, but `localeSummary` row ordering remained reorder-tolerant.
+  - this left a deterministic-proof seam where release-channel payloads could preserve locale membership yet drift row order, weakening canonical flagship localization sequencing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `locale_summary` normalization now rejects duplicate normalized locale ids.
+    - added strict `locale_summary` membership checks against canonical shipping locales (no missing/extra rows).
+    - added fail-close check requiring input `locale_summary` order to match canonical shipping locale order.
+    - canonical output `localeSummary` is now emitted in canonical shipping locale order.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added fail-close check requiring nested `releaseProof.uiLocalizationReleaseGate.localeSummary` row order to match canonical shipping locale order.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer negative mutation for non-canonical `locale_summary` ordering.
+    - added verifier negative mutation for non-canonical nested `releaseProof.uiLocalizationReleaseGate.localeSummary` ordering.
+    - strengthened canonical fixture assertions to require exact locale order in `localeSummary`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented canonical-order requirement for `localeSummary` rows aligned to canonical shipping locales.
+  - patched `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`:
+    - refreshed nested localization `localeSummary` row order to canonical sequence.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected mutation-failure probes include new locale-summary ordering checks; script exits `0`).
+- Current trusted state:
+  - hub-registry materialization and verification now enforce canonical `localeSummary` ordering in the same fail-close posture as canonical shipping locales and acceptance-gate ordering.
+  - milestone-2 localization release-proof sequencing can no longer pass with set-equivalent but non-canonical locale-summary row ordering.
+
 ## 2026-04-04: follow-up on milestone-2 canonical shipping-locale ordering fail-close in hub-registry (commit and push status)
 
 - Commits landed:
