@@ -13,11 +13,12 @@
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer6-hub` / `chummer.run-services`: `1c3fb10b` (`feat(w3-6): render per-device travel cache status cues`).
-  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+  - `fleet`: `7f7fbe3` (`docs: add w3 travel cache status visibility follow-on slice`).
 - Push attempts:
-  - not attempted yet for this follow-on slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this landed follow-on slice; pushability depends on GitHub credential availability in this environment.
+  - none for this landed follow-on slice; remote push is blocked in this environment by missing GitHub credential material.
 
 ## 2026-04-04: milestone-6 travel mode now exposes explicit fresh-vs-stale cache freshness proof across workspace server plane and account surface
 
