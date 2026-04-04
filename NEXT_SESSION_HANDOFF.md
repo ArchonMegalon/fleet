@@ -42,6 +42,41 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
 
+## 2026-04-04: milestone-1 install lane now has proof-backed quarantine promotion + release-manifest sanitizer bridge (unblocks truthful tuple promotion once external Windows/macOS smoke receipts arrive)
+
+- Trigger:
+  - W1 install lane remained blocked on missing promoted Windows/macOS installer tuples; payload-valid candidates already existed in quarantine, but promotion was still manual and easy to drift.
+  - `chummer6-ui/scripts/generate-releases-manifest.sh` also regressed against stricter `chummer6-hub-registry` materializer contract checks by forwarding unsanitized local proof/localization payloads with extra keys.
+- Landed:
+  - added `/docker/chummercomplete/chummer6-ui/scripts/promote-proof-backed-quarantined-installers.py`:
+    - scans `.codex-studio/quarantine` and `Docker/Downloads/quarantine` for installer candidates (`head/rid/platform/arch` parsed from filename).
+    - requires matching startup-smoke receipt per tuple under startup-smoke root.
+    - fail-closes on receipt contract mismatch (`status`, `readyCheckpoint`, `head/platform/rid/arch`, `hostClass`, `operatingSystem`, channel/version when provided, freshness window, and `artifactDigest` byte binding).
+    - only copies candidate into active `Docker/Downloads/files` when proof is valid; otherwise emits explicit skip reasons.
+    - writes audit artifact `.codex-studio/published/QUARANTINED_INSTALLER_PROMOTION.generated.json`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh`:
+    - wired proof-backed quarantine promotion step (default on via `CHUMMER_PROMOTE_PROOF_BACKED_QUARANTINED_INSTALLERS=1`).
+    - added proof payload sanitizer before calling registry materializer so extra local-proof keys do not trip strict `releaseProof` parsing.
+    - added localization gate sanitizer (including strict `localeSummary` row-key trimming) before materializer handoff so strict nested-key checks pass cleanly.
+    - added EXIT cleanup for temporary sanitized payload files.
+  - documented pipeline behavior in `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - explicit note that manifest generation now performs proof-backed quarantine promotion with auditable output.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && python3 -m py_compile scripts/promote-proof-backed-quarantined-installers.py` -> PASS.
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_RELEASE_REQUIRE_COMPLETE_DESKTOP_COVERAGE=0 bash scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (still truthful: missing Windows/macOS startup-smoke proof + tuple promotion).
+  - generated audit output shows truthful skip reasons:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/QUARANTINED_INSTALLER_PROMOTION.generated.json`
+    - macOS/Windows candidate installers skipped because matching startup-smoke receipts are missing.
+- Commits landed:
+  - `chummer6-ui`: _pending local commit in this session_ (`feat(w1-1): add proof-backed quarantine installer promotion and manifest payload sanitizers`).
+  - `chummer6-hub-registry`: _pending local commit in this session_ (`docs(w1-1): document proof-backed quarantine promotion in release pipeline`).
+- Push attempts:
+  - not attempted yet in this session.
+- Exact blocker:
+  - truthful W1 tuple completion still requires real Windows/macOS startup-smoke receipts for promoted bytes; current host is Linux-only and cannot execute native Windows/macOS installer smoke locally.
+
 ## 2026-04-04: milestone-1 install journey stale-proof seam closed for hub/mobile local release receipts
 
 - Trigger:
