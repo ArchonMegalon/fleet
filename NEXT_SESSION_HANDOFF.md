@@ -41,6 +41,45 @@
   - `chummer.run-services`: local changes landed in this slice (`CampaignWorkspaceServerPlaneService.cs`, `GmOpsBoardService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`, `GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-2 registry localization gate parser now fail-closes conflicting snake/camel alias payloads across materialize and verify
+
+- Trigger:
+  - milestone-2 release-proof alias hardening already fail-closed top-level and nested core proof aliases (`generatedAt`, `baseUrl`, `journeysPassed`, `proofRoutes`), but `releaseProof.uiLocalizationReleaseGate` still used first-present fallback for many snake/camel alias pairs.
+  - this left a drift seam where conflicting alias payloads inside localization-gate fields could pass depending on key precedence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - switched localization-gate alias reads from `first_present(...)` to `resolve_alias_value(...)` for:
+      - `defaultKeyCount/default_key_count`
+      - `explicitFallbackRuntime/explicit_fallback_runtime`
+      - `signoffSmokeRunnerStatus/signoff_smoke_runner_status`
+      - `shippingLocales/shipping_locales`
+      - `acceptanceGates/acceptance_gates`
+      - `domainCoverage/domain_coverage`
+      - `localeDomainCoverage/locale_domain_coverage`
+      - `blockingFindingsCount/blocking_findings_count`
+      - `blockingFindings/blocking_findings`
+      - `translationBacklogFindingsCount/translation_backlog_findings_count`
+      - `translationBacklogFindings/translation_backlog_findings`
+      - `localeSummary/locale_summary`
+      - locale-summary row aliases (`untranslatedKeyCount`, `overrideCount`, `minimumOverrideCount`, `missingReleaseSeedKeys`, `legacyXmlPresent`, `legacyDataXmlPresent`).
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - mirrored fail-close alias resolution for the same localization-gate field families during projection.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added verifier mutations asserting rejection for:
+      - conflicting `defaultKeyCount/default_key_count`
+      - conflicting `blockingFindingsCount/blocking_findings_count`
+      - conflicting `localeSummary/locale_summary`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - localization-gate alias handling now fail-closes conflicting snake/camel payloads across both materialization and verification instead of silently accepting first-present keys.
+  - milestone-2 release-proof localization evidence is less vulnerable to key-order-dependent false-green outcomes.
+- Push status:
+  - `chummer-hub-registry`: local changes landed in this slice (`scripts/verify_public_release_channel.py`, `scripts/materialize_public_release_channel.py`, `scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4/5 continuity and GM-ops prep lanes now script-lock plural return aliases `returnloops`, `nextsessionreturns`, and `sessionreturns`
 
 - Trigger:
