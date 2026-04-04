@@ -1,3 +1,30 @@
+## 2026-04-04: follow-up on milestone-2 localization locale-set script-lock commit and push status
+
+- Commits landed:
+  - `chummer6-hub`: `0b896b39` (`fix(milestone-2): script-lock localization locale-set gate branches`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 Hub verify now fail-closes localization shipping-locale, acceptance-gate, and per-locale domain-status drift
+
+- Trigger:
+  - parity audit already enforced localization flagship gate branches for `shippingLocales`, `acceptanceGates`, and `localeDomainCoverage`.
+  - verify mutation coverage did not execute those branches, leaving a script-lock seam where regressions could pass `scripts/ai/verify.sh` without exercising that debt.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation for incomplete `releaseProof.uiLocalizationReleaseGate.shippingLocales` and explicit rejection assertion.
+    - added mutation for incomplete `releaseProof.uiLocalizationReleaseGate.acceptanceGates` and explicit rejection assertion.
+    - added mutation for non-passing `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage` per-locale domain status and explicit rejection assertion.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-lock assertions for all three new reject markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (new locale-set/domain-status mutations execute and fail-close).
+- Current trusted state:
+  - milestone-2 localization verify now script-locks flagship locale-set completeness, required acceptance gate IDs, and per-locale domain pass status semantics inside `uiLocalizationReleaseGate`.
+
 ## 2026-04-04: follow-up on localization finding-count integer script-lock commit and push status
 
 - Commits landed:
