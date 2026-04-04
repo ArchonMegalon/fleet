@@ -1,3 +1,29 @@
+## 2026-04-04: follow-up on milestone-2 release-channel drift rematerialization broadening in chummer6-hub (commit and push status)
+
+- Commits landed:
+  - `chummer6-hub`: `08099d9b` (`fix(milestone-2): retry parity audit on all release-channel drift markers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-2 hub parity verify now retries workflow-gate rematerialization for all release-channel drift variants, not only generated_at drift
+
+- Trigger:
+  - `chummer6-hub/scripts/ai/verify.sh` only retried UI workflow-gate rematerialization when `scripts/audit-ui-parity.sh` failed on `milestone-2 workflow/visual release-channel generated_at drift`.
+  - parity can also fail on sibling drift markers (`ids`, `versions`, `nested receipt paths`) that usually share the same stale workflow-gate root cause, but those previously failed-close without one-time self-heal.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - replaced the single drift marker check with a prefix match on `milestone-2 workflow/visual release-channel `.
+    - verify now performs one rematerialization retry for any milestone-2 release-channel drift marker before failing.
+    - updated retry note text to reflect broader release-channel drift handling.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs` script-lock assertions so verify must keep the broadened retry marker prefix and updated retry note.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 hub parity verify now auto-recovers once from the full release-channel drift marker family and still fail-closes on non-drift parity failures.
+
 ## 2026-04-04: follow-up on W3 league/community `ctrls` shorthand script-lock closure (commit and push status)
 
 - Commits landed:
