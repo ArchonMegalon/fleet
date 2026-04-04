@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-1/3 release projection now fail-closes future-dated startup-smoke receipts in Fleet wrapper selection
+
+- Trigger:
+  - W1 milestones `1` and `3` require install/update/recovery proof receipts that cannot lie.
+  - Fleet's `materialize_chummer_release_registry_projection.py` accepted startup-smoke receipts whose timestamps were far in the future because age delta was clamped with `max(0, ...)`, letting implausible receipts count as fresh during startup-smoke directory resolution.
+  - this created an integrity seam where skewed/fabricated future receipts could influence release projection wrapper behavior before registry verification.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_chummer_release_registry_projection.py`:
+    - added `STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 60`.
+    - fail-closed `has_startup_smoke_receipts(...)` when receipt timestamp is more than 60 seconds in the future.
+  - patched `/docker/fleet/tests/test_materialize_chummer_release_registry_projection.py`:
+    - added `test_resolve_startup_smoke_dir_ignores_future_dated_receipts`.
+    - removed date-rot in existing tests by replacing hardcoded receipt timestamps with dynamic UTC-relative fixture timestamps.
+  - rematerialized completion-review frontier mirrors via supervisor derive:
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_chummer_release_registry_projection.py` -> PASS (`5 passed`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_chummer_release_registry_projection.py tests/test_materialize_chummer_release_registry_projection.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor/shard-1 --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (frontier still blocked only on required external host tuple proof capture).
+- Push attempts:
+  - not attempted in this slice.
+- Exact blocker:
+  - missing native-host promoted installer artifact + startup-smoke receipts for required release-channel tuples:
+    - `avalonia:osx-arm64:macos`
+    - `blazor-desktop:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:win-x64:windows`
+
 ## 2026-04-04: milestone-4 continuity lane now fail-closes singular `diary/contact/heat return*` packet and brief shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:

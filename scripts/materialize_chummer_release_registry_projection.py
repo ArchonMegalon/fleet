@@ -25,6 +25,7 @@ STARTUP_SMOKE_FALLBACK_DIRS = (
 )
 REGISTRY_MATERIALIZER = REGISTRY_ROOT / "scripts" / "materialize_public_release_channel.py"
 STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
+STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 60
 UTC = dt.timezone.utc
 PASS_STATUSES = {"pass", "passed", "ready"}
 STARTUP_SMOKE_REQUIRED_READY_CHECKPOINT = "pre_ui_event_loop"
@@ -88,6 +89,9 @@ def has_startup_smoke_receipts(path: Path | None, *, max_age_seconds: int = STAR
             continue
         recorded_at = startup_smoke_recorded_at(payload)
         if recorded_at is None:
+            continue
+        future_skew_seconds = int((recorded_at - now).total_seconds())
+        if future_skew_seconds > STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS:
             continue
         if max_age_seconds >= 0:
             age_seconds = max(0, int((now - recorded_at).total_seconds()))
