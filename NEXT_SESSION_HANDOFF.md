@@ -27,9 +27,9 @@
   - release-channel materialization and verification now enforce artifact-level desktop install identity (`channelId/channel/version/releaseVersion`) at the registry source, and UI-side canonical release generation applies the same normalization when materializing local canonical manifests.
   - executable gate evidence no longer reports missing artifact version metadata for promoted Linux installer tuples in current registry truth.
 - Push status:
-  - `chummer6-ui`: local changes in this slice (commit/push not executed in this run).
-  - `chummer-hub-registry`: local changes in this slice (commit/push not executed in this run).
-  - `fleet`: handoff updated locally in this slice (commit/push not executed in this run).
+  - `chummer6-ui`: committed (`ed96d0b3`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `chummer-hub-registry`: committed and pushed (`15e6d15` -> `fleet/hub-registry`).
+  - `fleet`: handoff committed (`8418dad`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for unexpected `releaseProof.proofRoutes` and duplicate `releaseProof.journeysPassed` ids
 
