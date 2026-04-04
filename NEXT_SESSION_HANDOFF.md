@@ -27,6 +27,36 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials; remaining executable-gate blockers are external Windows/macOS tuple + host-capability gaps.
 
+## 2026-04-04: milestone-2 parity audit now fail-closes unexpected `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage` locale entries, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` needs deterministic flagship proof receipts, but `scripts/audit-ui-parity.sh` only checked `localeDomainCoverage` for missing shipping locales and locale/domain status values.
+  - this left a fail-open seam where extra locale keys could ride in nested release proof receipts without parity audit failure.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - `releaseProof.uiLocalizationReleaseGate.localeDomainCoverage` now fail-closes unexpected locale keys outside canonical shipping locales.
+    - added fail-close marker:
+      - `release-channel nested receipt releaseProof.uiLocalizationReleaseGate.localeDomainCoverage has unexpected locales`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active mutation probe that injects `es-es` into `localeDomainCoverage` and requires parity audit fail-close.
+    - added fail-close verifier marker:
+      - `verify gate failed: parity audit should reject unexpected releaseProof.uiLocalizationReleaseGate.localeDomainCoverage locales.`
+  - patched script-lock tests:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
+    - pinned new parity-audit marker and verify mutation marker.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected unexpected-locale mutation fail-close log).
+- Commits landed:
+  - `chummer6-hub`: pending in this slice.
+  - `fleet`: pending in this slice.
+- Push attempts:
+  - not attempted yet in this slice.
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes non-canonical `releaseProof.uiLocalizationReleaseGate.localeSummary` row ordering, with active verify mutation coverage
 
 - Trigger:
