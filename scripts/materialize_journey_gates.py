@@ -842,12 +842,21 @@ def evaluate_journey(
             for item in external_proof_requests
             if str(item.get("tuple_id") or "").strip()
         }
+
+        def _is_case_backed_packet(packet: Dict[str, Any]) -> bool:
+            # Backward compatibility: older packets do not include support_case_backed and
+            # are support-case-backed by default.
+            if "support_case_backed" not in packet:
+                return True
+            return bool(packet.get("support_case_backed"))
+
         for index, packet in enumerate(packets, start=1):
             packet_id = str(packet.get("packet_id") or "").strip() or f"packet#{index}"
             install_truth_state = str(packet.get("install_truth_state") or "").strip().lower()
             install_diagnosis = packet.get("install_diagnosis")
             fix_confirmation = packet.get("fix_confirmation")
             recovery_path = packet.get("recovery_path")
+            case_backed = _is_case_backed_packet(packet)
             if not install_truth_state:
                 support_packet_contract_violations.append(
                     f"support packet {packet_id} is missing install_truth_state."
@@ -880,7 +889,8 @@ def evaluate_journey(
                         f"support packet {packet_id} is missing boolean install_diagnosis.external_proof_required."
                     )
                 elif external_proof_required:
-                    support_external_proof_required_count += 1
+                    if case_backed:
+                        support_external_proof_required_count += 1
                     if not isinstance(external_proof_request, dict):
                         support_packet_contract_violations.append(
                             f"support packet {packet_id} is missing install_diagnosis.external_proof_request."
@@ -1001,6 +1011,29 @@ def evaluate_journey(
                                         support_packet_contract_violations.append(
                                             f"support packet {packet_id} install_diagnosis.external_proof_request.{required_key} must match release-channel tuple truth '{expected_value}' but was '{actual_value}'."
                                         )
+
+                                try:
+                                    actual_tuple_entry_count = int(
+                                        external_proof_request.get("tuple_entry_count")
+                                    )
+                                except (TypeError, ValueError):
+                                    actual_tuple_entry_count = -1
+                                expected_tuple_entry_count = int(expected_request.get("tuple_entry_count") or 0)
+                                if actual_tuple_entry_count != expected_tuple_entry_count:
+                                    support_packet_contract_violations.append(
+                                        "support packet "
+                                        f"{packet_id} install_diagnosis.external_proof_request.tuple_entry_count "
+                                        f"must match release-channel tuple truth {expected_tuple_entry_count!r} but was {actual_tuple_entry_count!r}."
+                                    )
+
+                                actual_tuple_unique = bool(external_proof_request.get("tuple_unique"))
+                                expected_tuple_unique = bool(expected_request.get("tuple_unique"))
+                                if actual_tuple_unique != expected_tuple_unique:
+                                    support_packet_contract_violations.append(
+                                        "support packet "
+                                        f"{packet_id} install_diagnosis.external_proof_request.tuple_unique "
+                                        f"must match release-channel tuple truth {expected_tuple_unique!r} but was {actual_tuple_unique!r}."
+                                    )
 
                                 actual_required_proofs = sorted(
                                     {
@@ -1141,6 +1174,7 @@ def evaluate_journey(
                 .strip()
                 .lower()
                 for item in packets
+                if _is_case_backed_packet(item)
                 if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ]
         )
@@ -1155,6 +1189,7 @@ def evaluate_journey(
             [
                 str((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id") or "").strip()
                 for item in packets
+                if _is_case_backed_packet(item)
                 if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ]
         )

@@ -1,10 +1,361 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-04T20:19:23Z",
-  "packets": [],
+  "generated_at": "2026-04-04T21:53:19Z",
+  "packets": [
+    {
+      "affected_canon_files": [],
+      "arch": "",
+      "change_class": "type_b",
+      "design_impact_suspected": false,
+      "exit_condition": "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, then regenerate release-channel truth.",
+      "fix_confirmation": {
+        "fixed_channel": "",
+        "fixed_version": "",
+        "installed_version": "",
+        "reporter_verification_state": "",
+        "state": "no_fix_recorded",
+        "update_required": false
+      },
+      "fixed_channel": "",
+      "fixed_version": "",
+      "head_id": "avalonia",
+      "install_diagnosis": {
+        "case_channel_matches_registry": true,
+        "case_fixed_version_matches_registry_release": false,
+        "case_installed_version": "",
+        "case_tuple_id": "avalonia:osx-arm64:macos",
+        "case_version_matches_registry_release": false,
+        "external_proof_request": {
+          "channel_id": "docker",
+          "expected_artifact_id": "avalonia-osx-arm64-installer",
+          "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+          "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+          "proof_capture_commands": [
+            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+          ],
+          "required_host": "macos",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "startup_smoke_receipt_contract": {
+            "head_id": "avalonia",
+            "host_class_contains": "macos",
+            "platform": "macos",
+            "ready_checkpoint": "pre_ui_event_loop",
+            "rid": "osx-arm64",
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ]
+          },
+          "tuple_entry_count": 1,
+          "tuple_id": "avalonia:osx-arm64:macos",
+          "tuple_unique": true
+        },
+        "external_proof_required": true,
+        "fix_availability_summary": "Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf.",
+        "promoted_artifact_id": "",
+        "promoted_tuple_id": "",
+        "registry_channel_id": "docker",
+        "registry_release_channel_status": "published",
+        "registry_release_proof_status": "passed",
+        "registry_release_version": "local-docker",
+        "registry_rollout_state": "coverage_incomplete",
+        "registry_supportability_state": "review_required",
+        "tuple_present_on_promoted_shelf": false
+      },
+      "install_truth_state": "tuple_not_on_promoted_shelf",
+      "installation_id": "",
+      "installed_version": "",
+      "kind": "external_proof_request",
+      "packet_id": "support_packet_e9342e86aa33",
+      "packet_kind": "external_proof_request",
+      "platform": "macos",
+      "primary_lane": "ops",
+      "reason": "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke evidence from a macos host.",
+      "recovery_path": {
+        "action_id": "open_downloads",
+        "href": "/downloads",
+        "reason": "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the required host receipts land."
+      },
+      "release_channel": "docker",
+      "status": "awaiting_evidence",
+      "summary": "Missing promoted installer/startup-smoke proof for avalonia:osx-arm64:macos.",
+      "support_case_backed": false,
+      "target_repo": "chummer6-ui",
+      "title": "Capture desktop tuple proof for avalonia:osx-arm64:macos"
+    },
+    {
+      "affected_canon_files": [],
+      "arch": "",
+      "change_class": "type_b",
+      "design_impact_suspected": false,
+      "exit_condition": "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, then regenerate release-channel truth.",
+      "fix_confirmation": {
+        "fixed_channel": "",
+        "fixed_version": "",
+        "installed_version": "",
+        "reporter_verification_state": "",
+        "state": "no_fix_recorded",
+        "update_required": false
+      },
+      "fixed_channel": "",
+      "fixed_version": "",
+      "head_id": "avalonia",
+      "install_diagnosis": {
+        "case_channel_matches_registry": true,
+        "case_fixed_version_matches_registry_release": false,
+        "case_installed_version": "",
+        "case_tuple_id": "avalonia:win-x64:windows",
+        "case_version_matches_registry_release": false,
+        "external_proof_request": {
+          "channel_id": "docker",
+          "expected_artifact_id": "avalonia-win-x64-installer",
+          "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+          "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+          "proof_capture_commands": [
+            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+          ],
+          "required_host": "windows",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "startup_smoke_receipt_contract": {
+            "head_id": "avalonia",
+            "host_class_contains": "windows",
+            "platform": "windows",
+            "ready_checkpoint": "pre_ui_event_loop",
+            "rid": "win-x64",
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ]
+          },
+          "tuple_entry_count": 1,
+          "tuple_id": "avalonia:win-x64:windows",
+          "tuple_unique": true
+        },
+        "external_proof_required": true,
+        "fix_availability_summary": "Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf.",
+        "promoted_artifact_id": "",
+        "promoted_tuple_id": "",
+        "registry_channel_id": "docker",
+        "registry_release_channel_status": "published",
+        "registry_release_proof_status": "passed",
+        "registry_release_version": "local-docker",
+        "registry_rollout_state": "coverage_incomplete",
+        "registry_supportability_state": "review_required",
+        "tuple_present_on_promoted_shelf": false
+      },
+      "install_truth_state": "tuple_not_on_promoted_shelf",
+      "installation_id": "",
+      "installed_version": "",
+      "kind": "external_proof_request",
+      "packet_id": "support_packet_6abe9309308a",
+      "packet_kind": "external_proof_request",
+      "platform": "windows",
+      "primary_lane": "ops",
+      "reason": "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke evidence from a windows host.",
+      "recovery_path": {
+        "action_id": "open_downloads",
+        "href": "/downloads",
+        "reason": "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the required host receipts land."
+      },
+      "release_channel": "docker",
+      "status": "awaiting_evidence",
+      "summary": "Missing promoted installer/startup-smoke proof for avalonia:win-x64:windows.",
+      "support_case_backed": false,
+      "target_repo": "chummer6-ui",
+      "title": "Capture desktop tuple proof for avalonia:win-x64:windows"
+    },
+    {
+      "affected_canon_files": [],
+      "arch": "",
+      "change_class": "type_b",
+      "design_impact_suspected": false,
+      "exit_condition": "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, then regenerate release-channel truth.",
+      "fix_confirmation": {
+        "fixed_channel": "",
+        "fixed_version": "",
+        "installed_version": "",
+        "reporter_verification_state": "",
+        "state": "no_fix_recorded",
+        "update_required": false
+      },
+      "fixed_channel": "",
+      "fixed_version": "",
+      "head_id": "blazor-desktop",
+      "install_diagnosis": {
+        "case_channel_matches_registry": true,
+        "case_fixed_version_matches_registry_release": false,
+        "case_installed_version": "",
+        "case_tuple_id": "blazor-desktop:osx-arm64:macos",
+        "case_version_matches_registry_release": false,
+        "external_proof_request": {
+          "channel_id": "docker",
+          "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
+          "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+          "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+          "proof_capture_commands": [
+            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+          ],
+          "required_host": "macos",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "startup_smoke_receipt_contract": {
+            "head_id": "blazor-desktop",
+            "host_class_contains": "macos",
+            "platform": "macos",
+            "ready_checkpoint": "pre_ui_event_loop",
+            "rid": "osx-arm64",
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ]
+          },
+          "tuple_entry_count": 1,
+          "tuple_id": "blazor-desktop:osx-arm64:macos",
+          "tuple_unique": true
+        },
+        "external_proof_required": true,
+        "fix_availability_summary": "Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf.",
+        "promoted_artifact_id": "",
+        "promoted_tuple_id": "",
+        "registry_channel_id": "docker",
+        "registry_release_channel_status": "published",
+        "registry_release_proof_status": "passed",
+        "registry_release_version": "local-docker",
+        "registry_rollout_state": "coverage_incomplete",
+        "registry_supportability_state": "review_required",
+        "tuple_present_on_promoted_shelf": false
+      },
+      "install_truth_state": "tuple_not_on_promoted_shelf",
+      "installation_id": "",
+      "installed_version": "",
+      "kind": "external_proof_request",
+      "packet_id": "support_packet_053512d42784",
+      "packet_kind": "external_proof_request",
+      "platform": "macos",
+      "primary_lane": "ops",
+      "reason": "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke evidence from a macos host.",
+      "recovery_path": {
+        "action_id": "open_downloads",
+        "href": "/downloads",
+        "reason": "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the required host receipts land."
+      },
+      "release_channel": "docker",
+      "status": "awaiting_evidence",
+      "summary": "Missing promoted installer/startup-smoke proof for blazor-desktop:osx-arm64:macos.",
+      "support_case_backed": false,
+      "target_repo": "chummer6-ui",
+      "title": "Capture desktop tuple proof for blazor-desktop:osx-arm64:macos"
+    },
+    {
+      "affected_canon_files": [],
+      "arch": "",
+      "change_class": "type_b",
+      "design_impact_suspected": false,
+      "exit_condition": "Publish the promoted installer artifact and a passing startup-smoke receipt for the tuple, then regenerate release-channel truth.",
+      "fix_confirmation": {
+        "fixed_channel": "",
+        "fixed_version": "",
+        "installed_version": "",
+        "reporter_verification_state": "",
+        "state": "no_fix_recorded",
+        "update_required": false
+      },
+      "fixed_channel": "",
+      "fixed_version": "",
+      "head_id": "blazor-desktop",
+      "install_diagnosis": {
+        "case_channel_matches_registry": true,
+        "case_fixed_version_matches_registry_release": false,
+        "case_installed_version": "",
+        "case_tuple_id": "blazor-desktop:win-x64:windows",
+        "case_version_matches_registry_release": false,
+        "external_proof_request": {
+          "channel_id": "docker",
+          "expected_artifact_id": "blazor-desktop-win-x64-installer",
+          "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+          "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
+          "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+          "proof_capture_commands": [
+            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe blazor-desktop win-x64 Chummer.Blazor.Desktop.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+          ],
+          "required_host": "windows",
+          "required_proofs": [
+            "promoted_installer_artifact",
+            "startup_smoke_receipt"
+          ],
+          "startup_smoke_receipt_contract": {
+            "head_id": "blazor-desktop",
+            "host_class_contains": "windows",
+            "platform": "windows",
+            "ready_checkpoint": "pre_ui_event_loop",
+            "rid": "win-x64",
+            "status_any_of": [
+              "pass",
+              "passed",
+              "ready"
+            ]
+          },
+          "tuple_entry_count": 1,
+          "tuple_id": "blazor-desktop:win-x64:windows",
+          "tuple_unique": true
+        },
+        "external_proof_required": true,
+        "fix_availability_summary": "Do not send fixed notices until required desktop tuple coverage is complete for the promoted shelf.",
+        "promoted_artifact_id": "",
+        "promoted_tuple_id": "",
+        "registry_channel_id": "docker",
+        "registry_release_channel_status": "published",
+        "registry_release_proof_status": "passed",
+        "registry_release_version": "local-docker",
+        "registry_rollout_state": "coverage_incomplete",
+        "registry_supportability_state": "review_required",
+        "tuple_present_on_promoted_shelf": false
+      },
+      "install_truth_state": "tuple_not_on_promoted_shelf",
+      "installation_id": "",
+      "installed_version": "",
+      "kind": "external_proof_request",
+      "packet_id": "support_packet_2042904251b0",
+      "packet_kind": "external_proof_request",
+      "platform": "windows",
+      "primary_lane": "ops",
+      "reason": "Release-blocking desktop tuple proof is waiting on promoted installer bytes and startup-smoke evidence from a windows host.",
+      "recovery_path": {
+        "action_id": "open_downloads",
+        "href": "/downloads",
+        "reason": "The promoted desktop tuple proof is incomplete; stay on the published downloads lane until the required host receipts land."
+      },
+      "release_channel": "docker",
+      "status": "awaiting_evidence",
+      "summary": "Missing promoted installer/startup-smoke proof for blazor-desktop:win-x64:windows.",
+      "support_case_backed": false,
+      "target_repo": "chummer6-ui",
+      "title": "Capture desktop tuple proof for blazor-desktop:win-x64:windows"
+    }
+  ],
   "schema_version": 1,
   "source": {
-    "materialized_count": 0,
+    "case_materialized_count": 0,
+    "materialized_count": 4,
+    "operator_packet_count": 4,
     "reported_count": 0,
     "source_kind": "remote_url"
   },
@@ -14,12 +365,22 @@
     "external_proof_required_case_count": 0,
     "external_proof_required_host_counts": {},
     "external_proof_required_tuple_counts": {},
-    "install_truth_state_counts": {},
-    "lane_counts": {},
-    "needs_human_response": 0,
+    "install_truth_state_counts": {
+      "tuple_not_on_promoted_shelf": 4
+    },
+    "lane_counts": {
+      "ops": 4
+    },
+    "needs_human_response": 4,
     "open_case_count": 0,
-    "owner_repo_counts": {},
-    "status_counts": {},
+    "open_packet_count": 4,
+    "operator_packet_count": 4,
+    "owner_repo_counts": {
+      "chummer6-ui": 4
+    },
+    "status_counts": {
+      "awaiting_evidence": 4
+    },
     "unresolved_external_proof_request_count": 4,
     "unresolved_external_proof_request_host_counts": {
       "macos": 2,
@@ -56,7 +417,9 @@
             "passed",
             "ready"
           ]
-        }
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
       },
       "avalonia:win-x64:windows": {
         "channel_id": "docker",
@@ -84,7 +447,9 @@
             "passed",
             "ready"
           ]
-        }
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
       },
       "blazor-desktop:osx-arm64:macos": {
         "channel_id": "docker",
@@ -112,7 +477,9 @@
             "passed",
             "ready"
           ]
-        }
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
       },
       "blazor-desktop:win-x64:windows": {
         "channel_id": "docker",
@@ -140,7 +507,9 @@
             "passed",
             "ready"
           ]
-        }
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
       }
     },
     "unresolved_external_proof_request_tuple_counts": {
@@ -158,5 +527,150 @@
     "update_required_case_count": 0,
     "update_required_misrouted_case_count": 0,
     "update_required_routed_to_downloads_count": 0
+  },
+  "unresolved_external_proof": {
+    "count": 4,
+    "host_counts": {
+      "macos": 2,
+      "windows": 2
+    },
+    "hosts": [
+      "macos",
+      "windows"
+    ],
+    "specs": {
+      "avalonia:osx-arm64:macos": {
+        "channel_id": "docker",
+        "expected_artifact_id": "avalonia-osx-arm64-installer",
+        "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+        "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+        "proof_capture_commands": [
+          "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+          "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+        ],
+        "required_host": "macos",
+        "required_proofs": [
+          "promoted_installer_artifact",
+          "startup_smoke_receipt"
+        ],
+        "startup_smoke_receipt_contract": {
+          "head_id": "avalonia",
+          "host_class_contains": "macos",
+          "platform": "macos",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "osx-arm64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
+      },
+      "avalonia:win-x64:windows": {
+        "channel_id": "docker",
+        "expected_artifact_id": "avalonia-win-x64-installer",
+        "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+        "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+        "proof_capture_commands": [
+          "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+          "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+        ],
+        "required_host": "windows",
+        "required_proofs": [
+          "promoted_installer_artifact",
+          "startup_smoke_receipt"
+        ],
+        "startup_smoke_receipt_contract": {
+          "head_id": "avalonia",
+          "host_class_contains": "windows",
+          "platform": "windows",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "win-x64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
+      },
+      "blazor-desktop:osx-arm64:macos": {
+        "channel_id": "docker",
+        "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
+        "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+        "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
+        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+        "proof_capture_commands": [
+          "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+          "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+        ],
+        "required_host": "macos",
+        "required_proofs": [
+          "promoted_installer_artifact",
+          "startup_smoke_receipt"
+        ],
+        "startup_smoke_receipt_contract": {
+          "head_id": "blazor-desktop",
+          "host_class_contains": "macos",
+          "platform": "macos",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "osx-arm64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
+      },
+      "blazor-desktop:win-x64:windows": {
+        "channel_id": "docker",
+        "expected_artifact_id": "blazor-desktop-win-x64-installer",
+        "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+        "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
+        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+        "proof_capture_commands": [
+          "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe blazor-desktop win-x64 Chummer.Blazor.Desktop.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+          "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+        ],
+        "required_host": "windows",
+        "required_proofs": [
+          "promoted_installer_artifact",
+          "startup_smoke_receipt"
+        ],
+        "startup_smoke_receipt_contract": {
+          "head_id": "blazor-desktop",
+          "host_class_contains": "windows",
+          "platform": "windows",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "win-x64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
+        },
+        "tuple_entry_count": 1,
+        "tuple_unique": true
+      }
+    },
+    "tuple_counts": {
+      "avalonia:osx-arm64:macos": 1,
+      "avalonia:win-x64:windows": 1,
+      "blazor-desktop:osx-arm64:macos": 1,
+      "blazor-desktop:win-x64:windows": 1
+    },
+    "tuples": [
+      "avalonia:osx-arm64:macos",
+      "avalonia:win-x64:windows",
+      "blazor-desktop:osx-arm64:macos",
+      "blazor-desktop:win-x64:windows"
+    ]
   }
 }
