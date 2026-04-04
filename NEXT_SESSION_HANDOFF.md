@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting `generated_at` timestamp aliases on platform gate receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require per-platform packaged-binary proof that cannot lie.
+  - executable gate freshness checks consumed `generated_at`/`generatedAt` but did not fail-close when both aliases were present and contradictory on Linux/Windows/macOS gate envelopes.
+  - this left a deterministic-proof seam where freshness could be evaluated from one alias while conflicting timestamp metadata remained undetected.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `validate_receipt_freshness(...)` now records `*_generated_at_alias_conflict` evidence and fails closed with `... carries conflicting generated_at/generatedAt alias values.` whenever a receipt envelope has conflicting timestamp aliases.
+    - this applies uniformly to platform gate proof payloads (Linux, Windows, macOS) and other freshness-validated receipts in the executable lane.
+  - patched script-lock compliance tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - added assertions so generated-at alias-conflict fail-close markers remain required in the executable-gate script surface.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Commits landed:
+  - `chummer6-ui`: `be61818a` (`fix(w1): fail-close desktop gate generated_at alias drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `be61818a` remains local-only until auth is restored.
+
 ## 2026-04-04: follow-up on handoff refresh commit for W1 startup-smoke timestamp alias slice (commit and push status)
 
 - Commits landed:
