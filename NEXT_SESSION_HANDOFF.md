@@ -15,6 +15,10 @@
   - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py` -> PASS.
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=7, missing=1`).
   - `cd /docker/fleet && jq '{desktop_client:.coverage.desktop_client, install_external_only:.coverage_details.desktop_client.evidence.install_claim_restore_continue_blocked_by_external_constraints_only, executable_local_blockers:.coverage_details.desktop_client.evidence.ui_executable_exit_gate_local_blocking_findings_count}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`desktop_client: warning`, `install_external_only: true`, `executable_local_blockers: 0`).
+- Commits landed:
+  - `fleet`: `7a95d58` (`fix(w1-3): downgrade external-only desktop blockers to warning`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - remaining install lane closure still depends on native Windows/macOS startup-smoke receipts for promoted installer bytes; this Linux-only host cannot execute those installer smokes locally.
 
@@ -122,6 +126,12 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,blocked_by_external_constraints_only,external_blocking_reasons,local_blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: blocked`, `blocked_by_external_constraints_only: true`, `local_blocking_reasons: []`).
   - `cd /docker/fleet && python3 - <<'PY' ... test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof() ... PY` -> PASS.
+- Commits landed:
+  - `chummer6-ui`: `5f9e6701` (`feat(w1-1): split desktop executable blockers into local vs external`).
+  - `fleet`: `57ac647` (`feat(w1-1): classify install tuple gaps as external-only blockers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - promoted Windows/macOS install tuples remain blocked by missing native startup-smoke receipts for shipped bytes; current host is Linux-only and cannot execute native Windows/macOS installer smoke.
 
