@@ -40286,3 +40286,15 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py ...` -> PASS (`fail; ready=4, warning=4, missing=0`).
 - Exact blocker:
   - install journey remains external-only blocked on native Windows/macOS host proof capture and receipt ingestion for missing promoted tuples.
+
+## 2026-04-04: handoff push retry for support proof-capture command contract slice
+
+- Commits pending push:
+  - `fleet`: `c558b86` (`feat(w1-1-3): project executable host commands for external install proof`).
+  - `fleet`: `5125863` (`docs(handoff): record push status for external proof command slice`).
+  - `fleet`: `206ded2` (`docs(handoff): record second push retry status for external proof slice`).
+  - `fleet`: `cb0984a` (`feat(w1-1-3): enforce support proof-capture command contract`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
