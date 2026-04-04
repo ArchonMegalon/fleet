@@ -19,9 +19,10 @@
 - Commits landed:
   - `chummer.run-services`: `f8cc8dbc` (`test(w3): script-lock plural postmortem/session/run continuity journeys`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - pending push attempt.
+  - local environment lacks configured GitHub HTTPS credentials, so both commits remain local-only until auth is restored.
 
 ## 2026-04-04: milestone-1/3 executable gate now tolerates bounded startup-smoke completed/recorded timestamp jitter so Linux promoted-head proof no longer false-fails on installer receipts
 
