@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes permissive flagship desktop-head inventory parsing from flagship receipt
+
+- Trigger:
+  - frontier milestones `1` and `3` require per-head release proof contracts that cannot normalize malformed flagship head inventory metadata.
+  - executable gate still parsed flagship `desktopHeads` / `desktopHead` via permissive token coercion, allowing malformed/non-list inventory values to collapse silently.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - switched flagship head inventory parsing to strict `normalize_required_token_list(...)` handling under `flagship.desktop_heads`.
+    - `desktopHeads` non-list shape drift and malformed entries now fail-close with explicit reasons and normalized evidence output.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock strict flagship head-inventory parsing markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only.
+- Current trusted state:
+  - flagship required desktop-head inventory now fail-closes malformed shape/token drift before cross-gate proof checks.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed release-channel artifacts payload shape
 
 - Trigger:
