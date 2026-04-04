@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-4/5 recap publication linkage now normalizes whitespace-padded ids across workspace and campaign-spine projection lanes
+
+- Trigger:
+  - frontier milestones `4` and `5` require diary/aftermath return and GM ops publication posture to stay one governed lane even when projection ids arrive with formatting drift.
+  - recap-to-creator-publication joins still used raw `CreatorPublicationId` / `ArtifactId` string lookups in both workspace and campaign-spine projection paths.
+  - whitespace-padded ids could bypass creator-publication linkage, causing stale publication state/trust posture in recap shelf and attached campaign-spine recap projections.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - normalized recap publication/artifact ids before creator-publication filtering and lookup.
+    - workspace context now precomputes normalized recap id sets so publication filtering stays resilient to id formatting drift.
+    - recap artifact dictionary now normalizes keys before grouping and still keeps latest `UpdatedAtUtc` publication row.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - normalized artifact-id grouping and recap lookup path so campaign-spine publication posture matches workspace normalization behavior.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RecapShelfUsesLatestCreatorPublication_WhenRecapPublicationIdHasWhitespacePadding`.
+    - added `CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenRecapArtifactIdHasWhitespacePadding`.
+    - regressions prove whitespace-padded recap ids still link to newest creator publication status/trust/discoverability.
+  - committed in `chummer.run-services`:
+    - `6aa4b4ee` — `Normalize recap publication linkage ids across workspace and spine`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RecapShelfUsesLatestCreatorPublication_WhenRecapPublicationIdHasWhitespacePadding|FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenRecapArtifactIdHasWhitespacePadding" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`281` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 return-loop recap publication posture and milestone-5 GM ops recap posture now tolerate whitespace formatting drift in publication/artifact ids without dropping creator linkage.
+  - recap shelf and campaign-spine attached publication state stay aligned on newest creator-publication trust/status under id formatting drift.
+- Push status:
+  - `chummer.run-services`: commit landed locally (`6aa4b4ee`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes finding-array/count drift in registry verification
 
 - Trigger:
@@ -28,6 +58,26 @@
 - Push status:
   - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `be19dce`).
   - `fleet`: pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-1/3 release manifest generation now fail-closes incomplete desktop platform/head tuple coverage by default
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-truth generation to fail honest when required promoted desktop install tuples are missing.
+  - `scripts/generate-releases-manifest.sh` materialized `RELEASE_CHANNEL.generated.json` before downstream verification, allowing an easy path to produce published-but-incomplete manifests unless a later verifier step was always run.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/scripts/generate-releases-manifest.sh`:
+    - after materialization, the script now runs registry verification directly against the canonical manifest.
+    - complete desktop tuple coverage is required by default during this verification.
+    - added explicit opt-out:
+      - `CHUMMER_RELEASE_REQUIRE_COMPLETE_DESKTOP_COVERAGE` (`1` default; set `0` to bypass completeness requirement for bounded local/dev scenarios).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-releases-manifest.sh` -> FAIL-CLOSE (expected in current workspace): missing required Windows/macOS platform/head tuples in release-channel truth.
+- Current trusted state:
+  - release-manifest generation now enforces tuple-completeness honesty at source instead of relying only on later publish verification stages.
+  - active blocker remains real: current shelf still lacks promoted Windows/macOS install media tuples required by milestone `1`/`3`.
+- Push status:
+  - pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-3 workflow and visual desktop exit-gate receipts now fail-close stale or future-skewed proof inputs
 
