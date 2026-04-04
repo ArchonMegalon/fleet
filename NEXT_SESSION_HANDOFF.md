@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting release-channel alias values for generated timestamp and desktop install artifact identity fields
+
+- Trigger:
+  - frontier milestones `1` and `3` require release-channel, installer, and proof receipts to stay one non-contradictory truth surface.
+  - executable gate already validated field presence and mismatches against promoted channel/version, but still accepted contradictory alias-key payloads by preferring one value (`generated_at/generatedAt`, `channelId/channel`, `version/releaseVersion`) via fallback order.
+  - this left a drift seam where conflicting alias values could pass executable proof while artifacts and channel truth silently diverged.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `generated_at_alias_conflicts(...)` and evidence key `release_channel_generated_at_alias_conflict`.
+    - gate now fail-closes when `release_channel.generated_at` and `release_channel.generatedAt` both exist but disagree.
+    - desktop install artifact normalization now tracks primary/fallback alias fields separately.
+    - added evidence keys `release_channel_desktop_install_artifacts_channel_alias_conflict` and `release_channel_desktop_install_artifacts_version_alias_conflict`.
+    - gate now fail-closes when desktop install artifacts carry conflicting `channelId/channel` or `version/releaseVersion` values.
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+      - expanded marker assertions for the new release-channel generated-at alias conflict and desktop artifact alias-conflict evidence/reason strings.
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+      - expanded migration/compliance marker assertions for the same alias-conflict fail-close contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 executable proof no longer accepts contradictory alias-key release truth for generated timestamp or desktop installer identity fields, so release-channel and per-artifact identity cannot silently diverge behind fallback precedence.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice; commit/push not attempted in this step.
+  - `fleet`: handoff updated locally in this slice.
+
+
 ## 2026-04-04: milestone-5 live journeys now fail-close split/hyphen `gm controls` and `gm ctrl` shorthand across prep-library API and signed-in workspace search
 
 - Trigger:
@@ -83,6 +111,26 @@
   - milestone-1/3 executable proof now rejects publishable+complete channels that advertise non-promoted supportability posture, keeping status, tuple readiness, rollout posture, and supportability posture aligned as one release-truth lane.
 - Push status:
   - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for `releaseProof.uiLocalizationReleaseGate.generatedAt/generated_at` alias conflicts and excessive future skew
+
+- Trigger:
+  - the prior milestone-2 slice added nested `uiLocalizationReleaseGate` parity validation, including stale/future timestamp checks and alias-aware parsing.
+  - verify mutation coverage proved non-object, non-pass, missing timestamp, and stale timestamp branches, but did not explicitly execute nested generatedAt alias-conflict or excessive future-skew branches.
+  - this left two localization-timestamp fail-close paths unproven in the end-to-end Hub verify lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation where `releaseProof.uiLocalizationReleaseGate.generatedAt` and `generated_at` carry conflicting values and asserted parity-audit fail-close.
+    - added mutation where `releaseProof.uiLocalizationReleaseGate.generatedAt` is far-future and asserted parity-audit fail-close for excessive skew.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now includes nested localization generatedAt alias-drift and excessive-future-skew fail-close branches, then completes smoke).
+- Current trusted state:
+  - milestone-2 Hub verify now proves all nested localization timestamp safety branches (missing, invalid-format, stale, alias-drift, and excessive-future-skew) instead of relying on partial mutation evidence.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 Hub parity audit now fail-closes malformed/stale nested `releaseProof.uiLocalizationReleaseGate` payloads in release-channel receipts
