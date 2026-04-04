@@ -57,6 +57,43 @@
 - Exact blocker:
   - no repo-local blocker for this milestone-8 slice; remote push remains blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-6 claimed-device restore planning now exposes explicit cached/stale/offline-action truth
+
+- Trigger:
+  - milestone `6` requires continuity proof to stay explicit while moving between desktop/travel/mobile contexts.
+  - workspace restore already exposed prefetch readiness and install-local boundary notes, but did not project a dedicated cached-vs-stale-vs-offline-action lane for restore planning.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Roaming/RoamingWorkspaceSyncPlanner.cs`:
+    - `RoamingWorkspaceRestorePlan` now includes:
+      - `OfflineTruthSummary`
+      - `OfflineTruthLabels`
+    - planner now synthesizes deterministic restore truth via:
+      - `BuildOfflineTruthSummary(...)`
+      - `BuildOfflineTruthLabels(...)`
+    - restore truth now explicitly states:
+      - cached inventory posture for the target device
+      - stale warning posture when conflict review is active
+      - offline action boundaries (reconnect/read-only/allowed resume)
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Web/wwwroot/index.html`:
+    - added restore render targets:
+      - `id="restore-offline-truth"`
+      - `id="restore-offline-truth-labels"`
+    - wired restore payload binding for:
+      - `payload.offlineTruthSummary`
+      - `payload.offlineTruthLabels`
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - roaming planner and restore-service checks now fail-close on offline-truth summary + labels.
+    - conflict-path checks now fail-close on stale warning language in restore truth.
+    - index shell accessibility/source-binding checks now require restore offline-truth IDs and binding lines.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj -c Release` -> FAIL (`NU1101` for private package ids such as `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, `Chummer.Ui.Kit`; only `nuget.org` source is resolved in this environment).
+- Commits landed:
+  - `chummer6-mobile`: `04a8f5a` (`feat(w6): project restore offline truth boundaries`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - private `Chummer.*` package feed/bootstrap is unavailable in this environment, so mobile regression execution cannot restore/build.
+
 ## 2026-04-04: milestone-6 mobile workspace-lite now exposes an explicit cached/stale/offline-action truth rail beside continuity lanes
 
 - Trigger:
