@@ -30,6 +30,39 @@
   - `chummer6-ui`: local changes landed in this slice (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-4 return continuity lane now fail-closes compact `nextsessionreturn` and `sessionreturn` aliases across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-4 continuity coverage already fail-closed `return`, `returnloop`, `nextsession`, and split/hyphen forms across prep-library canonicalization, live API audits, and signed-in workspace search journeys.
+  - compact return aliases (`nextsessionreturn`, `sessionreturn`) were not explicitly canonicalized or script-locked, leaving a regression seam if continuity packet copy shifts away from spaced tokens.
+- Landed:
+  - patched canonicalization service:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - added compact alias rewrites:
+      - `nextsessionreturn|nextsessionreturns -> next+session+return`
+      - `sessionreturn|sessionreturns -> session+return`
+  - patched service tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - expanded `PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation` with compact, split, and hyphen `nextsessionreturn`/`sessionreturn` coverage.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=nextsessionreturn` and `queryText=sessionreturn`.
+      - added signed-in workspace route checks for `prepQuery=nextsessionreturn` and `prepQuery=sessionreturn`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for compact `nextsessionreturn` and `sessionreturn` continuity queries.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - expanded hub live-audit and Playwright marker assertions for `nextsessionreturn` and `sessionreturn`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 campaign return continuity proof now explicitly fail-closes compact, split, and hyphen return-query aliases including `nextsessionreturn` and `sessionreturn` across service canonicalization, live API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now fail-closes compact `returnloop` and `nextsession` aliases across prep search canonicalization and live API/UI journeys
 
 - Trigger:
