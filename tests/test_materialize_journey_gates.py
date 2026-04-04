@@ -1363,7 +1363,7 @@ groups: []
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     journey = payload["journeys"][0]
     assert payload["summary"]["overall_state"] == "blocked"
-    assert journey["signals"]["support_install_truth_contract_violation_count"] == 4
+    assert journey["signals"]["support_install_truth_contract_violation_count"] == 5
     assert any(
         "support packet support_packet_bad_contract is missing install_diagnosis.registry_release_version." in reason
         for reason in journey["blocking_reasons"]
@@ -2404,6 +2404,18 @@ groups: []
                                 "tuple_id": "avalonia:win-x64:windows",
                                 "required_host": "windows",
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "startup_smoke_receipt_contract": {
+                                    "status_any_of": ["pass", "passed", "ready"],
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "windows",
+                                    "rid": "win-x64",
+                                    "host_class_contains": "windows",
+                                },
+                                "proof_capture_commands": [
+                                    "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                                    "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                                ],
                             },
                         },
                         "fix_confirmation": {"state": "no_fix_recorded", "update_required": False},

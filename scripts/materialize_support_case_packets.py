@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -248,6 +249,70 @@ def _load_release_channel(path: str) -> Dict[str, Any]:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
+def _default_installer_file_name(head: str, rid: str, platform: str) -> str:
+    if not head or not rid:
+        return ""
+    platform_token = _normalize_platform(platform)
+    if platform_token == "windows":
+        suffix = ".exe"
+    elif platform_token == "macos":
+        suffix = ".dmg"
+    elif platform_token == "linux":
+        suffix = ".deb"
+    else:
+        suffix = ""
+    return f"chummer-{head}-{rid}-installer{suffix}"
+
+
+def _default_launch_target(head: str, platform: str) -> str:
+    head_token = _normalize_text(head).lower()
+    platform_token = _normalize_platform(platform)
+    if head_token == "blazor-desktop":
+        return "Chummer.Blazor.Desktop.exe" if platform_token == "windows" else "Chummer.Blazor.Desktop"
+    return "Chummer.Avalonia.exe" if platform_token == "windows" else "Chummer.Avalonia"
+
+
+def _derive_proof_capture_commands(
+    *,
+    head: str,
+    rid: str,
+    platform: str,
+    installer_file_name: str,
+    required_host: str,
+) -> List[str]:
+    head_token = _normalize_text(head).lower()
+    rid_token = _normalize_text(rid).lower()
+    platform_token = _normalize_platform(platform)
+    if not head_token or not rid_token or not platform_token:
+        return []
+    repo_root = Path("/docker/chummercomplete/chummer6-ui")
+    installer_name = _normalize_text(installer_file_name) or _default_installer_file_name(
+        head=head_token,
+        rid=rid_token,
+        platform=platform_token,
+    )
+    if not installer_name:
+        return []
+    installer_path = repo_root / "Docker" / "Downloads" / "files" / installer_name
+    startup_smoke_dir = repo_root / "Docker" / "Downloads" / "startup-smoke"
+    host_class = _normalize_platform(required_host) or platform_token or "required"
+    run_smoke = (
+        f"cd {shlex.quote(str(repo_root))} && "
+        f"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS={shlex.quote(host_class + '-host')} "
+        f"./scripts/run-desktop-startup-smoke.sh "
+        f"{shlex.quote(str(installer_path))} "
+        f"{shlex.quote(head_token)} "
+        f"{shlex.quote(rid_token)} "
+        f"{shlex.quote(_default_launch_target(head=head_token, platform=platform_token))} "
+        f"{shlex.quote(str(startup_smoke_dir))}"
+    )
+    refresh_manifest = (
+        f"cd {shlex.quote(str(repo_root))} && "
+        "./scripts/generate-releases-manifest.sh"
+    )
+    return [run_smoke, refresh_manifest]
+
+
 def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
     tuple_rows = []
     external_proof_rows = []
@@ -315,6 +380,23 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                     or item.get("startup_smoke_receipt_contract")
                     or {}
                 ),
+                "proof_capture_commands": [
+                    _normalize_text(token)
+                    for token in (
+                        item.get("proofCaptureCommands")
+                        or item.get("proof_capture_commands")
+                        or _derive_proof_capture_commands(
+                            head=head,
+                            rid=rid,
+                            platform=platform,
+                            installer_file_name=_normalize_text(
+                                item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
+                            ),
+                            required_host=_normalize_platform(item.get("requiredHost") or item.get("required_host")),
+                        )
+                    )
+                    if _normalize_text(token)
+                ],
             }
         )
     return {
@@ -619,6 +701,11 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
                 "startup_smoke_receipt_contract": dict(
                     external_proof_request.get("startup_smoke_receipt_contract") or {}
                 ),
+                "proof_capture_commands": [
+                    _normalize_text(token)
+                    for token in (external_proof_request.get("proof_capture_commands") or [])
+                    if _normalize_text(token)
+                ],
             },
             "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
             "case_installed_version": installed_version,

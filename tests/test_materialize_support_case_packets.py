@@ -459,6 +459,8 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
         "expected_installer_file_name": "",
         "expected_public_install_route": "",
         "expected_startup_smoke_receipt_path": "",
+        "startup_smoke_receipt_contract": {},
+        "proof_capture_commands": [],
     }
     assert waiting_packet["recovery_path"]["href"] == "/account/support"
     fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
@@ -571,6 +573,11 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
         "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+        "startup_smoke_receipt_contract": {},
+        "proof_capture_commands": [
+            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+        ],
     }
     assert packet["recovery_path"]["action_id"] == "open_downloads"
 

@@ -675,6 +675,13 @@ def evaluate_journey(
                                     support_packet_contract_violations.append(
                                         f"support packet {packet_id} is missing install_diagnosis.external_proof_request.startup_smoke_receipt_contract.{required_key}."
                                     )
+                        proof_capture_commands = external_proof_request.get("proof_capture_commands")
+                        if not isinstance(proof_capture_commands, list) or not [
+                            str(token or "").strip() for token in proof_capture_commands if str(token or "").strip()
+                        ]:
+                            support_packet_contract_violations.append(
+                                f"support packet {packet_id} is missing install_diagnosis.external_proof_request.proof_capture_commands."
+                            )
                 if install_truth_state == "tuple_not_on_promoted_shelf" and external_proof_required is not True:
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} with install_truth_state 'tuple_not_on_promoted_shelf' must declare external_proof_required=true."

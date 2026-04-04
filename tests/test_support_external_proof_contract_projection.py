@@ -90,6 +90,10 @@ def test_support_packets_project_startup_smoke_receipt_contract(tmp_path: Path) 
     request = payload["packets"][0]["install_diagnosis"]["external_proof_request"]
     assert request["startup_smoke_receipt_contract"]["ready_checkpoint"] == "pre_ui_event_loop"
     assert request["startup_smoke_receipt_contract"]["host_class_contains"] == "windows"
+    assert request["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    ]
 
 
 def test_journey_gate_requires_support_startup_smoke_receipt_contract(tmp_path: Path) -> None:

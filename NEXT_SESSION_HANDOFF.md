@@ -40251,3 +40251,38 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-1/3 support install contracts now carry executable external-proof commands and journey checks fail-close missing command lanes
+
+- Trigger:
+  - journey/readiness external tuple blockers now emitted executable host commands, but support packets and support-contract gating still did not require that same command lane.
+  - this left a drift seam where support closure could carry tuple/host/proofs without deterministic command payloads for host operators.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - release-channel external proof indexing now projects `proof_capture_commands`.
+    - if source rows omit command payloads, support materializer derives deterministic defaults from tuple (`head/rid/platform`) and expected installer metadata.
+    - support packet `install_diagnosis.external_proof_request` now carries `proof_capture_commands`.
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now fail-closes missing `install_diagnosis.external_proof_request.proof_capture_commands` whenever `external_proof_required=true`.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+    - `/docker/fleet/tests/test_support_external_proof_contract_projection.py`
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py scripts/materialize_journey_gates.py tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py tests/test_materialize_journey_gates.py` -> PASS.
+  - targeted test-function execution without `pytest`:
+    - `test_materialize_support_case_packets_projects_external_proof_requests_for_missing_tuple` -> PASS.
+    - `test_support_packets_project_startup_smoke_receipt_contract` -> PASS.
+    - `test_journey_gate_requires_support_startup_smoke_receipt_contract` -> PASS.
+    - `test_materialize_journey_gates_blocks_when_support_packet_install_truth_contract_is_incomplete` -> PASS.
+    - `test_report_cluster_release_notify_requires_support_install_truth_contract` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py ...` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py ...` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py ...` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Exact blocker:
+  - install journey remains external-only blocked on native Windows/macOS host proof capture and receipt ingestion for missing promoted tuples.
