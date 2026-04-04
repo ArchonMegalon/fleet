@@ -116,6 +116,44 @@
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
   - `install_claim_restore_continue` remains externally blocked on missing promoted Windows/macOS tuple proof receipts (`blocked_by_external_constraints_only: true`).
 
+## 2026-04-04: milestone-18 desktop master-index now surfaces explicit SR6 supplement/designer/house-rule and online-storage coverage lanes
+
+- Trigger:
+  - frontier milestone `18` requires SR6 supplement, designer-tool, house-rule, and online-storage successor parity to be visible as first-class desktop lanes, not only compressed into aggregate receipts.
+  - desktop `master_index` already surfaced aggregate online-storage and SR6 successor receipt strings, but omitted explicit field-level SR6 supplement posture, designer-family coverage, house-rule posture, and online-storage coverage fields.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopDialogFactory.cs`:
+    - `BuildMasterIndexFields(...)` now emits explicit read-only fields:
+      - `masterIndexOnlineStorageCoverage`
+      - `masterIndexSr6SupplementLane`
+      - `masterIndexSr6DesignerCoverage`
+      - `masterIndexHouseRuleLane`
+  - patched desktop presentation coverage:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs`
+    - both now assert the new milestone-18 field values on `master_index`.
+  - patched parity canon + mirror wording:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-18 row now explicitly calls out supplement/designer/house-rule and online-storage coverage projection on flagship desktop `master_index`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet build Chummer.Tests/Chummer.Tests.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopDialogFactoryTests.CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture|FullyQualifiedName~CharacterOverviewPresenterTests.ExecuteCommandAsync_master_index_opens_dialog_with_catalog_parity_fields" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS build/compile, but MSTest filter still returned `No test matches` in this environment.
+  - `cd /docker/fleet && python3 -m py_compile tests/test_materialize_journey_gates.py scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() ... PY` -> PASS.
+- Commits landed:
+  - `chummer6-ui`: `df6d53dd` (`feat(w2-18): surface explicit sr6 successor lanes in master-index dialog`).
+  - `chummer6-design`: `1a69ee5` (`docs(w2-18): record explicit sr6 successor desktop projection coverage`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `chummer6-ui` and `chummer6-design` pushes.
+  - targeted MSTest method filters for these `master_index` tests do not resolve in this environment; verification remains build + source-marker gate regression based.
+
 ## 2026-04-04: milestone-3 readiness now downgrades desktop external-only install blockers from missing to warning when local executable blockers are zero
 
 - Trigger:
