@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now proves parity-audit fail-close on malformed `releaseProof.proofRoutes` (`%` and `\\`) before smoke
+
+- Trigger:
+  - Hub parity script now rejects percent-encoded and escaped-path route characters, but `scripts/ai/verify.sh` only ran a happy-path parity audit and did not explicitly prove malformed-route fail-close behavior.
+  - this left the release-proof route hardening branch unexercised in Hub’s own end-to-end verify entrypoint.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - derives canonical release-channel receipt path from `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` evidence.
+    - adds mutation `releaseProof.proofRoutes=["/home/%2e%2e/access"]` and asserts `audit-ui-parity.sh` fails.
+    - adds mutation `releaseProof.proofRoutes=["/home\\access"]` and asserts `audit-ui-parity.sh` fails.
+    - restores release-channel receipt between mutation checks before continuing smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended verify-entrypoint marker assertions for release-channel path derivation and both malformed-route fail-close checks.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation assertions during parity phase, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively exercises and proves milestone-2 route-grammar fail-close behavior for encoded/escaped proof routes rather than relying on static marker text alone.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes blank or stale-unpublished release-channel posture once desktop tuple coverage is complete
 
 - Trigger:
