@@ -26,6 +26,38 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-7/8/9/16 build-lab handoff now carries rule-environment + explain receipts and exposes template/foundry export targets
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require Build Lab to behave as one grounded creation-to-advancement-to-exchange surface, with explain/rule-environment receipts and explicit downstream export lanes (including Foundry-class exchange posture).
+  - core Build Lab projection only exposed a single Build Idea Card export target and omitted explicit `rule-environment`/`explain-receipt` fields on the governed export payload, which left export/viewer/exchange follow-through under-specified at the source projection.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.Application/BuildLab/BuildLabWorkspaceProjectionFactory.cs`:
+    - Build Lab actions now include:
+      - `next-variants` -> `target.build-idea-card`
+      - `save-template` -> `target.character-template`
+      - `open-foundry-export` -> `target.foundry-export`
+    - Build Lab export payload now includes deterministic handoff fields:
+      - `rule-environment` (runtime compatibility summary)
+      - `explain-receipt` (top variant/timeline explain entry id fallback)
+    - Build Lab export targets now include:
+      - `target.character-template` (`BuildLabExportTargetKinds.CharacterTemplate`, `workflow.templates.character`)
+      - `target.foundry-export` (`BuildLabExportTargetKinds.Workflow`, `workflow.exchange.foundry`)
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.CoreEngine.Tests/Program.cs`:
+    - extended `BuildLabWorkspaceProjectionFactoryProjectsIntakeState` assertions to lock:
+      - template and Foundry export actions/targets
+      - `rule-environment` export-field presence
+      - `explain-receipt` export-field presence
+- Verification:
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet test Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~WorkspaceServiceTests" --nologo -v minimal` -> FAIL in this environment due existing cross-project missing-reference state in `Chummer.Tests` (`Chummer.Presentation`, `Chummer.Blazor`, `Chummer.Avalonia`, `Chummer.Desktop`, etc. namespaces not resolved), unrelated to this Build Lab projection patch.
+- Commits landed:
+  - pending local commit in `chummer-core-engine` (not yet created in this session at time of handoff update).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-4/5 campaign continuity query lane now normalizes diary/contact/heat mutation wording (`updates`/`changes`) to governed prep search tokens
 
 - Trigger:
