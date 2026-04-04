@@ -26,9 +26,9 @@
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=3, warning=5, missing=0`).
   - `cd /docker/fleet && jq '{rules_engine_and_import:.coverage.rules_engine_and_import, desktop_client:.coverage.desktop_client, install_external_only:.coverage_details.desktop_client.evidence.install_claim_restore_continue_blocked_by_external_constraints_only}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`rules_engine_and_import: ready`; desktop remains warning; install remains external-only).
 - Commits landed:
-  - `fleet`: `<pending>` (`feat(w1-2-3): promote core boundary stage from import parity certification`).
+  - `fleet`: `11ccb00` (`feat(w1-2-3): promote core boundary stage from import parity certification`).
 - Push attempts:
-  - `cd /docker/fleet && git push` -> `<pending>`.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
   - install lane closure remains externally blocked on native Windows/macOS promoted installer + startup-smoke tuple receipts.
