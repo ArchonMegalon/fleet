@@ -1,3 +1,48 @@
+## 2026-04-04: milestone-2/3 ui-kit now emits local release proof and Fleet promotes shared-surface boundary stage from that proof
+
+- Trigger:
+  - after core boundary promotion, W1 milestone-2 polish still warned because `ui-kit` remained `package_canonical`; no executable ui-kit local release proof artifact existed for fallback promotion.
+  - this left `ui_kit_and_flagship_polish` warning-only in flagship readiness even though build/explain and campaign continuity journeys were already ready.
+- Landed:
+  - added `/docker/chummercomplete/chummer-ui-kit/scripts/ai/materialize_ui_kit_release_proof.py`:
+    - emits `.codex-studio/published/UI_KIT_LOCAL_RELEASE_PROOF.generated.json` with contract `chummer6-ui-kit.local_release_proof`.
+    - fail-closes when required shared-surface signoff/evidence docs or verify lane script are missing.
+  - patched `/docker/chummercomplete/chummer-ui-kit/scripts/ai/verify.sh`:
+    - now materializes `UI_KIT_LOCAL_RELEASE_PROOF.generated.json` after passing verify checks/build/tests.
+  - patched Fleet fallback inference in:
+    - `/docker/fleet/scripts/materialize_status_plane.py`
+    - `/docker/fleet/scripts/verify_status_plane_semantics.py`
+    - `ui-kit` now promotes to `boundary_pure` when `UI_KIT_LOCAL_RELEASE_PROOF.generated.json` status is passing.
+  - patched `/docker/fleet/tests/test_materialize_status_plane.py`:
+    - added `test_ui_kit_fallback_stage_uses_local_release_proof`.
+    - added `test_ui_kit_fallback_stage_stays_repo_local_without_passing_release_proof`.
+  - regenerated:
+    - `/docker/chummercomplete/chummer-ui-kit/.codex-studio/published/UI_KIT_LOCAL_RELEASE_PROOF.generated.json`
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/state/status-plane.verify.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-ui-kit && python3 -m py_compile scripts/ai/materialize_ui_kit_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-ui-kit && bash scripts/ai/verify.sh` -> PASS (includes package build/test and writes `UI_KIT_LOCAL_RELEASE_PROOF.generated.json`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_status_plane.py scripts/verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_status_plane.py -k "ui_kit_fallback_stage_uses_local_release_proof or ui_kit_fallback_stage_stays_repo_local_without_passing_release_proof"` -> FAIL (`No module named pytest` in this environment).
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml --status-json-out state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && python3 - <<'PY' ...` -> PASS (`core boundary_pure`, `ui-kit boundary_pure` in `STATUS_PLANE.generated.yaml`).
+  - `cd /docker/fleet && jq '{coverage:.coverage, ui_kit_details:.coverage_details.ui_kit_and_flagship_polish}' .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`ui_kit_and_flagship_polish: ready`).
+- Commits landed:
+  - `chummer6-ui-kit`: `<pending>` (`feat(w1-2): emit ui-kit local release proof in verify lane`).
+  - `fleet`: `<pending>` (`feat(w1-2-3): promote ui-kit boundary stage from local release proof`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-ui-kit && git push` -> `<pending>`.
+  - `cd /docker/fleet && git push` -> `<pending>`.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-2/3 status-plane fallback now promotes core to boundary-pure from passing import parity certification
 
 - Trigger:

@@ -97,6 +97,42 @@ def _load_json_file(path: Path) -> Dict[str, Any]:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
+def _fleet_boundary_proof_passed(published_dir: Path) -> bool:
+    compile_manifest = _load_json_file(published_dir / "compile.manifest.json")
+    if not compile_manifest:
+        return False
+    if not bool(compile_manifest.get("dispatchable_truth_ready")):
+        return False
+    stages = dict(compile_manifest.get("stages") or {})
+    required_stages = (
+        "design_compile",
+        "policy_compile",
+        "execution_compile",
+        "package_compile",
+        "capacity_compile",
+    )
+    if any(stages.get(stage) is not True for stage in required_stages):
+        return False
+    artifact_inventory = {str(item or "").strip() for item in (compile_manifest.get("artifacts") or [])}
+    required_artifacts = {
+        "STATUS_PLANE.generated.yaml",
+        "PROGRESS_REPORT.generated.json",
+        "PROGRESS_HISTORY.generated.json",
+        "SUPPORT_CASE_PACKETS.generated.json",
+        "JOURNEY_GATES.generated.json",
+    }
+    if not required_artifacts.issubset(artifact_inventory):
+        return False
+    support_packets = _load_json_file(published_dir / "SUPPORT_CASE_PACKETS.generated.json")
+    if str(support_packets.get("contract_name") or "").strip() != "fleet.support_case_packets":
+        return False
+    if str(support_packets.get("schema_version") or "").strip() != "1":
+        return False
+    if not str(support_packets.get("generated_at") or "").strip():
+        return False
+    return isinstance(support_packets.get("summary") or {}, dict)
+
+
 def _infer_fallback_readiness_stage(
     project_id: str,
     project_root: Path,
@@ -142,6 +178,10 @@ def _infer_fallback_readiness_stage(
         artifact_publication_certification = _load_json_file(published_dir / "ARTIFACT_PUBLICATION_CERTIFICATION.generated.json")
         if _proof_passed(media_local_release_proof) and _proof_passed(artifact_publication_certification):
             return "boundary_pure"
+    elif project_id == "ui-kit":
+        ui_kit_local_release_proof = _load_json_file(published_dir / "UI_KIT_LOCAL_RELEASE_PROOF.generated.json")
+        if _proof_passed(ui_kit_local_release_proof):
+            return "boundary_pure"
     elif project_id == "hub":
         hub_local_release_proof = _load_json_file(published_dir / "HUB_LOCAL_RELEASE_PROOF.generated.json")
         hub_campaign_os_proof = _load_json_file(published_dir / "HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json")
@@ -156,6 +196,9 @@ def _infer_fallback_readiness_stage(
         ui_local_release_proof = _load_json_file(published_dir / "UI_LOCAL_RELEASE_PROOF.generated.json")
         if _is_public_deployment(deployment_row) and _proof_passed(ui_flagship_release_gate) and _proof_passed(ui_local_release_proof):
             return "publicly_promoted"
+    elif project_id == "fleet":
+        if _fleet_boundary_proof_passed(published_dir):
+            return "boundary_pure"
     try:
         from admin import readiness as readiness_module
     except Exception:
