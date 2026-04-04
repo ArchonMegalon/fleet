@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes desktop install artifact `generated_at` drift against release-channel truth
+
+- Trigger:
+  - milestone `1`/`3` release truth requires artifact, shelf, and gate proof alignment that cannot lie by alias/fallback.
+  - top-level release-channel desktop install artifact validation enforced channel/version/arch integrity but did not enforce `generated_at` presence, alias consistency, or equality with release-channel `generated_at`.
+  - this left a control-plane seam where artifact rows could carry stale or contradictory timestamp metadata while still satisfying other tuple checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - desktop-install artifact validation now tracks and fail-closes:
+      - missing `generated_at` / `generatedAt`
+      - `generated_at` mismatch vs release-channel envelope timestamp
+      - conflicting `generated_at`/`generatedAt` alias values
+    - added evidence keys:
+      - `release_channel_desktop_install_artifacts_missing_generated_at`
+      - `release_channel_desktop_install_artifacts_generated_at_mismatch`
+      - `release_channel_desktop_install_artifacts_generated_at_alias_conflict`
+  - patched script-lock compliance tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - pinned new evidence markers and fail-close reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Commits landed:
+  - `chummer6-ui`: `251a6835` (`fix(w1): require release-channel artifact generated_at integrity`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `251a6835` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting `generated_at` timestamp aliases on platform gate receipts
 
 - Trigger:
