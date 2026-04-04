@@ -63,6 +63,39 @@
 - Exact blocker:
   - no repo-local blocker for this slice; remote push remains credential-gated for GitHub HTTPS in this environment.
 
+## 2026-04-04: milestone-1 install journey now fail-closes directly on registry tuple-coverage gaps (platform + head + rid)
+
+- Trigger:
+  - frontier milestone `1` requires installer truth, release-channel truth, and journey proof to stay aligned by `artifact × head × platform × rid × channel`.
+  - install journey gating depended on UI desktop executable gate status, but did not directly assert the hub-registry tuple-gap fields, which left one seam where release-channel drift could hide behind aggregate status checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - install journey `repo_source_proof` now includes `chummer6-hub-registry` `RELEASE_CHANNEL.generated.json` tuple-gap checks via `json_must_equal`:
+      - `desktopTupleCoverage.missingRequiredPlatforms: []`
+      - `desktopTupleCoverage.missingRequiredPlatformHeadPairs: []`
+      - `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples: []`
+  - patched `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` mirror with the same tuple-gap fail-close checks.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - `test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof` now fail-proves the new hub-registry tuple-gap proof row and required markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - install journey blocking reasons now explicitly include the three tuple-gap blockers from registry truth:
+      - missing platforms (`windows`, `macos`)
+      - missing platform/head pairs
+      - missing platform/head/rid tuples
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - receipt inspection of `JOURNEY_GATES.generated.json` confirms new explicit hub-registry tuple-gap blocking reasons.
+- Commits landed:
+  - `chummer6-design`: `5d40486` (`docs(w1-1): require registry tuple-complete proof for install journey`).
+  - `fleet`: `d0d03ef` (`feat(w1-1): fail-close install journey on registry tuple gaps`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no repo-local implementation blocker for this slice; remote pushes remain credential-gated for GitHub HTTPS in this environment.
+
 ## 2026-04-04: milestone-4/5/6 EA built-in campaign and GM contract matrix is now fully fail-proved and cataloged
 
 - Trigger:
