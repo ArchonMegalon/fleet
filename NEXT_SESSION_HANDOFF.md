@@ -1,3 +1,49 @@
+## 2026-04-04: milestone-5 league/community control shorthand now fail-closes compact, split, and ctrl aliases across GM prep search, unresolved-domain triage, and live API/UI journey audits
+
+- Trigger:
+  - frontier milestone `5` requires organizer and GM operations to stay on one governed event-control lane across prep retrieval, triage, and signed-in journeys.
+  - service tokenizers and campaign packet matching already recognized `league/community control` aliases (`leaguecontrol`, `leaguecontrols`, `leaguectrl`, `communitycontrol`, `communitycontrols`, `communityctrl`), but live API/UI audit scripts only asserted `league/community ops` variants.
+  - this left a drift window where `league/community control` language could regress on signed-in API/browser journeys without tripping closeout proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=leaguecontrol`, `queryText=league%20control`, `queryText=leaguectrl`, `queryText=communitycontrol`, `queryText=community%20control`, and `queryText=communityctrl`.
+    - added signed-in workspace route checks for matching `prepQuery=` variants with governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search assertions for compact/split/ctrl `league/community control` aliases with route-preservation and non-empty governed packet checks.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-marker assertions to lock new `queryText` and `prepQuery` coverage in live-audit and Playwright scripts.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded prep-asset query coverage to assert compact/split/ctrl `league/community control` aliases map to governed event-control assets.
+    - expanded unresolved-domain ordering test to include split `league control` and hyphen `community-control` signals as `event_control` domain items.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatLeagueAndCommunityOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`382` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 organizer control shorthand now fail-closes `league/community control` compact, split, and ctrl aliases across GM query tokenization, unresolved-domain triage, API audits, and signed-in workspace route/browser proof.
+- Push status:
+  - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
+## 2026-04-04: milestone-2 registry verifier harness now explicitly fails closed for escaped backslash route entries in `releaseProof.proofRoutes`
+
+- Trigger:
+  - route grammar guardrails were expanded to reject both percent-encoded and escaped-path characters, but verifier harness mutations only asserted the percent-encoded path.
+  - this left the escaped backslash route rejection branch unproven in the automated verifier mutation suite.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation case `releaseProof.proofRoutes=["/home\\access"]`.
+    - added fail-close assertion text for escaped backslash route entries.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - registry verifier mutation harness now proves both `%` and `\\` route grammar rejection paths for milestone-2 release-proof route canonicalization.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release-proof route grammar now fail-closes percent-encoded and escaped path characters across hub parity and registry materialize/verify gates
 
 - Trigger:
