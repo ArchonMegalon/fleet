@@ -1,3 +1,67 @@
+## 2026-04-04: milestone-1/3 executable gate now avoids false corruption claims for macOS quarantine installers by making marker checks platform-aware
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-binary proof to fail honest.
+  - executable gate quarantine analysis used raw-byte marker scans (`ChummerInstaller.Payload.zip`, `Samples/Legacy/Soma-Career.chum5`) for all platforms, which can misclassify `.dmg`/`.pkg` candidates as marker-failed because those markers are not reliably discoverable from host-side raw-byte scans.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `summarize_quarantine_installer_markers(...)` is now platform-aware.
+    - marker checks are enforced for Windows installer-like binaries (`.exe`, `.msix`) and skipped for unsupported macOS quarantine artifact formats instead of labeling them corrupt.
+    - macOS gate reasons now emit explicit unsupported-format honesty:
+      - `macOS quarantine installer marker checks are skipped for unsupported artifact formats on this host; payload/sample markers were not asserted ...`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - updated script-contract assertion for new function signature.
+    - added coverage assertion for the new macOS marker-skip honesty reason.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`32 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL (expected unresolved W1 blockers remain), with updated honest reason text showing marker checks skipped for macOS quarantine DMGs rather than claiming marker failure.
+- Commits landed:
+  - none in this session for `chummer6-ui`; the touched files are already part of large concurrent in-flight edits in this workspace, so a safe isolated commit was not possible without risking unrelated changes.
+- Push attempts:
+  - none for this slice (no isolated commit created).
+- Exact blocker:
+  - promoted Windows/macOS install artifacts and matching startup-smoke receipts are still missing from release-channel/public shelf truth in this workspace; host is Linux-only for native Windows/macOS startup smoke execution.
+
+## 2026-04-04: milestone-14 master-index now projects custom-data directory posture from settings and overlays
+
+- Trigger:
+  - milestone `14` custom-data bridge still relied on implied interpretation of `settings.xml` custom data directories plus overlay presence; no first-class runtime posture was emitted.
+  - this left `custom-data`/XML successor parity weaker than sourcebook and source-toggle evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes:
+      - `CustomDataLanePosture`
+      - `SettingsProfilesWithCustomDataDirectories`
+      - `DistinctCustomDataDirectoryCount`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - settings summary now parses enabled `<customdatadirectoryname>` entries from `settings.xml`.
+    - custom-data lane posture now resolves deterministically:
+      - `missing` when no enabled custom-data directories are referenced.
+      - `stale` when settings reference custom-data directories but no enabled data overlay exists.
+      - `governed` when settings references exist and enabled data overlays are present.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - baseline assertions now cover new custom-data fields.
+    - added:
+      - `Master_index_reports_stale_custom_data_lane_when_settings_reference_custom_data_without_enabled_overlay`
+      - `Master_index_reports_governed_custom_data_lane_when_settings_reference_custom_data_with_enabled_overlay`
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - custom-data parity row now cites explicit master-index custom-data posture evidence while keeping UX workflow closure open.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_custom_data_lane_when_settings_reference_custom_data_with_enabled_overlay|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_custom_data_lane_when_settings_reference_custom_data_without_enabled_overlay" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api` namespace resolution errors).
+- Commits landed:
+  - `chummer6-core`: `6731fa91` (`feat(w14): project custom-data directory posture in master index`).
+  - `chummer6-design`: `ccefa32` (`docs(w14): note custom-data posture projection evidence`).
+  - `fleet`: pending local commit for mirror + handoff refresh.
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `2949b1e8..6731fa91`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - no blocker for landed core/design slice; remote push for design/fleet remains blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-14 parity canon now reflects governed settings/source-toggle projection evidence while keeping UX closure explicit
 
 - Trigger:
