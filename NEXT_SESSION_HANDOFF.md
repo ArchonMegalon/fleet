@@ -6,14 +6,17 @@
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
     - updated `ResolveWorkspaceNextSafeAction(...)` to select readiness cues via `NeedsAttention(...)` plus explicit severity priority (`attention` > `warning` > `review` > other non-ready), instead of first-list selection.
+    - updated `BuildFirstPlayableSession(...)` to use the same severity-priority selection for readiness attention synthesis instead of first-list selection.
     - added `ResolveReadinessAttentionPriority(...)` helper to keep the ranking explicit and stable.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `CampaignSpineResolveWorkspaceNextSafeActionPrefersAttentionCueOverEarlierReviewCue`.
     - added `CampaignSpineResolveWorkspaceNextSafeActionPrefersWarningCueOverEarlierReviewCue`.
+    - added `CampaignSpineBuildFirstPlayableSessionPrefersAttentionCueOverEarlierReviewCue`.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionPrefersWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionFallsBackToCampaignNameWhenLeadRunMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`318` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildFirstPlayableSessionPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionPrefersWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`319` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - next-safe-action synthesis now reliably surfaces the highest-severity governed readiness cue when multiple non-ready cues coexist, so return-loop guidance does not downplay urgent campaign or event-control blockers due to list order.
+  - first-playable session readiness messaging now follows the same severity priority, keeping kickoff guidance aligned with the most urgent governed cue instead of insertion order.
   - sparse run-hydration fallback behavior remains intact while improving cue-priority correctness for milestone-4/5 continuity guidance.
 - Push status:
   - `chummer.run-services`: pending in this environment (credential-dependent).
