@@ -1,13 +1,13 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T18:30:43Z",
+  "generated_at": "2026-04-04T18:32:42Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 4,
-    "warning_count": 1,
+    "ready_count": 5,
+    "warning_count": 0,
     "blocked_count": 1,
     "blocked_external_only_count": 1,
     "blocked_with_local_count": 0,
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T18:30:43Z",
+      "at": "2026-04-04T18:32:33Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 9
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-04T18:30:32Z",
+      "at": "2026-04-04T18:31:32Z",
       "state": "fresh",
-      "age_seconds": 11
+      "age_seconds": 70
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 310
+      "age_seconds": 429
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 310
+      "age_seconds": 429
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 4360
+      "age_seconds": 4479
     }
   },
   "journeys": [
@@ -416,6 +416,34 @@
               "foundry-vtt.scene-ledger.v1",
               "ReceiptSummary",
               "nextSafeAction"
+            ]
+          },
+          {
+            "repo": "chummer6-media-factory",
+            "path": "src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs",
+            "must_contain": [
+              "PreserveLaneLine(\"JSON exchange:\", handoff.ExchangeParityLines, selectedParityLines);",
+              "PreserveLaneLine(\"Foundry exchange:\", handoff.ExchangeParityLines, selectedParityLines);",
+              "PreserveLaneLine(\"Sheet viewer:\", handoff.ExchangeParityLines, selectedParityLines);",
+              "PreserveLaneLine(\"Print PDF:\", handoff.ExchangeParityLines, selectedParityLines);",
+              "PreserveLaneLine(\"Character template export:\", handoff.ExchangeParityLines, selectedParityLines);",
+              "PreserveLaneLine(\"Replay timeline:\", handoff.PortabilityPillarLines, selectedPortabilityLines);",
+              "PreserveLaneLine(\"Session recap:\", handoff.PortabilityPillarLines, selectedPortabilityLines);",
+              "PreserveLaneLine(\"Run module:\", handoff.PortabilityPillarLines, selectedPortabilityLines);"
+            ]
+          },
+          {
+            "repo": "chummer6-media-factory",
+            "path": "Chummer.Media.Factory.Runtime.Verify/Program.cs",
+            "must_contain": [
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"JSON exchange:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Foundry exchange:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Sheet viewer:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Print PDF:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Character template export:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Replay timeline:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Session recap:\", StringComparison.Ordinal)),",
+              "Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains(\"Run module:\", StringComparison.Ordinal)),"
             ]
           },
           {
@@ -1012,15 +1040,13 @@
       "id": "organize_community_and_close_loop",
       "title": "Organize community and close the loop",
       "user_promise": "Organizer and community operation stays on the same account, campaign, and closure spine instead of splintering into side spreadsheets and oral tradition.",
-      "state": "warning",
-      "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
       "blocking_reasons": [],
       "external_blocking_reasons": [],
       "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
-      "warning_reasons": [
-        "fleet is at package_canonical below target stage boundary_pure."
-      ],
+      "warning_reasons": [],
       "owner_repos": [
         "chummer6-hub",
         "fleet",
@@ -1086,7 +1112,7 @@
       },
       "signals": {
         "blocking_reason_count": 0,
-        "warning_reason_count": 1,
+        "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
         "support_update_required_case_count": 0,

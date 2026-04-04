@@ -48,16 +48,25 @@ RECOVERY_ACTION_HREF_MAP = {
     "open_support_timeline": "/account/support",
     "open_account_access": "/account/access",
 }
-REPO_ROOTS = {
-    "fleet": ROOT,
-    "chummer6-design": Path("/docker/chummercomplete/chummer-design"),
-    "chummer6-core": Path("/docker/chummercomplete/chummer-core-engine"),
-    "chummer6-hub": Path("/docker/chummercomplete/chummer.run-services"),
-    "chummer6-hub-registry": Path("/docker/chummercomplete/chummer-hub-registry"),
-    "chummer6-ui": Path("/docker/chummercomplete/chummer6-ui"),
-    "chummer6-mobile": Path("/docker/chummercomplete/chummer6-mobile"),
-    "chummer6-media-factory": Path("/docker/chummercomplete/chummer-media-factory"),
-    "executive-assistant": Path("/docker/EA"),
+REPO_ROOT_CANDIDATES = {
+    "fleet": (ROOT,),
+    "chummer6-design": (Path("/docker/chummercomplete/chummer-design"),),
+    "chummer6-core": (
+        Path("/docker/chummercomplete/chummer-core-engine"),
+        Path("/docker/chummercomplete/chummer6-core"),
+    ),
+    "chummer6-hub": (
+        Path("/docker/chummercomplete/chummer.run-services"),
+        Path("/docker/chummercomplete/chummer6-hub"),
+    ),
+    "chummer6-hub-registry": (Path("/docker/chummercomplete/chummer-hub-registry"),),
+    "chummer6-ui": (Path("/docker/chummercomplete/chummer6-ui"),),
+    "chummer6-mobile": (Path("/docker/chummercomplete/chummer6-mobile"),),
+    "chummer6-media-factory": (
+        Path("/docker/chummercomplete/chummer-media-factory"),
+        Path("/docker/fleet/repos/chummer-media-factory"),
+    ),
+    "executive-assistant": (Path("/docker/EA"),),
 }
 
 EXTERNAL_BLOCKER_MARKERS = (
@@ -204,6 +213,13 @@ def compare_order(actual: str, expected: str, order: Dict[str, int]) -> int:
     return order.get(str(actual or "").strip(), -1) - order.get(str(expected or "").strip(), -1)
 
 
+def resolve_repo_root(repo_name: str) -> Path | None:
+    for candidate in REPO_ROOT_CANDIDATES.get(repo_name, ()):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def classify_blocking_reasons(blocking_reasons: List[str]) -> Tuple[List[str], List[str]]:
     external_blocking_reasons: List[str] = []
     local_blocking_reasons: List[str] = []
@@ -294,7 +310,7 @@ def evaluate_journey(
         proof_row = dict(proof or {})
         repo_name = str(proof_row.get("repo") or "").strip()
         relative_path = str(proof_row.get("path") or "").strip()
-        repo_root = REPO_ROOTS.get(repo_name)
+        repo_root = resolve_repo_root(repo_name)
         if repo_root is None:
             blocking_reasons.append(f"repo proof root for {repo_name or 'unknown'} is not configured.")
             continue

@@ -39541,3 +39541,42 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-7/8/9/16 build-explain gate now fail-closes media-factory exchange/export/portability evidence and resolves media repo-root fallback
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require Build Lab explain/exchange/export portability truth to remain explicit all the way through creator-publication packet planning.
+  - `build_explain_publish` owner list already included `chummer6-media-factory`, but gate `repo_source_proof` omitted media-factory rows, so regressions in packet-lane evidence retention could slip without tripping Fleet journey gates.
+  - Fleet repo-root mapping also pointed only at `/docker/chummercomplete/chummer-media-factory`, while this workspace hosts media-factory at `/docker/fleet/repos/chummer-media-factory`.
+- Landed:
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - added `build_explain_publish` media-factory proof row for:
+      - `src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs`
+      - markers for `JSON exchange`, `Foundry exchange`, `Sheet viewer`, `Print PDF`, `Character template export`, `Replay timeline`, `Session recap`, and `Run module` lane-preservation calls.
+    - added `build_explain_publish` media-factory proof row for:
+      - `Chummer.Media.Factory.Runtime.Verify/Program.cs`
+      - markers that fail-close the same eight lane-evidence assertions in runtime verification.
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with identical media-factory proof rows.
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - replaced single-path repo root map with candidate-path map plus `resolve_repo_root(...)` helper.
+    - `chummer6-media-factory` now resolves from either `/docker/chummercomplete/chummer-media-factory` or `/docker/fleet/repos/chummer-media-factory`.
+    - `chummer6-core` and `chummer6-hub` now also accept both legacy and `chummer6-*` repo path candidates.
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - extended `test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` to require both new media-factory proof rows and all eight lane markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() ... PY` -> PASS (`ok`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-media-factory")' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (both media-factory proof rows present).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | {state,blocking_reasons,warning_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state: ready`, no blockers/warnings).
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+- Commits landed:
+  - pending.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.

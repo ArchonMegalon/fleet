@@ -170,7 +170,9 @@ journey_gates:
 contract_name: fleet.status_plane
 schema_version: 1
 generated_at: '{generated_at}'
-projects: []
+projects:
+  - id: ui
+    readiness_stage: boundary_pure
 groups: []
 """.strip()
         + "\n",
@@ -1728,6 +1730,77 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert "foundry-vtt.scene-ledger.v1" in hub_interop.get("must_contain", [])
     assert "ReceiptSummary" in hub_interop.get("must_contain", [])
     assert "nextSafeAction" in hub_interop.get("must_contain", [])
+
+    media_creator = proof_for(
+        "chummer6-media-factory",
+        "src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs",
+    )
+    assert (
+        'PreserveLaneLine("JSON exchange:", handoff.ExchangeParityLines, selectedParityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Foundry exchange:", handoff.ExchangeParityLines, selectedParityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Sheet viewer:", handoff.ExchangeParityLines, selectedParityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Print PDF:", handoff.ExchangeParityLines, selectedParityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Character template export:", handoff.ExchangeParityLines, selectedParityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Replay timeline:", handoff.PortabilityPillarLines, selectedPortabilityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Session recap:", handoff.PortabilityPillarLines, selectedPortabilityLines);'
+        in media_creator.get("must_contain", [])
+    )
+    assert (
+        'PreserveLaneLine("Run module:", handoff.PortabilityPillarLines, selectedPortabilityLines);'
+        in media_creator.get("must_contain", [])
+    )
+
+    media_verify = proof_for("chummer6-media-factory", "Chummer.Media.Factory.Runtime.Verify/Program.cs")
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("JSON exchange:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Foundry exchange:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Sheet viewer:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Print PDF:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Character template export:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Replay timeline:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Session recap:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
+    assert (
+        'Assert(creatorPublicationPlan.EvidenceLines.Any(static line => line.Contains("Run module:", StringComparison.Ordinal)),'
+        in media_verify.get("must_contain", [])
+    )
 
     boundary = proof_for("chummer6-ui", "Chummer.Presentation/UiKit/ChummerPatternBoundary.cs")
     assert "BlazorUiKitAdapter.AdaptDenseTableHeader" in boundary.get("must_contain", [])
