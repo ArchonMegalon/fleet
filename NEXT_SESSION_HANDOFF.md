@@ -1,3 +1,55 @@
+## 2026-04-04: milestone-5 live journey audits now fail-close on compact `seasonop` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestone `5` requires GM event-control shorthand to remain first-class on the same governed prep-library retrieval lane as roster movement and campaign return operations.
+  - prep tokenizers in campaign workspace and GM ops services already canonicalize both compact forms (`seasonops` and `seasonop`), but live signed-in closeout audits still asserted only `seasonops` in API and route-level retrieval checks.
+  - this left a drift window where singular compact query handling could regress in end-to-end API/UI journeys without breaking closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=seasonop` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=seasonop`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `seasonop` after `seasonops`, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=seasonop`, `prepQuery=seasonop`, and playwright `?prepQuery=seasonop` marker coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-5 audits now fail-close if compact singular `seasonop` prep retrieval drifts in API or workspace route flows.
+  - compact event-control retrieval proof now covers both `seasonops` and `seasonop` token paths in closeout automation.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-2 parity audit now fail-closes missing or drifted nested SR4/SR6/Chummer5a/frontier proof receipts
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar workflow parity proof to stay executable and anti-tamper across SR4, SR6, Chummer5a, and SR4/SR6 frontier receipts.
+  - Hub parity audit already validated nested proof metadata fields (`*_path`, `*_generated_at`, `*_age_seconds`) but did not open and validate those nested receipts directly.
+  - this left a drift path where metadata could remain pass-ready while referenced nested receipt files were missing, stale, future-skewed, or timestamp-divergent.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added nested proof-path resolution helper and direct nested receipt loading for:
+      - `sr4_workflow_parity_path`
+      - `sr6_workflow_parity_path`
+      - `chummer5a_workflow_parity_path`
+      - `sr4_sr6_frontier_path`
+    - fail-closes when nested receipts are missing or non-pass via existing receipt readers.
+    - fail-closes if wrapper `*_generated_at` drifts from nested receipt `generatedAt`.
+    - fail-closes if nested receipt `generatedAt` is stale or future-skewed beyond parity freshness ceilings.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock nested-receipt resolution and timestamp-drift fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 Hub parity audit now verifies nested SR4/SR6/Chummer5a/frontier proof receipts directly instead of trusting wrapper metadata alone.
+  - workflow parity receipt chains now fail-close on missing nested files, generated-at drift, and nested stale/future timestamp tampering.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on governed `roster` prep retrieval across API and workspace route
 
 - Trigger:
