@@ -91,9 +91,9 @@
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .external_proof_requests[0].startup_smoke_receipt_contract' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (contract includes `status_any_of`, `ready_checkpoint`, tuple `head_id/platform/rid`, and `host_class_contains`).
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=2, warning=6, missing=0`).
 - Commits landed:
-  - pending local commit in `fleet` for script/test/handoff updates.
+  - `fleet`: `4780793` (`feat(w1-1-3): project startup-smoke receipt contract in external proof requests`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment is missing `pytest`.
   - install journey remains external-only blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
