@@ -272,6 +272,75 @@ def _default_launch_target(head: str, platform: str) -> str:
     return "Chummer.Avalonia.exe" if platform_token == "windows" else "Chummer.Avalonia"
 
 
+def _default_startup_smoke_receipt_contract(
+    *,
+    head: str,
+    rid: str,
+    platform: str,
+    required_host: str,
+) -> Dict[str, Any]:
+    required_host_token = _normalize_platform(required_host) or _normalize_platform(platform) or "required"
+    return {
+        "ready_checkpoint": "pre_ui_event_loop",
+        "head_id": _normalize_text(head).lower(),
+        "platform": _normalize_platform(platform),
+        "rid": _normalize_text(rid).lower(),
+        "host_class_contains": required_host_token,
+        "status_any_of": ["pass", "passed", "ready"],
+    }
+
+
+def _normalized_smoke_contract_map(
+    contract: Any,
+    *,
+    default_contract: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    source = contract if isinstance(contract, dict) else {}
+    defaults = default_contract if isinstance(default_contract, dict) else {}
+    status_any_of_source = (
+        source.get("status_any_of")
+        or source.get("statusAnyOf")
+        or defaults.get("status_any_of")
+        or defaults.get("statusAnyOf")
+        or []
+    )
+    status_any_of = [
+        _normalize_text(token).lower()
+        for token in status_any_of_source
+        if _normalize_text(token)
+    ]
+    normalized: Dict[str, Any] = {
+        "ready_checkpoint": _normalize_text(
+            source.get("ready_checkpoint")
+            or source.get("readyCheckpoint")
+            or defaults.get("ready_checkpoint")
+            or defaults.get("readyCheckpoint")
+        ),
+        "head_id": _normalize_text(
+            source.get("head_id")
+            or source.get("headId")
+            or defaults.get("head_id")
+            or defaults.get("headId")
+        ).lower(),
+        "platform": _normalize_platform(
+            source.get("platform")
+            or defaults.get("platform")
+        ),
+        "rid": _normalize_text(
+            source.get("rid")
+            or defaults.get("rid")
+        ).lower(),
+        "host_class_contains": _normalize_text(
+            source.get("host_class_contains")
+            or source.get("hostClassContains")
+            or defaults.get("host_class_contains")
+            or defaults.get("hostClassContains")
+        ).lower(),
+        "status_any_of": sorted(set(status_any_of)),
+    }
+    return normalized
+
+
 def _derive_proof_capture_commands(
     *,
     head: str,
@@ -346,6 +415,13 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         head = _normalize_text(item.get("head")).lower()
         platform = _normalize_platform(item.get("platform"))
         rid = _normalize_text(item.get("rid")).lower()
+        required_host = _normalize_platform(item.get("requiredHost") or item.get("required_host"))
+        default_smoke_contract = _default_startup_smoke_receipt_contract(
+            head=head,
+            rid=rid,
+            platform=platform,
+            required_host=required_host,
+        )
         tuple_id = _normalize_text(
             item.get("tupleId") or item.get("tuple_id"),
             f"{head}:{rid}:{platform}" if head and rid and platform else "",
@@ -363,7 +439,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 "head": head,
                 "platform": platform,
                 "rid": rid,
-                "required_host": _normalize_platform(item.get("requiredHost") or item.get("required_host")),
+                "required_host": required_host,
                 "required_proofs": required_proofs,
                 "expected_artifact_id": _normalize_text(item.get("expectedArtifactId") or item.get("expected_artifact_id")),
                 "expected_installer_file_name": _normalize_text(
@@ -375,10 +451,11 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 "expected_startup_smoke_receipt_path": _normalize_text(
                     item.get("expectedStartupSmokeReceiptPath") or item.get("expected_startup_smoke_receipt_path")
                 ),
-                "startup_smoke_receipt_contract": dict(
+                "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
                     item.get("startupSmokeReceiptContract")
                     or item.get("startup_smoke_receipt_contract")
-                    or {}
+                    or {},
+                    default_contract=default_smoke_contract,
                 ),
                 "proof_capture_commands": [
                     _normalize_text(token)
@@ -737,25 +814,6 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
 def _counter_map(values: Iterable[str]) -> Dict[str, int]:
     counter = Counter(value for value in values if value)
     return {key: counter[key] for key in sorted(counter)}
-
-
-def _normalized_smoke_contract_map(contract: Any) -> Dict[str, Any]:
-    if not isinstance(contract, dict):
-        return {}
-    status_any_of = [
-        _normalize_text(token).lower()
-        for token in (contract.get("status_any_of") or [])
-        if _normalize_text(token)
-    ]
-    normalized: Dict[str, Any] = {
-        "ready_checkpoint": _normalize_text(contract.get("ready_checkpoint")),
-        "head_id": _normalize_text(contract.get("head_id")).lower(),
-        "platform": _normalize_platform(contract.get("platform")),
-        "rid": _normalize_text(contract.get("rid")).lower(),
-        "host_class_contains": _normalize_text(contract.get("host_class_contains")).lower(),
-        "status_any_of": sorted(set(status_any_of)),
-    }
-    return normalized
 
 
 def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:

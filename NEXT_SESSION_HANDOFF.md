@@ -37,6 +37,40 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 support summary now normalizes startup-smoke receipt contracts and unblocks local report/cluster release gate drift
+
+- Trigger:
+  - W1 install/update/recovery + packaged-proof lanes were still showing a local block on `report_cluster_release_notify` even though external tuple backlog truth was present.
+  - support summary `unresolved_external_proof_request_specs` emitted blank startup-smoke contract fields because support packet materialization only normalized snake_case keys and did not derive defaults from tuple identity.
+  - release-channel backlog truth uses tuple-derived startup-smoke contract semantics (head/platform/rid/host/ready checkpoint), so support summary drifted and falsely blocked the support closure journey.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - added canonical startup-smoke contract default derivation from tuple identity (`head`, `rid`, `platform`, `required_host`).
+    - added mixed-key normalization (`snake_case` + `camelCase`) for startup-smoke contract fields and `status_any_of`/`statusAnyOf`.
+    - release-channel external proof requests now carry normalized startup-smoke contract truth into support packet diagnosis and summary specs.
+  - patched `/docker/fleet/tests/test_materialize_support_case_packets.py`:
+    - external-proof summary and packet assertions now require populated startup-smoke contract truth.
+    - added camelCase release-channel contract input coverage to prove normalization and parity.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py tests/test_materialize_journey_gates_external_proof_contract.py -k "external_proof or support_install_truth_contract or support_external_proof"` -> PASS (`9 passed, 7 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="report_cluster_release_notify") | {state,blocking_reasons}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`state=ready`, `blocking_reasons=[]`).
+  - `cd /docker/fleet && jq '.summary' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (`ready_count=5`, `blocked_count=1`, `blocked_with_local_count=0`; only `install_claim_restore_continue` remains blocked and external-only).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=3, warning=4, missing=1`).
+- Commits landed:
+  - pending (recorded after commit step below).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - remaining W1 block is external host proof capture for missing promoted Windows/macOS installer + startup-smoke tuple receipts; push still depends on environment GitHub HTTPS credentials.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 external-proof tuple-spec contract slice
 
 - Commits landed:

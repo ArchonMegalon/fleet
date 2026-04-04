@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-04T19:41:43Z",
+  "generated_at": "2026-04-04T19:46:43Z",
   "packets": [],
   "schema_version": 1,
   "source": {
@@ -45,12 +45,16 @@
           "startup_smoke_receipt"
         ],
         "startup_smoke_receipt_contract": {
-          "head_id": "",
-          "host_class_contains": "",
-          "platform": "",
-          "ready_checkpoint": "",
-          "rid": "",
-          "status_any_of": []
+          "head_id": "avalonia",
+          "host_class_contains": "macos",
+          "platform": "macos",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "osx-arm64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
         }
       },
       "avalonia:win-x64:windows": {
@@ -68,12 +72,16 @@
           "startup_smoke_receipt"
         ],
         "startup_smoke_receipt_contract": {
-          "head_id": "",
-          "host_class_contains": "",
-          "platform": "",
-          "ready_checkpoint": "",
-          "rid": "",
-          "status_any_of": []
+          "head_id": "avalonia",
+          "host_class_contains": "windows",
+          "platform": "windows",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "win-x64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
         }
       },
       "blazor-desktop:osx-arm64:macos": {
@@ -91,12 +99,16 @@
           "startup_smoke_receipt"
         ],
         "startup_smoke_receipt_contract": {
-          "head_id": "",
-          "host_class_contains": "",
-          "platform": "",
-          "ready_checkpoint": "",
-          "rid": "",
-          "status_any_of": []
+          "head_id": "blazor-desktop",
+          "host_class_contains": "macos",
+          "platform": "macos",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "osx-arm64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
         }
       },
       "blazor-desktop:win-x64:windows": {
@@ -114,12 +126,16 @@
           "startup_smoke_receipt"
         ],
         "startup_smoke_receipt_contract": {
-          "head_id": "",
-          "host_class_contains": "",
-          "platform": "",
-          "ready_checkpoint": "",
-          "rid": "",
-          "status_any_of": []
+          "head_id": "blazor-desktop",
+          "host_class_contains": "windows",
+          "platform": "windows",
+          "ready_checkpoint": "pre_ui_event_loop",
+          "rid": "win-x64",
+          "status_any_of": [
+            "pass",
+            "passed",
+            "ready"
+          ]
         }
       }
     },

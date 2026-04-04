@@ -1,53 +1,53 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T19:41:42Z",
+  "generated_at": "2026-04-04T19:49:19Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
     "total_journey_count": 6,
-    "ready_count": 4,
+    "ready_count": 5,
     "warning_count": 0,
-    "blocked_count": 2,
+    "blocked_count": 1,
     "blocked_external_only_count": 1,
-    "blocked_with_local_count": 1,
+    "blocked_with_local_count": 0,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T19:40:15Z",
+      "at": "2026-04-04T19:46:43Z",
       "state": "fresh",
-      "age_seconds": 87
+      "age_seconds": 156
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 2894
+      "age_seconds": 3351
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 4569
+      "age_seconds": 5026
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 4569
+      "age_seconds": 5026
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-04T19:34:01Z",
+      "at": "2026-04-04T19:46:43Z",
       "state": "fresh",
-      "age_seconds": 461
+      "age_seconds": 156
     }
   },
   "journeys": [
@@ -372,7 +372,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:46:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -812,7 +812,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:46:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1217,7 +1217,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:46:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1329,7 +1329,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:46:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1362,15 +1362,11 @@
       "id": "report_cluster_release_notify",
       "title": "Report, cluster, release, notify",
       "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
-      "state": "blocked",
-      "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
-      "blocking_reasons": [
-        "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
-      ],
+      "state": "ready",
+      "recommended_action": "Keep the journey under routine weekly proof.",
+      "blocking_reasons": [],
       "external_blocking_reasons": [],
-      "local_blocking_reasons": [
-        "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
-      ],
+      "local_blocking_reasons": [],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [
         {
@@ -1594,7 +1590,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:46:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1732,7 +1728,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 1,
+        "blocking_reason_count": 0,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,
@@ -1744,7 +1740,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 0,
-        "local_blocking_reason_count": 1,
+        "local_blocking_reason_count": 0,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 4
       }
@@ -1813,7 +1809,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T19:34:01Z",
+        "support_packets_generated_at": "2026-04-04T19:46:43Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
