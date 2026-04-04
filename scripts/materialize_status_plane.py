@@ -29,6 +29,7 @@ STAGE_ORDER = (
     "boundary_pure",
     "publicly_promoted",
 )
+STAGE_RANK = {name: index for index, name in enumerate(STAGE_ORDER)}
 
 
 def iso_now() -> str:
@@ -67,7 +68,13 @@ def _load_json_file(path: Path) -> Dict[str, Any]:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
-def _infer_fallback_readiness_stage(project_id: str, project_root: Path) -> str:
+def _infer_fallback_readiness_stage(
+    project_id: str,
+    project_root: Path,
+    *,
+    lifecycle: str = "dispatchable",
+    design_doc: str = "",
+) -> str:
     published_dir = project_root / ".codex-studio" / "published"
     if not published_dir.is_dir():
         return "pre_repo_local_complete"
@@ -87,6 +94,23 @@ def _infer_fallback_readiness_stage(project_id: str, project_root: Path) -> str:
         artifact_publication_certification = _load_json_file(published_dir / "ARTIFACT_PUBLICATION_CERTIFICATION.generated.json")
         if _proof_passed(media_local_release_proof) and _proof_passed(artifact_publication_certification):
             return "boundary_pure"
+    try:
+        from admin import readiness as readiness_module
+    except Exception:
+        readiness_module = None
+        root_path = str(ROOT)
+        if root_path not in sys.path:
+            sys.path.insert(0, root_path)
+        try:
+            from admin import readiness as readiness_module
+        except Exception:
+            readiness_module = None
+
+    if readiness_module is not None:
+        compile_summary = readiness_module.studio_compile_summary(project_root, design_doc)
+        compile_health = readiness_module.compile_health(compile_summary, lifecycle)
+        if str(compile_health.get("status") or "").strip().lower() in {"ready", "not_required"}:
+            return "package_canonical"
 
     generated_artifacts = list(glob(str(published_dir / "*.generated.*")))
     if generated_artifacts:
@@ -111,8 +135,18 @@ def _load_project_config_rows() -> List[Dict[str, Any]]:
             continue
         project_root = Path(str(payload.get("path") or "").strip())
         lifecycle = str(payload.get("lifecycle") or "dispatchable").strip() or "dispatchable"
+        design_doc = str(payload.get("design_doc") or "").strip()
         deployment = dict(payload.get("deployment") or {})
-        fallback_stage = _infer_fallback_readiness_stage(project_id, project_root) if project_root else "pre_repo_local_complete"
+        fallback_stage = (
+            _infer_fallback_readiness_stage(
+                project_id,
+                project_root,
+                lifecycle=lifecycle,
+                design_doc=design_doc,
+            )
+            if project_root
+            else "pre_repo_local_complete"
+        )
         rows.append(
             {
                 "id": project_id,
@@ -148,22 +182,47 @@ def _recompute_readiness_counts(projects: List[Dict[str, Any]]) -> Dict[str, int
 def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
     normalized = dict(admin_status or {})
     projects = list(normalized.get("projects") or [])
-    if projects:
-        return normalized
-
     fallback_projects = _load_project_config_rows()
-    if not fallback_projects:
+    fallback_by_id = {
+        str(item.get("id") or "").strip(): dict(item.get("readiness") or {})
+        for item in fallback_projects
+        if str(item.get("id") or "").strip()
+    }
+
+    if projects:
+        upgraded_projects: List[Dict[str, Any]] = []
+        stage_upgraded = False
+        for row in projects:
+            project_row = dict(row or {})
+            project_id = str(project_row.get("id") or "").strip()
+            readiness = dict(project_row.get("readiness") or {})
+            current_stage = str(readiness.get("stage") or "pre_repo_local_complete").strip() or "pre_repo_local_complete"
+            fallback_stage = str((fallback_by_id.get(project_id) or {}).get("stage") or "").strip()
+            if fallback_stage and STAGE_RANK.get(fallback_stage, -1) > STAGE_RANK.get(current_stage, -1):
+                readiness["stage"] = fallback_stage
+                project_row["readiness"] = readiness
+                stage_upgraded = True
+            upgraded_projects.append(project_row)
+        if not stage_upgraded:
+            return normalized
+        normalized["projects"] = upgraded_projects
+    elif fallback_projects:
+        normalized["projects"] = fallback_projects
+    else:
         return normalized
 
-    normalized["projects"] = fallback_projects
     public_status = dict(normalized.get("public_status") or {})
     readiness_summary = dict(public_status.get("readiness_summary") or {})
-    counts = _recompute_readiness_counts(fallback_projects)
+    counts = _recompute_readiness_counts(list(normalized.get("projects") or []))
     readiness_summary["counts"] = counts
     readiness_summary["warning_count"] = int(readiness_summary.get("warning_count") or 0)
     readiness_summary["final_claim_ready"] = int(
         readiness_summary.get("final_claim_ready")
-        or sum(1 for project in fallback_projects if bool(dict(project.get("readiness") or {}).get("final_claim_allowed")))
+        or sum(
+            1
+            for project in (normalized.get("projects") or [])
+            if bool(dict(project.get("readiness") or {}).get("final_claim_allowed"))
+        )
     )
     public_status["readiness_summary"] = readiness_summary
     normalized["public_status"] = public_status

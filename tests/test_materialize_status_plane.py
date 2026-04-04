@@ -346,6 +346,87 @@ def test_materialize_status_plane_hydrates_projects_from_config_when_status_snap
     assert sum(int(v) for v in payload["readiness_summary"]["counts"].values()) == len(ids)
 
 
+def test_ensure_project_inventory_upgrades_snapshot_stage_from_local_compile_evidence(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    project_root = tmp_path / "fleet-project"
+    published_dir = project_root / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "fleet.yaml").write_text(
+        f"""
+id: fleet
+enabled: true
+lifecycle: live
+path: {project_root}
+design_doc: {project_root / "README.md"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (project_root / "README.md").write_text("# Fleet\n", encoding="utf-8")
+    (published_dir / "compile.manifest.json").write_text(
+        json.dumps(
+            {
+                "artifacts": ["WORKPACKAGES.generated.yaml", "STATUS_PLANE.generated.yaml"],
+                "dispatchable_truth_ready": True,
+                "published_at": "2026-04-04T18:11:45Z",
+                "stages": {
+                    "design_compile": True,
+                    "policy_compile": True,
+                    "execution_compile": True,
+                    "package_compile": True,
+                    "capacity_compile": True,
+                },
+                "lifecycle": "live",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "WORKPACKAGES.generated.yaml").write_text(
+        "source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c\nwork_packages: []\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    admin_status = {
+        "generated_at": "2026-04-04T00:00:00Z",
+        "public_status": {
+            "generated_at": "2026-04-04T00:00:00Z",
+            "readiness_summary": {
+                "counts": {
+                    "pre_repo_local_complete": 0,
+                    "repo_local_complete": 1,
+                    "package_canonical": 0,
+                    "boundary_pure": 0,
+                    "publicly_promoted": 0,
+                },
+                "warning_count": 0,
+                "final_claim_ready": 0,
+            },
+        },
+        "projects": [
+            {
+                "id": "fleet",
+                "readiness": {
+                    "stage": "repo_local_complete",
+                    "terminal_stage": "publicly_promoted",
+                    "final_claim_allowed": False,
+                    "warning_count": 0,
+                },
+            }
+        ],
+        "groups": [],
+    }
+
+    hydrated = materialize_status_plane_module._ensure_project_inventory(admin_status)
+    project = hydrated["projects"][0]
+    assert project["readiness"]["stage"] == "package_canonical"
+    counts = hydrated["public_status"]["readiness_summary"]["counts"]
+    assert counts["repo_local_complete"] == 0
+    assert counts["package_canonical"] == 1
+
+
 def test_hub_registry_fallback_stage_uses_release_channel_evidence(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "hub-registry" / ".codex-studio" / "published"
