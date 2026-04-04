@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:39:20Z",
+  "generated_at": "2026-04-04T17:41:48Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:39:00Z",
+      "at": "2026-04-04T17:40:02Z",
       "state": "fresh",
-      "age_seconds": 20
+      "age_seconds": 106
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 1232
+      "age_seconds": 1380
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 1278
+      "age_seconds": 1426
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 1278
+      "age_seconds": 1426
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 1277
+      "age_seconds": 1425
     }
   },
   "journeys": [
@@ -56,14 +56,14 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blocking_reasons": [
-        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (546624s old > 172800s max).",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (546772s old > 172800s max).",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'contract_name' must be a non-empty string but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'blocking_findings_count' expected 0 but was 44.",
-        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (516059s old > 172800s max)."
+        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (516207s old > 172800s max)."
       ],
       "warning_reasons": [
         "ui is at repo_local_complete below target stage publicly_promoted.",
@@ -332,6 +332,7 @@
             "repo": "chummer6-core",
             "path": "Chummer.Tests/ApiIntegrationTests.cs",
             "must_contain": [
+              "response[\"referenceSourceLaneReceipt\"]",
               "response[\"settingsLaneReceipt\"]",
               "response[\"sourceToggleLaneReceipt\"]",
               "response[\"customDataLaneReceipt\"]",
@@ -346,6 +347,7 @@
             "repo": "chummer6-core",
             "path": "Chummer.Infrastructure/Xml/XmlToolCatalogService.cs",
             "must_contain": [
+              "BuildReferenceSourceLaneReceipt",
               "BuildSettingsLaneReceipt",
               "BuildSourceToggleLaneReceipt",
               "BuildCustomDataLaneReceipt",
@@ -354,6 +356,41 @@
               "ImportOracleMissingSources",
               "BuildSr6SuccessorLaneReceipt",
               "ResolveReferenceSnapshotPosture"
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.CoreEngine.Tests/Program.cs",
+            "must_contain": [
+              "BuildLabWorkspaceProjectionFactoryProjectsIntakeState",
+              "RuntimeLockDiffIsDeterministicAndParameterized",
+              "target.foundry-export",
+              "target.json-exchange",
+              "target.sheet-viewer",
+              "target.print-pdf-export",
+              "target.replay-timeline",
+              "target.session-recap",
+              "target.run-module"
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs",
+            "must_contain": [
+              "handoff.RuleEnvironmentDiff",
+              "handoff.RuleEnvironmentDiff.BeforeScope",
+              "handoff.RuleEnvironmentDiff.AfterScope"
+            ]
+          },
+          {
+            "repo": "chummer6-hub",
+            "path": "Chummer.Run.AI/Services/Interop/InteropExportService.cs",
+            "must_contain": [
+              "chummer.portable-dossier.v1",
+              "chummer.portable-campaign.v1",
+              "foundry-vtt.scene-ledger.v1",
+              "ReceiptSummary",
+              "nextSafeAction"
             ]
           },
           {

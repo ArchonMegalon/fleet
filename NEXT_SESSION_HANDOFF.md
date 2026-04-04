@@ -1,3 +1,46 @@
+## 2026-04-04: milestone-13 master-index now emits an explicit aggregate reference-source lane receipt (PDF/URL/site-snapshot posture) and parity proof tracks it
+
+- Trigger:
+  - frontier milestone `13` requires governed sourcebook/reference parity to be first-class with explicit stale/missing posture, not just implied by counters.
+  - `master-index` already projected `ReferenceSourceLanePosture` and governed/stale/missing counts, but lacked a human-ready aggregate receipt string for operator surfaces and parity evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now exposes `ReferenceSourceLaneReceipt`.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added `BuildReferenceSourceLaneReceipt(...)` to produce deterministic aggregate receipts:
+      - missing lane: no discovered reference sources.
+      - governed lane: all sourcebooks have governed PDF/URL/site-snapshot targets.
+      - mixed lane: governed/stale/missing counts in one explicit sentence.
+    - wired `ReferenceSourceLaneReceipt` in both empty-catalog and populated `GetMasterIndex()` responses.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now fail-proves `response["referenceSourceLaneReceipt"]` is present.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - baseline/sourcebook tests now assert deterministic `ReferenceSourceLaneReceipt` content.
+  - parity canon/mirror wording sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-13 row now names explicit reference plus reference-source lane receipts.
+  - Fleet proof-regression update:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py` now asserts build/explain proof includes:
+      - `response["referenceSourceLaneReceipt"]`
+      - `BuildReferenceSourceLaneReceipt`
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reads_xml_files_and_tolerates_invalid_documents|FullyQualifiedName~ToolCatalogServiceTests.Master_index_projects_sourcebook_metadata_and_rule_snippets_from_books_catalog|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `response["referenceSourceLaneReceipt"]`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "build_explain_publish_gate_requires_ui_kit_build_and_explain_markers"` -> FAIL (`No module named pytest`).
+- Commits landed:
+  - `chummer6-core`: `e886138e` (`feat(w2-13): add aggregate reference-source lane receipt in master index`).
+  - `chummer6-design`: `c4b10d3` (`docs(w2-13): note reference-source lane receipts in parity canon`).
+- Push attempts:
+  - not run in this slice yet.
+- Exact blocker:
+  - `Chummer.Tests` filtered execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+  - `pytest` remains unavailable in this environment.
+
 ## 2026-04-04: milestone-4/6 travel continuity now includes explicit offline return-loop lane cues (downtime/diary + contacts/heat + aftermath + return)
 
 - Trigger:
