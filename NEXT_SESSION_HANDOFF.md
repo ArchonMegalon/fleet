@@ -1,3 +1,15 @@
+## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 support closure backlog projection slice
+
+- Commits landed:
+  - `chummer6-design`: `1f0a7c4` (`feat(w1-1-3): require release-channel proof in support closure journey gate`).
+  - `fleet`: `4e47538` (`feat(w1-1-3): unblock support closure gate with release backlog projection`).
+  - `fleet`: `bca2a33` (`docs(handoff): record w1 support closure backlog projection fix`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 support closure journey gate now fail-closes against release-channel tuple backlog without `json_must_equal` coupling
 
 - Trigger:
