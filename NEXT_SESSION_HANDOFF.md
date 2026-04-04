@@ -1,3 +1,40 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops prep lanes now script-lock plural return aliases `returnloops`, `nextsessionreturns`, and `sessionreturns`
+
+- Trigger:
+  - campaign workspace alias canonicalization already covered plural compact return forms, but live journey audits only script-locked singular compact forms and GM-ops prep tokenization had no `nextsession/returnloop/sessionreturn` alias rewrites.
+  - this left a parity seam where milestone-4 continuity and milestone-5 GM prep query behavior could drift on plural compact return phrases.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added continuity alias rewrites for:
+      - `nextsessionreturn|nextsessionreturns -> next + session + return`
+      - `sessionreturn|sessionreturns -> session + return`
+      - `nextsession|nextsessions -> next + session + return`
+      - `returnloop|returnloops -> return + loop + session`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for:
+      - `queryText=returnloops`
+      - `queryText=nextsessionreturns`
+      - `queryText=sessionreturns`
+    - added workspace route checks for:
+      - `prepQuery=returnloops`
+      - `prepQuery=nextsessionreturns`
+      - `prepQuery=sessionreturns`
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for the same compact plural return queries above.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded live-audit and Playwright marker assertions for all three plural compact queries in both API and workspace lanes.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - continuity return-query behavior is now parity-locked across workspace API/UI and GM-ops prep tokenization for compact singular/plural forms, reducing drift risk between milestone-4 and milestone-5 surfaces.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2/3 registry materialize+verify now fail-close conflicting alias payloads for `generatedAt/generated_at`, `journeysPassed/journeys_passed`, `proofRoutes/proof_routes`, and nested localization gate timestamps
 
 - Trigger:
