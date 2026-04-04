@@ -72,6 +72,29 @@
   - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 live journey audits now fail-close on compact prep/travel aliases `preplaunch`, `preplaunches`, `travelprefetch`, and `travelprefetches`
+
+- Trigger:
+  - frontier milestones `4` and `5` require governed prep-library and travel continuity retrieval to stay first-class across plan, launch, and return loops.
+  - campaign workspace token normalization already supports compact prep/travel aliases (`preplaunch`, `preplaunches`, `travelprefetch`, `travelprefetches`), but live closeout audits did not assert these alias paths.
+  - this left drift windows where compact prep/travel query handling could regress in API or signed-in workspace route journeys without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `queryText=preplaunch`, `queryText=preplaunches`, `queryText=travelprefetch`, and `queryText=travelprefetches` with non-empty governed packet assertions.
+    - added signed-in workspace route verification for `prepQuery=preplaunch`, `prepQuery=preplaunches`, `prepQuery=travelprefetch`, and `prepQuery=travelprefetches`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for all four compact prep/travel aliases, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock API, workspace-route, and Playwright marker coverage for all four compact prep/travel aliases.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-4/5 audits now fail-close compact prep/travel retrieval alias paths across API and workspace route flows.
+  - governed prep retrieval coverage now spans base, event-control, roster-movement, and prep/travel compact aliases on one verification lane.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on compact roster-movement aliases `rostertransfer`, `rosterhandoff`, and `crewhandoff`
 
 - Trigger:
