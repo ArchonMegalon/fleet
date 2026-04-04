@@ -18,30 +18,6 @@
 - Exact blocker:
   - missing GitHub HTTPS credentials in this environment; `pytest` is also unavailable.
 
-## 2026-04-04: milestone-3 journey-gate proof now classifies external host blockers vs repo-local blockers
-
-- Trigger:
-  - W1 milestone `3` requires packaged-binary exit proof that cannot lie, but journey-gate output only emitted a flat blocker list.
-  - when Windows/macOS startup-smoke blockers are host-bound, operators could not quickly separate external host constraints from actionable repo-local gaps.
-- Landed:
-  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
-    - added explicit blocker classification with `external_blocking_reasons` and `local_blocking_reasons` per journey.
-    - added boolean `blocked_by_external_constraints_only` and corresponding signal counters (`external_blocking_reason_count`, `local_blocking_reason_count`).
-    - blocking recommended action now pivots to platform-host proof capture when a journey is blocked only by external host constraints.
-    - summary now emits `blocked_external_only_count` and `blocked_with_local_count`.
-  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
-    - added `test_materialize_journey_gates_marks_external_only_blockers_when_all_blocking_reasons_are_host_constraints`.
-    - added `test_materialize_journey_gates_marks_mixed_blockers_when_local_and_external_reasons_coexist`.
-  - regenerated:
-    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
-    - `/docker/fleet/.codex-design/product/JOURNEY_GATES.generated.json`
-- Verification:
-  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
-  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
-  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "external_only_blockers or mixed_blockers or repo_source_proof_marker_is_missing"` -> FAIL (`No module named pytest` in this environment).
-- Exact blocker:
-  - test-runner dependency gap: `pytest` is unavailable in this execution environment.
-
 ## 2026-04-04: milestone-13/14 desktop dialogs now surface sourcebook/settings/custom-data/translator parity from the shared tool catalog
 
 - Trigger:
