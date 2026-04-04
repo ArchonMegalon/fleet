@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-4/5 recap identity projection now normalizes whitespace-padded publication and artifact ids even without creator-publication links
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return-loop recap identity to stay canonical even when no creator-publication row is currently linked.
+  - `CampaignSpineService` still had a fail-open seam:
+    - `EnrichWorkspaceRecapShelf(...)` preserved raw `CreatorPublicationId` when provided.
+    - `BuildCreatorPublications(...)` preserved raw recap `ArtifactId` when provided.
+    - `AttachCreatorPublicationPosture(...)` returned workspaces unchanged when `creatorPublications` was empty, so whitespace-padded recap ids could leak unchanged.
+  - this could fork recap/publication/artifact identity across the same campaign lane under whitespace formatting drift.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `EnrichWorkspaceRecapShelf(...)` now canonicalizes provided `CreatorPublicationId` via `ResolveChangePacketIdentity(...)`.
+    - `BuildCreatorPublications(...)` now canonicalizes provided recap `ArtifactId` via `AccountService.NormalizeOptional(...)` before projection.
+    - `AttachCreatorPublicationPosture(...)` now canonicalizes recap `CreatorPublicationId` and `ArtifactId` even when `creatorPublications` is empty.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineAttachCreatorPublicationPostureNormalizesRecapIdsWhenCreatorPublicationsAreEmpty`.
+    - added `CampaignSpineBuildCreatorPublicationsNormalizesWhitespaceArtifactIds`.
+    - added `CampaignSpineEnrichWorkspaceRecapShelfNormalizesProvidedWhitespacePublicationId`.
+  - committed in `chummer.run-services`:
+    - `2a3ef171` — `Normalize recap ids when creator publication links are absent`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureNormalizesRecapIdsWhenCreatorPublicationsAreEmpty|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsNormalizesWhitespaceArtifactIds|FullyQualifiedName~CampaignSpineEnrichWorkspaceRecapShelfNormalizesProvidedWhitespacePublicationId|FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureNormalizesUnlinkedWhitespacePublicationIds|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsUsesCanonicalProjectionIdForFallbackArtifactId" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`295` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - recap publication and artifact identity remain canonical under whitespace drift even when no creator-publication projection exists yet.
+  - milestone-4 campaign return-loop continuity and milestone-5 GM publication lanes keep one normalized recap identity seam across enrichment, projection, and attachment paths.
+- Push status:
+  - `chummer.run-services`: commit landed locally (`2a3ef171`); push not attempted in this slice.
+  - `fleet`: handoff update pending local commit in this slice.
+
 ## 2026-04-04: milestone-4/5 recap shelf attachment now normalizes unlinked whitespace-padded creator-publication ids instead of echoing raw drift
 
 - Trigger:
