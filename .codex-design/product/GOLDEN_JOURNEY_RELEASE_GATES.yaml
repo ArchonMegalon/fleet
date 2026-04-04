@@ -203,6 +203,32 @@ journey_gates:
             - ImportOracleMissingSources
             - BuildSr6SuccessorLaneReceipt
             - ResolveReferenceSnapshotPosture
+        - repo: chummer6-core
+          path: Chummer.CoreEngine.Tests/Program.cs
+          must_contain:
+            - BuildLabWorkspaceProjectionFactoryProjectsIntakeState
+            - RuntimeLockDiffIsDeterministicAndParameterized
+            - target.foundry-export
+            - target.json-exchange
+            - target.sheet-viewer
+            - target.print-pdf-export
+            - target.replay-timeline
+            - target.session-recap
+            - target.run-module
+        - repo: chummer6-hub
+          path: Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs
+          must_contain:
+            - handoff.RuleEnvironmentDiff
+            - handoff.RuleEnvironmentDiff.BeforeScope
+            - handoff.RuleEnvironmentDiff.AfterScope
+        - repo: chummer6-hub
+          path: Chummer.Run.AI/Services/Interop/InteropExportService.cs
+          must_contain:
+            - chummer.portable-dossier.v1
+            - chummer.portable-campaign.v1
+            - foundry-vtt.scene-ledger.v1
+            - ReceiptSummary
+            - nextSafeAction
         - repo: chummer6-ui
           path: Chummer.Presentation/UiKit/ChummerPatternBoundary.cs
           must_contain:
