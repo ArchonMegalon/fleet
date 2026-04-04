@@ -20,6 +20,39 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 hub-registry release channel now emits RID-aware desktop tuple coverage fields consumed by executable gate
+
+- Trigger:
+  - after hardening `chummer6-ui` executable gate to require architecture-aware tuple metadata, current hub-registry release-channel payloads omitted the required RID-aware `desktopTupleCoverage` fields.
+  - this caused avoidable metadata blockers in addition to the real external blocker (missing promoted Windows/macOS installer tuples).
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - `desktopTupleCoverage` now emits:
+      - `requiredDesktopPlatformHeadRidTuples`
+      - `promotedPlatformHeadRidTuples`
+      - `missingRequiredPlatformHeadRidTuples`
+    - RID tuple format is `head:rid:platform`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires and validates the RID-aware tuple fields against promoted installer tuple metadata.
+    - tuple completeness/honesty checks now include RID tuple coverage.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - startup-filter and release-fixture assertions now lock RID-aware tuple coverage fields.
+  - refreshed generated registry release artifacts:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json && python3 scripts/verify_public_release_channel.py .codex-studio/published/releases.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with only real external tuple blockers:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - release-channel payloads now provide explicit architecture-aware tuple coverage metadata, and verifier/CI guard that contract.
+  - milestone-1/3 executable gate is again narrowed to true external publication/proof gaps after metadata remediation.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 opposition/event-control packet synthesis now deduplicates identical run-pressure objective versions to prevent inflated GM ops counts
 
 - Trigger:
