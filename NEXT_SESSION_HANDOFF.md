@@ -64,6 +64,40 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 release-channel tuple coverage now publishes required `head:rid:platform` matrix and explicit missing RID tuples
+
+- Trigger:
+  - frontier milestones `1` and `3` require release/install/update truth to align by artifact, head, platform, architecture, and channel.
+  - `chummer-hub-registry` tuple coverage generation still set `requiredDesktopPlatformHeadRidTuples` to only promoted tuples, which hid required-but-missing RID tuples and weakened architecture-aware release truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added required RID defaults per desktop platform (`linux-x64`, `win-x64`, `osx-arm64`).
+    - `desktopTupleCoverage.requiredDesktopPlatformHeadRidTuples` now emits the full required `head:rid:platform` matrix across required heads/platforms.
+    - `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples` now reports `required - promoted` honestly.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now validates required RID tuple coverage against the required matrix instead of equating it with promoted tuples.
+    - retained strict promoted tuple validation and fail-close mismatch checks.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - updated assertions to lock the new required RID matrix and explicit missing RID tuple inventory.
+  - regenerated:
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`
+    - `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json`
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest .codex-studio/published/RELEASE_CHANNEL.generated.json --output .codex-studio/published/RELEASE_CHANNEL.generated.json --compat-output .codex-studio/published/releases.json` -> PASS (artifact_count `2`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) now with explicit missing RID tuples:
+    - `avalonia:osx-arm64:macos`
+    - `avalonia:win-x64:windows`
+    - `blazor-desktop:osx-arm64:macos`
+    - `blazor-desktop:win-x64:windows`
+- Current trusted state:
+  - release-channel tuple coverage now carries architecture-required tuple truth separately from promoted tuple truth, and missing architecture tuples are explicit in canonical shelf metadata.
+  - milestone-1/3 blockers remain external Windows/macOS installer promotion, but the channel now reports missing RID tuples as first-class release truth.
+- Push status:
+  - `chummer-hub-registry`: committed locally (`2370005`), push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment.
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes missing architecture tuple coverage for required platform/head pairs
 
 - Trigger:
