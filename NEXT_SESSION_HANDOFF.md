@@ -42138,6 +42138,17 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
     - `avalonia:win-x64:windows`
     - `blazor-desktop:win-x64:windows`
   - until those Windows/macOS host proofs exist and are promoted into `chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json`, `install_claim_restore_continue` remains blocked and completion is untrusted.
+## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 desktop proof feed-heal slice
+
+- Commits landed:
+  - `chummer6-ui`: `830c6fd7` (`fix(w1-1-3): bootstrap core contracts feed for desktop gate proofs`).
+  - `fleet`: `eb7544d` (`chore(w1-1-3): recover linux gate truth and refresh frontier receipts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 proof lane now self-heals stale core contract feed during Linux desktop gate materialization, restoring external-only blocker truth
 
 - Trigger:
