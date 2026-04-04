@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes duplicate-normalized promotedPlatformHeads keys in release-channel tuple coverage
+
+- Trigger:
+  - frontier milestones `1` and `3` require desktop tuple coverage proof that cannot lie on head/platform inventory shape.
+  - executable gate still normalized `desktopTupleCoverage.promotedPlatformHeads` platform keys without detecting normalized collisions, so duplicate spellings (for example casing/whitespace variants) could silently overwrite earlier entries.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - hardened `normalize_promoted_platform_heads(...)` to fail-close when `promotedPlatformHeads` contains duplicate normalized platform keys.
+    - duplicate collisions now emit explicit reason text and evidence fields:
+      - `desktopTupleCoverage.promotedPlatformHeads_raw_platform_keys_by_normalized`
+      - `desktopTupleCoverage.promotedPlatformHeads_duplicate_normalized_platform_keys`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock the duplicate-normalized-platform fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only.
+- Current trusted state:
+  - release-channel tuple-coverage parsing now fail-closes duplicate normalized platform-key drift in `promotedPlatformHeads` instead of silently overwriting inventory branches.
+  - remaining milestone-1/3 blockers in this workspace are still external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed per-head inventory token lists from visual/workflow receipts
 
 - Trigger:
