@@ -41,7 +41,7 @@
 - Current trusted state:
   - milestone-2 parity proof now fails if canonical flagship screenshot evidence or legacy theme/readability proof drifts, instead of allowing interaction-only status to pass.
 - Push status:
-  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `chummer6-hub`: committed locally as `58c76850`; push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-2 parity audit now fail-closes when workflow-family proof is missing required audit tests
