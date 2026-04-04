@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-1/3 release-channel materialization now stamps per-artifact desktop install channel/version identity in both UI and registry source lanes
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth and install-media truth to align by `channel/head/rid/version` so executable gate receipts cannot silently accept metadata drift.
+  - active executable-gate evidence showed promoted Linux desktop install artifacts in registry release truth missing explicit artifact-level `version/releaseVersion`, despite top-level release-channel version being present.
+  - registry materializer populated artifact `channel` only and did not guarantee artifact `channelId`, `version`, or `releaseVersion`, leaving a repeatable drift seam for downstream gates.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh`:
+    - added canonical-manifest post-materialization normalization (`normalize_release_channel_artifact_identity_fields`) that fail-closes missing top-level `channelId/channel` or `version` and stamps artifact-level desktop install `channelId/channel` and `version/releaseVersion` deterministically.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added marker assertions locking the new manifest normalization path and artifact identity field stamping.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - parse path now carries optional incoming `channelId`, `version`, and `releaseVersion` metadata.
+    - canonical projection now always stamps per-artifact `channelId`, `channel`, `version`, and `releaseVersion` from release-channel truth.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires artifact-level `channelId` and `channel`, enforces parity between them and top-level channel, and requires artifact `version`/`releaseVersion` parity with top-level release-channel version.
+    - startup-smoke channel expectation fallback now recognizes artifact `channelId` in addition to `channel`.
+  - refreshed `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` so currently published local registry truth carries explicit artifact `channelId/channel` and `version/releaseVersion` for promoted Linux installers.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/generate-releases-manifest.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Desktop_download_matrix_includes_avalonia_and_blazor_desktop_artifacts|FullyQualifiedName~MigrationComplianceTests.Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `python3 -m py_compile /docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (including expected negative-case fail-close probes).
+  - `python3 /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected for missing Windows/macOS promoted artifacts on this host; prior missing `version/releaseVersion` artifact reason is now removed.
+- Current trusted state:
+  - release-channel materialization and verification now enforce artifact-level desktop install identity (`channelId/channel/version/releaseVersion`) at the registry source, and UI-side canonical release generation applies the same normalization when materializing local canonical manifests.
+  - executable gate evidence no longer reports missing artifact version metadata for promoted Linux installer tuples in current registry truth.
+- Push status:
+  - `chummer6-ui`: local changes in this slice (commit/push not executed in this run).
+  - `chummer-hub-registry`: local changes in this slice (commit/push not executed in this run).
+  - `fleet`: handoff updated locally in this slice (commit/push not executed in this run).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for unexpected `releaseProof.proofRoutes` and duplicate `releaseProof.journeysPassed` ids
 
 - Trigger:
