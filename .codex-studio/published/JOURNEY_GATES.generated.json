@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:18:48Z",
+  "generated_at": "2026-04-04T17:23:19Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:18:48Z",
+      "at": "2026-04-04T17:19:38Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 221
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 271
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 46
+      "age_seconds": 317
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 46
+      "age_seconds": 317
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 45
+      "age_seconds": 316
     }
   },
   "journeys": [
@@ -56,6 +56,9 @@
       "state": "blocked",
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blocking_reasons": [
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'."
       ],
       "warning_reasons": [
@@ -106,6 +109,21 @@
             "must_contain": [
               "\"contract_name\": \"chummer6-hub.local_release_proof\"",
               "\"status\": \"passed\""
+            ]
+          },
+          {
+            "repo": "chummer6-hub-registry",
+            "path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+            "json_must_equal": {
+              "desktopTupleCoverage.missingRequiredPlatforms": [],
+              "desktopTupleCoverage.missingRequiredPlatformHeadPairs": [],
+              "desktopTupleCoverage.missingRequiredPlatformHeadRidTuples": []
+            },
+            "must_contain": [
+              "\"desktopTupleCoverage\"",
+              "\"missingRequiredPlatforms\"",
+              "\"missingRequiredPlatformHeadPairs\"",
+              "\"missingRequiredPlatformHeadRidTuples\""
             ]
           },
           {
@@ -186,7 +204,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 1,
+        "blocking_reason_count": 4,
         "warning_reason_count": 2,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 0,

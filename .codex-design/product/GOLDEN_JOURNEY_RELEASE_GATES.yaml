@@ -44,6 +44,17 @@ journey_gates:
           must_contain:
             - '"contract_name": "chummer6-hub.local_release_proof"'
             - '"status": "passed"'
+        - repo: chummer6-hub-registry
+          path: .codex-studio/published/RELEASE_CHANNEL.generated.json
+          json_must_equal:
+            desktopTupleCoverage.missingRequiredPlatforms: []
+            desktopTupleCoverage.missingRequiredPlatformHeadPairs: []
+            desktopTupleCoverage.missingRequiredPlatformHeadRidTuples: []
+          must_contain:
+            - '"desktopTupleCoverage"'
+            - '"missingRequiredPlatforms"'
+            - '"missingRequiredPlatformHeadPairs"'
+            - '"missingRequiredPlatformHeadRidTuples"'
         - repo: chummer6-ui
           path: Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
           must_contain:

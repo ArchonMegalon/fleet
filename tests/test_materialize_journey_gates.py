@@ -977,3 +977,21 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
     assert '"linux_gate:blazor-desktop:linux-x64"' in required_markers
     assert '"macos_gate:avalonia:osx-arm64"' in required_markers
     assert '"macos_gate:blazor-desktop:osx-arm64"' in required_markers
+
+    release_channel_proof = next(
+        row
+        for row in proofs
+        if isinstance(row, dict)
+        and row.get("repo") == "chummer6-hub-registry"
+        and row.get("path") == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+    )
+    assert release_channel_proof.get("json_must_equal") == {
+        "desktopTupleCoverage.missingRequiredPlatforms": [],
+        "desktopTupleCoverage.missingRequiredPlatformHeadPairs": [],
+        "desktopTupleCoverage.missingRequiredPlatformHeadRidTuples": [],
+    }
+    release_channel_markers = release_channel_proof.get("must_contain", [])
+    assert '"desktopTupleCoverage"' in release_channel_markers
+    assert '"missingRequiredPlatforms"' in release_channel_markers
+    assert '"missingRequiredPlatformHeadPairs"' in release_channel_markers
+    assert '"missingRequiredPlatformHeadRidTuples"' in release_channel_markers
