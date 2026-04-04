@@ -18,6 +18,28 @@
 - Exact blocker:
   - missing GitHub HTTPS credentials in this environment; `pytest` is also unavailable.
 
+## 2026-04-04: milestone-8 creator publication comparisons now carry explicit rule-environment before/after diff receipts
+
+- Trigger:
+  - frontier milestones `7/8/9/16` require explain receipts and rule-environment diffs to stay explicit on decision-driving surfaces, including creator publication comparisons generated from Build Lab handoffs.
+  - `BuildCreatorPublications` comparison summaries already carried parity and portability lanes, but they did not include explicit rule-environment before/after diff evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `DescribeCreatorPublicationComparisonSummary(...)` now includes explicit rule-environment before/after diff evidence.
+    - with a Build Lab handoff present, comparison summary now carries `rule-environment diff {before} -> {after} ({status})`.
+    - without a Build Lab handoff, fallback wording now still requires explicit `rule-environment before/after diff evidence` in comparison posture.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `CampaignSpineBuildCreatorPublicationsComparisonSummaryCarriesBuildLabParityAndPortabilityReceipts` to fail-close on `rule-environment diff` marker and concrete `sr6-preview -> sr6-mainline` fingerprint evidence.
+    - added `CampaignSpineBuildCreatorPublicationsComparisonSummaryFallsBackToRuleEnvironmentDiffEvidenceWithoutBuildLabHandoff` to fail-close fallback comparison wording when no Build Lab handoff is attached.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildCreatorPublicationsComparisonSummaryCarriesBuildLabParityAndPortabilityReceipts|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsComparisonSummaryFallsBackToRuleEnvironmentDiffEvidenceWithoutBuildLabHandoff" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`2 passed` on `net10.0` and `2 passed` on `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `fc599f43` (`feat(w4-8): include rule-environment diff receipts in creator comparisons`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `chummer6-hub` push.
+
 ## 2026-04-04: milestone-13/14 desktop dialogs now surface sourcebook/settings/custom-data/translator parity from the shared tool catalog
 
 - Trigger:
