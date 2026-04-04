@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-4/5 next-safe-action now prioritizes highest-severity readiness cue instead of first-list cue
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return and GM operations continuity to keep guidance anchored to the most urgent governed blocker.
+  - `CampaignSpineService.ResolveWorkspaceNextSafeAction(...)` still selected the first non-ready readiness cue from list order, so earlier `review` cues could mask later `warning`/`attention` blockers in next-safe-action copy.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - updated `ResolveWorkspaceNextSafeAction(...)` to select readiness cues via `NeedsAttention(...)` plus explicit severity priority (`attention` > `warning` > `review` > other non-ready), instead of first-list selection.
+    - added `ResolveReadinessAttentionPriority(...)` helper to keep the ranking explicit and stable.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineResolveWorkspaceNextSafeActionPrefersAttentionCueOverEarlierReviewCue`.
+    - added `CampaignSpineResolveWorkspaceNextSafeActionPrefersWarningCueOverEarlierReviewCue`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionPrefersWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineResolveWorkspaceNextSafeActionFallsBackToCampaignNameWhenLeadRunMissing|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`318` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - next-safe-action synthesis now reliably surfaces the highest-severity governed readiness cue when multiple non-ready cues coexist, so return-loop guidance does not downplay urgent campaign or event-control blockers due to list order.
+  - sparse run-hydration fallback behavior remains intact while improving cue-priority correctness for milestone-4/5 continuity guidance.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 UI parity generator now fail-closes missing legacy tabs/workspace actions
 
 - Trigger:
