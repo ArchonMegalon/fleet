@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-4/5 server-plane campaign summary and roster highlights now prioritize highest-severity readiness cues
+
+- Trigger:
+  - frontier milestones `4` and `5` require workspace campaign summary and roster readiness surfaces to highlight the most urgent governed blocker, not whichever cue arrives first.
+  - `CampaignWorkspaceServerPlaneService` still selected the first non-ready readiness cue for `SessionReadinessSummary` and workspace state attention posture, and roster highlights emitted readiness cues in list order.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `ResolveReadinessAttentionPriority(...)` and `ResolvePriorityReadinessCue(...)` helper seam (`attention` > `warning` > `review` > other non-ready).
+    - `BuildCampaignWorkspaceSummary(...)` now derives `SessionReadinessSummary` from highest-priority non-ready cue with non-empty summary.
+    - `BuildWorkspaceStateSummary(...)` now resolves readiness attention via the same priority helper.
+    - `BuildRosterReadinessSummary(...)` now orders readiness highlights by severity priority before composing the top highlights payload.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignWorkspaceSummarySessionReadinessPrefersAttentionCueOverEarlierReviewCue`.
+    - added `CampaignWorkspaceSummarySessionReadinessPrefersWarningCueOverEarlierReviewCue`.
+    - added `RosterReadinessHighlightsPreferAttentionCueOverEarlierReviewCue`.
+    - added private reflection helper `InvokeBuildRosterReadinessSummary(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceSummarySessionReadinessPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignWorkspaceSummarySessionReadinessPrefersWarningCueOverEarlierReviewCue|FullyQualifiedName~RosterReadinessHighlightsPreferAttentionCueOverEarlierReviewCue" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`324` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - campaign summary readiness and roster highlight messaging now consistently surface the highest-severity active readiness cue under stale cue ordering.
+  - server-plane digest language aligns with the same readiness-priority contract already enforced in campaign-spine next-safe-action and first-playable surfaces.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignWorkspaceServerPlaneService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 workspace rules-navigator readiness reason now prefers highest-severity non-ready cue
 
 - Trigger:
