@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-7/8/9/16 build-handoff now exposes governed replay, recap, and run-module artifact lanes alongside export/exchange/viewer/print continuity
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require Build Lab follow-through to keep artifact truth explicit across exchange, replay, recap, and module publication decisions.
+  - build-handoff outputs already covered template/JSON/Foundry/sheet/print, but did not emit first-class governed lanes for replay timeline, session recap, or run-module artifacts at the same decision surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - expanded governed Build Lab outputs from `5` to `8` lanes by adding:
+      - `replay_timeline`
+      - `session_recap`
+      - `run_module`
+    - updated explain/progression wording so Build Lab receipt continuity now explicitly spans export, exchange, replay, recap, and module artifact follow-through.
+    - tightened pending-output wording to call out replay/recap evidence, not only export/recap shorthand.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - increased handoff output detail rendering to `selectedBuildLabHandoff.Outputs.Take(8)` and added bounded overflow cue for any additional lanes.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - increased signed-in home Build Lab rail output rendering to `handoff.Outputs.Take(8)` with matching overflow math.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves `replay_timeline`, `session_recap`, and `run_module` output kinds and matching progression wording.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs` and `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - source guards now require `Take(8)` rendering and updated overflow expressions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for this landed slice.
+
 ## 2026-04-04: milestone-13 master-index now emits explicit snippet-coverage metrics for governed reference-lane stale posture
 
 - Trigger:
