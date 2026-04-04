@@ -1,3 +1,42 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 compact continuity+GM packet query canonicalization slice
+
+- Commits landed:
+  - `chummer6-hub`: `38bf58bd` (`feat(w3-4-5-6): canonicalize compact continuity and gm packet query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 hub prep-query lane now canonicalizes compact continuity and GM packet forms into one governed token lane
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign workspace v4 continuity (`downtime/diary/contacts/heat/aftermath/return`) plus GM operations and travel/offline/mobile continuity to behave as one product lane.
+  - compact packet-form queries for these continuity and GM lanes (`campaignreturnpacket`, `diarycontactsheatpacket`, `aftermathdowntimepacket`, `travelofflinepacket`, `mobileofflinepacket`, `safehousetravelpacket`, `gmopspacket`) were not canonicalized end-to-end, leaving under-match risk for compact operator shorthand.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact continuity packet-form rewrites:
+      - `campaignreturnpacket(s)` -> `campaign return packet`
+      - `diarycontactsheatpacket(s)` -> `diary contacts heat packet` (normalizes via existing `contacts -> connection`)
+      - `aftermathdowntimepacket(s)` -> `aftermath downtime packet`
+      - `travelofflinepacket(s)` -> `travel offline packet`
+      - `mobileofflinepacket(s)` -> `mobile offline packet` (normalizes via existing mobile+offline scope rules)
+      - `safehousetravelpacket(s)` -> `safehouse travel packet`
+    - added compact GM packet-form rewrites:
+      - `gmopspacket(s)`, `gmoperationpacket(s)`, `gmcontrolpacket(s)` -> existing GM ops canonical event-control token lane.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - added `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` to fail-close end-to-end matching for the new compact packet forms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms" -v minimal` -> PASS (`10 passed` on both target frameworks).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" -v minimal` -> PASS (`404 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `38bf58bd` (`feat(w3-4-5-6): canonicalize compact continuity and gm packet query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff follow-up commit + push status for milestone-1/3 external-proof tuple-spec contract slice
 
 - Commits landed:
