@@ -23,6 +23,27 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4 continuity packet synthesis now deduplicates identical change-signal versions to prevent inflated diary/continuity counts
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires continuity/diary packet truth to stay on one governed lane without payload-repeat inflation.
+  - `CampaignWorkspaceServerPlaneService.BuildContinuityPrepPacket(...)` still counted repeated identical `WorkspaceChangePacketProjection` rows separately, so continuity signal totals could overstate activity when the payload repeated the same version row.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - continuity packet assembly now applies `DeduplicateIdenticalChangePacketVersions(...)` before `Take(4)` in `BuildContinuityPrepPacket(...)`.
+    - dedupe key remains identity-safe (`packetId/kind/label/summary/updatedAtUtc`) and matches the existing campaign-return/event-control family behavior.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `ContinuityPacketDeduplicatesIdenticalSignalVersions_WhenPayloadRepeatsSameRow`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketDeduplicatesIdenticalSignalVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`240` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ContinuityPacketDeduplicatesIdenticalSignalVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - continuity/diary prep packet counts no longer inflate from duplicate identical change rows; continuity signal totals now reflect unique version truth like adjacent campaign-return/event-control lanes.
+  - milestone-4/5 campaign workspace + GM ops verification/smoke lane remains green after this hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign workspace packet synthesis now deduplicates identical change-signal versions across return, opposition, roster, aftermath, prep-launch, travel, and memory lanes
 
 - Trigger:
