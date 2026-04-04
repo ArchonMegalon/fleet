@@ -72,6 +72,30 @@
   - `chummer.run-services`: pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity checklist now fail-closes non-canonical catalog token aliases instead of silently coalescing them
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar workbench parity proof to fail closed when catalog IDs drift in shape, not just when IDs go missing.
+  - `chummer6-ui/scripts/generate-parity-checklist.sh` normalized catalog IDs case-insensitively and silently coalesced duplicate-normalized aliases, which could hide non-canonical catalog token drift while still producing passing parity output.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-parity-checklist.sh`:
+    - hardened `parse_catalog_token_matches(...)` to allow exact duplicate tokens but fail-close when a normalized catalog token appears with a non-canonical alias variant.
+    - added explicit fail-close reason text:
+      - `contains non-canonical alias for normalized catalog token`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Runbook_supports_download_manifest_generation_mode` guardrail assertions to lock the new parity-generator fail-close marker.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/ParityChecklistComplianceTests.cs`:
+    - added `Parity_generator_fail_closes_non_canonical_catalog_token_aliases` marker assertion for environments that compile this compliance class.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs covered=17/17`, `actions covered=47/47`, `desktop-controls covered=29/29`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1` test on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+- Current trusted state:
+  - milestone-2 parity checklist generation now fail-closes non-canonical alias collisions in catalog token inventories instead of silently normalizing them away.
+  - parity evidence for legacy tab/action/control coverage cannot pass with hidden normalized-token alias drift in source catalogs.
+- Push status:
+  - `chummer6-ui` (`chummer-presentation` repo): local changes pending commit/push in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 UI parity generator now fail-closes missing legacy tabs/workspace actions
 
 - Trigger:
