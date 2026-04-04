@@ -27,12 +27,15 @@
   - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_treats_site_snapshot_reference_as_governed_reference_source|FullyQualifiedName~ToolCatalogServiceTests.Master_index_marks_reference_source_stale_when_snapshot_target_has_invalid_scheme|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_reference_source_lane_when_all_sourcebooks_have_valid_pdf_or_url_targets|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests run due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
 - Commits landed:
-  - pending local commit in `chummer6-core` for snapshot-source master-index support.
-  - pending local doc sync commit in `chummer6-design` and `fleet` mirror.
+  - `chummer6-core`: `9b58f416` (`feat(w2-13): govern site snapshot sources in master index`).
+  - `chummer6-design`: `d5b56be` (`docs(w2-13): record snapshot-governed sourcebook references`).
+  - `fleet`: `85cccd5` (`docs(w2-13): sync snapshot reference parity and handoff`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `9b58f416`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - no product blocker for milestone-13 snapshot lane projection; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+  - no product blocker for milestone-13 snapshot lane projection; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and design/fleet pushes remain credential-gated.
 
 ## 2026-04-04: milestone-6 restore planning now exposes explicit travel-companion cached/stale/offline-action truth
 
@@ -68,6 +71,45 @@
   - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - private `Chummer.*` package feed/bootstrap is unavailable in this environment, so mobile regression execution cannot restore/build.
+
+## 2026-04-04: milestone-1/3 journey gates now fail-close on stale per-head desktop executable proof receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require install/update/recovery and packaged-binary proof to fail honest when platform/head receipts are missing or stale.
+  - `fleet` journey-gate repo proof checks only validated marker presence; stale generated desktop proof receipts could still pass.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `repo_source_proof` rows now support stale enforcement fields:
+      - `max_age_hours`
+      - `generated_at_fields` (default `generated_at`, `generatedAt`)
+      - `max_future_skew_seconds` (default `300`)
+    - evaluation now fail-closes when proof JSON is invalid, missing timestamp fields, too far in the future, or older than the allowed age.
+  - patched canonical gate registry in both mirrors:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `install_claim_restore_continue` now requires fresh `chummer6-ui` desktop executable receipt coverage via:
+      - `.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+      - tuple markers for Avalonia/Blazor on Windows/Linux/macOS
+      - startup-smoke trust marker
+      - `max_age_hours: 48`
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - added `test_materialize_journey_gates_blocks_when_repo_source_proof_is_stale`.
+    - added `test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof`.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+- Verification:
+  - `python3 -m py_compile /docker/fleet/scripts/materialize_journey_gates.py /docker/fleet/tests/test_materialize_journey_gates.py` -> PASS.
+  - executable stale-proof scenario:
+    - `python3 /docker/fleet/scripts/materialize_journey_gates.py --registry <tmp>/GOLDEN_JOURNEY_RELEASE_GATES.yaml --status-plane <tmp>/STATUS_PLANE.generated.yaml --progress-report <tmp>/PROGRESS_REPORT.generated.json --progress-history <tmp>/PROGRESS_HISTORY.generated.json --support-packets <tmp>/SUPPORT_CASE_PACKETS.generated.json --out <tmp>/JOURNEY_GATES.generated.json` -> PASS.
+    - output proof: `overall_state = blocked` with reason `repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (...)`.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
+- Commits landed:
+  - pending local commits in `fleet` and `chummer6-design`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
 ## 2026-04-04: milestone-8/9 Build Lab governed outputs now include source-hint tokens in publication/audit receipts
 
