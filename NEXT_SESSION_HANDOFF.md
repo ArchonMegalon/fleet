@@ -110,6 +110,7 @@
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter \"FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.DecisionNoticesIncludeTravelCacheRefreshWhenTravelCachesAreStale\" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`1 passed` on `net10.0` and `net10.0-windows` filtered runs).
 - Commits landed:
   - `chummer6-hub`: `6e8f3d94` (`feat(w3-6): mark offline lanes degraded when travel caches are stale`).
+  - `fleet`: `6d220d0` (`docs(handoff): record w3-6 degraded offline cache continuity slice`), `bc03617` (`docs(handoff): update w3-6 verification to passing targeted hub tests`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
