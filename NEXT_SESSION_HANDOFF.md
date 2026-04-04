@@ -1,3 +1,46 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 workspace-v4 brief compact-form canonicalization slice
+
+- Commits landed:
+  - `chummer6-hub`: `91f4f797` (`feat(w3-4-5-6): canonicalize workspacev4 brief compact continuity forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 workspace-v4 continuity lane now fail-closes compact `workspacev4brief(s)` and bare `campaignworkspacev4` forms across canonicalization and live journey audits
+
+- Trigger:
+  - `PrepLibraryQueryAliasCanonicalizer` accepted compact `campaignworkspacev4` and campaign-scoped brief packet forms, but coverage did not assert bare `campaignworkspacev4` in workspace journey probes.
+  - compact `workspacev4brief` / `workspacev4briefs` shorthand was also not canonicalized, leaving a compact-query seam where workspace-v4 brief wording could miss the governed campaign-return packet lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites:
+      - `workspacev4brief` -> `workspace v4 brief`
+      - `workspacev4briefs` -> `workspace v4 briefs`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesWorkspaceV4CompactFormsIntoCampaignReturnPacketTokens` with `campaignworkspacev4` and `workspacev4briefs` assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` to assert matches for:
+      - `campaignworkspacev4`
+      - `workspacev4brief`
+      - `workspacev4briefs`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` tuple probes for:
+      - `campaignworkspacev4`
+      - `workspacev4brief`
+      - `workspacev4briefs`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace query assertions via `assertWorkspacePrepQuerySearch(...)` for:
+      - `campaignworkspacev4`
+      - `workspacev4brief`
+      - `workspacev4briefs`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new live-audit and Playwright marker strings for all new compact query forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesWorkspaceV4CompactFormsIntoCampaignReturnPacketTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" -v minimal` -> PASS (`4 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W1 external-proof capture contract handoff docs slice
 
 - Commits landed:
