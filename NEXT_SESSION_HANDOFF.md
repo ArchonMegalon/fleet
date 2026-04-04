@@ -177,7 +177,7 @@
 - Commits landed:
   - `chummer6-core`: `5c0de1e6` (`feat(w13): aggregate reference-source posture in master index`).
   - `chummer6-design`: `ff528de` (`docs(w13): cite aggregate reference-source posture evidence`).
-  - `fleet`: `d41ce1f` (`docs(handoff): capture w13 source-reference posture slice`).
+  - `fleet`: `d41ce1f` (`docs(handoff): capture w13 source-reference posture slice`), `72367dc` (`docs(handoff): record w13 commit and push receipts`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `47a4948e..5c0de1e6`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
