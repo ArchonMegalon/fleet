@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-2 contract verifier now asserts full canonical flagship `releaseProof.proofRoutes` set
+
+- Trigger:
+  - registry materializer/verifier now fail-close incomplete flagship `releaseProof.proofRoutes` coverage.
+  - `Chummer.Hub.Registry.Contracts.Verify` still accepted a weaker route posture (single-route assertion plus a Windows installer route sample), which undercut package-level drift detection for the stricter canonical route set.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/Chummer.Hub.Registry.Contracts.Verify/Program.cs`:
+    - updated release-proof fixture route sample to canonical flagship installer route `/downloads/install/avalonia-linux-x64-installer`.
+    - replaced single-route assertion with full required set assertion for:
+      - `/downloads/install/avalonia-linux-x64-installer`
+      - `/home/access`
+      - `/home/work`
+      - `/account/work`
+      - `/account/support`
+      - `/contact`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && dotnet run --project Chummer.Hub.Registry.Contracts.Verify/Chummer.Hub.Registry.Contracts.Verify.csproj` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - package-level registry contract verification now enforces the same canonical flagship route-set expectation as runtime materializer/verifier gates, reducing route-coverage drift across contract and runtime seams.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-4 campaign return prep now fail-closes relationship-synonym drift (`connection`) across packet search terms, API audit, and workspace route journeys
 
 - Trigger:
