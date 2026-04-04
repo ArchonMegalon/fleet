@@ -1,3 +1,41 @@
+## 2026-04-04: follow-up on milestone-3 Linux startup-smoke checks-alias parity hardening (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `3131f8d8` (`fix(milestone-3): align linux startup-smoke checks receipt aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-3 Linux per-head gate now emits and validates `checks.startup_smoke_*` aliases like Windows/macOS
+
+- Trigger:
+  - macOS and Windows per-head exit receipts already expose startup-smoke contract keys directly in `checks`, while Linux relied on nested `startup_smoke.primary` plus `release_channel.startup_smoke_external_blocker`.
+  - that asymmetry left a control-plane seam for consumers that read `checks` envelopes uniformly across all promoted desktop platforms.
+- Landed:
+  - patched Linux exit gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`
+    - `checks` now includes:
+      - `startup_smoke_receipt_found`
+      - `startup_smoke_receipt_path`
+      - `startup_smoke_external_blocker`
+  - patched executable gate materializer:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - Linux validation now resolves blocker from:
+      - `release_channel.startup_smoke_external_blocker` **or**
+      - `checks.startup_smoke_external_blocker`.
+    - added fail-close checks for Linux receipt alias drift:
+      - `checks.startup_smoke_receipt_found` must match actual `startup_smoke.primary.receipt_path` file presence.
+      - `checks.startup_smoke_receipt_path` must match `startup_smoke.primary.receipt_path`.
+  - patched compliance script-lock:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - asserts Linux checks-alias emission and executable-gate alias/consistency markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Linux_exit_gate_materializer_embeds_release_channel_artifact_identity_in_checks_envelope|FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`2` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-3 per-head startup-smoke contract shape is now consistent across Linux, Windows, and macOS `checks` envelopes, and executable gate logic fail-closes Linux alias drift rather than silently trusting nested-only fields.
+
 ## 2026-04-04: follow-up on W3 prep-library packet-plural canonicalization (commit and push status)
 
 - Commits landed:
