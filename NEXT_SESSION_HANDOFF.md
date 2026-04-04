@@ -64,6 +64,7 @@
   - `fleet`: `19489a2` (`feat(w3-4-5-6): promote hub/mobile campaign proofs in status-plane fallback`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `docs(handoff)` append commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials for authenticated `fleet` push.
 
