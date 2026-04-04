@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-6 EA now has first-class built-in safehouse/travel/offline/mobile continuity planning contracts
+
+- Trigger:
+  - frontier milestone `6` requires safehouse, travel, offline, and mobile companion continuity to stay explicit and governed across planning and operator workflows.
+  - EA already shipped built-in campaign return-loop (`4`) and GM-ops (`5`) contracts, but milestone-6 continuity packets still depended on ad hoc task-contract setup.
+- Landed:
+  - patched `/docker/EA/ea/app/services/task_contracts.py`:
+    - expanded builtin groundwork contract family with milestone-6 continuity keys:
+      - `campaign_safehouse_readiness_brief`
+      - `campaign_travel_continuity_packet`
+      - `campaign_offline_continuity_brief`
+      - `campaign_mobile_companion_brief`
+    - all new keys resolve to explicit deliverable types and compile through the governed `tool_then_artifact` lane (`structured_generate` + optional `review_light` + artifact save).
+  - patched `/docker/EA/tests/test_planner.py`:
+    - added `test_builtin_campaign_mobile_companion_contract_builds_tool_then_artifact_plan`.
+    - fail-proves `campaign_mobile_companion_brief` resolves as builtin and compiles:
+      - `step_input_prepare`
+      - `step_structured_generate`
+      - `step_reasoned_patch_review`
+      - `step_artifact_save`
+  - patched `/docker/EA/SKILLS.md`:
+    - added `campaign_mobile_companion_brief` row in the initial catalog so product skill docs include the milestone-6 continuity lane.
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest tests/test_planner.py -q` -> PASS (`12 passed`).
+- Commits landed:
+  - pending local commit in this slice.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push remains credential-dependent in this environment.
+
+
 ## 2026-04-04: milestone-17 import-oracle lane now projects explicit Genesis/CommLink adjacent coverage posture from certification receipts
 
 - Trigger:
@@ -28,12 +60,15 @@
   - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
   - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_import_oracle_lane_when_fixture_families_and_certification_are_present|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_import_oracle_lane_when_adjacent_oracle_coverage_is_partial|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests run due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
 - Commits landed:
-  - pending local commit in `chummer6-core` for adjacent SR6 oracle posture fields and receipt parsing.
-  - pending local doc sync commit in `chummer6-design` and `fleet` mirror.
+  - `chummer6-core`: `3dd29762` (`feat(w2-17): project explicit adjacent oracle coverage from receipts`).
+  - `chummer6-design`: `640d4a1` (`docs(w2-17): record adjacent oracle posture projection`).
+  - `fleet`: `a1d0ddd` (`docs(w2-17): sync adjacent import oracle parity and handoff`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `3dd29762`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - no product blocker for this milestone-17 projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+  - no product blocker for this milestone-17 projection slice; filtered `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in this workspace baseline, and design/fleet pushes remain credential-gated.
 
 ## 2026-04-04: milestone-1/3 journey gates now fail-close on stale per-head desktop executable proof receipts
 
