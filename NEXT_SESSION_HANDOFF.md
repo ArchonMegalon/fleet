@@ -93,9 +93,11 @@
 ## 2026-04-04: follow-up on macOS startup-smoke blocker alias normalization for milestone-3 per-head receipts (commit and push status)
 
 - Commits landed:
-  - `chummer6-ui`: pending in this slice (scoped files only; see landed section below).
+  - `chummer6-ui`: `35bb75ac` (`fix(milestone-3): normalize macos startup-smoke blocker alias`).
+  - `fleet`: `b0e3c46` (`docs(handoff): record macos blocker alias normalization slice`).
 - Push attempts:
-  - pending in this slice after commit; expected to remain blocked by missing GitHub HTTPS credentials in this environment.
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment has no configured GitHub credentials for HTTPS remotes, so pushes fail with `fatal: could not read Username for 'https://github.com': No such device or address`.
 
