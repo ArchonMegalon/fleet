@@ -1,28 +1,34 @@
-## 2026-04-04: milestone-4/5 campaign aftermath continuity now fail-closes split/hyphen `out brief` and `hot wash` carry-forward recap shorthand in server-plane packet routing
+## 2026-04-04: milestone-4/5 campaign aftermath continuity now fail-closes split/hyphen carry-forward recap shorthand for `out brief`, `hot wash`, `post mortem`, `post session`, and `post run` in server-plane packet routing
 
 - Trigger:
   - frontier milestones `4` and `5` require campaign aftermath continuity and GM operations prep routing to stay one governed lane from carry-forward cues through recap packet hydration.
-  - `CampaignWorkspaceServerPlaneService` already recognized compact `outbrief*` and `hotwash*` terms, but carry-forward aftermath predicates missed split/hyphen forms (`out brief`, `out-brief`, `hot wash`, `hot-wash`) that were already accepted in prep-library canonical query and GM unresolved-domain routing.
-  - this left a continuity drift seam where common carry-forward phrasing could avoid aftermath packet activation even though equivalent prep/GM routes were governed.
+  - `CampaignWorkspaceServerPlaneService` already recognized compact recap shorthand terms, but carry-forward aftermath predicates missed split/hyphen forms (`out brief`, `out-brief`, `hot wash`, `hot-wash`, `post mortem`, `post-mortem`, `post session`, `post-session`, `post run`, `post-run`) that were already accepted in prep-library canonical query and GM unresolved-domain routing.
+  - this left a continuity drift seam where common carry-forward phrasing could avoid aftermath packet activation even though equivalent prep/GM routes stayed governed.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
     - `IsAftermathSignalKind(...)` now includes `ContainsOutBriefTokenPair(...)` and `ContainsHotWashTokenPair(...)`.
-    - `ContainsAftermathRecapToken(...)` now includes `ContainsOutBriefTokenPair(...)` and `ContainsHotWashTokenPair(...)`.
-    - split/hyphen `out brief` and `hot wash` carry-forward cues now activate the same aftermath lane as compact `outbrief`/`hotwash`.
+    - `IsAftermathSignalKind(...)` and `ContainsAftermathRecapToken(...)` now include `ContainsPostMortemTokenPair(...)`, `ContainsPostSessionTokenPair(...)`, and `ContainsPostRunTokenPair(...)`.
+    - split/hyphen carry-forward cues now activate the same aftermath lane as compact recap shorthand forms.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `AftermathPacketActivatesFromOutBriefCarryForwardSplitTokensWhenOtherFamiliesLag`.
     - added `AftermathPacketActivatesFromHotWashCarryForwardEvidenceSplitTokensWhenPrimaryFieldsAreSparse`.
-    - added focused workspace builders for split/hyphen carry-forward cue variants.
+    - added `AftermathPacketActivatesFromPostMortemCarryForwardSplitTokensWhenOtherFamiliesLag`.
+    - added `AftermathPacketActivatesFromPostSessionAndPostRunCarryForwardEvidenceSplitTokensWhenPrimaryFieldsAreSparse`.
+    - added focused workspace builders for these split/hyphen carry-forward cue variants.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromOutBriefCarryForwardSplitTokensWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromHotWashCarryForwardEvidenceSplitTokensWhenPrimaryFieldsAreSparse|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromCarryForwardSignalsWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromOutBriefCarryForwardSplitTokensWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromHotWashCarryForwardEvidenceSplitTokensWhenPrimaryFieldsAreSparse|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromPostMortemCarryForwardSplitTokensWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromPostSessionAndPostRunCarryForwardEvidenceSplitTokensWhenPrimaryFieldsAreSparse|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromCarryForwardSignalsWhenOtherFamiliesLag|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.AftermathPacketActivatesFromCarryForwardEvidenceLinesWhenPrimaryFieldsAreSparse" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
   - `chummer.run-services`: `2cc66fd2` (`fix(w3): route split out-brief and hot-wash carry-forward cues into aftermath lane`).
+  - `chummer.run-services`: `d6432e60` (`fix(w3): normalize split post-mortem/session/run carry-forward aftermath cues`).
   - `fleet`: `d83f731` (`docs(handoff): record w3 split out-brief and hot-wash carry-forward closure`).
+  - `fleet`: `8d648d3` (`docs(handoff): fill commit ids and push results for w3 carry-forward closure`).
+  - `fleet`: `ab59cc7` (`docs(handoff): record retry push failures for w3 carry-forward closure`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer.run-services && git push` (post-handoff-refresh retry) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` (post-handoff-refresh retry) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (final handoff commit retry) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
