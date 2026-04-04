@@ -49,6 +49,32 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 support install-proof contract now fail-closes expected installer target fields
+
+- Trigger:
+  - W1 install/update/recovery closure already required tuple host/proof and startup-smoke receipt contract fields in support packets, but still allowed missing expected target coordinates (`artifact_id`, installer filename, public install route, startup-smoke receipt path).
+  - this left room for support closure packets to pass while drifting from release/public shelf/installer truth for the same blocked tuple.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now fail-closes missing:
+      - `install_diagnosis.external_proof_request.expected_artifact_id`
+      - `install_diagnosis.external_proof_request.expected_installer_file_name`
+      - `install_diagnosis.external_proof_request.expected_public_install_route`
+      - `install_diagnosis.external_proof_request.expected_startup_smoke_receipt_path`
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - expanded `test_materialize_journey_gates_accepts_support_external_proof_contract_when_present` with full expected target fields.
+    - added `test_materialize_journey_gates_blocks_when_support_external_proof_request_is_missing_expected_targets`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_external_proof_contract_when_present or support_external_proof_request_is_missing_expected_targets"` -> FAIL (`No module named pytest`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && python3 - <<'PY' ... synthetic support packet missing expected_public_install_route ... PY` -> PASS (journey gate blocks with `expected_public_install_route` violation).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 gm continuity-return stale-drift gate slice
 
 - Commits landed:

@@ -642,6 +642,16 @@ def evaluate_journey(
                             support_packet_contract_violations.append(
                                 f"support packet {packet_id} is missing install_diagnosis.external_proof_request.required_host."
                             )
+                        for required_key in (
+                            "expected_artifact_id",
+                            "expected_installer_file_name",
+                            "expected_public_install_route",
+                            "expected_startup_smoke_receipt_path",
+                        ):
+                            if not str(external_proof_request.get(required_key) or "").strip():
+                                support_packet_contract_violations.append(
+                                    f"support packet {packet_id} is missing install_diagnosis.external_proof_request.{required_key}."
+                                )
                         required_proofs = external_proof_request.get("required_proofs")
                         if not isinstance(required_proofs, list) or not [
                             str(token or "").strip() for token in required_proofs if str(token or "").strip()
