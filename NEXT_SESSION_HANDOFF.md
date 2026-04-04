@@ -27,6 +27,33 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-1/3 completion-review executable gate now fail-closes declared blocker-count contradictions against local/external row payloads
+
+- Trigger:
+  - W1 milestones `1` and `3` require packaged-binary install/update/recovery proof receipts that cannot lie when desktop executable-gate payloads are contradictory.
+  - `_desktop_executable_exit_gate_audit(...)` already validated several blocker-contract contradictions, but still accepted payloads where positive blocker counts could be declared without matching row evidence or with aggregate count mismatches.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - fail-closed executable-gate payloads when declared `blocking/local/external` counts are positive but corresponding finding rows are empty.
+    - fail-closed executable-gate payloads when finding rows exist but declared counts are zero.
+    - fail-closed executable-gate payloads when declared `blockingFindingsCount` does not equal `localBlockingFindingsCount + externalBlockingFindingsCount`.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_desktop_executable_exit_gate_audit_rejects_positive_count_without_rows`.
+    - added `test_desktop_executable_exit_gate_audit_rejects_total_count_mismatch_vs_local_and_external`.
+  - refreshed completion-review frontier mirrors:
+    - `/docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+    - `/docker/fleet/.codex-design/product/COMPLETION_REVIEW_FRONTIER.generated.yaml`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit_rejects_external_only_contract_with_local_findings or desktop_executable_exit_gate_audit_rejects_passing_payload_with_blocking_findings or desktop_executable_exit_gate_audit_rejects_positive_count_without_rows or desktop_executable_exit_gate_audit_rejects_total_count_mismatch_vs_local_and_external or design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale"` -> PASS (`5 passed`, `179 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit or design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale"` -> PASS (`5 passed`, `179 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized with current audit contract).
+- Commits landed:
+  - pending
+- Push attempts:
+  - not attempted in this slice yet.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 completion-review frontier now preserves every missing desktop tuple external-proof request instead of truncating after four criteria
 
 - Trigger:

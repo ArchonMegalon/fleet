@@ -9324,6 +9324,36 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
             audit["status"] = "fail"
             audit["reason"] = "desktop executable exit gate external-only block is missing external blocking findings"
             return audit
+    if blocking_count > 0 and not blocking_findings:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate blocking findings count is positive but no finding rows were provided"
+        return audit
+    if local_count > 0 and not local_findings:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate local blocking findings count is positive but no finding rows were provided"
+        return audit
+    if external_count > 0 and not external_findings:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate external blocking findings count is positive but no finding rows were provided"
+        return audit
+    if blocking_findings and blocking_count <= 0:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate blocking findings rows are present but the declared count is zero"
+        return audit
+    if local_findings and local_count <= 0:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate local blocking findings rows are present but the declared count is zero"
+        return audit
+    if external_findings and external_count <= 0:
+        audit["status"] = "fail"
+        audit["reason"] = "desktop executable exit gate external blocking findings rows are present but the declared count is zero"
+        return audit
+    if (blocking_count > 0 or local_count > 0 or external_count > 0) and blocking_count != (local_count + external_count):
+        audit["status"] = "fail"
+        audit["reason"] = (
+            "desktop executable exit gate declared blocking findings count does not equal local plus external counts"
+        )
+        return audit
     if blocking_findings and blocking_count > 0 and blocking_count != len(blocking_findings):
         audit["status"] = "fail"
         audit["reason"] = "desktop executable exit gate blocking findings count does not match finding rows"
