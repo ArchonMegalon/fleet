@@ -216,6 +216,31 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         if not proof_tokens:
             continue
         head, rid, platform = _parse_tuple_identity(tuple_id)
+        provided_smoke_contract = item.get("startupSmokeReceiptContract")
+        provided_smoke_contract_normalized = (
+            {
+                "status_any_of": sorted(
+                    {
+                        str(token or "").strip().lower()
+                        for token in (provided_smoke_contract.get("statusAnyOf") or [])
+                        if str(token or "").strip()
+                    }
+                ),
+                "ready_checkpoint": str(provided_smoke_contract.get("readyCheckpoint") or "").strip().lower(),
+                "head_id": str(provided_smoke_contract.get("headId") or "").strip().lower(),
+                "platform": str(provided_smoke_contract.get("platform") or "").strip().lower(),
+                "rid": str(provided_smoke_contract.get("rid") or "").strip().lower(),
+                "host_class_contains": str(provided_smoke_contract.get("hostClassContains") or "").strip().lower(),
+            }
+            if isinstance(provided_smoke_contract, dict)
+            else {}
+        )
+        provided_commands = item.get("proofCaptureCommands")
+        provided_commands_normalized = (
+            [str(token or "").strip() for token in provided_commands if str(token or "").strip()]
+            if isinstance(provided_commands, list)
+            else []
+        )
         requests.append(
             {
                 "tuple_id": tuple_id,
@@ -228,18 +253,26 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "expected_installer_file_name": str(item.get("expectedInstallerFileName") or "").strip(),
                 "expected_public_install_route": str(item.get("expectedPublicInstallRoute") or "").strip(),
                 "expected_startup_smoke_receipt_path": str(item.get("expectedStartupSmokeReceiptPath") or "").strip(),
-                "startup_smoke_receipt_contract": _required_receipt_contract(
-                    head=head,
-                    rid=rid,
-                    platform=platform,
-                    required_host=required_host,
+                "startup_smoke_receipt_contract": (
+                    provided_smoke_contract_normalized
+                    if provided_smoke_contract_normalized
+                    else _required_receipt_contract(
+                        head=head,
+                        rid=rid,
+                        platform=platform,
+                        required_host=required_host,
+                    )
                 ),
-                "proof_capture_commands": _proof_capture_commands(
-                    head=head,
-                    rid=rid,
-                    platform=platform,
-                    installer_file_name=str(item.get("expectedInstallerFileName") or "").strip(),
-                    required_host=required_host,
+                "proof_capture_commands": (
+                    provided_commands_normalized
+                    if provided_commands_normalized
+                    else _proof_capture_commands(
+                        head=head,
+                        rid=rid,
+                        platform=platform,
+                        installer_file_name=str(item.get("expectedInstallerFileName") or "").strip(),
+                        required_host=required_host,
+                    )
                 ),
             }
         )
