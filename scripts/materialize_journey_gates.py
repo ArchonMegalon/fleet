@@ -369,6 +369,45 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
     requests = _release_channel_external_proof_requests(payload)
     reasons: List[str] = []
     coverage = dict(payload.get("desktopTupleCoverage") or {})
+    raw_external_proof_requests = coverage.get("externalProofRequests")
+    if raw_external_proof_requests is not None:
+        if not isinstance(raw_external_proof_requests, list):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests' "
+                "must be an explicit list when present."
+            )
+        else:
+            for index, raw_request in enumerate(raw_external_proof_requests):
+                row_id = f"externalProofRequests[{index}]"
+                if not isinstance(raw_request, dict):
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'desktopTupleCoverage.{row_id}' must be an object."
+                    )
+                    continue
+                tuple_id = str(raw_request.get("tupleId") or "").strip()
+                required_proofs = raw_request.get("requiredProofs")
+                if not tuple_id:
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'desktopTupleCoverage.{row_id}.tupleId' must be a non-empty string."
+                    )
+                if not isinstance(required_proofs, list):
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'desktopTupleCoverage.{row_id}.requiredProofs' must be an explicit list."
+                    )
+                    continue
+                normalized_required_proofs = [
+                    str(token or "").strip()
+                    for token in required_proofs
+                    if str(token or "").strip()
+                ]
+                if not normalized_required_proofs:
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'desktopTupleCoverage.{row_id}.requiredProofs' must include at least one token."
+                    )
     reported_complete = coverage.get("complete")
     if not isinstance(reported_complete, bool):
         reasons.append(
