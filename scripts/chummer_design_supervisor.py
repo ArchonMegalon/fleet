@@ -3261,7 +3261,7 @@ def _compose_final_message_sections(sections: Dict[str, str]) -> str:
 
 def _is_missing_github_push_blocker(text: str) -> bool:
     compact = str(text or "").strip().lower()
-    return "git push" in compact and "could not read username for 'https://github.com'" in compact
+    return "push" in compact and "could not read username for 'https://github.com'" in compact
 
 
 def _worker_reported_git_push_repos(stderr_text: str) -> List[Path]:

@@ -1701,6 +1701,25 @@ def test_retry_worker_reported_git_pushes_uses_host_git_auth(monkeypatch) -> Non
         assert calls[2][1]["GH_CONFIG_DIR"] == str(gh_dir)
 
 
+def test_is_missing_github_push_blocker_accepts_remote_push_wording() -> None:
+    module = _load_module()
+
+    assert (
+        module._is_missing_github_push_blocker(
+            "`fleet` remote push is still blocked by missing GitHub HTTPS credentials: "
+            "`fatal: could not read Username for 'https://github.com': No such device or address`."
+        )
+        is True
+    )
+    assert (
+        module._is_missing_github_push_blocker(
+            "host-side git push recovery failed after worker credential error: "
+            "/docker/fleet: fatal: could not read Username for 'https://github.com': No such device or address"
+        )
+        is True
+    )
+
+
 def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_account(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

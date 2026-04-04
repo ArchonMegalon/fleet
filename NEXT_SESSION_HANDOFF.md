@@ -1,3 +1,23 @@
+## 2026-04-04: fleet host-side push recovery now recognizes newer `remote push is still blocked` worker blocker wording
+
+- Trigger:
+  - a fresh post-fix shard completion (`20260404T140516Z`) still recorded a Fleet blocker even though replaying `_retry_worker_reported_git_pushes(...)` against the exact worker stderr successfully pushed both `/docker/chummercomplete/chummer-hub-registry` and `/docker/fleet`.
+  - the remaining defect was the blocker matcher in `/docker/fleet/scripts/chummer_design_supervisor.py`: it only triggered recovery when the worker closeout literally contained `git push`, but newer worker closeouts now say ``remote push is still blocked by missing GitHub HTTPS credentials``.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - broadened `_is_missing_github_push_blocker(...)` so any GitHub HTTPS username failure mentioning `push` now triggers host-side recovery, not just the older literal `git push` wording.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added regression coverage for the newer `remote push is still blocked` wording and the existing `host-side git push recovery failed...` wording.
+- Verification:
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k 'retry_worker_reported_git_pushes_uses_host_git_auth or is_missing_github_push_blocker_accepts_remote_push_wording'` -> PASS (`2 passed`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - replay against the exact failed shard stderr:
+    - `cd /docker/fleet && python3 - <<'PY' ... _retry_worker_reported_git_pushes(worker.stderr) ... PY` -> PASS (`/docker/chummercomplete/chummer-hub-registry`, `/docker/fleet` both recovered successfully).
+- Commits landed:
+  - pending local Fleet supervisor commit.
+- Exact blocker:
+  - waiting on one fresh post-patch completed shard run to overwrite the stale pre-fix blocker in live `status --json`.
+
 ## 2026-04-04: milestone-2 registry verify lane now mutation-tests locale-summary row alias drift fail-close in verifier and materializer
 
 - Trigger:
