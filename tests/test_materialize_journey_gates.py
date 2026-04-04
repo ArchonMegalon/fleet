@@ -1007,9 +1007,13 @@ groups: []
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     journey = payload["journeys"][0]
     assert payload["summary"]["overall_state"] == "blocked"
-    assert journey["signals"]["support_install_truth_contract_violation_count"] == 2
+    assert journey["signals"]["support_install_truth_contract_violation_count"] == 4
     assert any(
         "support packet support_packet_bad_contract is missing install_diagnosis.registry_release_version." in reason
+        for reason in journey["blocking_reasons"]
+    )
+    assert any(
+        "support packet support_packet_bad_contract is missing install_diagnosis.registry_release_channel_status." in reason
         for reason in journey["blocking_reasons"]
     )
     assert any(
@@ -1337,6 +1341,8 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
     }
     assert release_channel_proof.get("json_must_be_one_of") == {"status": ["published", "publishable"]}
     assert release_channel_proof.get("json_must_be_non_empty_string") == {
+        "contract_name": True,
+        "releaseProof.generatedAt": True,
         "rolloutReason": True,
         "supportabilitySummary": True,
         "knownIssueSummary": True,

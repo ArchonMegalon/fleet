@@ -274,10 +274,16 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         )
     return {
         "channel_id": _normalize_text(release_channel.get("channelId") or release_channel.get("channel")).lower(),
+        "status": _normalize_text(release_channel.get("status")).lower(),
         "version": _normalize_text(release_channel.get("version") or release_channel.get("releaseVersion")),
         "rollout_state": _normalize_text(release_channel.get("rolloutState") or release_channel.get("rollout_state")).lower(),
         "supportability_state": _normalize_text(
             release_channel.get("supportabilityState") or release_channel.get("supportability_state")
+        ).lower(),
+        "release_proof_status": _normalize_text(
+            (release_channel.get("releaseProof") or {}).get("status")
+            if isinstance(release_channel.get("releaseProof"), dict)
+            else release_channel.get("releaseProofStatus")
         ).lower(),
         "fix_availability_summary": _normalize_text(release_channel.get("fixAvailabilitySummary") or release_channel.get("fix_availability_summary")),
         "promoted_tuples": rows,
@@ -495,9 +501,11 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         "install_truth_state": install_truth_state,
         "install_diagnosis": {
             "registry_channel_id": _normalize_text(release_channel_index.get("channel_id")),
+            "registry_release_channel_status": _normalize_text(release_channel_index.get("status")),
             "registry_release_version": _normalize_text(release_channel_index.get("version")),
             "registry_rollout_state": _normalize_text(release_channel_index.get("rollout_state")),
             "registry_supportability_state": _normalize_text(release_channel_index.get("supportability_state")),
+            "registry_release_proof_status": _normalize_text(release_channel_index.get("release_proof_status")),
             "case_channel_matches_registry": bool(
                 release_channel
                 and _normalize_text(release_channel_index.get("channel_id"))

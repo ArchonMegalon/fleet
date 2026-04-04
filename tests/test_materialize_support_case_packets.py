@@ -390,7 +390,9 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
         json.dumps(
             {
                 "channelId": "preview",
+                "status": "published",
                 "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
                 "rolloutState": "published",
                 "supportabilityState": "supported",
                 "fixAvailabilitySummary": "Fix is on the preview shelf.",
@@ -439,7 +441,9 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["update_required_misrouted_case_count"] == 0
     waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
+    assert waiting_packet["install_diagnosis"]["registry_release_channel_status"] == "published"
     assert waiting_packet["install_diagnosis"]["tuple_present_on_promoted_shelf"] is True
+    assert waiting_packet["install_diagnosis"]["registry_release_proof_status"] == "passed"
     assert waiting_packet["recovery_path"]["href"] == "/account/support"
     fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
     assert fix_states == ["awaiting_reporter_verification", "confirmed_fixed"]
@@ -482,7 +486,9 @@ def test_materialize_support_case_packets_marks_update_required_when_fixed_versi
         json.dumps(
             {
                 "channelId": "preview",
+                "status": "published",
                 "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
                 "rolloutState": "published",
                 "supportabilityState": "supported",
                 "desktopTupleCoverage": {
@@ -527,6 +533,8 @@ def test_materialize_support_case_packets_marks_update_required_when_fixed_versi
     assert payload["summary"]["update_required_misrouted_case_count"] == 0
     packet = payload["packets"][0]
     assert packet["install_diagnosis"]["case_installed_version"] == "1.2.2"
+    assert packet["install_diagnosis"]["registry_release_channel_status"] == "published"
+    assert packet["install_diagnosis"]["registry_release_proof_status"] == "passed"
     assert packet["install_diagnosis"]["case_version_matches_registry_release"] is False
     assert packet["install_diagnosis"]["case_fixed_version_matches_registry_release"] is True
     assert packet["fix_confirmation"]["update_required"] is True

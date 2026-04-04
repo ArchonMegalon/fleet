@@ -392,9 +392,17 @@ def evaluate_journey(
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing install_diagnosis.registry_channel_id."
                     )
+                if not str(install_diagnosis.get("registry_release_channel_status") or "").strip():
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing install_diagnosis.registry_release_channel_status."
+                    )
                 if not str(install_diagnosis.get("registry_release_version") or "").strip():
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing install_diagnosis.registry_release_version."
+                    )
+                if not str(install_diagnosis.get("registry_release_proof_status") or "").strip():
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} is missing install_diagnosis.registry_release_proof_status."
                     )
             if not isinstance(fix_confirmation, dict):
                 support_packet_contract_violations.append(
