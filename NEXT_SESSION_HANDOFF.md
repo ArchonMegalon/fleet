@@ -22,6 +22,32 @@
 - Push status:
   - pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-3 executable gate now treats file-backed startup-smoke receipts as authoritative proof (no embedded fallback masking)
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot lie by platform/head tuple.
+  - `materialize-desktop-executable-exit-gate.sh` still allowed fallback to embedded gate-side startup-smoke fields when receipt files were partial/unreadable, which could mask missing provenance in file-backed proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - Linux startup-smoke validation now records `primary_receipt_source` and validates startup-smoke provenance from the file-backed receipt payload only.
+    - Windows startup-smoke validation now records `startup_smoke_receipt_source`, emits explicit unreadable/non-object receipt failures, and removes fallback reads from `gate_checks` metadata for startup-smoke identity fields.
+    - macOS startup-smoke validation now records `startup_smoke_receipt_source`, emits explicit unreadable/non-object receipt failures, and validates from file-backed receipt payload only.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract markers for new unreadable-receipt failure strings and startup-smoke receipt source evidence keys.
+  - refreshed generated executable gate receipt:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal --no-restore -m:1` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with only real external tuple blockers:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - executable gate startup-smoke proof is now file-backed and fail-honest when receipt files are unreadable or structurally invalid; embedded gate metadata can no longer silently satisfy those startup-smoke provenance checks.
+  - milestone-1/3 blocker posture remains correctly narrowed to external promoted Windows/macOS tuple publication/proof gaps.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 visual familiarity materializer now supports non-blocking lock posture under concurrent B14 runs
 
 - Trigger:
