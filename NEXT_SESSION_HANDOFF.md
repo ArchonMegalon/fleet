@@ -28,6 +28,39 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commit `93049546` remains local-only until auth is restored.
 
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `lesson learnt` / `lessons learnt` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath/return continuity and GM operations prep-library workflows to stay one governed lane across canonical query rewrite, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand was already fail-closed for `lesson learned` / `lessons learned`, but UK spelling variants (`lesson learnt`, `lessons learnt`, plus compact forms) were not canonicalized.
+  - this left a drift seam where common table recap wording could miss governed prep packets and unresolved GM triage could route continuity signals outside `prep_library`.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes compact and split `lessonlearnt` / `lessonslearnt` and `lesson(s) learnt` forms to governed `recap`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - expanded aftermath/recap continuity vocabulary and token-pair detection to include `learnt` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats compact/split/hyphen `lesson learnt` phrasing as governed `prep_library`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - widened continuity matching, unresolved-domain coverage, and script-lock assertions for `learnt` variants.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added API/workspace/browser checks for compact and split `lessonlearnt` / `lessonslearnt` variants, fail-closing on route drift, non-`200`, empty governed results, or missing snippets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatLessonLearntContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `7c5b8e4f` (`fix(w3): canonicalize lesson-learnt recap shorthand across continuity and gm ops`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `lesson learned` / `lessons learned` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
