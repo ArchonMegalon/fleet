@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes `postmortem` / `post mortem` aftermath vocabulary across prep-query canonicalization and service matching
+
+- Trigger:
+  - frontier milestone `4` requires downtime/diary/aftermath/return continuity to read as one governed lane.
+  - prep query rewrite already covers `debrief` and `afteraction`, but did not canonicalize common table shorthand (`postmortem`, `post mortem`, and hyphen/plural variants), leaving a continuity-search drift seam for aftermath workflows.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `postmortem`, `postmortems`, `post mortem`, and `post mortems` to governed `recap` semantics.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `postmortem` to aftermath/recap prep-word tokens so campaign workspace search and generated search terms stay aligned with the new alias lane.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended continuity alias coverage to include compact/split/hyphen `postmortem` variants and negative guard (`matrixpostmortem`).
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - extended continuity prep-query coverage so compact/split/hyphen `postmortem` variants must match governed continuity packets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 continuity prep search now treats postmortem/post-mortem vocabulary as first-class aftermath/recap language in the same governed query lane as debrief/afteraction.
+- Push status:
+  - pending in this environment (push remains blocked without GitHub HTTPS credentials).
+
 ## 2026-04-04: milestone-5 roster movement lane now fail-closes compact `crewswap` and `rosterswap` across prep search, GM ops triage, and live audit/browser proof
 
 - Trigger:
