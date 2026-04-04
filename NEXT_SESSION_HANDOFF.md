@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-2 verify lane now actively mutates visual receipt ordering to prove canonical-order fail-close behavior
+
+- Trigger:
+  - after hardening `audit-ui-parity.sh` canonical ordering checks, `scripts/ai/verify.sh` still lacked active negative probes for those new ordering rules.
+  - without mutation probes, ordering checks could regress while script-lock text assertions stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added three new negative mutation probes against `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`:
+      - swap first two `required_tests` entries.
+      - swap first two `required_legacy_interaction_keys` entries.
+      - swap first two `required_screenshots` entries.
+    - each probe now requires `audit-ui-parity.sh` to fail-close and restores the visual receipt from backup immediately after the check.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> FAILS EARLY on pre-existing workflow receipt timestamp drift (`sr4 workflow parity evidence generated_at drifts from nested receipt generatedAt`) before reaching the new visual-order mutation block.
+  - isolated temp-fixture parity mutation probe (using `CHUMMER_UI_PUBLISHED_DIR`) confirms canonical-order fail-close marker is emitted for swapped `required_tests` ordering.
+- Push status:
+  - commit landed locally in this slice; push remains credential-blocked in this environment.
+
 ## 2026-04-04: milestone-2 hub parity audit now fail-closes canonical ordering drift for visual tests, legacy interaction keys, and required screenshots
 
 - Trigger:
