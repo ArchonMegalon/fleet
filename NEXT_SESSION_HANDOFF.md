@@ -16,7 +16,7 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending local commit in `chummer.run-services` (not yet created in this session).
+  - `chummer6-hub` / `chummer.run-services`: `1b9a3af2` (`feat(w4): add governed print-ready PDF build handoff lane`).
   - pending local commit in `fleet` for handoff refresh (not yet created in this session).
 - Push attempts:
   - not attempted yet for this slice.
