@@ -97,10 +97,12 @@
   - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation markers, including future-skew receipt rejection).
 - Commits landed:
   - `chummer-hub-registry`: `95d2bd5` (`test(w1): fail-close startup smoke future-skew receipts`).
+  - `fleet`: `9418584` (`docs: record w1 startup-smoke future-skew fail-close slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `b41b66e..95d2bd5`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this slice.
+  - none for the landed verifier/mutation hardening; fleet push remains blocked in this container by missing GitHub HTTPS credentials.
 
 ## 2026-04-04: milestone-7/8/9/16 build-handoff now fail-closes governed export-lane eviction when carry-forward projections are long
 
