@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5 continuity lane now fail-closes compact afteraction/afteractions recap shorthand in workspace aftermath shelf classification
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign continuity recap language to stay one governed lane across prep query canonicalization, GM routing, and workspace aftermath/creator shelf classification.
+  - compact `afteraction` and `afteractions` were already canonicalized in prep-query rewrite and covered in GM/live proof rails, but workspace aftermath recap classification did not recognize those compact forms.
+  - this left a drift seam where compact `afteraction*` publication kinds could miss the aftermath shelf lane while equivalent report/review forms stayed governed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `afteraction` and `afteractions` to `AftermathRecapWordTokens`.
+    - `IsAftermathRecapPublicationKind(...)` now classifies compact `afteraction*` kinds as aftermath through existing recap-token routing.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `afteraction` and `afteractions` to `BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath` theory coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryTreatsContinuityRecapShorthandKindsAsAftermath|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.BoundedRecapShelfCategoryKeepsDowntimeClassification|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand" --nologo -v minimal` -> PASS (`18` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer.run-services` for this slice.
+  - pending local commit in `fleet` for this handoff refresh.
+- Push attempts:
+  - not attempted in this slice (known environment-wide GitHub HTTPS credential blocker remains).
+- Exact blocker:
+  - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
+
 ## 2026-04-04: milestone-2 materializer now fail-closes unexpected `releaseProof` and `uiLocalizationReleaseGate` top-level key drift, with active verify mutation coverage
 
 - Trigger:
@@ -24,12 +46,13 @@
   - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation runs for unexpected top-level proof/gate keys).
 - Commits landed:
-  - `chummer-hub-registry`: `<pending>` (`fix(w1): fail-close unexpected materializer release-proof and localization-gate keys`).
-  - `fleet`: `<pending>` (`docs(handoff): record w1 materializer proof/gate unexpected-key fail-close`).
+  - `chummer-hub-registry`: `f2842f2` (`fix(w1): fail-close unexpected materializer release-proof and localization-gate keys`).
+  - `fleet`: `d5f6d54` (`docs(handoff): record w1 materializer proof/gate unexpected-key fail-close`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `06e3e3a..f2842f2`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - pending.
+  - fleet push remains blocked by missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 registry materializer now fail-closes unexpected `locale_summary` row keys before release-channel projection, with active verify mutation coverage
 
