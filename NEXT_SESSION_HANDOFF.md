@@ -128,8 +128,10 @@
     - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
 - Commits landed:
   - `fleet`: `193cbb2` (`feat(w5-10): fail-close support install tuple proof-request linkage`).
+  - `fleet`: `7b40e22` (`docs(handoff): record w5-10 commit and push blocker`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `7b40e22`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks `pytest` module for local test runner execution.
   - release closure still externally blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
