@@ -242,6 +242,37 @@
 - Exact blocker:
   - private `Chummer.*` package restore is unavailable in this environment (only `nuget.org` source resolved), so build/regression lanes cannot execute until the local feed/bootstrap source is restored.
 
+## 2026-04-04: milestone-1/3 executable gate now auto-recovers stale empty b14 lock dirs before fail-closing, so dependency rematerialization no longer stalls on orphaned lock folders
+
+- Trigger:
+  - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` was repeatedly fail-closing on `Flagship release gate lock remained active...` because `b14-flagship-ui-release-gate.lock` could remain as an empty orphan directory after interrupted runs.
+  - this blocked dependency rematerialization and weakened W1 install/update/recovery proof freshness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added conservative stale-lock pruning for `b14-flagship-ui-release-gate.lock`:
+      - only removes when lock dir is empty,
+      - no active `b14-flagship-ui-release-gate.sh` process is detected,
+      - lock age exceeds `CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_STALE_MAX_AGE_SECONDS` (default `7200`).
+    - added evidence fields to keep lock behavior auditable:
+      - `release_gate_lock_stale_removed`
+      - `release_gate_lock_stale_reason`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded source-guard assertions to lock in stale-lock pruning logic and new receipt evidence keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`32 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=0 CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_WAIT_SECONDS=5 CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_POLL_SECONDS=1 CHUMMER_DESKTOP_EXECUTABLE_RELEASE_GATE_LOCK_STALE_MAX_AGE_SECONDS=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected on true external Windows/macOS tuple/smoke blockers, with stale lock no longer blocking rematerialization.
+  - `jq` receipt check confirms stale-lock recovery evidence:
+    - `release_gate_lock_blocked=false`
+    - `release_gate_lock_stale_removed=true`
+    - `release_gate_lock_stale_reason=stale_empty_lock_dir_removed_after_..._without_active_b14_process`
+- Commits landed:
+  - pending local commit in `chummer6-ui` for stale b14 lock recovery + compliance guards.
+  - pending local commit in `fleet` for this handoff refresh.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - promoted Windows/macOS installer tuples and matching startup-smoke receipts are still absent from release-channel/public shelf truth in this workspace (external to this stale-lock recovery slice).
+
 ## 2026-04-04: milestone-1/3 Windows and macOS per-head exit receipts now always emit non-null failure summaries
 
 - Trigger:
