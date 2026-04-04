@@ -44,8 +44,8 @@
   - recap artifact ids remain canonical whether creator-publication projection is empty, unrelated, or linked.
   - milestone-4 return-loop recap continuity and milestone-5 GM publication shelves now keep one normalized artifact identity seam across attachment paths.
 - Push status:
-  - `chummer.run-services`: commit landed locally (`7d5c00d1`); push not attempted after this commit in this slice.
-  - `fleet`: handoff update pending local commit in this slice.
+  - `chummer.run-services`: commit landed locally (`7d5c00d1`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff commit landed locally (`0b58e88`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-4/5 recap identity projection now normalizes whitespace-padded publication and artifact ids even without creator-publication links
 
