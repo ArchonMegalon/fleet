@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T19:20:06Z",
+  "generated_at": "2026-04-04T19:23:30Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -17,37 +17,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T19:20:05Z",
+      "at": "2026-04-04T19:22:42Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 48
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T18:53:28Z",
       "state": "fresh",
-      "age_seconds": 1598
+      "age_seconds": 1802
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 3273
+      "age_seconds": 3477
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T18:25:33Z",
       "state": "fresh",
-      "age_seconds": 3273
+      "age_seconds": 3477
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T19:20:05Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 205
     }
   },
   "journeys": [
@@ -857,6 +857,7 @@
         "chummer6-hub",
         "chummer6-mobile",
         "chummer6-ui",
+        "chummer6-core",
         "fleet",
         "executive-assistant"
       ],
@@ -954,6 +955,40 @@
             "must_contain": [
               "offline_sync_snapshot_v1",
               "Snapshot should include reusable campaign prep assets for offline library continuity."
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.Application/Workspaces/WorkspaceService.cs",
+            "must_contain": [
+              "Portable package keeps profile, progress, attributes, skills, inventory, qualities, and contacts on the same governed receipt.",
+              "Use the workspace normally or export a portable package when you need a governed cross-surface handoff."
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.Application/Simulation/DefaultRelationshipHeatService.cs",
+            "must_contain": [
+              "public HeatComputationResult ComputeHeat(HeatComputationInput input)",
+              "< 70m => \"heat.high\",",
+              "public DowntimeProgressionResult ComputeDowntimeProgression(DowntimeProgressionInput input)"
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.Tests/Compliance/MigrationComplianceTests.cs",
+            "must_contain": [
+              "public void Relationship_and_heat_simulation_contracts_lock_in_computation_primitives()",
+              "StringAssert.Contains(simulationContractsText, \"public sealed record DowntimeProgressionInput\");",
+              "StringAssert.Contains(simulationServiceText, \"heat.low\");"
+            ]
+          },
+          {
+            "repo": "chummer6-core",
+            "path": "Chummer.CoreEngine.Tests/Program.cs",
+            "must_contain": [
+              "private static void RelationshipHeatSimulationStaysDeterministic()",
+              "AssertEx.Equal(\"heat.high\", heat.ThresholdKey, \"Relationship heat should resolve the deterministic threshold band.\");"
             ]
           },
           {
@@ -1144,6 +1179,11 @@
           }
         ],
         "required_project_posture": [
+          {
+            "project_id": "core",
+            "minimum_stage": "boundary_pure",
+            "target_stage": "boundary_pure"
+          },
           {
             "project_id": "hub",
             "minimum_stage": "pre_repo_local_complete",

@@ -44,6 +44,46 @@
   - install journey still external-only blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-4 campaign gate now fail-closes `chummer6-core` ownership proof for continuity and no-shadow portability semantics
+
+- Trigger:
+  - frontier milestone `4` explicitly names `chummer6-core` as an owner for campaign workspace v4 continuity (`downtime/diary/contacts/heat/aftermath/return`), but `campaign_session_recover_recap` gate ownership/proof only covered Hub/Mobile/UI/EA and left core semantics non-blocking.
+  - this left a release-proof seam where core continuity primitives (deterministic heat thresholds, downtime progression contract, and governed cross-surface portability receipt) could regress without tripping the W3 campaign gate.
+- Landed:
+  - patched canonical gate contract:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `campaign_session_recover_recap` now:
+      - includes `chummer6-core` in `owner_repos`
+      - fail-closes `chummer6-core` source proof markers for:
+        - governed cross-surface portability/no-shadow receipt semantics in `WorkspaceService`
+        - deterministic heat + downtime simulation service contract in `DefaultRelationshipHeatService`
+        - compliance lock-in test for relationship/heat primitives in `MigrationComplianceTests`
+        - executable deterministic heat proof in `Chummer.CoreEngine.Tests/Program.cs`
+      - requires `core` project posture `boundary_pure` -> `boundary_pure`.
+  - patched Fleet gate mirror + regression assertions:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` now fail-closes:
+      - `chummer6-core` owner presence
+      - all new core source-proof markers
+      - required core project posture row.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 24 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --registry .codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | {owner_repos,required_project_posture:.fleet_gate.required_project_posture}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `chummer6-core` owner and `core` boundary-pure posture row).
+- Commits landed:
+  - pending (to be recorded after commit step).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; remote push still depends on missing GitHub HTTPS credentials in this environment.
+
 ## 2026-04-04: handoff second push retry for milestone-4/5/6 full mobile continuity+gm marker hardening slice
 
 - Commits pending push:

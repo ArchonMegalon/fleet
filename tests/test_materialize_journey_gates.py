@@ -1942,6 +1942,7 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     continuity_gate = next(
         row for row in journeys if isinstance(row, dict) and row.get("id") == "campaign_session_recover_recap"
     )
+    assert "chummer6-core" in (continuity_gate.get("owner_repos") or [])
     proofs = continuity_gate.get("fleet_gate", {}).get("repo_source_proof") or []
 
     def proof_for(repo: str, path: str) -> dict:
@@ -2007,6 +2008,49 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
         in hub_offline_verify.get("must_contain", [])
     )
 
+    core_workspace_service = proof_for("chummer6-core", "Chummer.Application/Workspaces/WorkspaceService.cs")
+    assert (
+        "Portable package keeps profile, progress, attributes, skills, inventory, qualities, and contacts on the same governed receipt."
+        in core_workspace_service.get("must_contain", [])
+    )
+    assert (
+        "Use the workspace normally or export a portable package when you need a governed cross-surface handoff."
+        in core_workspace_service.get("must_contain", [])
+    )
+
+    core_heat_service = proof_for("chummer6-core", "Chummer.Application/Simulation/DefaultRelationshipHeatService.cs")
+    assert "public HeatComputationResult ComputeHeat(HeatComputationInput input)" in core_heat_service.get(
+        "must_contain",
+        [],
+    )
+    assert '< 70m => "heat.high",' in core_heat_service.get("must_contain", [])
+    assert "public DowntimeProgressionResult ComputeDowntimeProgression(DowntimeProgressionInput input)" in (
+        core_heat_service.get("must_contain", [])
+    )
+
+    core_migration_compliance = proof_for("chummer6-core", "Chummer.Tests/Compliance/MigrationComplianceTests.cs")
+    assert (
+        "public void Relationship_and_heat_simulation_contracts_lock_in_computation_primitives()"
+        in core_migration_compliance.get("must_contain", [])
+    )
+    assert (
+        'StringAssert.Contains(simulationContractsText, "public sealed record DowntimeProgressionInput");'
+        in core_migration_compliance.get("must_contain", [])
+    )
+    assert (
+        'StringAssert.Contains(simulationServiceText, "heat.low");' in core_migration_compliance.get("must_contain", [])
+    )
+
+    core_engine_program = proof_for("chummer6-core", "Chummer.CoreEngine.Tests/Program.cs")
+    assert "private static void RelationshipHeatSimulationStaysDeterministic()" in core_engine_program.get(
+        "must_contain",
+        [],
+    )
+    assert (
+        'AssertEx.Equal("heat.high", heat.ThresholdKey, "Relationship heat should resolve the deterministic threshold band.");'
+        in core_engine_program.get("must_contain", [])
+    )
+
     ui_parity_audit = proof_for("chummer6-ui", "scripts/audit-ui-parity.sh")
     assert "dice_roller" in ui_parity_audit.get("must_contain", [])
     assert "character_roster" in ui_parity_audit.get("must_contain", [])
@@ -2070,6 +2114,13 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'id=\\"restore-offline-truth\\"' in mobile_local_release_proof.get("must_contain", [])
     assert 'id=\\"restore-travel-companion\\"' in mobile_local_release_proof.get("must_contain", [])
     assert 'id=\\"restore-travel-companion-labels\\"' in mobile_local_release_proof.get("must_contain", [])
+
+    required_project_posture = continuity_gate.get("fleet_gate", {}).get("required_project_posture") or []
+    core_posture = next(
+        row for row in required_project_posture if isinstance(row, dict) and row.get("project_id") == "core"
+    )
+    assert core_posture.get("minimum_stage") == "boundary_pure"
+    assert core_posture.get("target_stage") == "boundary_pure"
 
     executive_assistant_skill_catalog = proof_for("executive-assistant", "SKILLS.md")
     assert "`gm_ops_briefing`" in executive_assistant_skill_catalog.get("must_contain", [])
