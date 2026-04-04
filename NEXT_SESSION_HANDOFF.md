@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-5 prep-launch semantic dedupe now ignores packet-id drift across prep-launch and GM event-control lanes
+
+- Trigger:
+  - frontier milestones 4/5 require governed prep-launch and event-control receipt counts to stay count-honest when projection packet identities rotate.
+  - `BuildPrepLaunchSemanticDedupeKey(...)` still included `PacketId`, so semantically identical prep-launch rows could bypass semantic dedupe and inflate both `prep_launch_packet` and `event_control_packet` synthesis.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - removed `PacketId` from `BuildPrepLaunchSemanticDedupeKey(...)`.
+    - prep-launch semantic dedupe now anchors on workspace/campaign scope, packet meaning, target run/scene, summary/audit evidence, and launch timestamp rather than projection packet identity drift.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLaunchPacketDeduplicatesSemanticallyIdenticalLaunchVersions_WhenPacketIdsDiffer`.
+    - added `EventControlPacketDeduplicatesSemanticallyIdenticalPrepLaunchVersions_WhenPacketIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLaunchPacketDeduplicatesSemanticallyIdenticalLaunchVersions_WhenPacketIdsDiffer|FullyQualifiedName~EventControlPacketDeduplicatesSemanticallyIdenticalPrepLaunchVersions_WhenPacketIdsDiffer" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`275` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 prep-launch/event-control receipt synthesis now resists packet-id drift inflation while preserving semantic evidence and timestamps.
+  - campaign workspace and GM ops suites remain green after this semantic-key hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 aftermath package semantic dedupe now ignores artifact-id drift across return and aftermath packet lanes
 
 - Trigger:
