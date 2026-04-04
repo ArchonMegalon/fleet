@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes stale localization gate timestamps in registry verification
+
+- Trigger:
+  - frontier milestone 2 remains blocked by `BLK-009`, and registry verification only validated localization gate timestamp format, not freshness.
+  - this allowed old `uiLocalizationReleaseGate.generatedAt` values to pass as current proof, weakening release-shelf localization honesty.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added localization-gate freshness enforcement for `releaseProof.uiLocalizationReleaseGate.generatedAt`.
+    - stale gates now fail-close when older than the configured max age (default `604800` seconds).
+    - added env overrides:
+      - `CHUMMER_VERIFY_LOCALIZATION_GATE_MAX_AGE_SECONDS`
+      - `CHUMMER_UI_LOCALIZATION_GATE_MAX_AGE_SECONDS`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that mutates `generatedAt` to a stale timestamp and asserts verifier failure.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - release-channel contract now documents freshness as a required localization proof property and names freshness override env vars.
+  - committed and pushed in `chummer-hub-registry`:
+    - `8eef970` — `Fail-close stale localization gate timestamps`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes stale `generatedAt` negative check).
+- Current trusted state:
+  - registry localization proof now requires freshness, so stale localization signoff snapshots cannot silently pass release-channel verification.
+  - milestone-2 `BLK-009` honesty posture is tighter for localization release-truth recency.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `8eef970`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing en-us localeSummary coverage in registry release verification
 
 - Trigger:
