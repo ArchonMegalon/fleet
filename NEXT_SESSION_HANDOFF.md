@@ -22,12 +22,13 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Commits landed:
-  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice (not yet created in this session).
-  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+  - `chummer6-hub` / `chummer.run-services`: `bed2b3b3` (`feat(w4-9-16): add governed replay recap module handoff lanes`).
+  - `fleet`: `91cc3b2` (`docs: refresh handoff for build-lab artifact lanes slice`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this landed slice.
+  - none for this landed slice; push is blocked in this environment by missing GitHub credential material.
 
 ## 2026-04-04: milestone-13 master-index now emits explicit snippet-coverage metrics for governed reference-lane stale posture
 
