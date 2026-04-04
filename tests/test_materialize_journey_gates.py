@@ -2397,6 +2397,8 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert 'Assert(projection.GmOperationsSummary.Contains(\\"Roster movement:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(projection.GmOperationsSummary.Contains(\\"Prep library:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(projection.GmOperationsSummary.Contains(\\"Event controls:\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(projection.GmOperationsSummary.Contains(\\"audit-visible\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
+    assert 'Assert(projection.GmOperationsSummary.Contains(\\"support-linked\\", StringComparison.Ordinal)' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\"Opposition lane:\\", StringComparison.Ordinal))' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\"Roster movement lane:\\", StringComparison.Ordinal))' in mobile_local_release_proof.get("must_contain", [])
     assert 'Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\"Prep library lane:\\", StringComparison.Ordinal))' in mobile_local_release_proof.get("must_contain", [])

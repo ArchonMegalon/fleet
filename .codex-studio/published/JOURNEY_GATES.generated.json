@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T22:46:42Z",
+  "generated_at": "2026-04-04T22:54:03Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -32,7 +32,7 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T22:46:41Z",
+      "at": "2026-04-04T22:54:02Z",
       "state": "fresh",
       "age_seconds": 1
     },
@@ -41,28 +41,28 @@
       "available": true,
       "at": "2026-04-04T21:38:31Z",
       "state": "fresh",
-      "age_seconds": 4091
+      "age_seconds": 4532
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T21:38:14Z",
       "state": "fresh",
-      "age_seconds": 4108
+      "age_seconds": 4549
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T21:38:14Z",
       "state": "fresh",
-      "age_seconds": 4108
+      "age_seconds": 4549
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-04T22:46:41Z",
+      "at": "2026-04-04T22:52:47Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 76
     }
   },
   "journeys": [
@@ -407,7 +407,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:46:41Z",
+        "support_packets_generated_at": "2026-04-04T22:52:47Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -867,7 +867,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:46:41Z",
+        "support_packets_generated_at": "2026-04-04T22:52:47Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1156,6 +1156,8 @@
               "Assert(projection.GmOperationsSummary.Contains(\\\"Roster movement:\\\", StringComparison.Ordinal)",
               "Assert(projection.GmOperationsSummary.Contains(\\\"Prep library:\\\", StringComparison.Ordinal)",
               "Assert(projection.GmOperationsSummary.Contains(\\\"Event controls:\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsSummary.Contains(\\\"audit-visible\\\", StringComparison.Ordinal)",
+              "Assert(projection.GmOperationsSummary.Contains(\\\"support-linked\\\", StringComparison.Ordinal)",
               "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Opposition lane:\\\", StringComparison.Ordinal))",
               "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Roster movement lane:\\\", StringComparison.Ordinal))",
               "Assert(projection.GmOperationsLabels.Any(item => item.Contains(\\\"Prep library lane:\\\", StringComparison.Ordinal))",
@@ -1273,7 +1275,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:46:41Z",
+        "support_packets_generated_at": "2026-04-04T22:52:47Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1385,7 +1387,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:46:41Z",
+        "support_packets_generated_at": "2026-04-04T22:52:47Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1415,9 +1417,9 @@
       }
     },
     {
-      "id": "report_cluster_release_notify",
-      "title": "Report, cluster, release, notify",
-      "user_promise": "A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.",
+      "id": "",
+      "title": "",
+      "user_promise": "",
       "state": "blocked",
       "recommended_action": "Run the missing macos, windows host proof lane for 4 desktop tuple(s) and ingest receipts before widening promotion or trust claims.",
       "blocking_reasons": [
@@ -1581,34 +1583,9 @@
         }
       ],
       "warning_reasons": [],
-      "owner_repos": [
-        "chummer6-hub",
-        "chummer6-ui",
-        "chummer6-hub-registry",
-        "fleet",
-        "executive-assistant"
-      ],
-      "canonical_journeys": [
-        "journeys/claim-install-and-close-a-support-case.md",
-        "journeys/install-and-update.md"
-      ],
-      "scorecard_refs": {
-        "slos": [
-          "support_and_closure_honesty",
-          "install_and_update_coherence",
-          "golden_journey_proof"
-        ],
-        "release_gates": [
-          "campaign_and_closure_gate",
-          "install_and_update_gate",
-          "golden_journey_gate"
-        ],
-        "health_scorecards": [
-          "golden_journey_health",
-          "support_and_feedback_closure",
-          "control_loop_integrity"
-        ]
-      },
+      "owner_repos": [],
+      "canonical_journeys": [],
+      "scorecard_refs": {},
       "fleet_gate": {
         "required_artifacts": [
           "status_plane",
@@ -1676,16 +1653,13 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:46:41Z",
+        "support_packets_generated_at": "2026-04-04T22:52:47Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
           "support_packets"
         ],
-        "canonical_journeys": [
-          "journeys/claim-install-and-close-a-support-case.md",
-          "journeys/install-and-update.md"
-        ],
+        "canonical_journeys": [],
         "external_proof_requests": [
           {
             "tuple_id": "avalonia:osx-arm64:macos",
@@ -1915,7 +1889,7 @@
       },
       "evidence": {
         "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T22:46:41Z",
+        "support_packets_generated_at": "2026-04-04T22:52:47Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
