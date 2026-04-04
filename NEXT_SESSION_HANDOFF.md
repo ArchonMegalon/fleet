@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4/5 workspace rules-navigator readiness reason now prefers highest-severity non-ready cue
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign-return and GM-ops guidance to stay severity-faithful across all continuity surfaces, not just next-safe-action copy.
+  - `CampaignSpineService.BuildWorkspaceRulesNavigatorDiffs(...)` still used the first readiness-cue summary by list order, so an earlier `review` cue could mask a later `warning` or `attention` blocker in rules-navigator readiness rationale.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added `ResolvePriorityReadinessCue(...)` helper to centralize non-ready cue selection by explicit severity priority (`attention` > `warning` > `review` > other non-ready), with optional non-empty-summary requirement.
+    - wired `ResolveWorkspaceNextSafeAction(...)` and `BuildFirstPlayableSession(...)` to use the shared helper (no behavior drift, shared deterministic ranking).
+    - updated `BuildWorkspaceRulesNavigatorDiffs(...)` to use the same priority selection (summary-required) instead of first-list summary.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineBuildWorkspaceRulesNavigatorDiffsPrefersAttentionCueOverEarlierReviewCue`.
+    - added `CampaignSpineBuildWorkspaceRulesNavigatorDiffsPrefersWarningCueOverEarlierReviewCue`.
+    - added reflection helper `InvokeCampaignSpineBuildWorkspaceRulesNavigatorDiffs(...)` for direct private-method coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildWorkspaceRulesNavigatorDiffsPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineBuildWorkspaceRulesNavigatorDiffsPrefersWarningCueOverEarlierReviewCue|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`321` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildWorkspaceRulesNavigatorDiffsPrefersAttentionCueOverEarlierReviewCue|FullyQualifiedName~CampaignSpineBuildWorkspaceRulesNavigatorDiffsPrefersWarningCueOverEarlierReviewCue" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - workspace rules-navigator readiness rationale now surfaces the highest-severity active readiness cue instead of list-order luck, keeping campaign-return explain language aligned with next-safe-action and first-playable readiness ranking.
+  - milestone-4 continuity and milestone-5 GM guidance now share one deterministic readiness-priority seam across return guidance and rules-diff rationale.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`CampaignSpineService.cs`, `CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 next-safe-action now prioritizes highest-severity readiness cue instead of first-list cue
 
 - Trigger:
