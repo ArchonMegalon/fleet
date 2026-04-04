@@ -38122,3 +38122,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`23` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
   - milestone-6 compact continuity shorthand is now enforced end-to-end in live API query audit and signed-in workspace browser journey proof, not only at local alias-canonicalizer unit level.
+
+## 2026-04-04: handoff follow-up commit + push status for milestone-6 compact mobile continuity shorthand audit slice
+
+- Commits landed:
+  - `chummer6-hub`: `b1d7f15d` (`test(w3-6): fail-close compact mobile offline continuity journey aliases`).
+  - `fleet`: `459e0d7` (`docs(handoff): record w3-6 compact mobile continuity shorthand audit slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
