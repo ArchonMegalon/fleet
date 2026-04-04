@@ -69,6 +69,27 @@
   - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for missing `releaseProof.baseUrl`
+
+- Trigger:
+  - Hub verify mutation coverage already exercised `releaseProof.baseUrl` for disallowed and non-canonical origins, but still did not mutate the missing-origin case.
+  - this left one origin-policy branch in parity audit (`baseUrl` required/string) unproven in the verify entrypoint harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation removing `releaseProof.baseUrl` and asserted `audit-ui-parity.sh` fails.
+    - preserved receipt restore between mutation checks before continuing smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended verify-entrypoint marker assertions for missing `releaseProof.baseUrl` fail-close mutation coverage.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertion for missing `releaseProof.baseUrl`, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now proves all three release-proof origin fail-close modes (`outside allowed set`, `non-canonical`, and `missing`) before smoke.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now proves release-proof origin fail-close (`disallowed` and `non-canonical`) before smoke
 
 - Trigger:
