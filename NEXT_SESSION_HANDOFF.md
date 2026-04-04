@@ -29,6 +29,47 @@
   - milestone-2 localization gate proof now rejects set-equivalent but non-canonical acceptance-gate ordering drift.
   - nested release-proof localization acceptance sequencing is deterministic and script-locked across parity audit and verify mutation lanes.
 
+## 2026-04-04: follow-up on W3 compact plural `seasonctrls` prep-query parity slice (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `ed984d19` (`fix(w3): canonicalize seasonctrls prep-query shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 event and season controls lane now covers compact plural `seasonctrls` across campaign workspace and GM ops prep search plus live journeys
+
+- Trigger:
+  - W3 milestones `4` and `5` require campaign continuity and GM operations prep retrieval to remain one governed lane across workspace and operator surfaces.
+  - compact plural shorthand `seasonctrls` was not canonicalized and was absent from live-audit/browser journey checks, leaving a drift seam where natural operator wording could miss governed prep packets without failing runtime proof.
+- Landed:
+  - patched shared prep-query canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrite:
+      - `seasonctrls -> eventcontrol + season + operation`
+  - expanded campaign workspace continuity query coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsSeasonControlShorthandAcrossWhitespaceBoundaries` now asserts `seasonctrls` matching.
+  - expanded GM ops compact query and ops-domain coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `GetProjection_UnresolvedItemsTreatSeasonControlShorthandAsEventControlDomain` now includes `seasonctrls` event payload and ordering assertion.
+    - `ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation` now asserts `queryText=seasonctrls`.
+  - patched live API/workspace audit checks:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+    - added governed checks for:
+      - `queryText=seasonctrls`
+      - `prepQuery=seasonctrls`
+  - patched browser e2e journey:
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+    - added workspace prep search route, copy, and non-empty-result assertions for `?prepQuery=seasonctrls`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSeasonControlShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatSeasonControlShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact plural `seasonctrls` now resolves through the same shared canonicalizer lane used by existing season/event control shorthand, and runtime live-audit plus browser journey proof now fail-close this operator phrasing across campaign workspace and GM ops prep retrieval.
+
 ## 2026-04-04: follow-up on W3 `afteraction` prep-query continuity parity script-lock slice (commit and push status)
 
 - Commits landed:
