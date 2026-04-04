@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -131,6 +132,20 @@ def _resolve_json_path(payload: Any, path: str) -> Any:
 
 
 def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _default_installer_file_name(head: str, rid: str, platform: str) -> str:
+        platform_token = str(platform or "").strip().lower()
+        if platform_token == "windows":
+            suffix = ".exe"
+        elif platform_token == "macos":
+            suffix = ".dmg"
+        elif platform_token == "linux":
+            suffix = ".deb"
+        else:
+            suffix = ""
+        if not head or not rid:
+            return ""
+        return f"chummer-{head}-{rid}-installer{suffix}"
+
     def _parse_tuple_identity(tuple_id: str) -> Tuple[str, str, str]:
         raw = str(tuple_id or "").strip()
         if not raw:
@@ -150,6 +165,39 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             "rid": rid,
             "host_class_contains": host_value,
         }
+
+    def _default_launch_target(head: str, platform: str) -> str:
+        head_token = str(head or "").strip().lower()
+        platform_token = str(platform or "").strip().lower()
+        if head_token == "blazor-desktop":
+            return "Chummer.Blazor.Desktop.exe" if platform_token == "windows" else "Chummer.Blazor.Desktop"
+        return "Chummer.Avalonia.exe" if platform_token == "windows" else "Chummer.Avalonia"
+
+    def _proof_capture_commands(*, head: str, rid: str, platform: str, installer_file_name: str, required_host: str) -> List[str]:
+        if not head or not rid:
+            return []
+        repo_root = Path("/docker/chummercomplete/chummer6-ui")
+        installer_name = installer_file_name or _default_installer_file_name(head=head, rid=rid, platform=platform)
+        if not installer_name:
+            return []
+        installer_path = repo_root / "Docker" / "Downloads" / "files" / installer_name
+        startup_smoke_dir = repo_root / "Docker" / "Downloads" / "startup-smoke"
+        host_class = required_host or platform or "required"
+        run_smoke = (
+            f"cd {shlex.quote(str(repo_root))} && "
+            f"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS={shlex.quote(host_class + '-host')} "
+            f"./scripts/run-desktop-startup-smoke.sh "
+            f"{shlex.quote(str(installer_path))} "
+            f"{shlex.quote(head)} "
+            f"{shlex.quote(rid)} "
+            f"{shlex.quote(_default_launch_target(head=head, platform=platform))} "
+            f"{shlex.quote(str(startup_smoke_dir))}"
+        )
+        refresh_manifest = (
+            f"cd {shlex.quote(str(repo_root))} && "
+            "./scripts/generate-releases-manifest.sh"
+        )
+        return [run_smoke, refresh_manifest]
 
     coverage = dict(payload.get("desktopTupleCoverage") or {})
     source_requests = coverage.get("externalProofRequests")
@@ -184,6 +232,13 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                     head=head,
                     rid=rid,
                     platform=platform,
+                    required_host=required_host,
+                ),
+                "proof_capture_commands": _proof_capture_commands(
+                    head=head,
+                    rid=rid,
+                    platform=platform,
+                    installer_file_name=str(item.get("expectedInstallerFileName") or "").strip(),
                     required_host=required_host,
                 ),
             }

@@ -40199,3 +40199,36 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated `fleet` push.
+
+## 2026-04-04: milestone-1/3 install external-proof tuples now carry executable host capture commands in journey + readiness evidence
+
+- Trigger:
+  - install lane blockers already surfaced tuple/host/proof contract fields, but operators still had to infer exact host commands for startup-smoke capture and release-manifest refresh.
+  - this left the remaining external-only Windows/macOS tuple gap actionable in prose but not fully executable from generated receipts.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `_release_channel_external_proof_requests(...)` now emits `proof_capture_commands` per tuple with deterministic host-run commands:
+      - startup smoke capture via `chummer6-ui/scripts/run-desktop-startup-smoke.sh`
+      - release manifest refresh via `chummer6-ui/scripts/generate-releases-manifest.sh`
+    - command synthesis is tuple-aware (`head_id`, `rid`, `platform`) and includes platform-correct launch targets.
+  - patched tests:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+    - `/docker/fleet/tests/test_materialize_journey_gates_external_proof_contract.py`
+    - both now fail-close the new `proof_capture_commands` projection on normalized external-proof rows and install-journey output.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py` -> PASS.
+  - targeted test-function execution without `pytest`:
+    - `test_release_channel_external_proof_requests_normalize_and_dedupe` -> PASS.
+    - `test_install_journey_surfaces_release_channel_external_proof_requests` -> PASS.
+    - `test_external_proof_requests_include_startup_smoke_contract_fields` -> PASS.
+    - `test_external_proof_requests_project_contract_into_install_journey` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py ...` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py ...` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - receipt sanity:
+    - `JOURNEY_GATES.generated.json` and `FLAGSHIP_PRODUCT_READINESS.generated.json` now expose `install_claim_restore_continue.external_proof_requests[*].proof_capture_commands` for each missing Windows/macOS tuple.
+- Exact blocker:
+  - journey remains external-only blocked on native Windows/macOS host execution and receipt ingestion for promoted installer tuples.

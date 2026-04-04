@@ -57,8 +57,16 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
     ]
     assert requests[0]["required_host"] == "windows"
     assert requests[0]["required_proofs"] == ["promoted_installer_artifact"]
+    assert requests[0]["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    ]
     assert requests[1]["required_host"] == "macos"
     assert requests[1]["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
+    assert requests[1]["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    ]
 
 
 def test_materialize_journey_gates_emits_warning_when_target_posture_lags(tmp_path: Path) -> None:
@@ -842,6 +850,11 @@ groups: []
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     journey = payload["journeys"][0]
     assert journey["state"] == "blocked"
+    request = next(item for item in journey["external_proof_requests"] if item["tuple_id"] == "avalonia:win-x64:windows")
+    assert request["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    ]
     assert any(
         "external proof request: capture promoted_installer_artifact, startup_smoke_receipt" in reason
         for reason in journey["external_blocking_reasons"]

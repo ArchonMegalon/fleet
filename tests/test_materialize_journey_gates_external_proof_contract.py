@@ -39,6 +39,10 @@ def test_external_proof_requests_include_startup_smoke_contract_fields() -> None
         "rid": "win-x64",
         "host_class_contains": "windows",
     }
+    assert requests[0]["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    ]
 
 
 def test_external_proof_requests_project_contract_into_install_journey(tmp_path: Path) -> None:
@@ -131,4 +135,7 @@ groups: []
     request = next(item for item in journey["external_proof_requests"] if item["tuple_id"] == "avalonia:win-x64:windows")
     assert request["startup_smoke_receipt_contract"]["ready_checkpoint"] == "pre_ui_event_loop"
     assert request["startup_smoke_receipt_contract"]["host_class_contains"] == "windows"
-
+    assert request["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    ]
