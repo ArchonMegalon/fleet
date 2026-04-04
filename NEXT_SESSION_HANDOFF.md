@@ -177,10 +177,11 @@
 - Commits landed:
   - `chummer6-core`: `5c0de1e6` (`feat(w13): aggregate reference-source posture in master index`).
   - `chummer6-design`: `ff528de` (`docs(w13): cite aggregate reference-source posture evidence`).
-  - `fleet`: pending local commit for mirror + handoff refresh.
+  - `fleet`: `d41ce1f` (`docs(handoff): capture w13 source-reference posture slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `47a4948e..5c0de1e6`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - no blocker for the landed milestone-13 implementation itself; full `Chummer.Tests` lane remains compile-blocked in current baseline, and design/fleet push remains credential-gated in this environment.
 
