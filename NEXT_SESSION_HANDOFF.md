@@ -52,6 +52,30 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-17 import-oracle lane now fail-proves Hero Lab Online ruleset detection across root and nested metadata shapes
+
+- Trigger:
+  - frontier milestone `17` import-oracle posture still had a metadata-shape seam: `DetectRulesetFromOnlineJson(...)` only read `metadata.gameCode/gameName`.
+  - Hero Lab Online exports or transforms that flatten to root-level `gameCode/gameName` or nest under `game.code/game.name` could therefore miss ruleset detection even when semantic values were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Application/Workspaces/HeroLabShadowrunImporter.cs`:
+    - `DetectRulesetFromOnlineJson(...)` now resolves ruleset metadata from:
+      - `metadata.gameCode` / `metadata.gameName`
+      - root `gameCode` / `gameName`
+      - nested `game.code` / `game.name`
+    - added `FirstNonEmpty(...)` helper for deterministic fallback precedence.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/HeroLabRulesParityAudit.cs`:
+    - extended alias-drift coverage with explicit SR5 root-level metadata detection assertion.
+    - added explicit SR4 nested `game.code/game.name` detection assertion.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+- Commits landed:
+  - `chummer6-core`: `b95e1b0b` (`test(w17): lock Hero Lab online metadata-shape ruleset detection`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `102977cd..b95e1b0b`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-17 import-oracle lane now accepts Hero Lab Online array-shaped actors/items payloads with executable parity coverage
 
 - Trigger:
