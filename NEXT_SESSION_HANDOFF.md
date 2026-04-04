@@ -38222,3 +38222,55 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-12 pulse-v3 now fail-closes launch/freeze governance semantics and consumes latest frontier marker only
+
+- Trigger:
+  - frontier milestone `12` requires pulse-v3 to justify launch/freeze decisions from measured canary/release/support truth and keep automation aligned with the active frontier instead of drifting across stale handoff history.
+  - existing weekly pulse generation merged all historical frontier markers in handoff, and Fleet completion audit accepted pulse payloads without validating launch-governance decision semantics.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py`:
+    - handoff frontier parser now reads the latest explicit frontier marker first (`Frontier milestone ids ...`) and only falls back to `Current open milestone ids` when no explicit frontier marker exists.
+    - parser no longer unions historical frontier markers across the entire handoff timeline.
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - weekly pulse audit now fail-closes when launch governance evidence is incomplete.
+    - requires at least one launch decision action (`freeze_launch` or `launch_expand`) in `governor_decisions`.
+    - requires cited launch signal keys: `journey_gate_state`, `journey_gate_blocked_count`, `local_release_proof_status`, `provider_canary_status`, `closure_health_state`.
+    - requires non-empty `supporting_signals.launch_readiness` and provider stewardship `canary_status`/`next_decision`.
+    - blocks `launch_expand` when canary posture is not green or cited local release/support-closure posture is not safe.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - completion-audit fixture now includes a valid launch-governance decision and provider-route launch-readiness signals.
+    - added fail-close regressions for:
+      - missing launch-governance decision.
+      - `launch_expand` with non-green canary posture.
+  - regenerated and mirrored:
+    - `/docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json`
+    - `/docker/fleet/.codex-design/product/WEEKLY_PRODUCT_PULSE.generated.json`
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer-design/scripts/ai/materialize_weekly_product_pulse_snapshot.py` -> PASS.
+  - `python3 -m py_compile /docker/fleet/scripts/chummer_design_supervisor.py /docker/fleet/tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --as-of 2026-04-04` -> PASS.
+  - `cd /docker/fleet && ./.venv/bin/pytest ...` -> FAIL (`pytest` missing and the local `.venv` pip bootstrap is incomplete: `ModuleNotFoundError: No module named 'pip'`).
+- Current open milestone ids: 10, 11, 12, 15
+- Frontier milestone ids to prioritize first: 10, 11, 12, 15
+
+## 2026-04-04: milestone-9/16 creator publication comparison now carries Build Lab exchange/viewer parity and portability pillar receipts
+
+- Trigger:
+  - frontier milestones `9` and `16` require exchange/viewer/export parity and portability truth to remain explicit on real publication decisions, not only inside Build Lab handoff cards.
+  - creator publication `ComparisonSummary` used Build Lab title receipts but dropped explicit exchange-parity and portability-pillar readiness context.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `DescribeCreatorPublicationComparisonSummary(...)` now carries Build Lab `ExchangeParitySummary` and `PortabilityPillarSummary` when a lead handoff is present.
+    - when no lead handoff exists, fallback comparison copy remains bounded and unchanged.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineBuildCreatorPublicationsComparisonSummaryCarriesBuildLabParityAndPortabilityReceipts` fail-close test.
+    - added overloaded helper to invoke `BuildCreatorPublications` with explicit dossier + handoff fixtures for receipt-bearing comparison assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildCreatorPublicationsComparisonSummaryCarriesBuildLabParityAndPortabilityReceipts|FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`2` tests on `net10.0` and `2` tests on `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: pending local commit for this slice.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub credentials.
