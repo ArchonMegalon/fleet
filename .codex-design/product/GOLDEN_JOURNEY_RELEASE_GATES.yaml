@@ -60,6 +60,8 @@ journey_gates:
               - published
               - publishable
           json_must_be_non_empty_string:
+            contract_name: true
+            releaseProof.generatedAt: true
             rolloutReason: true
             supportabilitySummary: true
             knownIssueSummary: true
@@ -180,6 +182,7 @@ journey_gates:
         - repo: chummer6-core
           path: Chummer.Tests/ApiIntegrationTests.cs
           must_contain:
+            - 'response["referenceSourceLaneReceipt"]'
             - 'response["settingsLaneReceipt"]'
             - 'response["sourceToggleLaneReceipt"]'
             - 'response["customDataLaneReceipt"]'
@@ -191,6 +194,7 @@ journey_gates:
         - repo: chummer6-core
           path: Chummer.Infrastructure/Xml/XmlToolCatalogService.cs
           must_contain:
+            - BuildReferenceSourceLaneReceipt
             - BuildSettingsLaneReceipt
             - BuildSourceToggleLaneReceipt
             - BuildCustomDataLaneReceipt
