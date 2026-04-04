@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-1/3 Windows and macOS per-head exit receipts now always emit non-null failure summaries
+
+- Trigger:
+  - per-head receipts (`UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`, `UI_MACOS_*_DESKTOP_EXIT_GATE.generated.json`) could fail with `summary: null` even when reasons were present.
+  - this weakened control-plane readability for milestone `1`/`3` install/update/recovery proof triage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - added explicit `summary` field for both pass and fail states.
+    - fail summary now includes first fail-closed reason.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - added explicit `summary` field for both pass and fail states.
+    - fail summary now includes first fail-closed reason.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added source-guard assertions for `"summary": summary` and fail-summary tokens in both scripts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-windows-desktop-exit-gate.sh` -> FAIL (expected unresolved W1 tuple/smoke blockers) with receipt regenerated.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/materialize-macos-desktop-exit-gate.sh` -> FAIL (expected unresolved W1 tuple/smoke blockers) with receipt regenerated.
+  - `cd /docker/chummercomplete/chummer6-ui && jq -r '"windows: " + (.summary|tostring), "macos: " + (input.summary|tostring)' .codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json .codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json` -> PASS (both summaries non-null with explicit first blocker).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`32 passed`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL with expected unresolved W1 blockers; aggregate reasons include the new macOS marker-skip honesty wording.
+- Commits landed:
+  - none in this session for `chummer6-ui`; touched files are currently in large concurrent in-flight working-tree edits, so safe isolated commit slicing was not possible without risking unrelated changes.
+- Push attempts:
+  - none for this slice.
+- Exact blocker:
+  - promoted Windows/macOS installer tuples plus matching startup-smoke receipts are still absent from release-channel/public shelf truth in this workspace.
+
 ## 2026-04-04: milestone-12 status-plane v3 now carries governor decision context and pulse forecasts (mission/queue/capacity/blocker/support/publish)
 
 - Trigger:
@@ -32,6 +59,51 @@
   - pending.
 - Exact blocker:
   - no product blocker for this slice; full pytest execution is currently unavailable in this environment because `pytest` is not installed.
+
+## 2026-04-04: milestone-7/8 Build Lab handoffs now carry an explicit conditional-effect state rail on account and signed-in home decision surfaces
+
+- Trigger:
+  - frontier milestones `7` and `8` require Build Lab to keep conditional mechanics visible as first-class state where users choose advancement and follow-through lanes.
+  - Build Lab handoffs already exposed outputs, crew-fit, planner coverage, and rule diffs, but they did not project a dedicated conditional-effect rail (drugs/foci/sustained/acquisition/reputation posture) from the active rule environment.
+  - this left a gap against `BUILD_LAB_PRODUCT_MODEL.md` integration rules where conditional toggles must remain receipt-backed and visible instead of implied.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - `BuildLabHandoffProjection` now includes:
+      - `ConditionalStateSummary`
+      - `ConditionalStateLines`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab handoff projection now computes a deterministic conditional-state rail from active rule-environment toggles/source/house-rule packs.
+    - added conditional signal detection and lane lines for:
+      - drug modifiers
+      - foci bindings
+      - sustained effects
+      - acquisition timing
+      - reputation spends
+    - handoffs now carry explicit pending posture when no conditional toggles are active.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - account Build handoff detail now renders:
+      - `Conditional state` summary row
+      - `Conditional rail` line cues.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - signed-in Home Build path rail now renders:
+      - `Conditional state`
+      - up to two `Conditional lane` cues.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves conditional summary + lane lines.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - source guard now requires conditional summary and lane rendering hooks.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - source guard now requires signed-in home conditional state/line rendering hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice.
+  - pending local Fleet handoff refresh commit for this entry.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for this repo-local milestone `7/8` conditional-state rail slice.
 
 ## 2026-04-04: milestone-10 support packets now prove update-required install truth and route recovery to downloads when a fix exists but reporter build is behind
 
