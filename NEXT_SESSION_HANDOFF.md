@@ -1,3 +1,47 @@
+## 2026-04-04: milestone-3 per-head visual proof contracts now fail-honest in both visual and executable desktop exit gates
+
+- Trigger:
+  - frontier milestone 3 (`Packaged-binary desktop exit tests and per-head proof that cannot lie`) requires Avalonia and Blazor promoted heads to carry explicit per-head proof contracts, not only top-level pass statuses.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` previously accepted passing per-head statuses without enforcing head-specific proof markers (`visualReview`/`shellChrome` families, required test inventories, and source test-file integrity).
+  - `materialize-desktop-executable-exit-gate.sh` consumed visual per-head statuses but did not consume/validate per-head contract-marker evidence, which left a stale-receipt honesty seam.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - added per-head required contract-marker maps for `avalonia` and `blazor-desktop` proofs.
+    - added marker-level pass/fail evaluation and explicit missing-marker failures per required desktop head.
+    - added source test-file integrity checks (`exists` and `within repo root`) per head.
+    - published new evidence fields:
+      - `required_head_contract_markers`
+      - `flagship_head_contract_marker_statuses`
+      - `flagship_head_missing_contract_markers`
+      - `flagship_head_source_test_file_paths`
+      - `flagship_head_source_test_file_exists`
+      - `flagship_head_source_test_file_within_repo_root`
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - now consumes visual gate per-head contract-marker evidence.
+    - fails when marker evidence is missing for required heads.
+    - fails when any required per-head marker is missing/failing even if head status is `pass`.
+    - publishes executable evidence for consumed marker state:
+      - `visual_familiarity_head_contract_marker_statuses`
+      - `visual_familiarity_head_missing_contract_markers`
+      - `visual_familiarity_head_contract_markers_by_head`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked new visual and executable script contract markers/reason strings for per-head contract-marker enforcement.
+  - refreshed generated gate receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal -m:1` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_VISUAL_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with only external tuple blockers:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - milestone-3 visual and executable proof lanes now enforce per-head contract-marker integrity for Avalonia and Blazor instead of trusting top-level status-only declarations.
+  - W1 blocker posture remains external publication/proof availability for promoted Windows/macOS installer tuples.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 roster movement packet synthesis now deduplicates identical run-pressure objective versions to prevent inflated GM ops counts
 
 - Trigger:
