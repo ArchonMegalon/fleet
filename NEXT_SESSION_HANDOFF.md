@@ -12,11 +12,13 @@
     - count requirements remain strict (`0`) for promoted shelf truth.
   - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
     - added negative regression that injects non-empty `blockingFindings` with `blockingFindingsCount=0` and asserts verifier failure.
+    - added negative regression that injects non-empty `translationBacklogFindings` with `translationBacklogFindingsCount=0` and asserts verifier failure.
     - added canonical assertions that materialized proofs carry empty `blockingFindings` and `translationBacklogFindings` arrays when counts are zero.
   - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
     - release-channel localization contract now explicitly requires finding-array/count parity for both blocking and backlog findings.
   - committed and pushed in `chummer-hub-registry`:
     - `2ec764b` — `Fail-close localization finding count and list drift`.
+    - `be19dce` — `Cover translation backlog list/count drift regression`.
 - Verification:
   - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
   - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes new localization finding-array/count drift negative check).
@@ -24,7 +26,7 @@
   - registry-owned release-channel localization proof now fail-closes both directions of finding-debt drift: count suppression and array/count mismatch.
   - milestone-2 `BLK-009` remains globally open pending cross-surface shipping-locale quality closure, but this shelf-truth seam is now tighter.
 - Push status:
-  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `2ec764b`).
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `be19dce`).
   - `fleet`: pending (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-2 localization shelf proof now fail-closes future-skewed generatedAt values and unexpected localeSummary locale rows in registry verification
