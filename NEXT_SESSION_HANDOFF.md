@@ -41,8 +41,10 @@
   - `cd /docker/fleet && python3 -m pytest ...` -> FAIL (`No module named pytest`) in this environment.
 - Commits landed:
   - `chummer6-design`: `45e08c5` (`feat(w5-12): harden weekly product pulse v3 contract and alignment signals`).
+  - `fleet`: `6394d90` (`docs(handoff): record milestone-12 pulse-v3 alignment hardening slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - GitHub HTTPS credentials are unavailable for push in this environment; fleet test execution is additionally blocked by missing `pytest`.
 
