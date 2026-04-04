@@ -14,8 +14,10 @@
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesOpForShorthandIntoOppositionTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsOpForShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingTreatsOpForShorthandAsOppositionWhenPacketOmitsOpForVocabulary" -v minimal` -> PASS (`3 passed` on both target frameworks).
 - Commits landed:
   - `chummer6-hub`: `fb6fe03f` (`feat(w3-5): collapse opfor shorthand into opposition prep tokens`).
+  - `fleet`: `2012906` (`docs(handoff): record w3 opfor opposition canonicalization slice`).
 - Push attempts:
-  - not yet attempted in this slice.
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
