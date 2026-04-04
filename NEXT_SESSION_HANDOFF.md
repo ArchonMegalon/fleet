@@ -20,6 +20,33 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-3 executable gate now fail-closes per-platform startup-smoke release-version drift against release-channel head
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged install/update/recovery proof to stay aligned by release head (`channelId + version`), not channel alone.
+  - `materialize-desktop-executable-exit-gate.sh` validated startup-smoke and platform gate receipts against `channelId` and artifact bytes, but did not require per-platform gate/startup receipts to match release-channel `version`, leaving a stale same-channel receipt lie path.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added release-version binding for Linux gate receipts (`head.version` / `releaseVersion`) against release-channel `version`.
+    - added release-version binding for Linux installer startup-smoke receipts (`version` / `releaseVersion`) against release-channel `version`.
+    - added release-version binding for Windows gate receipts (`releaseVersion` / `checks.release_channel_version` / head version) against release-channel `version`.
+    - added release-version binding for Windows startup-smoke receipts (`version` / `releaseVersion`) against release-channel `version`.
+    - added release-version binding for macOS gate receipts (`releaseVersion` / `checks.release_channel_version` / head version) against release-channel `version`.
+    - added release-version binding for macOS startup-smoke receipts (`version` / `releaseVersion`) against release-channel `version`.
+    - emits new evidence markers (`gate_release_version`, `primary_receipt_version`, `startup_smoke_version`, `startup_smoke_receipt_version`) for honest drift diagnosis.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added compliance assertions locking all new release-version fail-close reason strings and evidence-marker tokens in the executable gate script.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; pre-existing analyzer warnings remain non-blocking).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with new release-version drift reasons now surfaced for Linux promoted heads.
+- Current trusted state:
+  - milestone-3 executable proof now fail-closes per-platform gate/startup-smoke receipts that are channel-matching but release-version-stale.
+  - promoted desktop proof cannot claim honest install/startup readiness unless platform receipts align to the same promoted release head version.
+- Push status:
+  - `chummer6-ui`: local changes pending commit/push in this environment (`scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`, `Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`, generated executable gate receipt drift; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 executable/visual/workflow proof now fail-closes release-version drift across same-channel receipts
 
 - Trigger:
