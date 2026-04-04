@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-2 release verifier now fail-closes empty/placeholder release-proof journey and route evidence
+
+- Trigger:
+  - frontier milestone `2` requires release shelf proof to stay provenance-backed, not merely status-valid.
+  - `chummer6-hub-registry` verifier already enforced `releaseProof.status` and freshness, but allowed `releaseProof.journeysPassed` and `releaseProof.proofRoutes` to be absent, empty, or placeholder/duplicate values.
+  - this left a drift path where promoted release truth could pass with weak or non-actionable journey/route provenance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - `releaseProof.journeysPassed` now must be present (camel or snake), list-typed, non-empty, string-only, non-blank, and duplicate-free after normalization.
+    - `releaseProof.proofRoutes` now must be present (camel or snake), list-typed, non-empty, string-only, non-blank, and duplicate-free after normalization.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving verifier fail-close on empty `releaseProof.journeysPassed`.
+    - added mutation proving verifier fail-close on blank `releaseProof.proofRoutes` entry.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented the verifier-bound non-empty, string-only, duplicate-free journey/route provenance contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - promoted release-channel verification now fails closed when release-proof journey/route provenance is empty, blank, or duplicate-normalized, preventing placeholder evidence from passing shelf truth gates.
+- Push status:
+  - `chummer6-hub-registry`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes workflow-vs-visual release-channel drift
 
 - Trigger:
