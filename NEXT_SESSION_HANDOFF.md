@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-1/3 executable gate now tolerates bounded startup-smoke completed/recorded timestamp jitter so Linux promoted-head proof no longer false-fails on installer receipts
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-head install/startup proof that cannot lie, but executable gate alias checks treated all startup-smoke timestamp fields as strict aliases.
+  - promoted Linux installer receipts can legitimately carry millisecond-level `completedAtUtc` vs `recordedAtUtc` drift (especially when proving installed binaries from promoted artifacts), which was causing deterministic false-fail reasons even while smoke status/checkpoint/digest/rid/head checks were passing.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - `startup_smoke_timestamp_alias_conflicts(...)` now evaluates only real alias pair `completedAtUtc` ↔ `recordedAtUtc`.
+    - added bounded tolerance env seam:
+      - `CHUMMER_DESKTOP_EXECUTABLE_STARTUP_SMOKE_TIMESTAMP_ALIAS_TOLERANCE_SECONDS` (fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_TIMESTAMP_ALIAS_TOLERANCE_SECONDS`, default `5`).
+    - Linux/Windows/macOS fail-close reason strings now reflect the canonical alias pair (`completedAtUtc/recordedAtUtc`).
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+  - regenerated executable gate receipt:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=avalonia CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_LINUX_DESKTOP_EXIT_GATE_APP_KEY=blazor-desktop CHUMMER_LINUX_DESKTOP_EXIT_GATE_RID=linux-x64 CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/materialize-linux-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL as expected on remaining real external blockers (missing promoted Windows/macOS install tuples and host capability), with prior Linux alias-conflict reasons now absent.
+- Commits landed:
+  - `chummer6-ui`: `aefb6a2b` (`fix(w1): tolerate startup-smoke timestamp alias jitter in executable gate`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials; remaining executable-gate blockers are external Windows/macOS tuple + host-capability gaps.
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes canonical ordering drift for nested `releaseProof.journeysPassed` and `releaseProof.proofRoutes`, with active verify mutation coverage
 
 - Trigger:
