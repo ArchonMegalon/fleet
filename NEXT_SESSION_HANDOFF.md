@@ -35,6 +35,26 @@
   - `chummer.run-services`: local changes landed in this slice (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`, `scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-2/3 registry verifier now fail-closes conflicting top-level `generatedAt/generated_at` timestamp aliases
+
+- Trigger:
+  - registry verifier already fail-closed nested `releaseProof` alias drift, but top-level release-channel timestamp parsing still used first-present fallback for `generatedAt/generated_at`.
+  - this left a key-precedence seam where contradictory top-level generation timestamps could bypass explicit alias-drift rejection.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - `verify_generated_timestamp(...)` now resolves top-level timestamp via alias-validated `resolve_alias_value(...)` instead of fallback precedence.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added explicit mutation asserting verifier rejection when top-level `generatedAt` and `generated_at` conflict.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - top-level release-channel generation timestamps now fail closed on alias drift just like nested milestone-2 proof fields.
+- Push status:
+  - `chummer-hub-registry`: local changes landed in this slice (`scripts/verify_public_release_channel.py`, `scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2/3 registry materialize+verify now fail-close conflicting alias payloads for `generatedAt/generated_at`, `journeysPassed/journeys_passed`, `proofRoutes/proof_routes`, and nested localization gate timestamps
 
 - Trigger:
