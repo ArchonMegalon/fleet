@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-2 registry verifier now fail-closes unexpected `releaseProof.uiLocalizationReleaseGate.localeSummary` row keys, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` needs deterministic flagship release-proof contracts so localization evidence cannot silently grow non-canonical schema fields.
+  - `scripts/verify_public_release_channel.py` validated locale-summary content but did not reject unexpected keys inside `releaseProof.uiLocalizationReleaseGate.localeSummary` rows.
+  - this left a fail-open seam where extra row keys could bypass verifier trust boundaries and drift promoted shelf proof contracts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added canonical `ALLOWED_LOCALIZATION_LOCALE_SUMMARY_ROW_KEYS`.
+    - added fail-close check for unexpected keys inside every `releaseProof.uiLocalizationReleaseGate.localeSummary` row.
+    - added fail-close marker:
+      - `releaseProof.uiLocalizationReleaseGate.localeSummary rows have unexpected keys`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active mutation injecting `bonus_noncanonical_locale_summary_key` into the `de-de` locale-summary row.
+    - verify now requires verifier failure on that mutation with marker:
+      - `verify gate failed: verifier should reject unexpected releaseProof.uiLocalizationReleaseGate.localeSummary row keys.`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical pipeline now states strict fail-close posture for unexpected `localeSummary` row keys.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation run for unexpected locale-summary row keys).
+- Commits landed:
+  - `chummer-hub-registry`: `60e5af4` (`fix(w1): fail-close unexpected localization locale-summary row keys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `551eb6c..60e5af4`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-3 desktop executable gate now fail-closes unexpected `desktopTupleCoverage` key drift in release-channel receipts
 
 - Trigger:
