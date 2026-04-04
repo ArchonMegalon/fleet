@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-7/8/9/16 build-handoff now carries structured rule-environment before/after diff cues across account and signed-in home rails
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require rule-environment diffs to be visible where build/export/exchange/viewer/print decisions happen, not only as one free-text tradeoff sentence.
+  - `BuildLabHandoffProjection` exposed only `TradeoffLines` text for rule-environment change context, so consumers could not reliably render before/after diff state for explain-receipt-grounded handoff decisions.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - added `BuildLabRuleEnvironmentDiffProjection` and wired optional `RuleEnvironmentDiff` onto `BuildLabHandoffProjection`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - replaced string-only diff helper with structured `BuildBuildLabRuleEnvironmentDiff(...)` projection (`status`, `summary`, `before/after` fingerprint + scope, `changed`).
+    - handoff payload now emits structured diff while retaining human-readable tradeoff wording.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - account build-handoff detail now renders explicit rule-diff status plus before/after scope+fingerprint rows and summary line.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - signed-in home build-handoff rail now renders compact rule-diff `before -> after (status)` cue inline with other follow-through context.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs` and `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - source guards now require new rule-diff rendering hooks in both surfaces.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `8281cb9e` (`feat(w4): expose structured build-handoff rule diff cues`).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
+
 ## 2026-04-04: milestone-14 xml/translator successor lane now exposes governed bridge posture and enabled-overlay counts in tool catalog responses
 
 - Trigger:
