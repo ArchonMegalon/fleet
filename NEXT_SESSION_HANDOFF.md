@@ -166,6 +166,27 @@
   - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-3 visual familiarity gate now fail-closes if the b14 lock never clears
+
+- Trigger:
+  - milestone `3` requires control-plane receipts to fail honest when proof generation conditions are stale or blocked.
+  - `materialize-desktop-visual-familiarity-exit-gate.sh` waited for `b14-flagship-ui-release-gate.lock`, but after timeout it continued execution even if the lock still existed.
+  - this allowed a drift path where visual familiarity materialization could proceed against in-flight/contended release-gate state instead of failing explicitly.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - after wait-loop completion, script now fail-closes with explicit marker and exit code `52` when the lock still exists.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended `Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs` assertions for lock-persistence fail-close markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1 passed`).
+- Current trusted state:
+  - visual familiarity gate no longer silently proceeds when lock contention outlives configured wait bounds.
+  - lock contention is now an explicit fail-close signal instead of an implicit stale-proof risk.
+- Push status:
+  - `chummer6-ui`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-3 flagship visual materialization no longer self-waits on its own release-gate lock
 
 - Trigger:
