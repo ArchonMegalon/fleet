@@ -10,12 +10,18 @@
     - added env controls:
       - `CHUMMER_PUBLISH_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
       - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-public-promotion-evidence.py`:
+    - added bounded future-skew validation for startup-smoke receipt timestamps used by public promotion evidence synthesis.
+    - added env controls:
+      - `CHUMMER_PUBLIC_PROMOTION_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`
+      - fallback `CHUMMER_DESKTOP_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS`.
   - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
-    - added compliance guards for publish-time future-skew fail-close reason text and new env knob usage.
+    - added compliance guards for publish-time and public-promotion future-skew fail-close reason text and new env knob usage.
   - patched `/docker/chummercomplete/chummer6-ui/docs/SELF_HOSTED_DOWNLOADS_RUNBOOK.md`:
     - documented publish-time startup-smoke future-skew policy and override knobs alongside max-age controls.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/publish-download-bundle.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && python3 -m py_compile scripts/generate-public-promotion-evidence.py` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1` test).
 - Current trusted state:
   - publish-time startup-smoke verification now rejects excessive future-skewed timestamps instead of treating them as fresh evidence.
