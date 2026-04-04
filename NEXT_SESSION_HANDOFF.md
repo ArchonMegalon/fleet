@@ -1,3 +1,35 @@
+## 2026-04-04: follow-up on milestone-2 hub parity verify temp-workdir isolation + workflow gate timestamp drift recovery (commit and push status)
+
+- Commits landed:
+  - `chummer6-hub`: `b152b5c6` (`fix(milestone-2): isolate run-services verify temp workdirs`).
+  - `chummer6-ui`: `a1121162` (`chore(milestone-2): rematerialize workflow execution gate receipt`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-2 hub parity verify now avoids fixed-temp race drift and passes after workflow execution gate rematerialization
+
+- Trigger:
+  - `chummer6-hub` verify intermittently failed before parity checks completed because run-services verification helper scripts reused fixed `.tmp` directories; concurrent/overlapping runs could clobber runtimeconfig/dll artifacts.
+  - after hardening those scripts, the next blocking failure was parity drift: `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` carried stale top-level `generatedAt` relative to nested SR4/SR6 workflow receipts.
+- Landed:
+  - patched temp-dir handling in run-services helper entrypoints:
+    - `/docker/chummercomplete/chummer6-hub/scripts/ai/run_services_restore_drill.sh`
+    - `/docker/chummercomplete/chummer6-hub/scripts/ai/run_services_verification.sh`
+    - `/docker/chummercomplete/chummer6-hub/scripts/ai/run_services_smoke.sh`
+    - replaced fixed shared temp directories with per-run `mktemp -d` isolation and cleanup `trap`, preventing cross-run clobber of compiled artifacts/runtimeconfigs.
+  - rematerialized workflow execution gate receipt:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - refreshed top-level and nested receipt timestamps so hub parity audit no longer fails on parent-vs-nested `generatedAt` drift.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, parity baseline passes; subsequent `parity audit failed: ...` lines are expected negative mutation probes in verify script-lock lane before final `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 hub parity verification no longer depends on shared fixed temp paths for run-services helper binaries and runtimeconfigs.
+  - hub verify baseline is green again after re-synchronizing desktop workflow execution gate receipt timestamps with nested SR4/SR6 workflow evidence.
+
 ## 2026-04-04: follow-up on W3 GM ops singular `ctl` shorthand fail-close slice (commit and push status)
 
 - Commits landed:
