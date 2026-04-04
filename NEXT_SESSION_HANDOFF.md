@@ -23,6 +23,31 @@
 - Current trusted state:
   - macOS per-head desktop exit gate now evaluates startup-smoke artifact path integrity without runtime NameError failure, preserving milestone-1/3 fail-honest proof behavior when receipts are present.
 
+## 2026-04-04: milestone-2 release proof lane now fail-closes non-canonical `journeysPassed` and `proofRoutes` ordering in hub-registry materialization + verification
+
+- Commits landed:
+  - `chummer-hub-registry`: `c4a1c10` (`fix(milestone-2): fail-close non-canonical release proof ordering`).
+- Trigger:
+  - milestone-2 release proof already fail-closed route and journey membership, alias drift, casing drift, and duplicates, but still tolerated set-equivalent reordering for `releaseProof.journeysPassed` and `releaseProof.proofRoutes`.
+  - this left a deterministic-proof seam where canonical sequencing could drift without failing registry verify, increasing cross-repo churn risk for parity consumers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - release-proof normalization now fail-closes non-canonical baseline journey ordering against `REQUIRED_RELEASE_PROOF_JOURNEYS`.
+    - release-proof normalization now fail-closes non-canonical flagship proof-route ordering against `REQUIRED_RELEASE_PROOF_ROUTES`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now fail-closes reordered `releaseProof.journeysPassed`.
+    - verifier now fail-closes reordered `releaseProof.proofRoutes`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added materializer mutation probes for non-canonical `journeys_passed` ordering and non-canonical `proof_routes` ordering.
+    - added verifier mutation probes for non-canonical `releaseProof.journeysPassed` ordering and non-canonical `releaseProof.proofRoutes` ordering.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (expected traceback/error lines are negative mutation probes in script-lock coverage).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated to `c4a1c10`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: follow-up on milestone-2 releaseProof timestamp drift self-heal in chummer6-hub (commit and push status)
 
 - Commits landed:
