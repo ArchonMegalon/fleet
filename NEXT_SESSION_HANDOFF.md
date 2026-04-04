@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-17 master-index now emits explicit adjacent-SR6 oracle lane receipts and build-explain gate fail-closes on receipt markers
+
+- Trigger:
+  - frontier milestone `17` requires legacy + adjacent import-oracle evidence to project explicit bounded-loss receipts, not only posture/counter primitives.
+  - `master-index` already exposed adjacent SR6 oracle posture and source counts, but lacked a deterministic aggregate adjacent-oracle lane receipt string suitable for UI/operator surfaces and parity gating.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now exposes `AdjacentSr6OracleLaneReceipt`.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added `BuildAdjacentSr6OracleLaneReceipt(...)` with deterministic messages:
+      - missing lane: no adjacent SR6 oracle certification receipt coverage found.
+      - covered lane: explicit `covered/expected` plus receipt posture for Genesis/CommLink6.
+    - wired `AdjacentSr6OracleLaneReceipt` in both empty-catalog and populated `GetMasterIndex()` responses.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - added fail-close assertions for adjacent receipt strings in missing/governed/stale import-oracle scenarios.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now fail-proves `response["adjacentSr6OracleLaneReceipt"]` exists.
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - `build_explain_publish` now requires `response["adjacentSr6OracleLaneReceipt"]` and `BuildAdjacentSr6OracleLaneReceipt`.
+  - patched Fleet mirror + parity wording:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py` to require both new markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Contracts/Chummer.Contracts.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_import_oracle_lane_when_certification_receipt_covers_legacy_and_adjacent_sources|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_import_oracle_lane_when_adjacent_oracle_coverage_is_partial|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespaces unresolved in this baseline).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `response["adjacentSr6OracleLaneReceipt"]`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `BuildAdjacentSr6OracleLaneReceipt`).
 ## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes on workspace-v4 continuity plus GM/offline verification markers
 
 - Trigger:
@@ -20,6 +54,36 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes new workspace-v4, GM ops, and offline continuity proofs).
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`390 passed` on `net10.0` and `390 passed` on `net10.0-windows`).
+
+## 2026-04-04: milestone-9/16 Build Lab exchange parity wording and creator evidence now preserve adjacent exchange + replay/template lanes
+
+- Trigger:
+  - frontier milestones `9` and `16` require portable dossier/exchange truth and sheet/print/export/viewer + adjacent exchange parity to remain explicit wherever Build Lab handoff evidence is consumed.
+  - hub Build Lab exchange parity lane set already included `JSON`, `Foundry`, and `character_template`, but summary/fallback wording still advertised only `sheet/print/export/viewer`.
+  - media-factory creator packet planner truncated exchange/portability evidence lines, which could drop `Character template export` and `Replay timeline` from publication packet evidence as new lanes were added.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `BuildBuildLabExchangeParitySummary(...)` now reports `sheet/print/export/viewer and adjacent exchange parity lanes`.
+    - creator publication comparison fallback now uses the same expanded parity wording.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - updated fail-close assertions to require the expanded exchange parity wording in both handoff and creator publication comparison summaries.
+  - patched `/docker/fleet/repos/chummer-media-factory/src/Chummer.Media.Factory.Runtime/Assets/CreatorPublicationPlannerService.cs`:
+    - exchange parity evidence selection still stays bounded, but now explicitly preserves `Character template export:` lane evidence when present.
+    - portability pillar evidence selection still stays bounded, but now explicitly preserves `Replay timeline:` lane evidence when present.
+  - patched `/docker/fleet/repos/chummer-media-factory/Chummer.Media.Factory.Runtime.Verify/Program.cs`:
+    - fixture now models `5 of 5` exchange parity lanes and `6 of 6` dossier/exchange/replay/recap/module portability lanes.
+    - added fail-close assertions requiring `Dossier exchange:` and `Character template export:` evidence lines in creator publication packets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignSpineBuildCreatorPublicationsComparisonSummaryCarriesBuildLabParityAndPortabilityReceipts|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignSpineBuildBuildLabHandoffs" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`1 passed` on `net10.0` and `1 passed` on `net10.0-windows`).
+  - `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj -c Release` -> PASS (`Media factory runtime verification passed.`).
+- Commits landed:
+  - `chummer6-hub`: `fc0d4c08` (`feat(w4-9-16): make build-lab exchange parity wording match governed lane set`).
+  - `chummer6-media-factory`: `cc21bd5` (`feat(w4-9-16): preserve template and replay lanes in creator packet evidence`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `5b5e4f7..cc21bd5`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials for `chummer6-hub` push.
 
 ## 2026-04-04: milestone-9 Build Lab portability pillar now explicitly includes dossier exchange on hub handoff rails
 
