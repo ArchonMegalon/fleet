@@ -19,9 +19,9 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates_external_proof_contract.py -k "external_proof_requests_include_startup_smoke_contract_fields or install_journey_blocks_when_support_external_proof_backlog_summary_drifts"` -> PASS (`2 passed`, `5 deselected`).
   - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized; active blocker remains external Windows/macOS host proof capture).
 - Commits landed:
-  - `fleet`: pending
+  - `fleet`: `a01d4b5` (`fix(w1-1-3): validate external-proof tuple identity and host platform`).
 - Push attempts:
-  - not attempted in this slice.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
