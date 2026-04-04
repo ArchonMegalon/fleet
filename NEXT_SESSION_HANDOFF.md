@@ -26,6 +26,34 @@
 - Exact blocker:
   - no repo-local blocker for this slice; remote push remains credential-gated for GitHub HTTPS in this environment.
 
+## 2026-04-04: milestone-17 import parity receipt now fail-closes on explicit Chummer4/5a/Hero Lab plus Genesis/CommLink oracle coverage
+
+- Trigger:
+  - milestone `17` requires evidence-backed oracle closeout across Chummer4, Chummer5a, Hero Lab, and adjacent SR6 clients.
+  - the checked-in import parity receipt lacked explicit `adjacent_oracles` and had no executable guard ensuring legacy + adjacent oracle names remain present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.CoreEngine.Tests/Program.cs`:
+    - added `ImportParityCertificationReceiptCoversLegacyAndAdjacentOracles()` and wired it into the `core-engine-tests` run.
+    - new guard fail-closes when `.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json` is missing, not `passed`, or missing required oracle identifiers:
+      - legacy: `Chummer4`, `Chummer5a`, `Hero Lab`
+      - adjacent SR6: `Genesis`, `CommLink`
+  - updated `/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json`:
+    - added explicit `import_oracles` and `adjacent_oracles` coverage payload.
+    - added aggregate `coverage` summary (`4/4`, `100%`).
+  - updated `/docker/chummercomplete/chummer6-core/docs/LEGACY_MIGRATION_CERTIFICATION.md`:
+    - certification inputs now explicitly include the import parity receipt artifact.
+    - certification rule now requires explicit legacy+adjacent oracle naming in the receipt.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter ... -f net10.0 ...` -> FAIL before test execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+- Commits landed:
+  - pending local commit in `chummer6-core` for import-parity receipt guard and evidence refresh.
+  - pending local commit in `fleet` for this handoff update.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local blocker for this milestone-17 receipt hardening slice; broader `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in current workspace baseline, and push remains credential-dependent for repos without authenticated remotes in this environment.
+
 ## 2026-04-04: milestone-6 mobile continuity proof now stays executable when owner package packing is available, and travel-companion restore truth remains explicit across non-travel sibling lanes
 
 - Trigger:
