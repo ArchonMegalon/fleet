@@ -1351,19 +1351,16 @@ def evaluate_journey(
                                     if str(token or "").strip()
                                 ]
                                 if isinstance(proof_capture_commands, list) and expected_commands:
-                                    actual_commands = {
+                                    actual_commands = [
                                         str(token or "").strip()
                                         for token in proof_capture_commands
                                         if str(token or "").strip()
-                                    }
-                                    missing_expected_commands = [
-                                        token for token in expected_commands if token not in actual_commands
                                     ]
-                                    if missing_expected_commands:
+                                    if actual_commands != expected_commands:
                                         support_packet_contract_violations.append(
                                             "support packet "
-                                            f"{packet_id} install_diagnosis.external_proof_request.proof_capture_commands is missing "
-                                            f"release-channel command(s): {missing_expected_commands}."
+                                            f"{packet_id} install_diagnosis.external_proof_request.proof_capture_commands "
+                                            "must exactly match release-channel tuple truth command sequence."
                                         )
                 if install_truth_state == "tuple_not_on_promoted_shelf" and external_proof_required is not True:
                     support_packet_contract_violations.append(
@@ -1523,44 +1520,44 @@ def evaluate_journey(
                 continue
             grouped_external_proof_requests.setdefault(host, []).append(dict(item))
         for host in sorted(grouped_external_proof_requests):
-            rows = sorted(
+            host_rows = sorted(
                 grouped_external_proof_requests[host],
-                key=lambda row: str(row.get("tuple_id") or "").strip(),
+                key=lambda request_row: str(request_row.get("tuple_id") or "").strip(),
             )
             normalized_requests = []
-            for row in rows:
+            for request_row in host_rows:
                 required_proofs = sorted(
                     {
                         str(token or "").strip().lower()
-                        for token in (row.get("required_proofs") or [])
+                        for token in (request_row.get("required_proofs") or [])
                         if str(token or "").strip()
                     }
                 )
                 proof_capture_commands = [
                     str(token or "").strip()
-                    for token in (row.get("proof_capture_commands") or [])
+                    for token in (request_row.get("proof_capture_commands") or [])
                     if str(token or "").strip()
                 ]
                 normalized_requests.append(
                     {
-                        "tuple_id": str(row.get("tuple_id") or "").strip(),
-                        "channel_id": str(row.get("channel_id") or "").strip().lower(),
-                        "head_id": str(row.get("head_id") or row.get("head") or "").strip().lower(),
-                        "platform": str(row.get("platform") or "").strip().lower(),
-                        "rid": str(row.get("rid") or "").strip().lower(),
-                        "expected_artifact_id": str(row.get("expected_artifact_id") or "").strip(),
+                        "tuple_id": str(request_row.get("tuple_id") or "").strip(),
+                        "channel_id": str(request_row.get("channel_id") or "").strip().lower(),
+                        "head_id": str(request_row.get("head_id") or request_row.get("head") or "").strip().lower(),
+                        "platform": str(request_row.get("platform") or "").strip().lower(),
+                        "rid": str(request_row.get("rid") or "").strip().lower(),
+                        "expected_artifact_id": str(request_row.get("expected_artifact_id") or "").strip(),
                         "expected_installer_file_name": str(
-                            row.get("expected_installer_file_name") or ""
+                            request_row.get("expected_installer_file_name") or ""
                         ).strip(),
                         "expected_public_install_route": str(
-                            row.get("expected_public_install_route") or ""
+                            request_row.get("expected_public_install_route") or ""
                         ).strip(),
                         "expected_startup_smoke_receipt_path": str(
-                            row.get("expected_startup_smoke_receipt_path") or ""
+                            request_row.get("expected_startup_smoke_receipt_path") or ""
                         ).strip(),
                         "required_proofs": required_proofs,
                         "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
-                            row.get("startup_smoke_receipt_contract")
+                            request_row.get("startup_smoke_receipt_contract")
                         ),
                         "proof_capture_commands": proof_capture_commands,
                     }
