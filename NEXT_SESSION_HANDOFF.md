@@ -20,6 +20,30 @@
   - `chummer.run-services`: local changes landed in this slice (`scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`); commit/push pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release truth when rollout state is paused/revoked despite complete desktop tuple coverage
+
+- Trigger:
+  - frontier milestones `1` and `3` require publishable desktop release truth to align with executable readiness and promoted installer tuple proof.
+  - executable gate already fail-closed incomplete tuple coverage and unpublished sentinel/version/state seams, but still allowed publishable status with `rolloutState=paused` or `rolloutState=revoked` after tuple coverage was complete.
+  - this left a drift seam where release truth could present as publishable while rollout posture still declared a blocked/retracted state.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added evidence key `release_channel_rollout_state_blocked_for_publishable_complete_values`.
+    - added evidence key `release_channel_rollout_state_blocks_publishable_complete`.
+    - gate now fail-closes with reason `Release channel rolloutState cannot be paused/revoked when status is publishable and required desktop tuple coverage is complete.`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded executable-gate marker assertions for the new rollout-state fail-close evidence and reason text.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded migration/compliance marker assertions for the same publishable+paused/revoked rollout-state guardrail.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable proof can no longer report publishable desktop release truth with complete tuple coverage while rollout state still says `paused` or `revoked`.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable release status when desktop tuple coverage is still incomplete
 
 - Trigger:
