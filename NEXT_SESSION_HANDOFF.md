@@ -1,3 +1,36 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 singular diary-contact-heat compact packet proof slice
+
+- Commits landed:
+  - `chummer6-hub`: `9b0523a8` (`feat(w3-4-5-6): canonicalize singular diarycontactheat compact packet forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-4/5/6 prep continuity lane now fail-closes singular diary-contact-heat compact packet shorthand across alias canonicalization and live journey audits
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require diary/contact/heat continuity to behave as one governed campaign-return lane in both API and workspace proof.
+  - compact packet-form coverage and audits only exercised plural `diarycontactsheatpacket(s)`, leaving singular operator shorthand `diarycontactheatpacket(s)` outside explicit fail-close proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added singular compact rewrites:
+      - `diarycontactheatpacket(s)` -> `diary contact heat packet` (normalizes through existing contact/connection collapse path).
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - extended `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with singular compact form assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` to assert singular compact packet matching.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added singular compact query probes to API `queryText` and workspace `prepQuery` coverage lists.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added singular compact workspace assertions via `assertWorkspacePrepQuerySearch(...)`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new singular markers for live-audit tuple lists and Playwright assertions.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W1 external-proof request contract handoff docs slice
 
 - Commits landed:
