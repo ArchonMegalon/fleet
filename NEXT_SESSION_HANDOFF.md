@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-2 release proof route canonicalization now fail-closes query/fragment drift and normalized duplicate route variants
+
+- Trigger:
+  - frontier milestone `2` requires release shelf workflow/visual provenance to stay canonical and non-ambiguous across projections.
+  - `releaseProof.proofRoutes` validation already required slash-led route strings, but still accepted query/fragment payloads and equivalent route variants that only differed by trailing slash or case.
+  - this left a drift path where non-canonical or duplicate-equivalent route evidence could pass as distinct proof receipts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical `proof_routes` normalization/validation (slash-led route path, no whitespace, no `?`/`#`, no `//` empty path segments, lowercase + trailing-slash normalization).
+    - fail-closes duplicate route variants after normalization.
+    - materialized `releaseProof.proofRoutes` now emit canonical normalized routes.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - mirrored canonical `releaseProof.proofRoutes` validation/normalization semantics.
+    - verifier now fail-closes query/fragment route entries, whitespace-containing routes, empty-path-segment routes, and duplicate-equivalent route variants after normalization.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving materializer fail-close on `proof_routes` with query/fragment segments.
+    - added mutation proving materializer fail-close on normalized duplicate route variants (`/home/access` vs `/home/access/`).
+    - added mutation proving verifier fail-close on query/fragment `releaseProof.proofRoutes`.
+    - added mutation proving verifier fail-close on normalized duplicate `releaseProof.proofRoutes`.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented canonical route constraints and duplicate detection after normalization for `releaseProof.proofRoutes`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - milestone-2 release shelf route provenance now rejects non-canonical route evidence and normalized duplicate variants at both projection and verification boundaries.
+  - promoted release proof routes are canonicalized before emission, reducing cross-receipt drift for workflow/visual shelf provenance.
+- Push status:
+  - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 release materializer now fail-closes non-passing `releaseProof.status` and malformed `proof_routes` before projection
 
 - Trigger:
