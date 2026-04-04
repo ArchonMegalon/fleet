@@ -77,8 +77,10 @@
   - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
 - Commits landed:
   - `chummer.run-services`: `c5b4ba0a` (`fix(w3): fail-close de-brief recap continuity across workspace and gm ops`).
+  - `fleet`: `842eba5` (`docs(handoff): record w3 de-brief continuity and gm ops fail-close`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
