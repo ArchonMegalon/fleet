@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-6 mobile continuity proof now stays executable when owner package packing is available, and travel-companion restore truth remains explicit across non-travel sibling lanes
+
+- Trigger:
+  - milestone `6` continuity verification in `chummer6-mobile` regressed in two ways under live workspace conditions:
+    - roaming restore `travelCompanion*` truth dropped explicit cached/stale/offline lines whenever the sibling claimed device was not `travel_*`-labeled.
+    - package-plane owner packaging silently fell back to stubs because `chummer6-core` `Chummer.Contracts` failed compile, causing missing campaign/workspace contract types during mobile verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-play/src/Chummer.Play.Core/Roaming/RoamingWorkspaceSyncPlanner.cs`:
+    - added `ResolveTravelCompanions(...)` to prefer `travel_*` siblings but fall back to any sibling claimed device.
+    - `BuildTravelCompanionSummary` now keeps explicit `Cached:`/`Stale:`/`Offline actions:` truth when non-travel sibling lanes exist.
+    - `BuildTravelCompanionLabels` now includes companion `DeviceRole` in `Travel companion lane:` labels (fail-proves `travel_cache` visibility where present).
+  - patched `/docker/chummercomplete/chummer-core-engine/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - fixed `MasterIndexResponse` constructor parameter ordering so required parameters (`SourcebookCount`, `Sourcebooks`) no longer come after an optional parameter (`ReferenceLaneReceipt`).
+    - this restores successful owner packaging of `Chummer.Engine.Contracts`, which mobile package-plane helpers consume for real contract types.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-play && bash scripts/ai/verify.sh` -> PASS (`chummer6-mobile verify ok`).
+  - `cd /docker/chummercomplete/chummer-core-engine && dotnet pack Chummer.Contracts/Chummer.Contracts.csproj --nologo -c Release -o /tmp/chummer-pack-test` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet pack Chummer.Campaign.Contracts/Chummer.Campaign.Contracts.csproj --nologo -c Release -o /tmp/chummer-pack-test` -> PASS.
+- Commits landed:
+  - pending local commit in `chummer6-mobile` for travel-companion continuity fallback/label fix.
+  - pending local commit in `chummer6-core` for `MasterIndexResponse` compile-order fix.
+  - pending local commit in `fleet` for this handoff update.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local implementation blocker for this slice; remote pushes remain credential-dependent in this environment.
+
 ## 2026-04-04: milestone-13/14/17/18 master-index now emits explicit bounded-loss lane receipts for parity decisions
 
 - Trigger:
