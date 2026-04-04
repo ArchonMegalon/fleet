@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes release-proof alias drift for canonical origin and nested localization-gate alias pairs
+
+- Trigger:
+  - frontier milestone `2` requires release-channel projection contracts to stay deterministic for legacy-familiar flagship trust, including projection-time fail-close on alias drift.
+  - `scripts/materialize_public_release_channel.py` already rejected conflicting alias values through `resolve_alias_value(...)`, but `scripts/ai/verify.sh` did not actively mutate `proof.json` to prove the materializer path still fail-closed these alias seams.
+  - this left a regression seam where materializer alias-drift fail-close behavior (`baseUrl` vs `base_url`, `uiLocalizationReleaseGate` vs `ui_localization_release_gate`) could weaken without verification catching it.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active materializer mutation that injects conflicting alias values between `releaseProof.baseUrl` and `releaseProof.base_url` in `proof.json`.
+    - verify now requires materializer failure on that mutation and enforces fail-close marker:
+      - `base_url alias values drift between baseUrl and base_url`
+    - added active materializer mutation that injects conflicting alias values between `releaseProof.uiLocalizationReleaseGate` and `releaseProof.ui_localization_release_gate` in `proof.json`.
+    - verify now requires materializer failure on that mutation and enforces fail-close marker:
+      - `uiLocalizationReleaseGate alias values drift between uiLocalizationReleaseGate and ui_localization_release_gate`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented projection-time fail-close posture for conflicting `releaseProof` alias pairs (`baseUrl` vs `base_url`, `uiLocalizationReleaseGate` vs `ui_localization_release_gate`) in materializer malformed-payload handling.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected materializer fail-close mutation runs for both alias-drift seams).
+- Commits landed:
+  - `chummer-hub-registry`: `b61f8d3` (`fix(w1): mutation-test materializer release-proof alias drift fail-close`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - fleet push remains blocked by missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-4/5 continuity lane now fail-closes compact afteraction/afteractions recap shorthand in workspace aftermath shelf classification
 
 - Trigger:
