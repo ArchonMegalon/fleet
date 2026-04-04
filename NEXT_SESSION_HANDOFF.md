@@ -45,6 +45,15 @@
   - `pytest` remains unavailable in this environment.
   - environment lacks GitHub HTTPS credentials for `chummer6-design` and `fleet` pushes.
 
+## 2026-04-04: handoff append commit + fleet push status for milestone-13 reference-source receipt slice
+
+- Commits landed:
+  - `fleet`: `e471ba2` (`docs(handoff): record w2-13 reference-source receipt commit and push outcomes`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment still lacks GitHub HTTPS credentials, so fleet commits remain local-only.
+
 ## 2026-04-04: milestone-4/6 travel continuity now includes explicit offline return-loop lane cues (downtime/diary + contacts/heat + aftermath + return)
 
 - Trigger:
@@ -37843,3 +37852,43 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - GitHub HTTPS credentials are unavailable in this environment for `chummer6-design` and `fleet` remotes.
+
+## 2026-04-04: milestone-7/8/9/16 build+explain gate now fail-closes on Build Lab rule-diff evidence and exchange/export parity anchors
+
+- Trigger:
+  - frontier milestones `7`, `8`, `9`, and `16` require one grounded Build Lab lane with rule-environment diffs plus portable exchange/export parity (Foundry/JSON/sheet/print/replay/recap/module) across core and hub.
+  - `build_explain_publish` gate previously enforced UI + core master-index parity markers but did not fail-close on Build Lab rule-diff view evidence or portable exchange/export parity anchors.
+- Landed:
+  - patched canonical design source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - added `build_explain_publish` repo proof row for `chummer6-core` `Chummer.CoreEngine.Tests/Program.cs` requiring:
+      - `BuildLabWorkspaceProjectionFactoryProjectsIntakeState`
+      - `RuntimeLockDiffIsDeterministicAndParameterized`
+      - `target.foundry-export`
+      - `target.json-exchange`
+      - `target.sheet-viewer`
+      - `target.print-pdf-export`
+      - `target.replay-timeline`
+      - `target.session-recap`
+      - `target.run-module`
+    - added `chummer6-hub` `Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs` proof row requiring:
+      - `handoff.RuleEnvironmentDiff`
+      - `handoff.RuleEnvironmentDiff.BeforeScope`
+      - `handoff.RuleEnvironmentDiff.AfterScope`
+    - added `chummer6-hub` `Chummer.Run.AI/Services/Interop/InteropExportService.cs` proof row requiring:
+      - `chummer.portable-dossier.v1`
+      - `chummer.portable-campaign.v1`
+      - `foundry-vtt.scene-ledger.v1`
+      - `ReceiptSummary`
+      - `nextSafeAction`
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same proof rows.
+  - patched Fleet regression coverage `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - extended `test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` to fail-close on the new core/hub proof rows and markers.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select((.repo=="chummer6-core" and .path=="Chummer.CoreEngine.Tests/Program.cs") or (.repo=="chummer6-hub" and .path=="Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs") or (.repo=="chummer6-hub" and .path=="Chummer.Run.AI/Services/Interop/InteropExportService.cs"))' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (new proof rows are present in generated output).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k build_explain_publish_gate_requires_ui_kit_build_and_explain_markers` -> FAIL (`No module named pytest`).
+- Exact blocker:
+  - `pytest` is unavailable in the current environment, so Fleet tests cannot run beyond compile/materialize/jq verification in this session.
