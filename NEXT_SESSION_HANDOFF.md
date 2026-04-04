@@ -142,10 +142,12 @@
   - `chummer6-ui`: `93f5a32c` (`feat(w2-13-14-17-18): surface master-index receipt lanes on desktop dialogs`).
   - `chummer6-design`: `0ce5128` (`docs(w2-13-14-17-18): gate and describe desktop receipt-lane parity`).
   - `fleet`: `b8310da` (`docs(handoff): record desktop master-index parity receipt projection slice`).
+  - `fleet`: `cff6df6` (`docs(handoff): capture commit hashes and push results for w2 receipt slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `cff6df6`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - MSTest fine-grained filter execution for these new presentation test names did not resolve in this environment; verification relied on compile + direct fleet gate regression invocation.
   - environment lacks GitHub HTTPS credentials for `chummer6-ui`, `chummer6-design`, and `fleet` pushes.
