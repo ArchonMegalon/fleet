@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-5 opposition fallback prep retrieval now fail-closes `opfor` and `opforce` query variants across API and workspace route journeys
+
+- Trigger:
+  - milestone `5` opposition prep retrieval already covered canonical opposition terms, but fallback operator vocabulary (`opfor`, `opforce`) was still implicit evidence rather than explicit closeout checks.
+  - this left a drift window where common GM opposition shorthand could regress without tripping signed-in closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - opposition prep packet search terms now explicitly include `opfor` and `opforce` in the guaranteed opposition query vocabulary.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=opfor` and `queryText=opforce`.
+    - added signed-in workspace route checks for `prepQuery=opfor` and `prepQuery=opforce`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `opfor` and `opforce`, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded opposition packet search-term assertions to lock `opfor` and `opforce` coverage.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock API/live-audit and Playwright marker coverage for `opfor` and `opforce`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`342` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 opposition retrieval now fail-closes both canonical and fallback opposition query vocabulary across API, signed-in workspace route, and browser journey proof.
+- Push status:
+  - `chummer.run-services`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 hub parity audit now fail-closes workflow/visual release-channel generation drift
 
 - Trigger:
