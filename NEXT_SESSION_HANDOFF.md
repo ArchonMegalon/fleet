@@ -42,6 +42,32 @@
   - `chummer.run-services`: local follow-on changes landed in this slice; commit/push not attempted in this step.
   - `fleet`: handoff updated locally in this slice.
 
+## 2026-04-04: milestone-1/3 executable gate now fail-closes top-level release-channel `version/releaseVersion` alias drift
+
+- Trigger:
+  - frontier milestones `1` and `3` require one non-contradictory release truth across channel identity, versioning, installers, and per-head proof receipts.
+  - executable gate already fail-closed top-level `channelId/channel` and `generated_at/generatedAt` alias conflicts plus installer artifact alias drift, but top-level release version still read only `release_channel.version`.
+  - this left a drift seam where payloads carrying both `version` and `releaseVersion` with conflicting values could bypass explicit alias-conflict proof at the channel root.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added top-level alias-aware normalization across `release_channel.version` and `release_channel.releaseVersion`.
+    - added evidence key `release_channel_version_alias_conflict`.
+    - gate now fail-closes when `release_channel.version` and `release_channel.releaseVersion` both exist but disagree.
+    - missing-version fail-close message now explicitly requires `version/releaseVersion`.
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+      - expanded marker assertions for `release_channel.releaseVersion`, `release_channel_version_alias_conflict`, and the new alias-conflict reason text.
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+      - expanded migration/compliance marker assertions for the same top-level release-version alias-conflict contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 executable proof now fail-closes contradictory top-level release-channel version aliases instead of silently preferring one key, keeping release version truth aligned across channel root, installer artifacts, and per-head gate envelopes.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes conflicting alias-key release truth across channel timestamps, installer artifacts, and per-head visual/workflow identity
 
 - Trigger:
