@@ -1,3 +1,22 @@
+## 2026-04-04: milestone-2 Hub verify now fail-closes non-passing `uiLocalizationReleaseGate.signoffSmokeRunnerStatus` on canonical and alias-only payload paths
+
+- Trigger:
+  - milestone-2 parity audit already enforces `releaseProof.uiLocalizationReleaseGate.signoffSmokeRunnerStatus` with camelCase and snake_case alias resolution.
+  - Hub verify mutation coverage did not execute this branch, so regressions in signoff-smoke status enforcement could slip past `scripts/ai/verify.sh` script-locks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation to set `releaseProof.uiLocalizationReleaseGate.signoffSmokeRunnerStatus = "failed"` and assert parity-audit rejection.
+    - added alias-only mutation that removes `signoffSmokeRunnerStatus`, sets `signoff_smoke_runner_status = "failed"`, and asserts parity-audit rejection.
+  - existing script-lock test already asserts both failure-marker strings in `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (new signoff-smoke mutations execute and fail-close as expected).
+- Current trusted state:
+  - milestone-2 verify now explicitly guards signoff-smoke localization gate status semantics across both canonical and alias-only payload paths in end-to-end parity verification.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: follow-up on `debrief` continuity lock commit and push status
 
 - Commits landed:
