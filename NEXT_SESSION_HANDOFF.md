@@ -1,3 +1,21 @@
+## 2026-04-04: milestone-2 localization verifier coverage now includes blank shipping-locale id rejection regression
+
+- Trigger:
+  - localization verifier strict-token hardening landed for `shippingLocales` and `acceptanceGates`, but regression coverage still only asserted blank-id rejection on acceptance gates.
+  - without direct shipping-locale blank-id coverage, the negative test suite could miss future regressions in locale-list token validation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added negative regression that injects a blank `shippingLocales` id (`"   "`) into materialized release proof and asserts verifier failure.
+  - committed and pushed in `chummer-hub-registry`:
+    - `41a6724` — `Cover blank shipping locale token regression`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes blank shipping-locale and blank acceptance-gate negative regressions).
+- Current trusted state:
+  - localization verifier strict-token enforcement now has explicit regression checks on both required list families: `shippingLocales` and `acceptanceGates`.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `41a6724`).
+  - `fleet`: pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 localization verifier now rejects blank/non-string shipping-locale and acceptance-gate ids in release proof payloads
 
 - Trigger:
