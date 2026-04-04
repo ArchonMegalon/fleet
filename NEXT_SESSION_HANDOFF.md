@@ -130,6 +130,48 @@
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-7 Build Lab now projects an explicit creation/compare/advancement/crew-fit cohesion rail on account and signed-in home surfaces
+
+- Trigger:
+  - frontier milestone `7` requires creation, compare, advancement planning, and crew-fit analysis to behave like one grounded Build Lab surface.
+  - Build Lab handoffs already exposed outputs/rule-diff/conditional/source/planner cues, but they did not project one explicit rail proving those four milestone-7 lanes were grounded together.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - `BuildLabHandoffProjection` now includes:
+      - `BuildSurfaceSummary`
+      - `BuildSurfaceLines`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - Build Lab handoff projection now computes deterministic build-surface cohesion posture via:
+      - `BuildBuildLabSurfaceSummary(...)`
+      - `BuildBuildLabSurfaceLines(...)`
+      - `ResolveBuildLabSurfaceCoverage(...)`
+      - `IsBuildLabCompareProjectionKind(...)`
+    - coverage now explicitly tracks four lanes on one handoff:
+      - creation
+      - compare
+      - advancement
+      - crew-fit
+  - patched views:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`
+      - Build handoff detail now renders `BuildSurfaceSummary` and `BuildSurfaceLines`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`
+      - signed-in Home build rail now renders build-surface summary plus lane lines.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves build-surface summary/line coverage for all four lanes.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - now asserts Account view includes build-surface summary/lines rendering hooks.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - now asserts signed-in Home build rail includes build-surface summary/lines rendering hooks.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false -p:StaticWebAssetsEnabled=false` -> PASS (`6` tests on `net10.0` + `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services`.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no repo-local blocker for this slice; remote push in this environment remains credential-gated for GitHub HTTPS remotes.
+
 ## 2026-04-04: milestone-1/3 journey gates now fail-close on stale per-head desktop executable proof receipts
 
 - Trigger:
