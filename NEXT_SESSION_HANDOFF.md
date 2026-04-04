@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes canonical ordering drift for nested `releaseProof.journeysPassed` and `releaseProof.proofRoutes`, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires deterministic, legacy-familiar flagship proof receipts, but `scripts/audit-ui-parity.sh` still treated nested release-proof `journeysPassed` and `proofRoutes` as order-insensitive sets.
+  - this left a drift seam where set-equivalent reordering could pass parity audit even though canonical ordering is part of release-proof contract truth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - nested `releaseProof.journeysPassed` now fail-closes non-canonical baseline journey ordering.
+    - nested `releaseProof.proofRoutes` now fail-closes non-canonical flagship route ordering.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added active mutation probe that swaps the first two `releaseProof.proofRoutes` entries and requires parity audit fail-close.
+    - added active mutation probe that swaps the first two `releaseProof.journeysPassed` entries and requires parity audit fail-close.
+    - added fail-close verifier markers:
+      - `verify gate failed: parity audit should reject non-canonical releaseProof.proofRoutes ordering.`
+      - `verify gate failed: parity audit should reject non-canonical releaseProof.journeysPassed ordering.`
+  - patched script-lock tests:
+    - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
+    - pinned new audit failure markers plus new verify mutation markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected ordering-mutation fail-close lines for `releaseProof.proofRoutes` and `releaseProof.journeysPassed`).
+- Commits landed:
+  - `chummer6-hub`: `93049546` (`fix(milestone-2): fail-close release proof ordering drift in parity audit`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `93049546` remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `lesson learned` / `lessons learned` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
