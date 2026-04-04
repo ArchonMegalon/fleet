@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-4/5 continuity + GM ops prep search now normalizes split plural `return loops` shorthand end to end
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return-loop continuity and GM prep-library operations to remain one governed lane across compact, split, and hyphen query forms.
+  - query alias normalization already covered compact plural forms (`returnloops`, `sessionreturnloops`, `nextsessionreturnloops`) but did not normalize split plural variants such as `return loops`, `session return loops`, and `next session return loops`.
+  - this left a false-negative seam where valid split/hyphen plural return-loop shorthand could miss governed continuity packets in workspace matching and GM prep search.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added split plural loop normalization so loop plurals collapse to canonical `loop` when paired with return-loop context tokens (`return` or `session`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - extended `PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation` with split/hyphen plural assertions for:
+      - `return loops` / `return-loops`
+      - `session return loops` / `session-return-loops`
+      - `next session return loops` / `next-session-return-loops`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - extended `ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation` with matching split/hyphen plural prep-query coverage.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsNextSessionReturnLoopPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`430` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --nologo -v minimal` -> PASS (`534` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `7cfe5838` (`fix(w3): normalize split plural return-loop prep queries`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-3 readiness lane now fail-closes stale Linux non-promoted startup-smoke tuple receipts in flagship materializer evidence
 
 - Trigger:
