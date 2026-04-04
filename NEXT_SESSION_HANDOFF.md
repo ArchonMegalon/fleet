@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `contacts` prep retrieval across API and workspace route
+
+- Trigger:
+  - frontier milestones `4` and `5` require diary/contact/heat continuity and GM prep retrieval to remain one governed campaign lane in both API and signed-in workspace journeys.
+  - after adding `heat` live checks, audits still had no fail-close coverage for `contacts` retrieval even though campaign return packets expose contacts continuity search terms.
+  - this left a route-level drift window where contacts continuity retrieval could regress without tripping closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `GET /api/v1/campaign-spine/me/workspaces/{workspaceId}/prep-library?queryText=contacts` with non-empty governed packet results.
+    - added signed-in workspace route verification for `/account/work/workspaces/{workspaceId}?prepQuery=contacts`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI search step for `contacts` after `heat`, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock `queryText=contacts`, `prepQuery=contacts`, and playwright `?prepQuery=contacts` markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-4/5 audits now fail-close if governed `contacts` continuity prep retrieval drifts in API or workspace route flows.
+  - campaign continuity proof now covers `opposition`, `seasonops`, `heat`, and `contacts` retrieval lanes in the closeout audit path.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 live journey audits now fail-close on governed `heat` prep retrieval across API and workspace route
 
 - Trigger:
@@ -94,6 +117,36 @@
   - milestone-5 event-control prep retrieval no longer depends on users typing split `season operation(s)` words.
 - Push status:
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-1/3 executable gate now materializes and audits Linux required tuple policy with per-tuple proof paths
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-binary proof to stay fail-honest by `head × platform × rid`, including Linux required tuples declared in release-channel policy.
+  - `scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` only auto-materialized required tuples for Windows/macOS and Linux validation was head-only pathing, which could miss tuple-specific Linux policy diagnostics and stale-proof regeneration for non-default Linux tuples.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added Linux tuple dependency materialization via `scripts/materialize-linux-desktop-exit-gate.sh` using required tuple policy (`requiredDesktopPlatformHeadRidTuples`).
+    - expanded tuple parser to include Linux platform rows.
+    - made Linux gate proof path resolution tuple-aware (`head + rid`) with default-path retention for `avalonia/linux-x64` and `blazor-desktop/linux-x64`.
+    - promoted Linux policy tuple synthesis to parity with Windows/macOS:
+      - added `required_linux_policy_tuples`
+      - added `linux_policy_tuples_missing_release_artifacts`
+      - emits `linux_policy_required_head_rid_tuples` and `linux_policy_tuples_missing_release_artifacts` evidence.
+    - shifted Linux validation/status keys to tuple labels (`head:rid`) instead of head-only labels.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - renamed and expanded tuple-policy regression to lock Linux + Windows + macOS policy diagnostics/materializer wiring strings.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - remains expected-fail (`31`) on real missing promoted Windows/macOS artifacts/startup-smoke, while now carrying Linux policy tuple evidence (`linux_policy_required_head_rid_tuples`, tuple-keyed Linux statuses).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`5` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`31`) with unchanged real blocker reasons (missing promoted Windows/macOS installer bytes and startup-smoke receipts).
+- Current trusted state:
+  - executable-gate dependency materialization and diagnostics are now tuple-policy complete across Linux, Windows, and macOS for required desktop tuple contracts.
+  - Linux proof keys are tuple-specific (`head:rid`), reducing head-only ambiguity and aligning per-tuple verification semantics.
+  - frontier blocker remains external publication truth for promoted Windows/macOS installer/startup-smoke evidence.
+- Push status:
+  - `chummer6-ui`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-5 `eventctrl` shorthand now fail-closes across GM unresolved triage and campaign event-control packet fallback
