@@ -1,3 +1,24 @@
+## 2026-04-04: Fleet supervisor now heals accepted closeouts that still say a verified commit is "not yet on remote"
+
+- Trigger:
+  - widened 5-shard root status was already unblocked, but live shard-1 still surfaced a false-green accepted closeout:
+    - `Exact blocker: none`
+    - while `What remains` still claimed `` `fleet` commit `8140fd4` is not yet on remote ``
+  - `origin/main` already contained that commit, so the receipt was stale and misleading.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - remote-push residue detection now recognizes additional phrases such as `not yet on remote`, `not on remote yet`, `is not on remote`, and `are not on remote`.
+    - accepted closeout healing now strips semicolon-separated residue clauses when the cited repo/commit hashes are already present on a remote branch.
+    - shard aggregate blocker suppression continues to ignore stale blockers when a newer active run started after the blocked run finished.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added regression coverage for the exact `repo commit HASH is not yet on remote` wording.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "heal_state_push_blockers_repairs_verified_remote_push_residue or heal_state_push_blockers_repairs_verified_not_yet_on_remote_phrase or reconcile_aggregate_shard_truth_updates_eta_and_blockers or effective_supervisor_state_surfaces_shard_blockers_in_aggregate_status or effective_supervisor_state_recomputes_aggregate_eta_from_active_shards or live_shard_summaries_ignore_stale_dirs_not_in_manifest"` -> PASS (`6 passed`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status --json` -> PASS; shard-1/root `last_run.remains` no longer claim commit `8140fd4` is local-only.
+- Exact blocker:
+  - none for this Fleet control-plane slice; remaining work is product/frontier execution.
+
 ## 2026-04-04: milestone-8/9/16 build-handoff outputs now carry publication posture and rule-diff audit cues on account and signed-in home rails
 
 - Trigger:
@@ -31,6 +52,38 @@
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - `chummer.run-services` verification lane is currently blocked by pre-existing concurrent baseline compile instability (`IsCampaignDiarySignalKind` missing in `CampaignWorkspaceServerPlaneService.cs` plus downstream `Chummer.Engine.Contracts.dll` metadata resolution failure).
+
+## 2026-04-04: milestone-13 sourcebook lane now projects governed PDF/URL reference targets and explicit source-target posture in master-index responses
+
+- Trigger:
+  - milestone `13` requires sourcebook reference parity to cover governed reference targets, not only snippet metadata and coverage percentages.
+  - `MasterIndexSourcebookEntry` exposed snippet posture but had no first-class projection for sourcebook PDF/URL targets or their validity posture.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexSourcebookEntry` now includes:
+      - `ReferenceSourcePosture` (`missing` / `stale` / `governed`)
+      - `LocalPdfPath`
+      - `ReferenceUrl`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - sourcebook projection now reads optional `<pdf>` and `<url>` nodes from `books.xml`.
+    - added deterministic `ResolveReferenceSourcePosture(...)` rules:
+      - `missing` when neither target is present
+      - `governed` when present targets are valid (`*.pdf` path and/or absolute `http(s)` URL)
+      - `stale` when one or more present targets are malformed.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - extended sourcebook metadata projection test to assert governed/missing source-target posture and projected values.
+    - added `Master_index_reports_stale_reference_source_posture_for_invalid_pdf_or_url_targets` to fail-close malformed target drift.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_projects_sourcebook_metadata_and_rule_snippets_from_books_catalog|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_reference_source_posture_for_invalid_pdf_or_url_targets" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability in this workspace baseline (`Chummer.Presentation`/`Chummer.Blazor` namespace resolution errors).
+- Commits landed:
+  - `chummer6-core`: `d9749cd0` (`feat(w13): project sourcebook pdf-url reference targets`).
+  - `fleet`: pending local handoff refresh commit for this slice.
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `199d138d..d9749cd0`).
+- Exact blocker:
+  - no blocker for landed milestone-13 source-target projection path; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference instability in current workspace baseline.
 
 ## 2026-04-04: milestone-13 sourcebook parity canon now marks sourcebook/reference family partial after governed master-index metadata and snippet-coverage posture landed
 
