@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-4 campaign workspace summary now deduplicates identical recap/consequence/roster versions to prevent inflated publication lane counts
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires publication lane summaries to reflect unique governed continuity truth.
+  - `CampaignWorkspaceServerPlaneService.BuildCampaignWorkspaceSummary(...)` still counted raw `RecapShelf`, `Consequences`, and `RosterTransfers` rows.
+  - repeated identical rows could overstate publication-safe output, consequence, and roster-transfer counts in campaign workspace summary copy.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign workspace publication summary now counts deduplicated families via:
+      - `DeduplicateIdenticalPublicationRecapVersions(...)`
+      - `DeduplicateIdenticalCampaignConsequenceVersions(...)`
+      - `DeduplicateIdenticalRosterTransferVersions(...)`
+    - publication summary strings now bind to deduped counts rather than raw list sizes.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignWorkspaceSummaryDeduplicatesIdenticalPublicationFamilies_WhenPayloadRepeatsSameRows`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceSummaryDeduplicatesIdenticalPublicationFamilies_WhenPayloadRepeatsSameRows|FullyQualifiedName~RunboardSummaryDeduplicatesIdenticalOpenObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~RosterMovementPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~EventControlPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~OppositionPacketDeduplicatesIdenticalRunPressureObjectiveVersions_WhenPayloadRepeatsSameRow" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`255` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 campaign workspace publication summaries now resist duplicate-row inflation across recap, consequence, and roster transfer families.
+  - milestone-4/5 campaign continuity + GM ops surfaces now dedupe duplicate versions consistently in packet synthesis, runboard objective attention, and publication lane summary counts.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-3 workflow execution proof now enforces per-head contract markers and executable gate consumption
 
 - Trigger:
