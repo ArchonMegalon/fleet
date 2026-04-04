@@ -65,7 +65,8 @@
 - Commits landed:
   - `chummer.run-services`: `ac93d561` (`fix(milestone-2): fail-close locale-summary row contract drift`).
 - Push attempts:
-  - pending in this slice.
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - expected environment blocker remains GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`) when push is attempted.
 
