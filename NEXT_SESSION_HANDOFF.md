@@ -60,6 +60,32 @@
   - `chummer6-hub-registry`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
+## 2026-04-04: milestone-3 desktop executable aggregator now fail-closes invalid per-platform gate `contract_name` receipts
+
+- Trigger:
+  - frontier milestone `3` requires per-head packaged-binary proof that cannot lie across Linux, Windows, and macOS promoted tuples.
+  - `materialize-desktop-executable-exit-gate.sh` validated freshness/status and receipt payload fields, but did not fail-close missing/wrong `contract_name` on nested Linux/Windows/macOS gate receipts.
+  - this left a drift path where structurally similar non-canonical gate payloads could be consumed as valid platform proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added `normalize_contract_name(...)` helper.
+    - Linux validation now requires `contract_name == "chummer6-ui.linux_desktop_exit_gate"`.
+    - Windows validation now requires `contract_name == "chummer6-ui.windows_desktop_exit_gate"`.
+    - macOS validation now requires `contract_name == "chummer6-ui.macos_desktop_exit_gate"`.
+    - each platform now emits explicit fail-close reason text when contract identity is invalid.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Desktop_executable_gate_fail_closes_invalid_platform_gate_contract_names`.
+    - test locks helper marker and new per-platform invalid-contract fail-close messages.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_gate_fail_closes_invalid_platform_gate_contract_names" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> FAIL due pre-existing unrelated assertion in `Windows_and_macos_exit_gate_materializers_do_not_resolve_proof_from_legacy_chummer5a_paths` (legacy-string drift already present in workspace).
+- Current trusted state:
+  - milestone-3 executable gate aggregation now binds Linux/Windows/macOS tuple proof to canonical platform gate contract ids, tightening receipt identity and reducing false-green proof ingestion.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes unexpected nested release-proof journey and route ids
 
 - Trigger:
