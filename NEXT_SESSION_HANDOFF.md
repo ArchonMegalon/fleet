@@ -1039,6 +1039,25 @@
 - Push attempts:
   - pending below in this slice.
 
+## 2026-04-04: fleet host-side push recovery now uses explicit GitHub token auth instead of relying on git credential helper state
+
+- Trigger:
+  - live completed shard runs were still intermittently recording `host-side git push recovery failed ... could not read Username for 'https://github.com'` even after worker-home git/gh seeding and successful manual recovery replays.
+  - root cause was that the recovery path still depended on git credential-helper resolution inside the live supervisor environment; that path was less deterministic than an explicit GitHub token header.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - host-side push recovery now resolves the repo `origin` URL, obtains a token via `gh auth token`, and injects `http.https://github.com/.extraheader=AUTHORIZATION: basic ...` for the recovery push.
+    - this bypasses intermittent credential-helper drift while keeping recovery bounded to GitHub HTTPS remotes only.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - host-side recovery regression now requires the `gh auth token` + GitHub extraheader path.
+- Verification:
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "worker_reported_git_push_repos_parses_unique_repos or retry_worker_reported_git_pushes_uses_host_git_auth or prepare_account_environment_falls_back_to_workspace_secret_mirror_for_auth_json or prepare_direct_worker_environment_preserves_host_git_and_gh_auth or prepare_account_environment_preserves_host_git_and_gh_auth or prepare_direct_worker_environment_falls_back_to_passwd_home_for_git_auth"` -> PASS (`6 passed`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - replayed recovery against the real failed shard stderr at `/docker/fleet/state/chummer_design_supervisor/shard-2/runs/20260404T125418Z/worker.stderr.log`:
+    - attempted repos: `/docker/chummercomplete/chummer.run-services`, `/docker/fleet`
+    - succeeded: both
+    - failed: none
+
 ## 2026-04-04: fleet supervisor now auto-recovers worker-reported GitHub HTTPS push failures by replaying the exact repo pushes from the host lane
 
 - Trigger:

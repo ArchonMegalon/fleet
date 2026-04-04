@@ -1676,6 +1676,10 @@ def test_retry_worker_reported_git_pushes_uses_host_git_auth(monkeypatch) -> Non
         def fake_run(command, *, text, capture_output, check, env=None):
             assert env is not None
             calls.append((list(command), dict(env)))
+            if command[:5] == ["git", "-C", "/docker/fleet", "remote", "get-url"]:
+                return subprocess.CompletedProcess(command, 0, stdout="https://github.com/ArchonMegalon/fleet.git\n", stderr="")
+            if command[:3] == ["gh", "auth", "token"]:
+                return subprocess.CompletedProcess(command, 0, stdout="gho_test_token\n", stderr="")
             return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
         monkeypatch.setattr(module.subprocess, "run", fake_run)
@@ -1687,11 +1691,14 @@ def test_retry_worker_reported_git_pushes_uses_host_git_auth(monkeypatch) -> Non
         assert result["attempted"] == ["/docker/fleet"]
         assert result["succeeded"] == ["/docker/fleet"]
         assert result["failed"] == {}
-        assert calls[0][0] == ["git", "-C", "/docker/fleet", "push"]
-        assert calls[0][1]["HOME"] == str(host_home)
-        assert calls[0][1]["GIT_CONFIG_GLOBAL"] == str(host_home / ".gitconfig")
-        assert calls[0][1]["XDG_CONFIG_HOME"] == str(host_home / ".config")
-        assert calls[0][1]["GH_CONFIG_DIR"] == str(gh_dir)
+        assert calls[0][0] == ["git", "-C", "/docker/fleet", "remote", "get-url", "origin"]
+        assert calls[1][0] == ["gh", "auth", "token"]
+        assert calls[2][0][:3] == ["git", "-C", "/docker/fleet"]
+        assert any(part.startswith("http.https://github.com/.extraheader=AUTHORIZATION: basic ") for part in calls[2][0])
+        assert calls[2][1]["HOME"] == str(host_home)
+        assert calls[2][1]["GIT_CONFIG_GLOBAL"] == str(host_home / ".gitconfig")
+        assert calls[2][1]["XDG_CONFIG_HOME"] == str(host_home / ".config")
+        assert calls[2][1]["GH_CONFIG_DIR"] == str(gh_dir)
 
 
 def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_account(monkeypatch) -> None:

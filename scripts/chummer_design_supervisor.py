@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
 import hashlib
 import importlib
@@ -3291,6 +3292,31 @@ def _prepare_host_git_push_environment() -> Dict[str, str]:
     return env
 
 
+def _github_https_auth_extraheader(env: Dict[str, str], repo: Path) -> str:
+    remote = subprocess.run(
+        ["git", "-C", str(repo), "remote", "get-url", "origin"],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    remote_url = str(remote.stdout or "").strip()
+    if remote.returncode != 0 or not remote_url.startswith("https://github.com/"):
+        return ""
+    token_process = subprocess.run(
+        ["gh", "auth", "token"],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    token = str(token_process.stdout or "").strip()
+    if token_process.returncode != 0 or not token:
+        return ""
+    basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
+    return f"AUTHORIZATION: basic {basic}"
+
+
 def _retry_worker_reported_git_pushes(stderr_text: str) -> Dict[str, Any]:
     repos = _worker_reported_git_push_repos(stderr_text)
     if not repos:
@@ -3301,13 +3327,12 @@ def _retry_worker_reported_git_pushes(stderr_text: str) -> Dict[str, Any]:
     failed: Dict[str, str] = {}
     for repo in repos:
         attempted.append(str(repo))
-        completed = subprocess.run(
-            ["git", "-C", str(repo), "push"],
-            text=True,
-            capture_output=True,
-            check=False,
-            env=env,
-        )
+        command = ["git", "-C", str(repo)]
+        extraheader = _github_https_auth_extraheader(env, repo)
+        if extraheader:
+            command.extend(["-c", f"http.https://github.com/.extraheader={extraheader}"])
+        command.append("push")
+        completed = subprocess.run(command, text=True, capture_output=True, check=False, env=env)
         combined = "\n".join(
             item for item in (str(completed.stdout or "").strip(), str(completed.stderr or "").strip()) if item
         ).strip()
