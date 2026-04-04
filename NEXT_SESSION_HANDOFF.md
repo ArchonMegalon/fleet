@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-2 Hub verify now fail-closes alias-only `releaseProof.base_url` scheme/path/userinfo origin regressions
+
+- Trigger:
+  - milestone-2 parity hardening already exercised many canonical-origin failures through `releaseProof.baseUrl`, and alias-only coverage existed for hostless/whitespace paths.
+  - verify did not execute alias-only (`baseUrl` removed, `base_url` present) fail-close mutations for non-http scheme, non-origin path/query, and userinfo credentials, leaving a regression seam if alias-path canonicalization drifted.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added alias-only mutation asserting rejection of `releaseProof.base_url="ftp://chummer.run"`.
+    - added alias-only mutation asserting rejection of `releaseProof.base_url="https://chummer.run/home?preview=1"`.
+    - added alias-only mutation asserting rejection of `releaseProof.base_url="https://operator@chummer.run"`.
+    - all three mutations remove camelCase `releaseProof.baseUrl` first so the alias path is the only evaluated input.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - Hub milestone-2 verify now executes canonical origin fail-close branches for both `releaseProof.baseUrl` and alias-only `releaseProof.base_url` across scheme, path/query, host, userinfo, and whitespace constraints.
+- Push status:
+  - `chummer6-hub`: local change landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub parity audit now derives required workflow families from SR4/SR6 workflow ledgers
 
 - Trigger:
