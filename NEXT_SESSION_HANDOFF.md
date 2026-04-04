@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-passing and stale/future `releaseProof` status timestamps
+
+- Trigger:
+  - parity audit already fail-closed non-passing `releaseProof.status` and stale/future `releaseProof.generatedAt`, but Hub verify mutation coverage did not execute those branches.
+  - this left key proof-pass/freshness enforcement unproven in the end-to-end Hub verify harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.status="failed"` and asserted `audit-ui-parity.sh` fails.
+    - added mutation `releaseProof.generatedAt="2000-01-01T00:00:00Z"` and asserted stale-proof fail-close.
+    - added mutation `releaseProof.generatedAt="2099-01-01T00:00:00Z"` and asserted future-skew fail-close.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock status and generated-at mutation coverage text.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for non-passing `releaseProof.status` and stale/future `releaseProof.generatedAt` mutations, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves `releaseProof` pass-readiness and freshness fail-close behavior in the same mutation lane as nested route and journey grammar checks.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for non-canonical lowercase and token-shape `releaseProof.journeysPassed` ids
 
 - Trigger:
