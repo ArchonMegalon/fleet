@@ -142,6 +142,34 @@
   - `chummer6-ui`: committed locally (`0fad2e53`); push pending in this environment (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-1/3 executable gate receipt now publishes canonical channel/version identity and has runnable focused compliance coverage on non-Windows hosts
+
+- Trigger:
+  - milestone `1/3` proof receipts should stay channel-bound end-to-end, including the executable gate artifact itself.
+  - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` did not publish canonical `channelId`/release version fields, and the new dedicated executable-gate compliance test file was not included in non-Windows test compile items.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - executable gate payload now emits:
+      - `channelId` (from canonical release channel)
+      - `releaseVersion` (from canonical release channel version)
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - strengthened root discovery to support sibling-repo layout (`.../chummer6-ui`) used by this workspace.
+    - extended channel-binding assertions to lock executable receipt `channelId`/`releaseVersion` projection.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Chummer.Tests.csproj`:
+    - includes `Compliance/DesktopExecutableGateComplianceTests.cs` in the non-Windows explicit compile list.
+  - regenerated:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` (now channel/version stamped).
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external windows/macos tuple blockers.
+- Current trusted state:
+  - executable gate receipt now carries release-channel identity directly (`channelId`, `releaseVersion`) and remains fail-honest on missing promoted windows/macos tuples.
+  - dedicated executable-gate compliance tests now execute in this Linux workspace layout instead of silently dropping.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment.
+
 ## 2026-04-04: milestone-1/3 per-head visual/workflow proof receipts now bind to release-channel identity before executable gate acceptance
 
 - Trigger:
