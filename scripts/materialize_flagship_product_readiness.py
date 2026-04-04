@@ -1525,16 +1525,48 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Release channel publishes macOS installer media, but executable-gate evidence is missing passing macOS startup-smoke tuple proof."
             )
-    install_journey_state = str((journeys.get("install_claim_restore_continue") or {}).get("state") or "").strip()
-    build_journey_state = str((journeys.get("build_explain_publish") or {}).get("state") or "").strip()
+    install_journey = dict(journeys.get("install_claim_restore_continue") or {})
+    build_journey = dict(journeys.get("build_explain_publish") or {})
+    install_journey_state = str(install_journey.get("state") or "").strip()
+    build_journey_state = str(build_journey.get("state") or "").strip()
+    install_journey_external_blockers = [
+        str(item).strip()
+        for item in (install_journey.get("external_blocking_reasons") or [])
+        if str(item).strip()
+    ]
+    install_journey_local_blockers = [
+        str(item).strip()
+        for item in (install_journey.get("local_blocking_reasons") or [])
+        if str(item).strip()
+    ]
+    build_journey_external_blockers = [
+        str(item).strip()
+        for item in (build_journey.get("external_blocking_reasons") or [])
+        if str(item).strip()
+    ]
+    build_journey_local_blockers = [
+        str(item).strip()
+        for item in (build_journey.get("local_blocking_reasons") or [])
+        if str(item).strip()
+    ]
     if install_journey_state == "ready":
         desktop_positives += 1
     else:
-        desktop_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
+        if bool(install_journey.get("blocked_by_external_constraints_only")) and install_journey_external_blockers:
+            desktop_reasons.append(
+                "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
+            )
+        else:
+            desktop_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
     if build_journey_state == "ready":
         desktop_positives += 1
     else:
-        desktop_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
+        if bool(build_journey.get("blocked_by_external_constraints_only")) and build_journey_external_blockers:
+            desktop_reasons.append(
+                "Build/explain/publish journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
+            )
+        else:
+            desktop_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
     ui_stage = str(ui_project.get("readiness_stage") or "").strip()
     ui_promotion = project_posture(ui_project)
     if compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0:
@@ -1762,6 +1794,20 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_macos_missing_or_failing_keys": macos_missing_or_failing_keys,
             "install_claim_restore_continue": install_journey_state,
             "build_explain_publish": build_journey_state,
+            "install_claim_restore_continue_external_blocking_reason_count": len(
+                install_journey_external_blockers
+            ),
+            "install_claim_restore_continue_local_blocking_reason_count": len(
+                install_journey_local_blockers
+            ),
+            "install_claim_restore_continue_blocked_by_external_constraints_only": bool(
+                install_journey.get("blocked_by_external_constraints_only")
+            ),
+            "build_explain_publish_external_blocking_reason_count": len(build_journey_external_blockers),
+            "build_explain_publish_local_blocking_reason_count": len(build_journey_local_blockers),
+            "build_explain_publish_blocked_by_external_constraints_only": bool(
+                build_journey.get("blocked_by_external_constraints_only")
+            ),
         },
     )
 

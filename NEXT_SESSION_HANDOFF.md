@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-3 readiness evidence now carries journey external-vs-local blocker counts
+
+- Trigger:
+  - after journey-gate blocker classification landed, flagship readiness still surfaced install/build journey states without preserving whether blockers were external host constraints or repo-local gaps.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_flagship_product_readiness.py`:
+    - desktop-client evidence now reads journey-level `external_blocking_reasons`, `local_blocking_reasons`, and `blocked_by_external_constraints_only` from `JOURNEY_GATES.generated.json`.
+    - emits explicit evidence counters for install/build journey external/local blocker counts and external-only flags.
+    - desktop reason text now pivots to host-proof capture messaging when journey blockers are external-only.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_flagship_product_readiness.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=0, warning=6, missing=2`).
+  - evidence check now returns non-null counts for install/build journey blocker classes in desktop-client evidence.
+- Exact blocker:
+  - `pytest` remains unavailable in this execution environment; targeted runtime assertions could not be executed here.
+
 ## 2026-04-04: milestone-15 utility parity now fail-closes dice/initiative/roster/watch-folder/dashboard route markers in campaign-session journey gates
 
 - Trigger:
