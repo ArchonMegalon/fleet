@@ -28,6 +28,29 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commit `93049546` remains local-only until auth is restored.
 
+## 2026-04-04: milestone-4/5 continuity + GM ops live audits now script-lock hyphen `lesson-learnt` / `lessons-learnt` recap shorthand across API/workspace and browser journey proofs
+
+- Trigger:
+  - the prior W3 continuity slice canonicalized `lesson learnt` and compact/split proof rails, but hyphen `lesson-learnt` variants were still outside live API/workspace/browser script-lock coverage.
+  - this left a drift seam where hyphen recap phrasing could regress in signed-in proof rails without failing verification.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API and workspace checks for `lesson-learnt` and `lessons-learnt`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added signed-in browser prep journey checks for hyphen `lesson-learnt` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - script-lock assertions now require `queryText`/`prepQuery` and Playwright markers for hyphen `lesson-learnt` variants.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatLessonLearntContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `0be1b8a2` (`test(w3): script-lock hyphen lesson-learnt continuity journeys`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so push remains credential-blocked.
+
 ## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `lesson learnt` / `lessons learnt` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
 
 - Trigger:
