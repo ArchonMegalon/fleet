@@ -1,3 +1,37 @@
+## 2026-04-04: follow-up on W3 roster-movement prep-query canonicalization (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `87df53fc` (`fix(w3): canonicalize roster movement prep-query aliases`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 prep-library query now fail-closes roster-movement wording through shared campaign/GM canonicalization
+
+- Trigger:
+  - W3 milestone wording explicitly calls out roster movement, but prep-query canonicalization normalized `move`/`moves` variants without rewriting `movement`/`movements`.
+  - because prep search is all-tokens-required, queries such as `roster movement`, `crew movement`, or compact forms (`rostermovement`, `crewmovement`) could miss assets indexed with canonical `move` language.
+- Landed:
+  - patched shared canonicalizer:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`
+    - added rewrites:
+      - `crewmovement`/`crewmovements` -> `rostermove`
+      - `rostermovement`/`rostermovements` -> `rostermove`
+      - split `crew movement(s)` and `roster movement(s)` -> `move`
+  - expanded campaign workspace coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries` now asserts compact, hyphenated, and split `movement`/`movements` forms for both crew and roster wording.
+  - expanded GM ops coverage:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - `ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation` now asserts compact, hyphenated, and split roster/crew movement forms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupports|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupports" --nologo -v minimal` -> PASS (`17` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/verify.sh` -> PASS (`run-services in-process smoke passed`; parity-audit failure lines are expected mutation probes in this script-lock lane).
+- Current trusted state:
+  - campaign workspace and GM ops prep search now treat roster-movement wording as first-class canonical query vocabulary in the same shared contracts utility, reducing W3 misses for natural-language GM/organizer movement phrasing.
+
 ## 2026-04-04: follow-up on fleet handoff sync for milestone-3 Linux startup-smoke checks-alias parity slice
 
 - Commits landed:
