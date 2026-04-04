@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 release verifier now fail-closes non-route `releaseProof.proofRoutes` placeholders
+
+- Trigger:
+  - frontier milestone `2` release-proof provenance requires route-level evidence to stay actionable path truth, not arbitrary string placeholders.
+  - `chummer6-hub-registry` verifier already required `releaseProof.proofRoutes` to be present, non-empty, string-only, and duplicate-free, but did not constrain route shape.
+  - this left a drift path where non-route placeholder values (for example `downloads/install/...` without a leading slash) could pass as proof-route evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - `releaseProof.proofRoutes[*]` now must be slash-led route paths (`/…`), with fail-close error on non-route entries.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation proving verifier fail-close when `releaseProof.proofRoutes` contains a non-route entry lacking the leading slash.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - documented slash-led `releaseProof.proofRoutes` contract alongside existing non-empty/duplicate-free constraints.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - release-channel verifier now rejects non-route proof-route placeholders and only accepts slash-led route-path provenance entries for promoted shelf proof.
+- Push status:
+  - `chummer6-hub-registry`: local commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes nested release-channel receipt drift, staleness, and spoofed metadata
 
 - Trigger:
