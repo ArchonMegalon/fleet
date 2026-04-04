@@ -1,3 +1,20 @@
+## 2026-04-04: milestone-1/3 completion-review executable gate now fail-closes duplicate or contradictory finding-row payloads
+
+- Trigger:
+  - W1 milestones `1` and `3` require packaged-binary install/update/recovery proof receipts that cannot lie when executable-gate blocker rows are duplicated or when aggregate rows disagree with local/external rows.
+  - `_desktop_executable_exit_gate_audit(...)` validated counts and totals but did not reject duplicate finding rows or mismatched finding-row content across aggregate vs local/external lists.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - fail-closed duplicate `blockingFindings`, `localBlockingFindings`, and `externalBlockingFindings` rows.
+    - fail-closed payloads where `blockingFindings` row content does not exactly match `localBlockingFindings + externalBlockingFindings`.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_desktop_executable_exit_gate_audit_rejects_duplicate_external_blocking_rows`.
+    - added `test_desktop_executable_exit_gate_audit_rejects_blocking_row_content_mismatch_vs_local_and_external`.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit_rejects_duplicate_external_blocking_rows or desktop_executable_exit_gate_audit_rejects_blocking_row_content_mismatch_vs_local_and_external or desktop_executable_exit_gate_audit_rejects_negative_blocking_counts or desktop_executable_exit_gate_audit_rejects_total_count_mismatch_vs_local_and_external"` -> PASS (`4 passed`, `183 deselected`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "desktop_executable_exit_gate_audit or design_completion_audit_fails_when_desktop_executable_exit_gate_is_stale"` -> PASS (`8 passed`, `179 deselected`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py derive --state-root /var/lib/codex-fleet/chummer_design_supervisor --frontier-id 3194227093 --focus-owner chummer6-ui --focus-owner chummer6-ui-kit --focus-owner fleet --focus-owner chummer6-hub-registry --focus-text install --focus-text update --focus-text recovery --focus-text desktop --focus-text workbench --focus-text proof --ui-linux-desktop-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json --ui-executable-exit-gate-path /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json --ui-linux-desktop-repo-root /docker/chummercomplete/chummer6-ui` -> PASS (completion frontier rematerialized; external host tuple proof remains the active blocker).
+
 ## 2026-04-04: milestone-1/3 support external-proof backlog now dedupes duplicate tuple requests and exposes tuple-uniqueness contract in packet summaries
 
 - Trigger:
@@ -42390,6 +42407,35 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - pending.
 - Exact blocker:
   - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
+## 2026-04-04: milestone-4 continuity lane now fail-closes compact `campaignsreturn*` shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `4` requires campaign return continuity queries to remain on one governed lane across compact plural wording.
+  - compact plural campaign return forms (`campaignsreturn*`) were not explicitly canonicalized, leaving a false-negative seam between packet shorthand and governed continuity search.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact plural `campaignsreturn*` rewrites into canonical campaign return loop/packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with `campaignsreturnloop`, `campaignsreturnpacket`, and `campaignsreturnbriefs`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` to assert `campaignsreturnloop/packet/packets/brief/briefs` matching.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for `campaignsreturnloop`, `campaignsreturnpacket(s)`, and `campaignsreturnbrief(s)`.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same compact plural campaign-return forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for all added `campaignsreturn*` probes.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `d7745e36` (`feat(w3-4): canonicalize campaigns return compact shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: milestone-4 continuity lane now fail-closes compact `downtimesreturn*` shorthand across canonicalization, workspace matching, and live journey audits
 
