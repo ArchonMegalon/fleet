@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-4 recap shelf projection now survives duplicate aftermath package ids and keeps the latest timestamp
+
+- Trigger:
+  - frontier milestone 4 requires downtime/diary/aftermath return-loop continuity to stay one governed lane even when upstream projection rows repeat.
+  - `BuildRecapShelf(...)` built `aftermathTimes` with `ToDictionary(PackageId, ...)`, so duplicate `PackageId` rows could throw during recap-shelf projection and break campaign continuity rendering.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - replaced direct `ToDictionary` on aftermath packages with normalized grouping by `PackageId`.
+    - aftermath timestamp lookup now keeps the latest `GeneratedAtUtc` per package id and ignores blank package ids, preventing duplicate-row projection crashes.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RecapShelfUsesLatestAftermathTimestamp_WhenAftermathPackageIdsRepeat`.
+    - regression proves duplicate `PackageId` payloads do not break shelf projection and resolve to the latest aftermath timestamp.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RecapShelfUsesLatestAftermathTimestamp_WhenAftermathPackageIdsRepeat" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warning observed once).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`262` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+- Current trusted state:
+  - milestone-4 recap-shelf continuity projection no longer fails on duplicate aftermath package ids and consistently uses the newest timestamp for duplicate package rows.
+  - campaign workspace suite remains green after this recap-shelf hardening.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 prep-launch semantic dedupe now ignores packet-id drift across prep-launch and GM event-control lanes
 
 - Trigger:
