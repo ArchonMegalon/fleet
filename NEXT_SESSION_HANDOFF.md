@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-1/3 executable tuple gate now fail-closes blank or stale-unpublished release-channel posture once desktop tuple coverage is complete
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth, installer truth, and packaged-head proof to stay aligned by tuple (`head/platform/rid/channel/version`) with fail-close behavior in both directions.
+  - executable gate already fail-closed stale `coverage_incomplete/review_required` once tuple coverage becomes complete, but still allowed release-channel state drift where `rolloutState` or `supportabilityState` were blank, or remained `unpublished`, while promoted desktop tuple proof was otherwise present.
+  - that left a false-green seam: tuple proof could pass without explicit release posture state, weakening install/update/recovery release-truth accountability.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added evidence keys `release_channel_rollout_state_present` and `release_channel_supportability_state_present`.
+    - executable gate now fail-closes missing `rolloutState` when desktop install media exists.
+    - executable gate now fail-closes missing `supportabilityState` when desktop install media exists.
+    - executable gate now fail-closes `rolloutState=unpublished` once required desktop tuple coverage is complete.
+    - executable gate now fail-closes `supportabilityState=unpublished` once required desktop tuple coverage is complete.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - expanded marker assertions for missing-state and stale-`unpublished` fail-close reason strings.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded executable-gate marker assertions to lock the new evidence keys and fail-close reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+- Current trusted state:
+  - milestone-1/3 executable tuple proof now requires explicit non-blank release-channel rollout/supportability posture and rejects stale `unpublished` tuple posture after coverage completion, tightening release-truth alignment for shipped desktop tuple evidence.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 league/community control shorthand now fail-closes compact, split, and ctrl aliases across GM prep search, unresolved-domain triage, and live API/UI journey audits
 
 - Trigger:
