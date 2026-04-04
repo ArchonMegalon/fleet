@@ -87,8 +87,8 @@ But every feature family that remains in product scope must satisfy one of these
 | Dice roller, initiative roller, initiative tracker, combat utilities | standalone utility windows for fast table work | no explicit flagship utility lane today | missing | `15` |
 | Character roster, watch folders, GM/player dashboards, multi-character operator tools | `CharacterRoster`, dashboard forms, roster watch folder | campaign and GM canon exists, but desktop utility/operator parity is not explicit enough | partial | `5`, `15` |
 | Sheet viewer, print/export, PDF variants, JSON/Foundry exchange | `CharacterSheetViewer`, `PrintMultipleCharacters`, `ExportCharacter`, Genesis JSON/Foundry export | `INTEROP_AND_PORTABILITY_MODEL.md`, `BUILD_LAB_PRODUCT_MODEL.md`, export/print migration work | partial | `16` |
-| Legacy and adjacent import/oracle parity | Chummer4, Chummer5a, Hero Lab, Genesis/CommLink evidence | `FLAGSHIP_RELEASE_ACCEPTANCE.yaml`, `INTEROP_AND_PORTABILITY_MODEL.md`, `RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md` | partial | `17` |
-| SR6 supplement coverage, designer tools, online storage, house-rule support, metaindex | Genesis/CommLink6 supplement matrix, spell/vehicle/cyberdeck/drug/quality designers, online storage, better house rules | current canon covers SR6 authored UX broadly, but not these successor families explicitly | missing | `18` |
+| Legacy and adjacent import/oracle parity | Chummer4, Chummer5a, Hero Lab, Genesis/CommLink evidence | master-index now projects import-oracle fixture-family coverage and certification receipt posture (missing/stale/governed) for milestone-17 evidence; full first-class import UX closure remains open | partial | `17` |
+| SR6 supplement coverage, designer tools, online storage, house-rule support, metaindex | Genesis/CommLink6 supplement matrix, spell/vehicle/cyberdeck/drug/quality designers, online storage, better house rules | SR6 successor posture now has explicit tool-catalog projection for supplement/designer/house-rule lanes, but online-storage and full authored-designer UX closure remains open | partial | `18` |
 
 ## New canon decisions
 

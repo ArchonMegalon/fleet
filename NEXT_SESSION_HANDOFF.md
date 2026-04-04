@@ -69,6 +69,59 @@
 - Exact blocker:
   - no product blocker for this slice; full pytest execution is currently unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-17 master-index now emits explicit import-oracle coverage and receipt posture for Chummer4/5a/Hero Lab/adjacent SR6 parity evidence
+
+- Trigger:
+  - frontier milestone `17` still lacked first-class runtime projection for import-oracle readiness, leaving Chummer4/5a/Hero Lab/adjacent SR6 parity evidence mostly implicit in scattered tests and notes.
+  - `master-index` already emitted governed posture for sourcebook/settings/custom-data/SR6-designer lanes, so import-oracle closure was the highest-impact missing parity signal in the same governed surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes import-oracle evidence fields:
+      - `ImportOracleLanePosture`
+      - `ImportOracleReceiptPosture`
+      - `LegacyChummer4FixtureCount`
+      - `LegacyChummer5FixtureCount`
+      - `HeroLabFixtureCount`
+      - `ImportOracleSourcesCovered`
+      - `ImportOracleSourcesExpected`
+      - `ImportOracleCoveragePercent`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added deterministic import-oracle summary projection rooted at the active data catalog path.
+    - source families counted from repo-local fixture evidence:
+      - `Chummer.CoreEngine.Tests/Fixtures/Sr4/*.chum4`
+      - `Chummer.Tests/TestFiles/*.chum5`
+      - `Chummer.CoreEngine.Tests/Fixtures/HeroLab/**/*.{por,hlo}`
+    - certification receipt posture now reads `.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json`:
+      - `governed` when `status=passed`
+      - `stale` when present but non-passing or unreadable
+      - `missing` when absent
+    - lane posture now fail-closes:
+      - `missing` with zero covered families
+      - `stale` with partial evidence
+      - `governed` only when all expected oracle families are covered and receipt posture is governed
+  - patched tests:
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`
+      - baseline assertions now include the new import-oracle fields.
+      - added:
+        - `Master_index_reports_governed_import_oracle_lane_when_fixture_families_and_certification_are_present`
+        - `Master_index_reports_stale_import_oracle_lane_when_certification_receipt_is_missing`
+    - `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`
+      - `Master_index_endpoint_returns_data` now asserts presence of all new import-oracle API fields.
+  - canon sync:
+    - `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+    - milestone-17 parity row now cites explicit master-index import-oracle projection evidence while keeping first-class import UX closure open.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` missing namespace graph in current baseline).
+- Commits landed:
+  - pending in current workspace for `chummer6-core`, `chummer6-design`, and `fleet` (safe isolation and push attempts recorded after commit staging).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no blocker for the landed core implementation itself; full `Chummer.Tests` lane remains blocked by existing compile/reference instability, and remote pushes for design/fleet remain credential-gated in this environment.
+
 ## 2026-04-04: milestone-1/3 executable gate now avoids false corruption claims for macOS quarantine installers by making marker checks platform-aware
 
 - Trigger:
