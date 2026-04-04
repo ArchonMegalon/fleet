@@ -1,3 +1,31 @@
+## 2026-04-04: milestone-4 campaign return prep now fail-closes relationship-synonym drift (`connection`) across packet search terms, API audit, and workspace route journeys
+
+- Trigger:
+  - milestone `4` requires diary/contacts/heat continuity to stay one governed campaign lane, including relationship vocabulary users actually type.
+  - campaign return prep search terms were locked to `contact|contacts|heat` and did not explicitly guarantee `connection` synonym coverage, while live API/UI audits also skipped that synonym.
+  - this left a drift window where relationship continuity retrieval could regress for common `connection` search language without failing closeout automation.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return prep packet now seeds canonical `connection` search vocabulary alongside existing diary/contact/heat/recap/return terms without breaking the bounded token budget.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API prep-library checks for `queryText=connection`.
+    - added signed-in workspace route checks for `prepQuery=connection`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for `connection`, including route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded campaign-return packet assertions to lock `connection` token coverage.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification-entrypoint assertions to lock live-audit and Playwright `connection` markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`343` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 relationship continuity retrieval now fail-closes `connection` synonym coverage across prep packet generation, API audit proof, and signed-in workspace route/browser journey proof.
+- Push status:
+  - `chummer.run-services`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 registry release-proof now fail-closes incomplete canonical flagship `proofRoutes` coverage at materialization and verification
 
 - Trigger:
