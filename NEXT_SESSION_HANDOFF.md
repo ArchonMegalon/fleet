@@ -21,11 +21,13 @@
   - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" -v minimal` -> PASS (`4 passed` on both target frameworks).
 - Commits landed:
-  - pending in this session.
+  - `chummer6-hub`: `e46bbb3a` (`feat(w3-5): fail-close compact pkt shorthand for governed prep packets`).
+  - `fleet`: `cbdb388` (`docs(handoff): record w3-5 compact pkt shorthand closure`).
 - Push attempts:
-  - pending in this session.
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - pending in this session.
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
 ## 2026-04-04: milestone-5 GM prep lane now fail-closes compact `preplibrarybrief*` shorthand across canonicalization, workspace matching, and live journey audits
 
