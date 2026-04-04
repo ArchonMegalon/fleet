@@ -91,7 +91,12 @@
     - added `resolve_alias_value(...)` helper to fail-close when both alias keys are present with different values.
     - routed `releaseProof.generatedAt`, `releaseProof.baseUrl`, `releaseProof.journeysPassed`, and `releaseProof.proofRoutes` through alias-conflict enforcement before existing validation.
   - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
-    - added mutation coverage that sets conflicting `releaseProof.baseUrl`/`releaseProof.base_url` values and asserts `audit-ui-parity.sh` fails as expected.
+    - added mutation coverage that sets conflicting alias values for:
+      - `releaseProof.baseUrl` vs `releaseProof.base_url`
+      - `releaseProof.generatedAt` vs `releaseProof.generated_at`
+      - `releaseProof.journeysPassed` vs `releaseProof.journeys_passed`
+      - `releaseProof.proofRoutes` vs `releaseProof.proof_routes`
+    - asserted `audit-ui-parity.sh` fails as expected for each conflict branch before continuing smoke.
   - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
     - expanded script-lock assertions for alias-drift messaging in parity audit.
     - expanded verify entrypoint marker assertions for the new alias-conflict mutation coverage text.
@@ -99,7 +104,7 @@
   - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
   - `bash -n /docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
-  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now emits expected fail-close for conflicting `releaseProof.baseUrl`/`releaseProof.base_url` values, then completes smoke).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now emits expected fail-close for all four conflicting alias pairs in `releaseProof`, then completes smoke).
 - Current trusted state:
   - Hub parity closeout can no longer accept contradictory alias-key release-proof payloads; schema aliasing now behaves as one canonical truth surface instead of a precedence loophole.
 - Push status:
