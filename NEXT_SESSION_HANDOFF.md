@@ -79,6 +79,48 @@
 - Exact blocker:
   - none for this slice.
 
+## 2026-04-04: milestone-18 online-storage successor lane now emits explicit continuity receipts and build-explain gate fail-closes on receipt markers
+
+- Trigger:
+  - frontier milestone `18` requires online-storage continuity to be first-class evidence, not posture-only counters.
+  - `master-index` exposed `OnlineStorageLanePosture`, `OnlineStorageReceiptPosture`, and coverage counters, but lacked an explicit aggregate lane receipt string and gate marker parity for build-explain proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now exposes `OnlineStorageLaneReceipt`.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added `BuildOnlineStorageLaneReceipt(...)` with deterministic missing/covered wording.
+    - wired `OnlineStorageLaneReceipt` in both empty-catalog and populated `GetMasterIndex()` responses.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ApiIntegrationTests.cs`:
+    - `Master_index_endpoint_returns_data` now fail-proves `response["onlineStorageLaneReceipt"]` is present.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - missing/governed/stale online-storage scenarios now assert deterministic `OnlineStorageLaneReceipt` values.
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - `build_explain_publish` now requires `response["onlineStorageLaneReceipt"]` and `BuildOnlineStorageLaneReceipt`.
+  - patched Fleet mirror + regression:
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/tests/test_materialize_journey_gates.py`
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Contracts/Chummer.Contracts.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -f net10.0 --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_governed_online_storage_lane_when_hub_and_mobile_release_receipts_cover_restore_journey|FullyQualifiedName~ToolCatalogServiceTests.Master_index_reports_stale_online_storage_lane_when_only_one_receipt_covers_restore_journey|FullyQualifiedName~ApiIntegrationTests.Master_index_endpoint_returns_data" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered execution due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api`/`Chummer.Desktop` namespace graph missing in current baseline).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `response["onlineStorageLaneReceipt"]`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `BuildOnlineStorageLaneReceipt`).
+- Commits landed:
+  - `chummer6-core`: `f459c011` (`feat(w2-18): add online-storage lane receipt evidence`).
+  - `chummer6-design`: `a504b68` (`docs(w2-18): require online-storage lane receipt markers`).
+  - `fleet`: `da645c3` (`feat(w2-18): fail-close build-explain on storage lane receipt`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `874e6abb..f459c011`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for `chummer6-design` and `fleet` pushes.
+  - `Chummer.Tests` filtered execution remains blocked by pre-existing compile/reference instability in this workspace baseline.
+
 ## 2026-04-04: follow-up on W2-14 XML-bridge receipt handoff commit (push status)
 
 - Commits landed:
@@ -38283,5 +38325,19 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: follow-up commit/push status for milestone-12 pulse-v3 governance hardening
+
+- Commits landed:
+  - `chummer6-design`: `8782243` (`feat(w5-12): fail-close pulse frontier parsing to latest handoff marker`).
+  - `fleet`: `73e8eeb` (`docs(w5-12): record pulse-v3 launch-governance fail-close slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Remaining local-only code edits (not committed because files were already in active concurrent edit state):
+  - `/docker/fleet/scripts/chummer_design_supervisor.py`
+  - `/docker/fleet/tests/test_chummer_design_supervisor.py`
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
