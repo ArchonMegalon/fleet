@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +17,10 @@ DEFAULT_STATUS_PLANE_PATH = ROOT / ".codex-studio" / "published" / "STATUS_PLANE
 DEPLOY_SCRIPT_PATH = ROOT / "scripts" / "deploy.sh"
 DEFAULT_STATUS_JSON_SNAPSHOT_PATH = ROOT / "state" / "status-plane.verify.json"
 VOLATILE_TOP_LEVEL_KEYS = {"generated_at", "source_public_status_generated_at"}
+UTC = dt.timezone.utc
+REBUILDER_STATE_DIR = Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(ROOT / "state" / "rebuilder")))
+REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
+RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
 
 
 class StatusPlaneDriftError(RuntimeError):
@@ -53,6 +59,183 @@ def _normalize_runtime_healing(payload: Any) -> Dict[str, Any]:
     normalized = dict(payload or {})
     normalized.pop("generated_at", None)
     return normalized
+
+
+def _parse_iso(value: Any) -> dt.datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _load_json_mapping(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
+def _load_jsonl_rows(path: Path, *, limit: int = 24) -> List[Dict[str, Any]]:
+    if not path.is_file():
+        return []
+    rows: List[Dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    for line in reversed(lines):
+        clean = str(line or "").strip()
+        if not clean:
+            continue
+        try:
+            payload = json.loads(clean)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            rows.append(dict(payload))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
+    if not REBUILDER_AUTOHEAL_STATE_DIR.is_dir():
+        return {}
+
+    service_rows: List[Dict[str, Any]] = []
+    for path in sorted(REBUILDER_AUTOHEAL_STATE_DIR.glob("*.status.json")):
+        payload = _load_json_mapping(path)
+        if not payload:
+            continue
+        service = str(payload.get("service") or path.name.replace(".status.json", "")).strip()
+        if not service:
+            continue
+        current_state = str(payload.get("current_state") or "unknown").strip() or "unknown"
+        service_rows.append(
+            {
+                "service": service,
+                "current_state": current_state,
+                "observed_status": str(payload.get("observed_status") or "").strip(),
+                "consecutive_failures": int(payload.get("consecutive_failures") or 0),
+                "cooldown_active": bool(payload.get("cooldown_active")),
+                "cooldown_remaining_seconds": max(0, int(payload.get("cooldown_remaining_seconds") or 0)),
+                "last_result": str(payload.get("last_result") or "").strip(),
+                "last_detail": str(payload.get("last_detail") or "").strip(),
+                "last_restart_at": str(payload.get("last_restart_at") or "").strip(),
+                "generated_at": str(payload.get("generated_at") or "").strip(),
+                "escalation_threshold": max(1, int(payload.get("escalation_threshold") or 1)),
+                "restart_window_count": max(0, int(payload.get("restart_window_count") or 0)),
+                "total_restarts": max(0, int(payload.get("total_restarts") or 0)),
+            }
+        )
+
+    recent_events = _load_jsonl_rows(RUNTIME_HEALING_EVENTS_PATH, limit=24)
+    for event in recent_events:
+        event["service"] = str(event.get("service") or "").strip()
+        event["event"] = str(event.get("event") or "").strip()
+        event["status"] = str(event.get("status") or "").strip()
+        event["detail"] = str(event.get("detail") or "").strip()
+        event["at"] = str(event.get("at") or "").strip()
+        event["consecutive_failures"] = int(event.get("consecutive_failures") or 0)
+        event["cooldown_remaining_seconds"] = max(0, int(event.get("cooldown_remaining_seconds") or 0))
+
+    escalated_services = [
+        row
+        for row in service_rows
+        if str(row.get("current_state") or "") in {"escalation_required", "restart_failed"}
+    ]
+    degraded_services = [
+        row
+        for row in service_rows
+        if str(row.get("current_state") or "") in {"cooldown", "restarting", "observed_unhealthy", "escalation_required", "restart_failed"}
+        or bool(row.get("cooldown_active"))
+    ]
+    cooldown_services = [row for row in service_rows if bool(row.get("cooldown_active"))]
+    last_event = recent_events[0] if recent_events else {}
+    last_recovery = next(
+        (event for event in recent_events if str(event.get("event") or "") == "restart_recovered"),
+        {},
+    )
+
+    alert_state = "healthy"
+    alert_reason = "No runtime healing drift is currently recorded."
+    recommended_action = "Keep the bounded auto-heal loop enabled and review the weekly healer history."
+    if escalated_services:
+        service_labels = ", ".join(str(item.get("service") or "") for item in escalated_services[:3])
+        alert_state = "action_needed"
+        alert_reason = f"Runtime self-healing escalated for {service_labels or 'one or more services'}."
+        recommended_action = "Open Housekeeping, inspect the escalated service, and freeze new change pressure until the root cause is understood."
+    elif degraded_services:
+        service_labels = ", ".join(str(item.get("service") or "") for item in degraded_services[:3])
+        alert_state = "degraded"
+        alert_reason = f"Runtime healing is actively compensating for {service_labels or 'recent service drift'}."
+        recommended_action = "Verify the unhealthy service, fail streak, and cooldown posture before assuming the stack is steady."
+
+    candidates: List[dt.datetime] = []
+    for row in service_rows:
+        parsed = _parse_iso(row.get("generated_at"))
+        if parsed is not None:
+            candidates.append(parsed)
+    for event in recent_events:
+        parsed = _parse_iso(event.get("at"))
+        if parsed is not None:
+            candidates.append(parsed)
+    generated_at = max(candidates).replace(microsecond=0).isoformat().replace("+00:00", "Z") if candidates else ""
+
+    return {
+        "generated_at": generated_at,
+        "enabled": True,
+        "event_log_present": RUNTIME_HEALING_EVENTS_PATH.is_file(),
+        "services": service_rows,
+        "recent_events": recent_events,
+        "summary": {
+            "service_count": len(service_rows),
+            "degraded_service_count": len(degraded_services),
+            "cooldown_active_count": len(cooldown_services),
+            "escalated_service_count": len(escalated_services),
+            "recent_restart_count": 0,
+            "alert_state": alert_state,
+            "alert_reason": alert_reason,
+            "recommended_action": recommended_action,
+            "last_event_at": str(last_event.get("at") or "").strip(),
+            "last_event_service": str(last_event.get("service") or "").strip(),
+            "last_event_kind": str(last_event.get("event") or "").strip(),
+            "last_event_detail": str(last_event.get("detail") or "").strip(),
+            "last_recovered_service": str(last_recovery.get("service") or "").strip(),
+            "last_recovered_at": str(last_recovery.get("at") or "").strip(),
+        },
+    }
+
+
+def _resolve_runtime_healing(snapshot_runtime_healing: Any) -> Dict[str, Any]:
+    snapshot = dict(snapshot_runtime_healing or {})
+    local = _runtime_healing_from_autoheal_state()
+    if not local:
+        return snapshot
+
+    snapshot_alert = str((snapshot.get("summary") or {}).get("alert_state") or "").strip().lower()
+    local_alert = str((local.get("summary") or {}).get("alert_state") or "").strip().lower()
+    snapshot_generated = _parse_iso(snapshot.get("generated_at"))
+    local_generated = _parse_iso(local.get("generated_at"))
+
+    if snapshot_alert != "action_needed":
+        return snapshot
+    if local_alert != "healthy":
+        return snapshot
+    if snapshot_generated is not None and local_generated is not None and local_generated <= snapshot_generated:
+        return snapshot
+    return local
 
 
 def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,10 +285,16 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
         "schema_version": 1,
         "generated_at": str(admin_status.get("generated_at") or ""),
         "source_public_status_generated_at": str(public_status.get("generated_at") or ""),
+        "mission_snapshot": dict(public_status.get("mission_snapshot") or {}),
+        "queue_forecast": dict(public_status.get("queue_forecast") or {}),
+        "capacity_forecast": dict(public_status.get("capacity_forecast") or {}),
+        "blocker_forecast": dict(public_status.get("blocker_forecast") or {}),
         "deployment_posture": dict(public_status.get("deployment_posture") or {}),
         "readiness_summary": dict(public_status.get("readiness_summary") or {}),
         "dispatch_policy": dict(public_status.get("dispatch_policy") or {}),
-        "runtime_healing": _normalize_runtime_healing(public_status.get("runtime_healing") or {}),
+        "support_summary": dict(public_status.get("support_summary") or {}),
+        "publish_readiness": dict(public_status.get("publish_readiness") or {}),
+        "runtime_healing": _normalize_runtime_healing(_resolve_runtime_healing(public_status.get("runtime_healing") or {})),
         "projects": project_rows,
         "groups": group_rows,
     }

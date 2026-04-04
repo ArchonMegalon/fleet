@@ -1,3 +1,38 @@
+## 2026-04-04: milestone-12 status-plane v3 now carries governor decision context and pulse forecasts (mission/queue/capacity/blocker/support/publish)
+
+- Trigger:
+  - milestone `12` requires launch/freeze/governance decisions to be justified from measured truth, but `STATUS_PLANE.generated.yaml` only projected deployment/readiness/dispatch/runtime-healing slices.
+  - product-governor pulse context (`mission_snapshot`, queue/capacity/blocker forecasts, support posture, publish-readiness) stayed trapped in admin public-status payloads instead of the compiled status-plane contract.
+- Landed:
+  - patched `/docker/fleet/scripts/verify_status_plane_semantics.py`:
+    - `build_expected_status_plane(...)` now projects additional public-status control-plane sections:
+      - `mission_snapshot`
+      - `queue_forecast`
+      - `capacity_forecast`
+      - `blocker_forecast`
+      - `support_summary`
+      - `publish_readiness`
+  - patched tests:
+    - `/docker/fleet/tests/test_verify_status_plane_semantics.py`
+      - sample admin payload now includes forecast/support/publish fields.
+      - added pass assertions proving those fields survive into expected status-plane output.
+    - `/docker/fleet/tests/test_materialize_status_plane.py`
+      - fixture payload now includes the same governor context.
+      - assertions now fail-close if materialized status plane drops those sections.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/verify_status_plane_semantics.py scripts/materialize_status_plane.py tests/test_verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS.
+  - `cd /docker/fleet && python3 -m unittest tests/test_verify_status_plane_semantics.py` -> PASS (`10 tests`).
+  - executable smoke:
+    - `python3 /docker/fleet/scripts/materialize_status_plane.py --status-json <tmp>/status.json --out <tmp>/STATUS_PLANE.generated.yaml` -> PASS.
+    - output now includes `mission_snapshot`, `queue_forecast`, `capacity_forecast`, `blocker_forecast`, `support_summary`, `publish_readiness`.
+  - `python3 -m pytest ...` lanes remain unavailable in this environment (`No module named pytest`).
+- Commits landed:
+  - pending local commit in `fleet` for status-plane v3 governor-context projection + tests + handoff refresh.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no product blocker for this slice; full pytest execution is currently unavailable in this environment because `pytest` is not installed.
+
 ## 2026-04-04: milestone-10 support packets now prove update-required install truth and route recovery to downloads when a fix exists but reporter build is behind
 
 - Trigger:

@@ -31,6 +31,20 @@ def _sample_admin_status() -> dict:
                 "display": "protected_preview",
                 "status": "protected_preview",
             },
+            "mission_snapshot": {
+                "headline": "Truth -> Slice -> Review -> Land",
+                "health": "watch",
+            },
+            "queue_forecast": {
+                "now": {"title": "Compile status plane"},
+                "next": {"title": "Materialize support packets"},
+            },
+            "capacity_forecast": {
+                "overall": "steady",
+            },
+            "blocker_forecast": {
+                "now": "none",
+            },
             "readiness_summary": {
                 "counts": {
                     "pre_repo_local_complete": 0,
@@ -55,6 +69,20 @@ def _sample_admin_status() -> dict:
                     }
                 ],
                 "operator_only_projects": ["fleet"],
+            },
+            "support_summary": {
+                "open_case_count": 2,
+                "closure_waiting_on_release_truth": 1,
+            },
+            "publish_readiness": {
+                "status": "watch",
+                "reason": "Support queue still has one fix awaiting reporter verification.",
+                "control_decision": {
+                    "primary_lane": "support",
+                    "target_repo": "chummer6-hub",
+                    "change_class": "type_c",
+                    "exit_condition": "Closure waiting on release truth returns to zero.",
+                },
             },
             "runtime_healing": {
                 "generated_at": "2026-03-23T07:21:00Z",
@@ -124,6 +152,9 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
             self.assertEqual(status_plane["dispatch_policy"]["participant_dispatch_canary_count"], 1)
             self.assertEqual(status_plane["dispatch_policy"]["participant_dispatch_canaries"][0]["project_id"], "core")
+            self.assertEqual(status_plane["publish_readiness"]["status"], "watch")
+            self.assertEqual(status_plane["support_summary"]["open_case_count"], 2)
+            self.assertEqual(status_plane["mission_snapshot"]["headline"], "Truth -> Slice -> Review -> Land")
 
     def test_verify_status_plane_fails_when_readiness_stage_drifts(self) -> None:
         with self.subTest("drifted readiness"):
