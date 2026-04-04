@@ -9,8 +9,12 @@
 - Verification:
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatTravelCacheUnsyncedSignalsAsContinuityReturnDomainWithoutCampaignOrOpenKeywords|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatOfflineSyncDriftSignalsAsContinuityReturnDomainWithoutOpenKeyword|FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompact|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapses" -v minimal` -> PASS (`10 passed` on both target frameworks).
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreat" -v minimal` -> PASS (`36 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `3f96d42f` (`fix(w3-4-6): treat still-active continuity signals as unresolved`).
+  - `fleet`: `cf1a421` (`docs(handoff): record w3 unresolved still-active continuity fix`).
 - Push attempts:
-  - not attempted in this slice.
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
