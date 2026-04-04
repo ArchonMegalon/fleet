@@ -24,6 +24,29 @@
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4/5 recap shelf attachment now normalizes whitespace-padded artifact ids even when creator-publication lists are present
+
+- Trigger:
+  - frontier milestones `4` and `5` require recap/publication identity to remain canonical under drift across campaign return and GM operations.
+  - after normalizing empty-link paths, `AttachCreatorPublicationPosture(...)` still copied raw recap `ArtifactId` values when the creator-publication list was non-empty, including unrelated publication rows.
+  - whitespace-padded unlinked artifact ids could still leak into recap shelf truth despite publication-list presence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `AttachCreatorPublicationPosture(...)` now canonicalizes recap `ArtifactId` via `AccountService.NormalizeOptional(...)` in the standard (non-empty publication-list) path.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineAttachCreatorPublicationPostureNormalizesUnlinkedWhitespaceArtifactIdsWhenPublicationListIsPresent`.
+  - committed in `chummer.run-services`:
+    - `7d5c00d1` — `Normalize recap artifact ids in creator publication attachment`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureNormalizesUnlinkedWhitespaceArtifactIdsWhenPublicationListIsPresent|FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureNormalizesRecapIdsWhenCreatorPublicationsAreEmpty|FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureUsesLatestPublication_WhenRecapArtifactIdHasWhitespacePadding" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`296` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - recap artifact ids remain canonical whether creator-publication projection is empty, unrelated, or linked.
+  - milestone-4 return-loop recap continuity and milestone-5 GM publication shelves now keep one normalized artifact identity seam across attachment paths.
+- Push status:
+  - `chummer.run-services`: commit landed locally (`7d5c00d1`); push not attempted after this commit in this slice.
+  - `fleet`: handoff update pending local commit in this slice.
+
 ## 2026-04-04: milestone-4/5 recap identity projection now normalizes whitespace-padded publication and artifact ids even without creator-publication links
 
 - Trigger:
