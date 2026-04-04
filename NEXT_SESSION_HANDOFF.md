@@ -104,9 +104,11 @@
   - `chummer6-core`: `c744d3be` (`feat(w4-16): add explicit build-lab json and print export workflow rails`).
   - `chummer6-design`: `cbaff3c` (`docs(w2-16): note build-lab json foundry viewer print workflow lane coverage`).
 - Push attempts:
-  - pending.
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` advanced to `c744d3be`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - no repo-local blocker for this milestone-16 Build Lab workflow-rail slice; broader `Chummer.Tests` filtered execution remains blocked by pre-existing compile/reference instability in the current workspace baseline.
+  - no repo-local blocker for this milestone-16 Build Lab workflow-rail slice; remaining blockers are missing GitHub HTTPS credentials for `chummer6-design` + `fleet` pushes and pre-existing `Chummer.Tests` compile/reference instability in the current workspace baseline.
 
 ## 2026-04-04: milestone-9 media-factory creator packet planning now preserves Build Lab portability pillar receipts
 
