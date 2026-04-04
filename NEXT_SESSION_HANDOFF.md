@@ -184,8 +184,8 @@
   - visual familiarity gate no longer silently proceeds when lock contention outlives configured wait bounds.
   - lock contention is now an explicit fail-close signal instead of an implicit stale-proof risk.
 - Push status:
-  - `chummer6-ui`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+  - `chummer6-ui`: committed locally (`bb0187c4`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: committed locally (`860bb15`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-3 flagship visual materialization no longer self-waits on its own release-gate lock
 
