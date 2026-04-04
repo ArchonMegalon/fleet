@@ -80,6 +80,7 @@
       - `workflow receipt required_workflow_family_ids must preserve canonical milestone-2 family ordering`
   - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
     - added active negative mutation probe that swaps the first two `required_workflow_family_ids` entries in `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` and requires parity audit fail-close.
+    - added active negative mutation probe that appends `bonus-noncanonical-workflow-family-id` to `required_workflow_family_ids` and requires parity audit fail-close.
     - added explicit guard for missing workflow receipt before mutation.
   - patched script-lock tests:
     - `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`
@@ -88,10 +89,13 @@
   - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (including expected fail-close mutation probes for release-proof, localization, workflow-family ordering, and visual ordering).
 - Commits landed:
   - `chummer6-hub`: `dad75143` (`fix(w1): fail-close workflow family ordering drift in ui parity audit`).
+  - `chummer6-hub`: `239c86d6` (`test(w1): probe unexpected workflow family ids in parity verify lane`).
 - Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commit `dad75143` remains local-only until auth is restored.
