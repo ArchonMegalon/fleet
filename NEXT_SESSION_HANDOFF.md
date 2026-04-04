@@ -22,6 +22,42 @@
 - Exact blocker:
   - local environment still lacks configured GitHub HTTPS credentials, so commit `be61818a` remains local-only until auth is restored.
 
+## 2026-04-04: milestone-4/5 continuity + GM ops lanes now fail-close `aar` / `aars` recap shorthand across canonical query rewrite, unresolved-domain routing, and signed-in audit/browser proofs
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign aftermath continuity and GM prep operations to remain one governed lane across prep-library query canonicalization, unresolved-domain routing, and signed-in proof rails.
+  - recap shorthand coverage already handled `debrief`, `postmortem`, `postsession`, `postrun`, and `afteractionreport` variants, but did not canonicalize common table shorthand `aar` / `aars`.
+  - this left a seam where users searching by `AAR` terms could miss governed recap packets and unresolved GM triage could classify recap shorthand outside the prep-library lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - canonicalizes `aar` and `aars` to governed `recap` semantics.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added `aar`/`aars` to aftermath/recap token vocabulary so workspace continuity matching stays aligned with canonical aliases.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved-domain routing now treats `aar`/`aars` as governed `prep_library` signals.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - extended continuity shorthand matching and negative coverage for `aar` variants.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - widened unresolved-domain regression to include `AAR` shorthand events and continuity query matching for `aar`/`aars`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded script-lock assertions so audit and Playwright proof rails fail-close if `aar`/`aars` coverage drifts.
+  - patched proof scripts:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API and workspace probes for `aar` and `aars`, each fail-closing on non-`200`, empty governed result, or missing route/snippet evidence.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added signed-in browser continuity journey checks for `aar` and `aars` with route-preservation and governed-result assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatRecapContinuityShorthandAsPrepLibraryDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `be213636` (`fix(w3): canonicalize aar recap shorthand across continuity and gm ops`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so commit `be213636` remains local-only until auth is restored.
+
 ## 2026-04-04: follow-up on handoff refresh commit for W1 startup-smoke timestamp alias slice (commit and push status)
 
 - Commits landed:
