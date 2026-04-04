@@ -87,7 +87,7 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["open_case_count"] == 2
     assert payload["summary"]["design_impact_count"] == 1
     assert payload["summary"]["owner_repo_counts"] == {
-        "chummer6-hub": 1,
+        "chummer6-design": 1,
         "chummer6-ui": 1,
     }
     assert payload["summary"]["closure_waiting_on_release_truth"] == 0
@@ -104,6 +104,11 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
     assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
     assert payload["summary"]["unresolved_external_proof_request_specs"] == {}
+    assert payload["unresolved_external_proof_execution_plan"] == {
+        "request_count": 0,
+        "hosts": [],
+        "host_groups": {},
+    }
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -862,6 +867,70 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                 "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
                 "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
             ],
+        },
+    }
+    assert payload["unresolved_external_proof_execution_plan"] == {
+        "request_count": 2,
+        "hosts": ["macos", "windows"],
+        "host_groups": {
+            "macos": {
+                "request_count": 1,
+                "tuples": ["blazor-desktop:osx-arm64:macos"],
+                "requests": [
+                    {
+                        "tuple_id": "blazor-desktop:osx-arm64:macos",
+                        "head_id": "blazor-desktop",
+                        "platform": "macos",
+                        "rid": "osx-arm64",
+                        "expected_artifact_id": "",
+                        "expected_installer_file_name": "",
+                        "expected_public_install_route": "",
+                        "expected_startup_smoke_receipt_path": "",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "startup_smoke_receipt_contract": {
+                            "head_id": "blazor-desktop",
+                            "host_class_contains": "macos",
+                            "platform": "macos",
+                            "ready_checkpoint": "pre_ui_event_loop",
+                            "rid": "osx-arm64",
+                            "status_any_of": ["pass", "passed", "ready"],
+                        },
+                        "proof_capture_commands": [
+                            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                        ],
+                    }
+                ],
+            },
+            "windows": {
+                "request_count": 1,
+                "tuples": ["avalonia:win-x64:windows"],
+                "requests": [
+                    {
+                        "tuple_id": "avalonia:win-x64:windows",
+                        "head_id": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "expected_artifact_id": "",
+                        "expected_installer_file_name": "",
+                        "expected_public_install_route": "",
+                        "expected_startup_smoke_receipt_path": "",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "startup_smoke_receipt_contract": {
+                            "head_id": "avalonia",
+                            "host_class_contains": "windows",
+                            "platform": "windows",
+                            "ready_checkpoint": "pre_ui_event_loop",
+                            "rid": "win-x64",
+                            "status_any_of": ["pass", "passed", "ready"],
+                        },
+                        "proof_capture_commands": [
+                            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                        ],
+                    }
+                ],
+            },
         },
     }
 

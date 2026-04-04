@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-04T22:39:42Z",
+  "generated_at": "2026-04-04T22:46:41Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -672,5 +672,152 @@
       "blazor-desktop:osx-arm64:macos",
       "blazor-desktop:win-x64:windows"
     ]
+  },
+  "unresolved_external_proof_execution_plan": {
+    "host_groups": {
+      "macos": {
+        "request_count": 2,
+        "requests": [
+          {
+            "expected_artifact_id": "avalonia-osx-arm64-installer",
+            "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+            "head_id": "avalonia",
+            "platform": "macos",
+            "proof_capture_commands": [
+              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+            ],
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "rid": "osx-arm64",
+            "startup_smoke_receipt_contract": {
+              "head_id": "avalonia",
+              "host_class_contains": "macos",
+              "platform": "macos",
+              "ready_checkpoint": "pre_ui_event_loop",
+              "rid": "osx-arm64",
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ]
+            },
+            "tuple_id": "avalonia:osx-arm64:macos"
+          },
+          {
+            "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
+            "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+            "head_id": "blazor-desktop",
+            "platform": "macos",
+            "proof_capture_commands": [
+              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+            ],
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "rid": "osx-arm64",
+            "startup_smoke_receipt_contract": {
+              "head_id": "blazor-desktop",
+              "host_class_contains": "macos",
+              "platform": "macos",
+              "ready_checkpoint": "pre_ui_event_loop",
+              "rid": "osx-arm64",
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ]
+            },
+            "tuple_id": "blazor-desktop:osx-arm64:macos"
+          }
+        ],
+        "tuples": [
+          "avalonia:osx-arm64:macos",
+          "blazor-desktop:osx-arm64:macos"
+        ]
+      },
+      "windows": {
+        "request_count": 2,
+        "requests": [
+          {
+            "expected_artifact_id": "avalonia-win-x64-installer",
+            "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+            "head_id": "avalonia",
+            "platform": "windows",
+            "proof_capture_commands": [
+              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+            ],
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "rid": "win-x64",
+            "startup_smoke_receipt_contract": {
+              "head_id": "avalonia",
+              "host_class_contains": "windows",
+              "platform": "windows",
+              "ready_checkpoint": "pre_ui_event_loop",
+              "rid": "win-x64",
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ]
+            },
+            "tuple_id": "avalonia:win-x64:windows"
+          },
+          {
+            "expected_artifact_id": "blazor-desktop-win-x64-installer",
+            "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
+            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+            "head_id": "blazor-desktop",
+            "platform": "windows",
+            "proof_capture_commands": [
+              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe blazor-desktop win-x64 Chummer.Blazor.Desktop.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
+            ],
+            "required_proofs": [
+              "promoted_installer_artifact",
+              "startup_smoke_receipt"
+            ],
+            "rid": "win-x64",
+            "startup_smoke_receipt_contract": {
+              "head_id": "blazor-desktop",
+              "host_class_contains": "windows",
+              "platform": "windows",
+              "ready_checkpoint": "pre_ui_event_loop",
+              "rid": "win-x64",
+              "status_any_of": [
+                "pass",
+                "passed",
+                "ready"
+              ]
+            },
+            "tuple_id": "blazor-desktop:win-x64:windows"
+          }
+        ],
+        "tuples": [
+          "avalonia:win-x64:windows",
+          "blazor-desktop:win-x64:windows"
+        ]
+      }
+    },
+    "hosts": [
+      "macos",
+      "windows"
+    ],
+    "request_count": 4
   }
 }

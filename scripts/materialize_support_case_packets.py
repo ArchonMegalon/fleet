@@ -929,6 +929,62 @@ def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Di
     }
 
 
+def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
+    request_rows = [
+        dict(row)
+        for row in (release_channel_index.get("external_proof_requests") or [])
+        if isinstance(row, dict) and _normalize_text(row.get("tuple_id"))
+    ]
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for row in request_rows:
+        host = _normalize_platform(row.get("required_host")) or "required"
+        grouped.setdefault(host, []).append(row)
+
+    host_groups: Dict[str, Any] = {}
+    for host in sorted(grouped.keys()):
+        rows = sorted(grouped[host], key=lambda item: _normalize_text(item.get("tuple_id")))
+        request_items = []
+        for row in rows:
+            request_items.append(
+                {
+                    "tuple_id": _normalize_text(row.get("tuple_id")),
+                    "head_id": _normalize_text(row.get("head")).lower(),
+                    "platform": _normalize_platform(row.get("platform")),
+                    "rid": _normalize_text(row.get("rid")).lower(),
+                    "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
+                    "expected_installer_file_name": _normalize_text(row.get("expected_installer_file_name")),
+                    "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
+                    "expected_startup_smoke_receipt_path": _normalize_text(row.get("expected_startup_smoke_receipt_path")),
+                    "required_proofs": sorted(
+                        {
+                            _normalize_text(token).lower()
+                            for token in (row.get("required_proofs") or [])
+                            if _normalize_text(token)
+                        }
+                    ),
+                    "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                        row.get("startup_smoke_receipt_contract")
+                    ),
+                    "proof_capture_commands": [
+                        _normalize_text(token)
+                        for token in (row.get("proof_capture_commands") or [])
+                        if _normalize_text(token)
+                    ],
+                }
+            )
+        host_groups[host] = {
+            "request_count": len(request_items),
+            "tuples": [item["tuple_id"] for item in request_items if item.get("tuple_id")],
+            "requests": request_items,
+        }
+
+    return {
+        "request_count": len(request_rows),
+        "hosts": sorted(host_groups.keys()),
+        "host_groups": host_groups,
+    }
+
+
 def _external_proof_operator_packet(
     row: Dict[str, Any],
     *,
@@ -1079,6 +1135,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         if packet["status"] in open_statuses
     ]
     unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
+    unresolved_external_proof_execution_plan = _external_proof_execution_plan(release_channel_index)
     packet_external_tuple_ids = {
         _normalize_text((packet.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
         for packet in case_packets
@@ -1160,6 +1217,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "unresolved_external_proof_request_specs": dict(unresolved_external_proof["specs"]),
         },
         "unresolved_external_proof": dict(unresolved_external_proof),
+        "unresolved_external_proof_execution_plan": dict(unresolved_external_proof_execution_plan),
         "packets": packets,
     }
 
