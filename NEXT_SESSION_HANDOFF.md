@@ -1,3 +1,33 @@
+## 2026-04-04: milestone-4 continuity lane now fail-closes compact plural `aftermathsreturn*` query forms across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `4` requires diary/aftermath/downtime return continuity to stay on one governed prep and workspace lane across compact query forms.
+  - compact plural forms (`aftermathsreturn*`, `aftermathsdowntime*`) were not canonicalized, leaving a false-negative seam for compact plural aftermath wording in prep-library and workspace search.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact plural `aftermathsreturn*` rewrites into canonical aftermath return tokens (`aftermath`, `return`, `loop`/`packet`).
+    - added compact plural `aftermathsdowntime*` rewrites into canonical aftermath downtime packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with plural compact aftermath return/downtime packet assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` and `PrepLibraryQueryMatchingSupportsCompactCampaignAftermathAndDowntimeReturnShorthand` with plural compact aftermath return/downtime forms and negative matrix guard.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` and workspace compact query probes for `aftermathsreturn*` and `aftermathsdowntime*`.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same plural compact aftermath forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for the added plural compact aftermath forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactCampaignAftermathAndDowntimeReturnShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`4 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `019b07ba` (`feat(w3-4): fail-close compact aftermaths return query variants`).
+- Push attempts:
+  - not yet attempted in this slice.
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 support-case packets now canonicalize legacy `head:platform:rid` tuple ids before external-proof routing
 
 - Trigger:
