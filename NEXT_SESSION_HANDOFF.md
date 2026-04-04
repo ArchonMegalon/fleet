@@ -1,3 +1,41 @@
+## 2026-04-04: milestone-5 GM event-control lane now fail-closes `gm control` compact/split/hyphen shorthand across prep canonicalization, GM unresolved routing, and live API/UI journeys
+
+- Trigger:
+  - frontier milestone `5` keeps GM operations and event controls on one governed prep-library lane across search, triage, and signed-in workspace journeys.
+  - service/query normalization covered `gmops/gmop/gm operation(s)` families, but `gm control` wording (`gmcontrol`, `gmcontrols`, `gmctrl`, `gm control`, `gm-control`) was not canonicalized.
+  - this left a drift seam where natural operator wording could miss governed event-control packets and unresolved-domain routing.
+- Landed:
+  - patched service canonicalization:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+      - added `gmcontrol`, `gmcontrols`, `gmctrl` to event-control compact tokens.
+      - added rewrite normalization for compact/split `gm control` aliases onto the governed event-control lane.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+      - mirrored compact/split `gm control` alias rewrites in prep-asset query tokenization.
+      - expanded unresolved-domain event-control keyword routing to include compact/split/hyphen `gm control` variants.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - expanded prep-query shorthand matrix to include `gmcontrol`, `gmcontrols`, `gmctrl`, `gm control`, `gm-control`, and plural/control abbreviations.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - expanded unresolved event-control domain test with `gmcontrol` and `gmctrl` payload variants.
+      - expanded prep-asset query matrix assertions for compact/split/hyphen `gm control` aliases.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded marker assertions for new `gm control` checks in live-audit and Playwright scripts.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added API and signed-in workspace checks for `gmcontrol`, `gmcontrols`, `gmctrl`, `gm control`, and `gm-control`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for the same compact/split/hyphen `gm control` variants with route-preservation and non-empty governed packet assertions.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsGmOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.GetProjection_UnresolvedItemsTreatGmOpsShorthandAsEventControlDomain|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`6` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`404` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control proof now fail-closes compact, split, and hyphen `gm control` shorthand across service canonicalization, unresolved-domain routing, API/workspace live audits, and browser journey checks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable+complete channels that keep non-promoted rollout posture
 
 - Trigger:
