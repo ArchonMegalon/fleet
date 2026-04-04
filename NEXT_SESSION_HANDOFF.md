@@ -137,12 +137,15 @@
     - updates parity matrix wording for milestone-17 to call out explicit `import_oracles` + `adjacent_oracles` fail-close posture.
   - updated local mirror:
     - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md` now mirrors the same milestone-17 wording.
+  - committed in `fleet`:
+    - `238df55` (`docs(w2-17): sync parity mirror and handoff for receipt hardening`)
+    - records mirror sync and this handoff update.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated to `38caa64a`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
-  - `cd /docker/fleet && git push` -> pending for this handoff append.
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - no repo-local blocker for milestone-17 receipt hardening or canon sync; push for `chummer6-design` remains credential-gated in this environment.
 
