@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-14 master-index now emits explicit settings-profile and source-toggle posture for governed rules-environment parity
+
+- Trigger:
+  - milestone `14` requires one obvious modern route for settings plus source toggles, but `MasterIndexResponse` only projected sourcebook/snippet and amend/translator bridge posture.
+  - source-toggle readiness was still implicit in raw `settings.xml` content and not first-class runtime evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - `MasterIndexResponse` now includes milestone-14 settings/source-toggle fields:
+      - `SettingsLanePosture`
+      - `SettingsProfileCount`
+      - `SettingsProfilesWithSourceToggles`
+      - `DistinctSourcebookToggles`
+      - `SourceToggleLanePosture`
+      - `SourcebookToggleCoveragePercent`
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - added deterministic `BuildSettingsCatalogSummary(...)` projection from `settings.xml` + `books.xml`:
+      - settings lane: `missing` when no settings catalog, `stale` when profiles have no sourcebook toggles, `governed` when toggles are present.
+      - source-toggle lane: `missing` when no toggles, `stale` when toggle codes drift from known sourcebooks (or catalog missing), `governed` when all toggles resolve to known sourcebooks.
+      - coverage percent now quantifies how much of known sourcebook catalog is represented by active toggle codes.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - extended baseline assertions for new fields.
+    - added `Master_index_projects_settings_profile_and_source_toggle_posture_from_settings_catalog`.
+    - added `Master_index_reports_stale_source_toggle_posture_when_settings_reference_unknown_sourcebook_codes`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet run --project Chummer.CoreEngine.Tests/Chummer.CoreEngine.Tests.csproj -c Release` -> PASS (`core-engine-tests: ok`).
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL before filtered tests execute due pre-existing `Chummer.Tests` compile/reference instability (`Chummer.Presentation`/`Chummer.Blazor`/`Chummer.Api` namespace resolution errors in current baseline).
+- Commits landed:
+  - `chummer6-core`: `2949b1e8` (`feat(w14): project settings and source-toggle posture in master index`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-core && git push` -> PASS (`fleet/core` updated: `d9749cd0..2949b1e8`).
+- Exact blocker:
+  - focused `Chummer.Tests` execution for this lane remains blocked by pre-existing compile/reference instability in current workspace baseline; the changed `Chummer.Infrastructure` and core-engine verification lanes are green.
+
 ## 2026-04-04: milestone-6 travel mode now exposes explicit per-lane offline continuity status (downtime/diary, contacts/heat, aftermath, prep)
 
 - Trigger:
