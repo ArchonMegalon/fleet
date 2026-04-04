@@ -1,3 +1,10 @@
+## 2026-04-04: follow-up verify confirms broadened milestone-2 release-channel drift retry lane stays green in chummer6-hub
+
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (baseline parity passes; repeated `parity audit failed: ...` lines are expected negative mutation probes in script-lock coverage; final `run-services in-process smoke passed`).
+- Current trusted state:
+  - broadened milestone-2 release-channel drift retry behavior is verified in the full `chummer6-hub` verify lane.
+
 ## 2026-04-04: follow-up on milestone-2 release-channel drift rematerialization broadening in chummer6-hub (commit and push status)
 
 - Commits landed:
