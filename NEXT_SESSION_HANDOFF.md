@@ -17,12 +17,13 @@
   - source-level consistency check:
     - `git -C /docker/chummercomplete/chummer-design diff -- products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md` -> PASS (status + matrix wording updated coherently for milestone `13`).
 - Commits landed:
-  - pending local commit in `chummer6-design` for this slice (to be recorded below).
-  - pending local commit in `fleet` for handoff refresh and parity-mirror update (to be recorded below).
+  - `chummer6-design`: `5a09553` (`docs(w13): mark sourcebook parity family partial`).
+  - `fleet`: `1ae417f` (`docs(handoff): record w13 sourcebook parity status sync`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this landed slice; remote push is expected to remain blocked in this environment by missing GitHub HTTPS credentials.
+  - none for this landed slice; remote push is blocked in this environment by missing GitHub HTTPS credentials.
 
 ## 2026-04-04: milestone-6 account workspace now renders per-device travel cache status so stale readiness is actionable
 
