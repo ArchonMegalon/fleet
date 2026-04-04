@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-13 master-index now emits explicit snippet-coverage metrics for governed reference-lane stale posture
+
+- Trigger:
+  - frontier milestone `13` requires the sourcebook/reference lane to expose explicit stale-or-missing source posture, not only a single status token.
+  - `MasterIndexResponse` already reported `ReferenceLanePosture`, but callers could not directly quantify snippet coverage versus gaps across the sourcebook set.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Contracts/Api/ToolCatalogModels.cs`:
+    - added `SourcebooksWithSnippets`, `SourcebooksMissingSnippets`, and `ReferenceCoveragePercent` to `MasterIndexResponse`.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Infrastructure/Xml/XmlToolCatalogService.cs`:
+    - master-index projection now computes deterministic coverage metrics from sourcebook snippet posture.
+    - no-data catalogs return explicit zeroed coverage metrics.
+  - patched `/docker/chummercomplete/chummer6-core/Chummer.Tests/ToolCatalogServiceTests.cs`:
+    - fail-proves missing/stale/governed coverage metrics (`0%`, `50%`, `100%`) across representative sourcebook catalogs.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-core && dotnet build Chummer.Infrastructure/Chummer.Infrastructure.csproj -nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-core && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ToolCatalogServiceTests" -f net10.0 --nologo -v minimal -m:1 -p:BuildInParallel=false` -> FAIL due pre-existing `Chummer.Tests` compile/reference instability in current baseline (missing `Chummer.Presentation`/`Chummer.Blazor` and related symbols).
+- Commits landed:
+  - pending local commit in `chummer6-core` for this slice (not yet created in this session).
+  - pending local commit in `fleet` for handoff refresh (not yet created in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for landed milestone-13 sourcebook reference-lane coverage logic; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference churn in current workspace baseline.
+
 ## 2026-04-04: milestone-7/8/9/16 account build-handoff detail now keeps every governed export lane visible after JSON exchange promotion
 
 - Trigger:
@@ -38,6 +62,32 @@
   - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
+
+## 2026-04-04: root Fleet status now surfaces shard-local blockers and recomputes in-progress ETA from live shard runs
+
+- Trigger:
+  - widened 5-shard `status --json` was still lying in two ways:
+    - root ETA said `0 in progress` even while all 5 shards had active runs
+    - root status could look healthy if one shard finished cleanly later, while another shard still had a real latest-run blocker
+  - the immediate live example was shard-1's concurrent-local-commits blocker being hidden behind shard-4's later clean receipt.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - added `_reconcile_aggregate_shard_truth(...)` to normalize aggregate shard blocker and active-frontier truth in one place
+    - root aggregate state now emits `shard_blockers`
+    - shard summaries now carry `last_run_blocker`
+    - root ETA now recomputes `remaining_in_progress_milestones` / `remaining_not_started_milestones` from active shard frontier unions instead of inheriting stale per-shard zeroes
+    - `status` / `trace` refresh paths now reuse that reconciler, so live reads match the base reducer
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py` with regressions for:
+    - aggregate shard blocker surfacing
+    - aggregate ETA recomputation from active shard runs
+    - direct reconciler coverage
+- Verification:
+  - `python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `pytest -q tests/test_chummer_design_supervisor.py -k 'reconcile_aggregate_shard_truth_updates_eta_and_blockers or effective_supervisor_state_surfaces_shard_blockers_in_aggregate_status or effective_supervisor_state_recomputes_aggregate_eta_from_active_shards or assess_worker_result_rejects_unpublished_remote_work or heal_state_push_blockers_repairs_verified_remote_push_residue or live_shard_summaries_ignore_stale_dirs_not_in_manifest'` -> PASS (`6 passed`).
+  - live `python3 scripts/chummer_design_supervisor.py status --json` now reports:
+    - `eta.summary: 18 open milestones remain (18 in progress, 0 not started)`
+    - top-level `shard_blockers` with shard-1's current blocker
+    - per-shard `last_run_blocker` fields in the 5-pack shard summary.
 
 ## 2026-04-04: accepted shard receipts now fail closed on stale local-only push residue, and verified remote commit clauses self-heal on read
 
