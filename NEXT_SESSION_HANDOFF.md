@@ -13,6 +13,8 @@
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `CampaignSpineCampaignMemoryTreatsWhitespacePaddedDuplicatePackageIdsAsOneAnchor`.
     - added `CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds`.
+  - committed in `chummer.run-services`:
+    - `f54b6c54` — `Normalize aftermath package ids in campaign spine routing`.
 - Verification:
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineCampaignMemoryTreatsWhitespacePaddedDuplicatePackageIdsAsOneAnchor|FullyQualifiedName~CampaignSpineWorkspaceChangePacketsDeduplicateWhitespacePaddedAftermathPackageIds|FullyQualifiedName~CampaignSpineCampaignMemoryTreatsWhitespacePaddedDowntimePackageKindAsDowntimeBrief|FullyQualifiedName~CampaignSpineNextSessionCarryForwardTreatsWhitespacePaddedReplayPackageKindAsReplay" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
   - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`287` tests on `net10.0` and `net10.0-windows`).
@@ -20,8 +22,8 @@
   - package-id formatting drift no longer creates duplicate aftermath identities across campaign-memory and workspace-change packet lanes.
   - milestone-4 diary/aftermath return-loop continuity and milestone-5 GM packet posture now stay aligned on one normalized package identity seam.
 - Push status:
-  - `chummer.run-services`: pending (credential-dependent in this environment).
-  - `fleet`: pending (credential-dependent in this environment).
+  - `chummer.run-services`: commit landed locally (`f54b6c54`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: commit landed locally (`f5237a9`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-2 localization verifier coverage now includes blank shipping-locale id rejection regression
 
