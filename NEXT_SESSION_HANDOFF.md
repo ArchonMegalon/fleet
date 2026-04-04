@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-1/3 registry lane now fail-closes tuple coverage coherence drift and localization signoff status alias contradictions
+
+- Trigger:
+  - frontier milestones `1` and `3` require release truth to fail closed when promoted installer tuple coverage fields contradict canonical artifact-derived metadata.
+  - verifier already enforced these branches in `scripts/verify_public_release_channel.py`, but `scripts/ai/verify.sh` did not actively mutate all corresponding drift seams (`requiredDesktopPlatforms` exactness, tupleId metadata coherence, per-platform head-list shape/inventory coherence).
+  - release-channel materialization also accepted contradictory localization status aliases when both `signoff_smoke_runner.status` and `signoff_smoke_runner_status` were present but mismatched, allowing ambiguous release proof payloads.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation for `desktopTupleCoverage.requiredDesktopPlatforms` exact-coverage drift with explicit fail-close marker assertion.
+    - added mutation for `desktopTupleCoverage.promotedInstallerTuples[*].tupleId` metadata drift (`head/platform/rid` mismatch) with explicit fail-close marker assertion.
+    - added mutation for `desktopTupleCoverage.promotedPlatformHeads.<platform>` non-list shape drift with explicit fail-close marker assertion.
+    - added mutation for `desktopTupleCoverage.promotedPlatformHeads.<platform>` inventory drift against promoted tuples with explicit fail-close marker assertion.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - hardened localization normalization so when both aliases exist, `signoff_smoke_runner.status` and `signoff_smoke_runner_status` must agree; mismatches now fail closed.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected negative mutation failures/markers, then completes green).
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py` -> PASS.
+- Commits landed:
+  - `chummer-hub-registry`: `14ada32` (`fix(w1): fail-close tuple and localization alias drift proofs`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `5b8ed2d..14ada32`).
+- Exact blocker:
+  - none for this slice.
+
 ## 2026-04-04: milestone-1/3 registry verify lane now mutation-tests promoted installer tupleId integrity fail-close
 
 - Trigger:
@@ -155,6 +180,59 @@
   - not attempted yet for this slice.
 - Exact blocker:
   - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
+## 2026-04-04: 5-shard control plane now persists structured shard topology, filters stale pre-topology history, and reports shard-local load honestly
+
+- Trigger:
+  - the first 5-shard widening showed two remaining OODA lies:
+    - aggregate/root status could still surface stale blocker history from pre-widening shard packs.
+    - pinned shard packs still reported whole-wave `open_milestone_ids`, overstating shard-local load and ETA.
+  - `_live_shard_summaries()` also depended on env-group reconstruction instead of the exact launched shard topology, so ad hoc launcher overrides could drift from refreshed shard state.
+- Landed:
+  - patched `/docker/fleet/scripts/run_chummer_design_supervisor.sh`:
+    - `active_shards.json` is now a structured manifest with `generated_at`, `topology_fingerprint`, and per-shard config:
+      - `name`
+      - `index`
+      - `frontier_ids`
+      - `focus_owner`
+      - `account_alias`
+      - `focus_text`
+      - `worker_bin`
+      - `worker_lane`
+      - `worker_model`
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - added structured active-shard manifest readers and shard-index helpers.
+    - aggregate history now filters shard runs against the current manifest frontier pack before choosing root `last_run`.
+    - pinned `--frontier-id` shards now narrow `open_milestones` as well as `frontier`.
+    - shard refresh now prefers the exact structured manifest entry over env-group defaults.
+    - aggregate live state now reports the union of current shard frontier packs and shard-local `open_milestone_ids`.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added:
+      - `test_configured_shard_roots_accepts_structured_manifest_entries`
+      - `test_effective_supervisor_state_filters_history_that_does_not_match_current_manifest_pack`
+      - `test_live_shard_summaries_prefer_structured_manifest_over_env_group_defaults`
+      - extended explicit frontier override test to pin `open_milestones`
+      - aggregate union-of-shard-frontiers regression
+  - patched `/docker/fleet/runtime.env.example`:
+    - restored local-stack support-case default (`http://host.docker.internal:8091/...`) instead of silently pointing local examples at production.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "configured_shard_roots_accepts_structured_manifest_entries or effective_supervisor_state_filters_history_that_does_not_match_current_manifest_pack or live_shard_summaries_prefer_structured_manifest_over_env_group_defaults or live_shard_summaries_refresh_each_shard_with_its_own_configured_frontier_pack or live_state_with_current_completion_audit_aggregates_union_of_shard_frontier_packs or derive_context_honors_frontier_id_override_without_shard_reslicing or configured_shard_roots_prefers_active_manifest_over_stale_dirs or open_milestone_shard_frontier_uses_active_manifest_to_avoid_stranded_slices or run_supervisor_launcher_exits_loudly_when_frontier_probe_fails"` -> PASS.
+  - live supervisor recreated; root `status --json` now reports:
+    - `shard_count = 5`
+    - aggregate `frontier_ids = 1..18`
+    - shard packs:
+      - `1,2,3`
+      - `13,14,17,18`
+      - `4,5,6`
+      - `7,8,9,16`
+      - `10,11,12,15`
+- Commits landed:
+  - pending local commit in `fleet` (not yet pushed in this session).
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - none for local shard-scaling control-plane truth; the next real scale blocker is product frontier breadth beyond the current 18-milestone wave.
 
 ## 2026-04-04: active 5-shard frontier refresh now preserves each shard's own pinned frontier pack instead of letting one shard overwrite sibling state
 
