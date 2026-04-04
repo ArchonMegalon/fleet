@@ -48,6 +48,32 @@
   - `chummer6-ui`: pending in this environment (credential-dependent).
   - `fleet`: pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-2 parity oracle token arrays now have direct canonical-id compliance coverage (including desktopControls)
+
+- Trigger:
+  - milestone `2` familiarity proof depends on `docs/PARITY_ORACLE.json` as the checked-in parity contract.
+  - generator hardening existed, but `desktopControls` and other oracle token arrays still lacked a direct JSON-level compliance assertion for canonical token shape (string-only, non-blank, no whitespace padding, no duplicate normalized ids).
+  - malformed oracle token drift could therefore persist until generator/runtime paths happened to consume the affected field.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added `ParityOracleTokenListsUseCanonicalStringIds`.
+    - new helper `AssertCanonicalTokenArray(...)` now enforces canonical token semantics on:
+      - `tabs`
+      - `workspaceActions`
+      - `acknowledgedCatalogOnlyTabs`
+      - `acknowledgedCatalogOnlyWorkspaceActions`
+      - `desktopControls`
+  - committed in `chummer6-hub`:
+    - `276ed766` — `Validate parity oracle token lists as canonical ids`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens|FullyQualifiedName~ParityOracleTokenListsUseCanonicalStringIds|FullyQualifiedName~AuditComplianceUsesSupportedVerificationScript" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - parity oracle token-shape drift now fails directly in compliance tests even for arrays not currently projected by checklist generation.
+  - milestone-2 parity contract keeps one canonical token normalization posture across checklist generation and oracle-level compliance assertions.
+- Push status:
+  - `chummer6-hub`: local commit landed (`276ed766`; earlier related commit `3b0f6d3f`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff update pending local commit in this slice.
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes unacknowledged catalog-only tabs/actions so new workbench surfaces cannot drift silently
 
 - Trigger:
@@ -129,6 +155,29 @@
 - Push status:
   - `chummer6-hub`: local changes staged in working tree (`scripts/generate-parity-checklist.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`, `docs/PARITY_CHECKLIST.md`); commit/push pending.
   - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-5 roster movement transfer ingress now normalizes whitespace-padded dossier/group/campaign/owner ids before governed ownership moves
+
+- Trigger:
+  - frontier milestone `5` requires roster movement to stay one governed lane across source/target group, campaign, and owner transitions.
+  - `CampaignSpineService.TransferRoster(...)` still consumed raw request ids for `DossierId`, `TargetGroupId`, and `TargetCampaignId`, while owner id normalization used ad-hoc trimming.
+  - whitespace-padded request ids could fail lookups or drift owner/campaign resolution even when canonical ids were present.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - `TransferRoster(...)` now normalizes request ids for dossier, target group, target campaign, and target owner before lookup or campaign resolution.
+    - added `ResolveRosterTransferRequestIdentity(...)` to centralize required roster-request id normalization and fail-close unknown-id errors.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineResolveRosterTransferRequestIdentityNormalizesWhitespacePaddedIds`.
+    - added `CampaignSpineResolveRosterTransferRequestIdentityThrowsForWhitespaceOnlyIds`.
+    - added reflection helper for `ResolveRosterTransferRequestIdentity(...)`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`300` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - roster transfer ingress now uses one normalized request-id seam for dossier/group/campaign/owner targeting.
+  - milestone-5 roster movement and operator audit lanes are less vulnerable to whitespace-formatting drift at API boundaries.
+- Push status:
+  - `chummer.run-services`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-5 GM prep launch and travel prefetch lookups now normalize whitespace-padded request ids before governed packet/device resolution
 
