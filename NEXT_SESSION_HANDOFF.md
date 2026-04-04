@@ -51,6 +51,35 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: milestone-5 GM/prep lane now fail-closes compact `...brief(s)` shorthand for opposition, roster movement, event controls, and game-master packet queries
+
+- Trigger:
+  - W3 milestone `5` requires GM operations, opposition packets, roster movement, prep-library search, and event controls to stay on one governed query lane across compact operator shorthand.
+  - compact `...brief(s)` forms were normalized for campaign/aftermath continuity packets but not for GM/prep packet families (`opposition`, `roster movement`, `event control`, `gm`, `gamemaster`), leaving a false-negative seam between packet and brief vocabulary.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact `...brief(s)` alias rewrites for opposition, roster movement, event control, `gm*`, and `gamemaster*` packet families into canonical packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded compact governed-packet and compact continuity/GM packet alias tests with new brief-form inputs and negative token assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded compact governed-packet and compact continuity/GM packet matching tests so the new brief forms match governed prep packets.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for all newly canonicalized compact brief forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for the same compact brief forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for the added GM/prep brief shorthand.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactGovernedPacketFormsIntoPrepOpsTokens|FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactGovernedPacketForms|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`5 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `4fd02a44` (`feat(w3-5): canonicalize compact gm and prep brief shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-6 mobile companion continuity lane now fail-closes compact return-brief shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
