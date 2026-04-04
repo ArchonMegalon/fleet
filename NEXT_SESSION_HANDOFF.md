@@ -1,3 +1,31 @@
+## 2026-04-04: W1/W3 desktop exit proofs now preserve chummer6-ui repo-root identity instead of symlink-resolved legacy path drift
+
+- Trigger:
+  - `DESKTOP_EXECUTABLE_EXIT_GATE.generated.json` and per-head Windows/macOS receipts were serializing repo-local proof paths under `/docker/chummercomplete/chummer-presentation` because scripts resolved symlinks (`.resolve()`/physical roots).
+  - this created proof-ownership drift against canon owner naming (`chummer6-ui`) and made W1/W3 receipt evidence less trustworthy even when failures were otherwise honest.
+- Landed:
+  - patched repo-root alias normalization (`CHUMMER_UI_REPO_ROOT_ALIAS`, default `/docker/chummercomplete/chummer6-ui`) in:
+    - `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-linux-desktop-exit-gate.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`
+    - `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`
+  - removed symlink-dereferencing from path serialization in desktop gate Python payloads where proof evidence should remain logical-owner rooted.
+  - expanded compliance lock coverage in:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - script-lock now asserts alias-normalization wiring for executable/linux/windows/macos gate scripts.
+  - rematerialized receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_AVALONIA_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_MACOS_BLAZOR_DESKTOP_OSX_ARM64_DESKTOP_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh scripts/materialize-linux-desktop-exit-gate.sh scripts/materialize-windows-desktop-exit-gate.sh scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Windows_and_macos_exit_gate_materializers_do_not_resolve_proof_from_legacy_chummer5a_paths" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> FAIL honestly on existing external blockers (missing promoted Windows/macOS artifacts/startup-smoke host capability) while now emitting `chummer6-ui` rooted evidence paths.
+- Current trusted state:
+  - W1/W3 packaged-proof receipts continue to fail close for true external blockers, and path ownership evidence now aligns with the `chummer6-ui` canonical repo root instead of legacy symlink-resolved naming.
+
 ## 2026-04-04: follow-up verify confirms broadened milestone-2 release-channel drift retry lane stays green in chummer6-hub
 
 - Verification:
