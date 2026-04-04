@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes on flagship-head and legacy-ruleset proof status drift
+
+- Trigger:
+  - frontier milestone `2` requires familiar workbench proof across the full flagship desktop posture and legacy mental models (`SR4`, `SR6`, `Chummer5a`).
+  - `scripts/audit-ui-parity.sh` enforced receipt freshness/family/interaction coverage, but it did not fail-close when workflow evidence silently drifted on flagship-head readiness or ruleset parity status markers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - requires `evidence.flagship_required_desktop_heads` to include both `avalonia` and `blazor-desktop`.
+    - fail-closes on non-empty `evidence.flagship_missing_or_not_ready_desktop_heads`.
+    - fail-closes unless `evidence.sr4_workflow_parity_status`, `evidence.chummer5a_workflow_parity_status`, and `evidence.sr4_sr6_frontier_status` are pass/ready.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock the new script contract markers/messages.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, parity audit passed, `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 parity proof now fail-closes when flagship desktop head coverage drifts or when `SR4`/`SR6 frontier`/`Chummer5a` workflow parity evidence drops below pass-ready.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 campaign workspace opposition fallback now classifies `op_for` and `opforce` shorthand
 
 - Trigger:
