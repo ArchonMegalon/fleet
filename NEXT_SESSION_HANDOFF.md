@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-2 parity audit now fail-closes unexpected nested release-proof journey and route ids
+
+- Trigger:
+  - milestone-2 parity audit enforced missing baseline nested `releaseProof.journeysPassed` and `releaseProof.proofRoutes` members but still allowed unexpected extra ids in either list.
+  - this left a drift path where non-canonical release-proof supersets could pass while expanding route/journey evidence semantics outside governed flagship canon.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added fail-close checks for unexpected normalized journey ids in nested `releaseProof.journeysPassed`.
+    - added fail-close checks for unexpected normalized route ids in nested `releaseProof.proofRoutes`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - added script-marker assertions locking the new `declares unexpected ...` nested release-proof guards.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-2 nested release-proof validation now enforces canonical exactness for baseline journey and flagship route inventories, not only subset coverage.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes unexpected visual required-id supersets across tests, interaction keys, and screenshots
 
 - Trigger:
@@ -39,6 +60,42 @@
   - milestone-5 compact GM-ops shorthand is now aligned across campaign workspace prep retrieval, GM prep-asset search tokenization, and GM unresolved-domain triage.
 - Push status:
   - `chummer.run-services`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
+## 2026-04-04: milestone-1/3 startup-smoke receipt identity now fail-closes `rid` drift across Windows/macOS desktop exit gates plus bundle/public promotion validators
+
+- Trigger:
+  - frontier milestones `1` and `3` require packaged-head startup-smoke proof to stay bound to the exact promoted installer tuple (`head/platform/rid/channel/version`) so per-head evidence cannot lie.
+  - Linux already fail-closed startup-smoke `rid`, but Windows/macOS desktop exit gates only enforced `arch`, and downstream bundle/public promotion validators also skipped explicit `rid` integrity checks.
+  - this left a drift path where receipts could remain green while pointing at a different RID variant inside the same head/platform family.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - records startup-smoke `rid` in evidence payload.
+    - fail-closes missing startup-smoke `rid`.
+    - fail-closes startup-smoke `rid` mismatch against promoted `expected_rid`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - records startup-smoke `rid` in evidence payload.
+    - fail-closes missing startup-smoke `rid`.
+    - fail-closes startup-smoke `rid` mismatch against promoted `rid`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/publish-download-bundle.sh`:
+    - added startup-smoke `rid` validation for each promoted install medium.
+    - fail-closes missing `rid` and mismatched `rid` in copied startup-smoke receipts before promotion sync succeeds.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/generate-public-promotion-evidence.py`:
+    - matching receipts now include `rid` equality, not only head/platform/arch.
+    - receipt validation now fail-closes missing `rid` and `rid` mismatch against manifest `rid`.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - expanded Windows/macOS exit-gate marker assertions to lock `rid` fail-close checks.
+    - expanded runbook/publisher/public-promotion marker assertions to lock new `rid` coverage in bundle/promotion validators.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-windows-desktop-exit-gate.sh && bash -n scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Windows_exit_gate_requires_startup_smoke_receipt_integrity_for_promoted_installer_bytes|FullyQualifiedName~Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/publish-download-bundle.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && python3 -m py_compile scripts/generate-public-promotion-evidence.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Runbook_supports_download_manifest_generation_mode" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+- Current trusted state:
+  - startup-smoke proof now fail-closes `rid` identity drift at desktop exit-gate, bundle publication, and public promotion evidence boundaries, tightening per-head packaged-artifact truth for milestones `1`/`3`.
+- Push status:
+  - `chummer6-ui`: commit/push attempted in this slice (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
 
 ## 2026-04-04: milestone-5 GM operations prep retrieval now fail-closes compact `gmops` and `gmop` aliases across packet query normalization, API audit, and workspace route journeys
