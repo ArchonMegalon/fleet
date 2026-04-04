@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-3 executable gate now self-materializes visual/workflow proof dependencies to fail only on real promoted tuple gaps
+
+- Trigger:
+  - frontier milestones 1 and 3 require packaged-binary proof that cannot lie by platform/head tuple.
+  - `materialize-desktop-executable-exit-gate.sh` could read stale `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` evidence, yielding false missing-screenshot failures (for example old `12-magic-matrix-dialog-light.png` expectation) even when current screenshot proof existed.
+  - stale dependent receipts obscured the true external blockers (missing promoted Windows/macOS installer tuples and host-run startup smoke receipts).
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added dependency materializer paths for visual-familiarity and workflow-execution gates.
+    - added `CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE` (default `0`) to allow explicit opt-out.
+    - default execution now rematerializes dependent receipts before aggregate executable proof evaluation.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract markers for the new dependency materialization path and opt-out env flag.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with screenshot drift removed and only external tuple blockers remaining:
+    - missing promoted desktop media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - aggregate executable gate no longer fails spuriously on stale visual-screenshot contract drift when current visual/workflow materializers are available.
+  - milestone-1/3 gate output is narrowed to true external publication/proof blockers in this workspace (Windows/macOS promoted tuples).
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign workspace packet synthesis now deduplicates identical change-signal versions across return, opposition, roster, aftermath, prep-launch, travel, and memory lanes
 
 - Trigger:
@@ -153,6 +178,54 @@
 - Current trusted state:
   - milestone-1/3 startup-smoke promotion/gate lanes now require explicit host provenance, preventing channel-correct but host-ambiguous receipts from counting as packaged-binary proof.
   - remaining W1 blockers remain external in this workspace: promoted Windows/macOS installer tuple publication plus fresh host-run startup-smoke receipts.
+- Push status:
+  - pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-2 visual familiarity gate now fail-closes split magic and matrix workflow proof with dedicated runtime tests and screenshots
+
+- Trigger:
+  - frontier milestone 2 (`Legacy-familiar flagship workbench across SR4, SR6, and Chummer5a mental models`) still allowed a single combined magic/matrix runtime-backed test and screenshot (`Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions`, `12-magic-matrix-dialog-light.png`) to represent both surfaces.
+  - that combined seam could mask a regression in one surface while milestone-2 receipts remained green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs`:
+    - split combined proof into explicit tests:
+      - `Magic_workflows_execute_with_specific_dialog_fields_and_confirm_actions`
+      - `Matrix_workflows_execute_with_specific_dialog_fields_and_confirm_actions`
+    - split visual capture into dedicated screenshots:
+      - `12-magic-dialog-light.png`
+      - `13-matrix-dialog-light.png`
+      - shifted downstream captures to `14-advancement-dialog-light.png` and `15-creation-section-light.png`.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/b14-flagship-ui-release-gate.sh`:
+    - requires both new explicit runtime-backed tests in gate inventory and published `requiredRuntimeBackedTests`.
+    - updates expected screenshot inventory to separate magic vs matrix captures.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh`:
+    - requires both new explicit runtime-backed tests.
+    - updates screenshot requirements/sizing policy for split magic and matrix captures.
+    - replaces combined marker logic with dedicated method and capture marker checks:
+      - `magic_method_has_rhythm_markers`
+      - `matrix_method_has_rhythm_markers`
+      - `magic_capture_opens_dialog_posture`
+      - `matrix_capture_opens_dialog_posture`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked script-contract markers for the new split magic/matrix tests and screenshot filenames.
+  - patched workflow parity ledgers:
+    - `/docker/chummercomplete/chummer6-ui/docs/SR4_WORKFLOW_PARITY_LEDGER.json`
+    - `/docker/chummercomplete/chummer6-ui/docs/SR6_WORKFLOW_PARITY_LEDGER.json`
+    - magic/resonance family now cites both dedicated test names instead of the old combined method.
+  - rematerialized milestone receipts and screenshots through `b14`, including:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_FLAGSHIP_RELEASE_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/12-magic-dialog-light.png`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/ui-flagship-release-gate-screenshots/13-matrix-dialog-light.png`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Magic_workflows_execute_with_specific_dialog_fields_and_confirm_actions|FullyQualifiedName~Matrix_workflows_execute_with_specific_dialog_fields_and_confirm_actions|FullyQualifiedName~Visual_review_evidence_is_published_for_light_and_dark_shell_states|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`4` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/b14-flagship-ui-release-gate.sh scripts/ai/milestones/materialize-desktop-visual-familiarity-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/b14-flagship-ui-release-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+- Current trusted state:
+  - milestone-2 visual familiarity proof is now fail-closed on explicit magic and matrix runtime-backed tests and distinct screenshot evidence, reducing the chance of single-surface regressions hiding behind combined proof.
+  - downstream executable/visual receipts now advertise split magic vs matrix evidence paths while keeping overall milestone-2 gate status green.
 - Push status:
   - pending in this environment (credential-dependent).
 
