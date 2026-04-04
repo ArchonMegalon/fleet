@@ -38826,3 +38826,37 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `/docker/fleet/tests/test_chummer_design_supervisor.py`
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push.
+
+## 2026-04-04: milestone-4/6 prep-query continuity lane now fail-closes compact relationship-mutation aliases in live audit proof
+
+- Trigger:
+  - frontier milestones `4` and `6` require diary/contacts/heat/aftermath/return continuity to remain one governed lane across API search and signed-in workspace journey audits.
+  - compact mutation aliases already covered `contact*` forms, but plural `connections*` and `relationships*` compact forms were not explicitly projected into canonical prep-query rewrite coverage or live-audit fail-close markers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact rewrite coverage for plural continuity mutation forms:
+      - `connectionsupdate|connectionsupdates|connectionsupdated|connectionschange|connectionschanges|connectionschanged`
+      - `relationshipsupdate|relationshipsupdates|relationshipsupdated|relationshipschange|relationshipschanges|relationshipschanged`
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - extended governed prep-library query assertions to fail-close compact continuity mutation aliases spanning contacts/heat/diary/return:
+      - `contactupdate`, `contactsupdate`, `contactchange`, `contactschange`
+      - `connectionupdate`, `connectionsupdate`, `connectionchange`, `connectionschange`
+      - `relationshipupdate`, `relationshipsupdate`, `relationshipchange`, `relationshipschange`
+      - `heatupdate`, `heatchange`, `diaryupdate`, `sessionlogupdate`
+      - `aftermathreturn`, `downtimereturn`, `campaignreturn`, `campaignreturnlane`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - locked new `queryText=` live-audit marker assertions for the compact continuity mutation aliases above.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - added regression `RewriteAliases_CollapsesPluralConnectionAndRelationshipMutationCompactForms`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode" -v minimal --nologo -m:1 -p:BuildInParallel=false` -> PASS (`5` tests on `net10.0` and `5` tests on `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `80f370fa` (`test(w3-4-6): fail-close compact continuity mutation aliases`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
+- Current open milestone ids: 4, 5, 6
+- Frontier milestone ids to prioritize first: 4, 5, 6
