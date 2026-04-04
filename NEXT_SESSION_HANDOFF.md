@@ -25,6 +25,19 @@
   - `chummer.run-services`: local changes landed in this slice (`scripts/hub-live-audit.py`, `scripts/e2e-hub-playwright.cjs`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: follow-up on milestone-2 parity rematerialization slice commit/push status
+
+- Commits landed:
+  - `chummer6-ui`: `8bda3a01` (`fix(parity): rematerialize desktop workflow execution gate receipt`) updating:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+  - `fleet`: `086211d` (`docs(handoff): record milestone-2 parity gate rematerialization`) updating:
+    - `/docker/fleet/NEXT_SESSION_HANDOFF.md`
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment lacks configured GitHub credentials for HTTPS remotes, so commits are local-only until auth is restored.
+
 ## 2026-04-04: milestone-2 parity lane recovered by re-materializing stale desktop workflow execution gate timestamp to match nested SR4/SR6 receipts
 
 - Trigger:
