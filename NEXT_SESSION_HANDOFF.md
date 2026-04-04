@@ -20,7 +20,7 @@
   - milestone-1/3 executable proof now rejects unrecognized release-channel rollout/supportability tokens, so desktop install/update truth cannot silently drift away from registry-owned state vocabulary.
 - Push status:
   - `chummer6-ui`: committed (`b3ab654f`); push failed in this environment (`could not read Username for 'https://github.com'`).
-  - `fleet`: handoff committed (`7915417`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: handoff committed (`2087ffc`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-5 GM operations lane now fail-closes `gm operation(s)` compact/split/hyphen aliases across prep tokenization, GM prep search, and live API/UI journeys
 
