@@ -1,3 +1,29 @@
+## 2026-04-04: milestone-5 live journeys now fail-close split/hyphen `gm controls` and `gm ctrl` shorthand across prep-library API and signed-in workspace search
+
+- Trigger:
+  - after landing `gm control` compact/split/hyphen coverage, adjacent plural and abbreviated split/hyphen variants (`gm controls`, `gm-controls`, `gm ctrl`, `gm-ctrl`) remained unexercised in live journey proof.
+  - canonical token rewrite accepted these through shared `gm + controls/ctrl` logic, but API/workspace script checks and matrix assertions did not lock them.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded prep-asset query matrix assertions for `gm controls`, `gm-controls`, `gm ctrl`, `gm-ctrl`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API checks for `queryText=gm%20controls`, `gm-controls`, `gm%20ctrl`, `gm-ctrl`.
+    - added signed-in workspace route checks for `prepQuery=gm%20controls`, `gm-controls`, `gm%20ctrl`, `gm-ctrl`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for the same four split/hyphen variants with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-lock assertions for the new query markers and Playwright route/label markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~VerificationEntryPointTests" --nologo -v minimal` -> PASS (`404` tests on `net10.0` and `net10.0-windows`; first attempt hit transient deps-file lock, immediate retry passed).
+- Current trusted state:
+  - milestone-5 GM event-control journey proof now fail-closes compact/split/hyphen/singular/plural/abbrev `gm control` shorthand families end-to-end across canonicalization, API/workspace audits, and Playwright route checks.
+- Push status:
+  - `chummer.run-services`: local follow-on changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-5 GM event-control lane now fail-closes `gm control` compact/split/hyphen shorthand across prep canonicalization, GM unresolved routing, and live API/UI journeys
 
 - Trigger:
