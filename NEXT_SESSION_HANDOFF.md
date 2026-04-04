@@ -123,9 +123,11 @@
   - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -q` -> FAIL (`No module named pytest`) in this environment.
 - Commits landed:
   - `fleet`: `4c50eda` (`feat(w1-3): fail-close journey gates on structured desktop proof status`).
+  - `fleet`: `f07b478` (`docs(handoff): record w1-3 structured proof push outcomes`).
   - `chummer6-design`: `e3c6469` (`docs(w1-3): require structured desktop exit-gate pass status`).
 - Push attempts:
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`) after handoff commit `f07b478`.
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - full pytest execution remains unavailable in this environment because `pytest` is not installed.
