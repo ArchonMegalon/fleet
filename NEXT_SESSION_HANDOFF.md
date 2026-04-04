@@ -22,8 +22,9 @@
   - `chummer-hub-registry`: `6e81ed1` (`fix(w1): mutation-test locale-summary alias drift fail-close`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-hub-registry && git push` -> PASS (`fleet/hub-registry` updated: `6b378ce..6e81ed1`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none for this slice.
+  - fleet push remains blocked by missing GitHub HTTPS credentials (`fatal: could not read Username for 'https://github.com': No such device or address`).
 
 ## 2026-04-04: milestone-4/5 continuity and GM prep search now canonicalize compact session-return-loop shorthand
 
