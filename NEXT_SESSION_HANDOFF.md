@@ -24,10 +24,11 @@
     - `ROADMAP.md must name Next 20 Big Wins After Post-Audit Closeout as the active follow-on wave.`
     - `Weekly product pulse must carry the same history snapshot count as PROGRESS_HISTORY.generated.json.`
 - Commits landed:
-  - pending local commit in `chummer-design` (not yet created in this session).
-  - pending local commit in `fleet` for handoff + pulse mirror refresh (not yet created in this session).
+  - `chummer-design`: `7969d00` (`feat(w12): align weekly pulse with active-wave launch governance`).
+  - `fleet`: `b13220f` (`docs(w12): refresh pulse mirror and handoff for launch governance`).
 - Push attempts:
-  - not attempted yet for this slice.
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - none for the landed pulse-v3 generator changes; full `validate_product_invariants.py` remains blocked by pre-existing baseline invariant expectations in current repo state.
 
