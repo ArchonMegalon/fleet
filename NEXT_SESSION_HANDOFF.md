@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-2 parity audit now enforces full visual interaction-key set (13/13) from canonical familiarity gate
+
+- Trigger:
+  - frontier milestone `2` requires visual familiarity proof across the complete loaded-runner workbench rhythm, not a reduced subset of interaction keys.
+  - `scripts/audit-ui-parity.sh` validated only a nine-key subset even though `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json` publishes a canonical 13-key required interaction inventory.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - expanded required visual interaction checks to include the full set markers:
+      - `runtimeBackedLegacyWorkbench`
+      - `legacyDenseBuilderRhythm`
+      - `legacyBrowseDetailConfirmRhythm`
+      - `legacyContactsDiaryRhythm`
+      - plus the previously enforced creation/advancement/magic/matrix/gear/cyberware/vehicles/contacts/diary keys.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock the newly required visual-key markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, parity audit passed, `run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-2 visual familiarity proof can no longer pass with only a reduced key subset; all canonical interaction-key families now fail-close in Hub verification.
+- Push status:
+  - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now fail-closes on flagship-head and legacy-ruleset proof status drift
 
 - Trigger:
