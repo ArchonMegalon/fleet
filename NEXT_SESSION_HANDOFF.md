@@ -1,3 +1,32 @@
+## 2026-04-04: milestone-6 mobile companion continuity lane now fail-closes compact return-brief shorthand across canonicalization, workspace matching, and live journey audits
+
+- Trigger:
+  - W3 milestone `6` requires mobile companion continuity proof to stay fail-closed for compact prep/workspace query forms that operators and users actually type.
+  - compact return-brief forms (`mobilecompanionreturnbrief(s)`, `mobilecompanionsreturnbrief(s)`, `campaignmobilecompanionreturnbrief(s)`, `campaignmobilecompanionsreturnbrief(s)`) were not explicitly canonicalized or covered by live audit and workspace query probes.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact mobile companion return-brief rewrites into canonical continuity packet tokens.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactMobileCompanionReturnLoopFormsIntoContinuityTokens` with return-brief variants and packet-token assertions.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms` to fail-close return-brief matching against governed continuity packets.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added signed-in API `queryText=` probes and workspace `prepQuery=` probes for the compact return-brief variants.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added `assertWorkspacePrepQuerySearch(...)` checks for the same return-brief variants.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed live-audit and Playwright marker assertions for all added compact return-brief forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactMobileCompanionReturnLoopFormsIntoContinuityTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingCollapsesCompactMobileCompanionReturnLoopForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+- Commits landed:
+  - `chummer6-hub`: `95b63646` (`feat(w3-6): canonicalize mobile companion return brief shorthand`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-6 mobile companion continuity lane now fail-closes compact return-packet shorthand across canonicalization, workspace matching, and live journey audits
 
 - Trigger:
