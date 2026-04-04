@@ -16,6 +16,7 @@
       - `DeduplicateSemanticPrepLaunchVersions(...)`
       - `DeduplicateSemanticTravelPrefetchReceiptVersions(...)`
     - semantic keys now exclude identity ids and anchor on workspace/campaign scope, packet or device semantics, summary/evidence payloads, and event timestamps.
+    - removed unused identity recap dedupe helpers so campaign/GM dedupe posture is semantic-only in active packet synthesis paths.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenPackageIdsDiffer`.
     - added `PrepLaunchPacketDeduplicatesSemanticallyIdenticalLaunchVersions_WhenLaunchIdsDiffer`.
