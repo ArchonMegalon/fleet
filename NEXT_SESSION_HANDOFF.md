@@ -1,3 +1,38 @@
+## 2026-04-04: handoff follow-up commit + push status for W3 gamemaster compact packet query canonicalization slice
+
+- Commits landed:
+  - `chummer6-hub`: `56868294` (`feat(w3-5): canonicalize compact gamemaster packet query forms`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-5 prep-library GM lane now fail-closes compact `gamemaster*packet(s)` forms across canonicalization and live journey audits
+
+- Trigger:
+  - W3 milestone `5` requires GM packet operations to stay on one governed prep-library lane for opposition, roster, prep, and event controls.
+  - compact `gamemaster` packet shorthand (`gamemasteropspacket(s)`, `gamemasteroperationpacket(s)`, `gamemastercontrolpacket(s)`) was not canonicalized or journey-audited, leaving a compact-query seam outside existing `gm*packet(s)` proof.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - added compact alias rewrites for:
+      - `gamemasteropspacket(s)`
+      - `gamemasteroperationpacket(s)`
+      - `gamemastercontrolpacket(s)`
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/PrepLibraryQueryAliasCanonicalizerTests.cs`:
+    - expanded `RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens` with the new compact packet forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - expanded `PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms` with matching assertions for all new compact packet forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py`:
+    - added API `queryText=` and workspace `prepQuery=` tuple probes for all new compact packet forms.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs`:
+    - added workspace `assertWorkspacePrepQuerySearch(...)` checks for all new compact packet forms.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - fail-closed new live-audit and Playwright marker assertions for all new compact packet forms.
+- Verification:
+  - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
+  - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCompactContinuityAndGmPacketForms|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" -v minimal` -> PASS (`4 passed` on both target frameworks).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 gamemaster compact ctl/ctrl plural prep-query proof slice
 
 - Commits landed:
@@ -33,6 +68,28 @@
   - `python3 -m py_compile /docker/chummercomplete/chummer6-hub/scripts/hub-live-audit.py` -> PASS.
   - `node --check /docker/chummercomplete/chummer6-hub/scripts/e2e-hub-playwright.cjs` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryAliasCanonicalizerTests.RewriteAliases_CollapsesCompactContinuityAndGmPacketFormsIntoUnifiedWorkspaceTokens|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsGameMasterOpsShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.E2eHubPlaywright" -v minimal` -> PASS (`3 passed` on both target frameworks).
+
+## 2026-04-04: false-complete recovery pass re-materialized shard-1 completion-review frontier with Linux gate truth repaired
+
+- Trigger:
+  - active synthetic frontier `completion-review-frontiers/shard-1.generated.yaml` was carrying a stale Linux gate failure (`primary startup smoke is invalid`) even though the gate proof artifact had a passing startup smoke + install verification result.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - Linux desktop exit-gate audit now accepts startup-smoke receipt digest parity against either:
+      - the locally built installer digest, or
+      - the promoted release-channel installer digest (`checks.release_channel_linux_artifact.sha256`).
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_linux_desktop_exit_gate_audit_accepts_release_channel_promoted_receipt_digest`.
+  - re-materialized:
+    - `/docker/fleet/.codex-studio/published/completion-review-frontiers/shard-1.generated.yaml`
+    - `/docker/fleet/.codex-design/product/completion-review-frontiers/shard-1.generated.yaml`
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_chummer_design_supervisor.py -k "linux_desktop_exit_gate_audit_rejects_receipt_digest_mismatch or linux_desktop_exit_gate_audit_accepts_release_channel_promoted_receipt_digest or linux_desktop_exit_gate_audit_rejects_missing_deb_install_verification or linux_desktop_exit_gate_audit_rejects_invalid_deb_install_verification_log"` -> PASS (`4 passed`).
+  - direct audit call on `/docker/chummercomplete/chummer-presentation/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json` -> `status: pass`, `primary_smoke_status: passed`, `primary_install_verification_status: passed`.
+  - refreshed shard-1 synthetic frontier now reports:
+    - `linux_desktop_exit_gate_audit.status: pass`
+    - `frontier_ids: [3194227093]` (golden-journey install/claim/restore/continue blocker only)
+    - blocker remains external tuple proof gaps in `/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json` (`windows`, `macos` promoted tuple coverage missing).
 
 ## 2026-04-04: handoff follow-up commit + push status for W3 compact return-brief continuity canonicalization slice
 
