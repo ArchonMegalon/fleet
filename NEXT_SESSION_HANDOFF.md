@@ -46,6 +46,39 @@
 - Exact blocker:
   - full pytest execution is unavailable in this environment because `pytest` is not installed.
 
+## 2026-04-04: milestone-5 EA now has first-class built-in GM ops planning contracts for opposition, roster movement, prep packets, and event controls
+
+- Trigger:
+  - frontier milestone `5` requires GM/organizer operations to be a governed first-class lane rather than ad hoc prep notes.
+  - EA builtin groundwork contracts covered meeting/decision/stakeholder lanes, but no default task-key family existed for GM ops packet generation (`opposition`, `roster`, `prep`, `event controls`) unless operators manually created task contracts first.
+- Landed:
+  - patched `/docker/EA/ea/app/services/task_contracts.py`:
+    - expanded builtin groundwork contract family with new task keys:
+      - `gm_ops_briefing`
+      - `opposition_packet`
+      - `roster_movement_plan`
+      - `prep_library_packet`
+      - `event_control_brief`
+    - each key now resolves to an explicit deliverable type and compiles through the same governed `tool_then_artifact` grounded-brain + optional posthoc review lane.
+  - patched `/docker/EA/tests/test_planner.py`:
+    - added `test_builtin_gm_ops_contract_builds_tool_then_artifact_plan`.
+    - fail-proves the new `opposition_packet` lane resolves as builtin contract and compiles:
+      - `step_input_prepare`
+      - `step_structured_generate`
+      - `step_reasoned_patch_review`
+      - `step_artifact_save`
+  - patched `/docker/EA/SKILLS.md`:
+    - added `gm_ops_briefing` row in initial catalog so product skill docs reflect the new GM-ops lane.
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest tests/test_planner.py -q` -> PASS (`10 passed`).
+  - note: running without `PYTHONPATH=ea` fails test collection (`ModuleNotFoundError: No module named 'app'`) in this workspace shell configuration.
+- Commits landed:
+  - pending local commit in `executive-assistant` for builtin GM-ops contract family + planner coverage + skill catalog note.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - no code blocker for this slice; remote push remains credential-gated in this environment.
+
 ## 2026-04-04: milestone-4/6 mobile workspace-lite now exposes an explicit downtime/diary/contacts/heat/aftermath/return continuity rail
 
 - Trigger:
