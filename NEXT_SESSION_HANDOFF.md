@@ -16,6 +16,36 @@
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-5 organizer event-control lane now fail-closes hyphen singular `event-op` aliases across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-5 organizer query coverage already fail-closed compact (`eventop`) plus split/hyphen plural (`event ops`, `event-ops`) and operation (`event-operation`, `event-operations`) variants.
+  - the natural hyphen singular alias (`event-op`) was token-supported but not explicitly executed and locked in service tests, live audit API/workspace checks, or Playwright script-lock assertions.
+- Landed:
+  - patched service/query tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added explicit `event-op` query assertions so prep matching and GM prep retrieval must keep the alias on the governed event-control lane.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API check for `queryText=event-op`.
+      - added signed-in workspace route check for `prepQuery=event-op`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey check for `event-op` with route-preservation and non-empty governed packet assertion.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for `queryText=event-op` and `prepQuery=event-op`.
+      - expanded Playwright marker assertions for `?prepQuery=event-op` and `hyphen event-op prep query`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 event-control proof now explicitly fail-closes compact, split, and hyphen singular/plural shorthand (`eventop`, `event-op`, `event ops`, `event-ops`) across unit canonicalization, live API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.generated_at` alias timestamps
 
 - Trigger:
@@ -34,6 +64,34 @@
   - Hub verify now executes invalid-format nested proof-timestamp fail-close for both `releaseProof.generatedAt` and `releaseProof.generated_at`, not only camelCase payloads.
 - Push status:
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
+## 2026-04-04: milestone-1/3 executable gate now fail-closes `arch` vs `architecture` alias drift across release artifacts, startup smoke receipts, and embedded gate payloads
+
+- Trigger:
+  - frontier milestones `1` and `3` require one non-contradictory install/update/recovery truth across release channel artifacts, per-head executable proof, and startup smoke receipts.
+  - executable gate already fail-closed channel/version/timestamp alias drift, but architecture parsing still consumed only `arch` and did not detect conflicting `arch` vs `architecture` payloads.
+  - this left a drift seam where contradictory architecture aliases could hide in release channel artifacts, embedded gate artifacts, or startup smoke receipts while RID/arch checks appeared green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added alias-aware helpers `payload_arch(...)` and `arch_alias_conflicts(...)`.
+    - upgraded Linux, Windows, and macOS executable-gate validation to normalize architecture from `arch|architecture`.
+    - added explicit fail-close reasons for conflicting `arch/architecture` values in:
+      - Linux startup smoke receipt and promoted release artifact checks.
+      - Windows startup smoke receipt, promoted release artifact checks, and embedded `release_channel_windows_artifact`.
+      - macOS startup smoke receipt, promoted release artifact checks, and embedded `release_channel_macos_artifact`.
+    - extended desktop install artifact aggregation with evidence key `release_channel_desktop_install_artifacts_arch_alias_conflict` and fail-close reason when install artifacts carry conflicting `arch/architecture`.
+  - patched compliance marker tests:
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
+    - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`
+    - added marker assertions for new arch-alias conflict evidence keys and reason strings.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests.Desktop_executable_gate_binds_visual_and_workflow_receipts_to_release_channel_identity|FullyQualifiedName~MigrationComplianceTests.Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`2` tests on `net10.0`; analyzer warnings only).
+- Current trusted state:
+  - milestone-1/3 executable proof now treats architecture aliases the same way as channel/version aliases: contradictory `arch` vs `architecture` payloads fail-close instead of being silently normalized away.
+- Push status:
+  - `chummer6-ui`: local changes landed in this slice (`materialize-desktop-executable-exit-gate.sh`, `DesktopExecutableGateComplianceTests.cs`, `MigrationComplianceTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid-format nested `releaseProof.uiLocalizationReleaseGate.generated_at` alias timestamps
