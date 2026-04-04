@@ -148,10 +148,12 @@
   - `chummer6-ui`: `df6d53dd` (`feat(w2-18): surface explicit sr6 successor lanes in master-index dialog`).
   - `chummer6-design`: `1a69ee5` (`docs(w2-18): record explicit sr6 successor desktop projection coverage`).
   - `fleet`: `87374ad` (`docs(handoff): record w2-18 explicit sr6 successor desktop lane slice`).
+  - `fleet`: `5e2854a` (`docs(handoff): capture w2-18 fleet push blocker`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-presentation && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after `5e2854a`) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for `chummer6-ui`, `chummer6-design`, and `fleet` pushes.
   - targeted MSTest method filters for these `master_index` tests do not resolve in this environment; verification remains build + source-marker gate regression based.
