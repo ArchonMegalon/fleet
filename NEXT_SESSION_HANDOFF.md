@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-5 prep search now canonicalizes compact `seasonops`/`seasonop` shorthand across campaign workspace and GM assets
+
+- Trigger:
+  - frontier milestone `5` requires event-control operator shorthand to stay governed across campaign prep-library retrieval and GM prep-asset search.
+  - `seasonops`/`seasonop` compact tokens were recognized by unresolved GM domain triage, but prep query tokenization paths did not canonically rewrite them for all-token matching.
+  - compact season shorthand could therefore return false-empty prep results even when governed season-operation evidence existed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `RewritePrepLibraryQueryAliases(...)` now rewrites `seasonops` and `seasonop` into canonical `season` + `operation` query tokens.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - `TokenizeQueryText(...)` now rewrites `seasonops` and `seasonop` into canonical `season` + `operation` tokens before all-token matching.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLibraryQueryMatchingSupportsSeasonOpsShorthandAcrossWhitespaceBoundaries`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - expanded compact-shorthand search regression to assert `seasonops` and `seasonop` return governed event-control assets.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~PrepLibraryQueryMatchingSupportsSeasonOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`368` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact season-operation shorthand now resolves consistently across both campaign workspace prep packet search and GM prep asset search.
+  - milestone-5 event-control prep retrieval no longer depends on users typing split `season operation(s)` words.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 `eventctrl` shorthand now fail-closes across GM unresolved triage and campaign event-control packet fallback
 
 - Trigger:
