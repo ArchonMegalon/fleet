@@ -32,6 +32,29 @@
   - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Tests/ApiIntegrationTests.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `response["adjacentSr6OracleLaneReceipt"]`).
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="build_explain_publish") | .fleet_gate.repo_source_proof[] | select(.repo=="chummer6-core" and .path=="Chummer.Infrastructure/Xml/XmlToolCatalogService.cs") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `BuildAdjacentSr6OracleLaneReceipt`).
+## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes executive-assistant planning contracts for campaign/GM/offline continuity
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign continuity plus GM operations and offline/mobile continuity to stay governed across the same account/audit lane, including the `executive-assistant` owner seam in milestone `5`.
+  - `campaign_session_recover_recap` gate already fail-closed hub/mobile continuity markers, but it did not fail-close the EA planning-contract catalog that is meant to carry the same lane (`downtime/diary/contacts/heat/aftermath/return`, GM ops/opposition/roster/prep/event, and safehouse/travel/offline/mobile continuity).
+- Landed:
+  - patched canonical gate source `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`:
+    - `campaign_session_recover_recap` `owner_repos` now explicitly includes `executive-assistant`.
+    - added `repo_source_proof` row for `executive-assistant` `SKILLS.md` requiring built-in W3 planning keys:
+      - GM lane: ``gm_ops_briefing``, ``opposition_packet``, ``roster_movement_plan``, ``prep_library_packet``, ``event_control_brief``
+      - campaign v4 lane: ``campaign_downtime_plan``, ``campaign_diary_packet``, ``campaign_contacts_update``, ``campaign_heat_brief``, ``campaign_aftermath_packet``, ``campaign_return_loop_brief``
+      - offline/mobile lane: ``campaign_safehouse_readiness_brief``, ``campaign_travel_continuity_packet``, ``campaign_offline_continuity_brief``, ``campaign_mobile_companion_brief``
+  - patched Fleet mirror `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml` with the same owner/proof requirements.
+  - patched Fleet regression `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - extended `test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers` to fail-close the new EA `SKILLS.md` marker set.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 - <<'PY' ... test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers() ... PY` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | {owner_repos,repo_source_proof:.fleet_gate.repo_source_proof}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes `executive-assistant` owner + `SKILLS.md` proof markers).
+
 ## 2026-04-04: milestone-4/5/6 campaign-session gate now fail-closes on workspace-v4 continuity plus GM/offline verification markers
 
 - Trigger:

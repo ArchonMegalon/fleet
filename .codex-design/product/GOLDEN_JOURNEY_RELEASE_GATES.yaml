@@ -192,6 +192,7 @@ journey_gates:
             - 'response["importOracleMissingSources"]'
             - 'response["adjacentSr6OracleReceiptPosture"]'
             - 'response["adjacentSr6OracleSourcesCovered"]'
+            - 'response["adjacentSr6OracleLaneReceipt"]'
             - 'response["sr6SuccessorLaneReceipt"]'
             - 'response["onlineStorageLanePosture"]'
             - 'response["onlineStorageReceiptPosture"]'
@@ -207,6 +208,7 @@ journey_gates:
             - BuildXmlBridgeLaneReceipt
             - BuildTranslatorLaneReceipt
             - BuildImportOracleLaneReceipt
+            - BuildAdjacentSr6OracleLaneReceipt
             - ImportOracleMissingSources
             - ResolveAdjacentSr6OracleCoverage
             - BuildSr6SuccessorLaneReceipt
@@ -289,6 +291,7 @@ journey_gates:
       - chummer6-mobile
       - chummer6-ui
       - fleet
+      - executive-assistant
     scorecard_refs:
       slos:
         - session_continuity
@@ -343,6 +346,24 @@ journey_gates:
           must_contain:
             - '"contract_name": "chummer6-mobile.local_release_proof"'
             - '"campaign_session_recover_recap"'
+        - repo: executive-assistant
+          path: SKILLS.md
+          must_contain:
+            - "`gm_ops_briefing`"
+            - "`opposition_packet`"
+            - "`roster_movement_plan`"
+            - "`prep_library_packet`"
+            - "`event_control_brief`"
+            - "`campaign_downtime_plan`"
+            - "`campaign_diary_packet`"
+            - "`campaign_contacts_update`"
+            - "`campaign_heat_brief`"
+            - "`campaign_aftermath_packet`"
+            - "`campaign_return_loop_brief`"
+            - "`campaign_safehouse_readiness_brief`"
+            - "`campaign_travel_continuity_packet`"
+            - "`campaign_offline_continuity_brief`"
+            - "`campaign_mobile_companion_brief`"
       required_project_posture:
         - project_id: hub
           minimum_stage: pre_repo_local_complete
@@ -457,6 +478,7 @@ journey_gates:
       require_support_closure_waiting_zero: true
       require_support_update_required_routes_to_downloads: true
       require_support_install_truth_contract: true
+      require_support_recovery_path_contract: true
       required_project_posture:
         - project_id: hub
           minimum_stage: pre_repo_local_complete

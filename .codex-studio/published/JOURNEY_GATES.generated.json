@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:53:41Z",
+  "generated_at": "2026-04-04T17:57:40Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -15,37 +15,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:52:17Z",
+      "at": "2026-04-04T17:57:39Z",
       "state": "fresh",
-      "age_seconds": 84
+      "age_seconds": 1
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 2093
+      "age_seconds": 2332
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2139
+      "age_seconds": 2378
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2139
+      "age_seconds": 2378
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 2138
+      "age_seconds": 2377
     }
   },
   "journeys": [
@@ -255,7 +255,8 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
-        "support_install_truth_contract_violation_count": 0
+        "support_install_truth_contract_violation_count": 0,
+        "support_recovery_route_contract_violation_count": 0
       }
     },
     {
@@ -339,6 +340,7 @@
               "response[\"importOracleMissingSources\"]",
               "response[\"adjacentSr6OracleReceiptPosture\"]",
               "response[\"adjacentSr6OracleSourcesCovered\"]",
+              "response[\"adjacentSr6OracleLaneReceipt\"]",
               "response[\"sr6SuccessorLaneReceipt\"]",
               "response[\"onlineStorageLanePosture\"]",
               "response[\"onlineStorageReceiptPosture\"]",
@@ -357,6 +359,7 @@
               "BuildXmlBridgeLaneReceipt",
               "BuildTranslatorLaneReceipt",
               "BuildImportOracleLaneReceipt",
+              "BuildAdjacentSr6OracleLaneReceipt",
               "ImportOracleMissingSources",
               "ResolveAdjacentSr6OracleCoverage",
               "BuildSr6SuccessorLaneReceipt",
@@ -481,7 +484,8 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
-        "support_install_truth_contract_violation_count": 0
+        "support_install_truth_contract_violation_count": 0,
+        "support_recovery_route_contract_violation_count": 0
       }
     },
     {
@@ -500,7 +504,8 @@
         "chummer6-hub",
         "chummer6-mobile",
         "chummer6-ui",
-        "fleet"
+        "fleet",
+        "executive-assistant"
       ],
       "canonical_journeys": [
         "journeys/run-a-campaign-and-return.md",
@@ -582,6 +587,27 @@
               "\"contract_name\": \"chummer6-mobile.local_release_proof\"",
               "\"campaign_session_recover_recap\""
             ]
+          },
+          {
+            "repo": "executive-assistant",
+            "path": "SKILLS.md",
+            "must_contain": [
+              "`gm_ops_briefing`",
+              "`opposition_packet`",
+              "`roster_movement_plan`",
+              "`prep_library_packet`",
+              "`event_control_brief`",
+              "`campaign_downtime_plan`",
+              "`campaign_diary_packet`",
+              "`campaign_contacts_update`",
+              "`campaign_heat_brief`",
+              "`campaign_aftermath_packet`",
+              "`campaign_return_loop_brief`",
+              "`campaign_safehouse_readiness_brief`",
+              "`campaign_travel_continuity_packet`",
+              "`campaign_offline_continuity_brief`",
+              "`campaign_mobile_companion_brief`"
+            ]
           }
         ],
         "required_project_posture": [
@@ -628,7 +654,8 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
-        "support_install_truth_contract_violation_count": 0
+        "support_install_truth_contract_violation_count": 0,
+        "support_recovery_route_contract_violation_count": 0
       }
     },
     {
@@ -732,7 +759,8 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
-        "support_install_truth_contract_violation_count": 0
+        "support_install_truth_contract_violation_count": 0,
+        "support_recovery_route_contract_violation_count": 0
       }
     },
     {
@@ -797,6 +825,7 @@
         "require_support_closure_waiting_zero": true,
         "require_support_update_required_routes_to_downloads": true,
         "require_support_install_truth_contract": true,
+        "require_support_recovery_path_contract": true,
         "required_project_posture": [
           {
             "project_id": "hub",
@@ -840,7 +869,8 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
-        "support_install_truth_contract_violation_count": 0
+        "support_install_truth_contract_violation_count": 0,
+        "support_recovery_route_contract_violation_count": 0
       }
     },
     {
@@ -926,7 +956,8 @@
         "support_update_required_case_count": 0,
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
-        "support_install_truth_contract_violation_count": 0
+        "support_install_truth_contract_violation_count": 0,
+        "support_recovery_route_contract_violation_count": 0
       }
     }
   ]
