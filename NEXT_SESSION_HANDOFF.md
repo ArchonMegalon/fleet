@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-4/5 recap shelf attachment now normalizes unlinked whitespace-padded creator-publication ids instead of echoing raw drift
+
+- Trigger:
+  - frontier milestones `4` and `5` require recap and GM publication lanes to retain canonical identity even when recap rows are not currently linked to a live creator-publication projection.
+  - `CampaignSpineService.AttachCreatorPublicationPosture(...)` still copied `item.CreatorPublicationId` raw for unlinked recap rows.
+  - whitespace-padded unlinked ids could leak into recap shelf truth, forking recap/publication identity across the same campaign lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - unlinked recap fallback now canonicalizes `CreatorPublicationId` via `AccountService.NormalizeOptional(...)` before projection.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignSpineAttachCreatorPublicationPostureNormalizesUnlinkedWhitespacePublicationIds`.
+  - committed in `chummer.run-services`:
+    - `707e2c7f` — `Normalize unlinked recap publication id fallback`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineAttachCreatorPublicationPostureNormalizesUnlinkedWhitespacePublicationIds|FullyQualifiedName~CampaignSpineEnrichWorkspaceRecapShelfUsesCanonicalProjectionIdForFallbackPublicationId|FullyQualifiedName~CampaignSpineBuildCreatorPublicationsUsesCanonicalProjectionIdForFallbackArtifactId" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`292` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - recap shelf attachment no longer emits whitespace-padded unlinked publication ids.
+  - milestone-4 return-loop recap continuity and milestone-5 GM publication packet posture stay on one normalized recap/publication identity seam.
+- Push status:
+  - `chummer.run-services`: commit landed locally (`707e2c7f`); push failed in this environment (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `fleet`: handoff update pending local commit in this slice.
+
 ## 2026-04-04: milestone-4/5 recap publication fallbacks now canonicalize whitespace-padded recap projection ids before publication/artifact identity projection
 
 - Trigger:
