@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-2 materializer now fail-closes unexpected `releaseProof` and `uiLocalizationReleaseGate` top-level key drift, with active verify mutation coverage
+
+- Trigger:
+  - frontier milestone `2` requires release-proof contract boundaries to fail-close during projection, not only in verifier checks.
+  - `scripts/materialize_public_release_channel.py` normalized proof payloads into canonical fields but did not reject unexpected top-level keys in input `releaseProof` or input `uiLocalizationReleaseGate` payloads.
+  - this left a fail-open seam where non-canonical key growth could be silently dropped during materialization.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/materialize_public_release_channel.py`:
+    - added canonical `ALLOWED_RELEASE_PROOF_KEYS` contract and fail-close check for unexpected `releaseProof` keys.
+    - added canonical `ALLOWED_LOCALIZATION_GATE_KEYS` contract and fail-close check for unexpected `uiLocalizationReleaseGate` keys.
+    - added fail-close markers:
+      - `releaseProof has unexpected keys`
+      - `uiLocalizationReleaseGate has unexpected keys`
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added active materializer mutation injecting `bonus_noncanonical_release_proof_key` into `proof.json`.
+    - added active materializer mutation injecting `bonus_noncanonical_localization_gate_key` into `ui-localization-release-gate.json`.
+    - verify now requires materializer failure with markers:
+      - `verify gate failed: materializer should reject release proof with unexpected releaseProof keys.`
+      - `verify gate failed: materializer should reject localization proof with unexpected uiLocalizationReleaseGate keys.`
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical pipeline now states projection-time fail-close posture for unexpected top-level keys in both `releaseProof` and `uiLocalizationReleaseGate`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes expected fail-close mutation runs for unexpected top-level proof/gate keys).
+- Commits landed:
+  - `chummer-hub-registry`: `<pending>` (`fix(w1): fail-close unexpected materializer release-proof and localization-gate keys`).
+  - `fleet`: `<pending>` (`docs(handoff): record w1 materializer proof/gate unexpected-key fail-close`).
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - pending.
+
 ## 2026-04-04: milestone-2 registry materializer now fail-closes unexpected `locale_summary` row keys before release-channel projection, with active verify mutation coverage
 
 - Trigger:
