@@ -1,3 +1,34 @@
+## 2026-04-04: milestone-4 campaign return lane now fail-closes compact `returnloop` and `nextsession` aliases across prep search canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-4 continuity coverage already proved `return`, `recap`, and related downtime/aftermath queries across prep-library API and signed-in workspace search.
+  - compact return-loop aliases (`returnloop`, `nextsession`) were not explicitly canonicalized or script-locked, leaving a regression seam if packet text spacing/punctuation changes.
+- Landed:
+  - patched canonicalization service:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - added compact alias rewrites: `nextsession|nextsessions -> next+session+return` and `returnloop|returnloops -> return+loop+session`.
+  - patched service tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - added `PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=returnloop` and `queryText=nextsession`.
+      - added signed-in workspace route checks for `prepQuery=returnloop` and `prepQuery=nextsession`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for compact `returnloop` and `nextsession` continuity queries.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+    - expanded audit and Playwright marker assertions for `returnloop`/`nextsession` query paths.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsNextSessionReturnLoopShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4 return continuity proof now explicitly fail-closes compact return-loop shorthand (`returnloop`, `nextsession`) across service canonicalization, live API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for alias-only whitespace-padded `releaseProof.base_url` origins
 
 - Trigger:
