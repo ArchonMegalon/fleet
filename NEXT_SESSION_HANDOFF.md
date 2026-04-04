@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-2/3 registry verifier now fail-closes conflicting `releaseProof.baseUrl` vs `releaseProof.base_url` alias drift
+
+- Trigger:
+  - release-channel verification in `chummer-hub-registry` normalized `releaseProof.baseUrl|base_url` by first-present fallback, but did not fail-close conflicting alias payloads.
+  - this left a false-green seam where contradictory alias values could pass depending on key ordering, weakening flagship release-proof identity enforcement.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - added `resolve_alias_value(...)` helper with explicit alias-drift rejection.
+    - switched `releaseProof.baseUrl` resolution from fallback to alias-validated resolution, emitting fail-close on `baseUrl`/`base_url` disagreement.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - added mutation that sets `releaseProof.baseUrl="https://chummer.run"` and `releaseProof.base_url="https://chummer.test"` and asserts verifier rejection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS.
+- Current trusted state:
+  - registry release verification no longer allows contradictory `releaseProof.baseUrl` aliases to pass by key-precedence fallback; conflicting alias origin payloads fail closed.
+- Push status:
+  - `chummer-hub-registry`: local changes landed in this slice (`scripts/verify_public_release_channel.py`, `scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify now fail-closes alias-only `releaseProof.base_url` scheme/path/userinfo origin regressions
 
 - Trigger:
