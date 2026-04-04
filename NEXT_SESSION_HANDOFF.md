@@ -129,9 +129,13 @@
   - `cd /docker/chummercomplete/chummer6-ui && dotnet build Chummer.Presentation/Chummer.Presentation.csproj -v minimal` -> PASS.
   - `cd /docker/chummercomplete/chummer6-ui && dotnet build Chummer.Tests/Chummer.Tests.csproj -v minimal` -> FAIL (pre-existing unrelated compile breakage in `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/BlazorShellComponentTests.cs` plus one existing callsite mismatch in `AvaloniaFlagshipUiGateTests`; not introduced by this slice).
 - Commits landed:
-  - not committed yet in this environment.
+  - `chummer6-ui`: `8aa1b243` (`feat(w2-13-17-18): surface first-class master-index sourcebook and oracle detail`).
+  - `chummer6-design`: `65d09f1` (`docs(w2-13-17-18): record first-class master-index parity surface depth`).
+  - `fleet`: `9c3ca93` (`docs(handoff): record w2 master-index parity depth slice`).
 - Push attempts:
-  - not attempted in this slice.
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - `Chummer.Tests` currently cannot compile due unrelated pre-existing `BlazorShellComponentTests` component/type drift in `chummer-presentation` test sources.
 
