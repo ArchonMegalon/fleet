@@ -13,10 +13,12 @@
   - `cd /docker/fleet/repos/chummer-media-factory && dotnet run --project Chummer.Media.Factory.Runtime.Verify/Chummer.Media.Factory.Runtime.Verify.csproj -c Release` -> PASS (`Media factory runtime verification passed.`).
 - Commits landed:
   - `chummer6-media-factory`: `c36b571` (`feat(w4-16): preserve sheet and print parity evidence in creator packets`).
+  - `fleet`: `5335947` (`docs(handoff): record w4 parity evidence retention slice`).
 - Push attempts:
   - `cd /docker/fleet/repos/chummer-media-factory && git push` -> PASS (`fleet/media-factory` updated: `cc21bd5..c36b571`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
-  - none.
+  - environment lacks GitHub HTTPS credentials for `fleet` push.
 
 ## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
 
