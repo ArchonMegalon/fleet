@@ -1,3 +1,32 @@
+## 2026-04-04: handoff follow-up commit + push status for W3-6 mobile safehouse continuity offline-truth hardening slice
+
+- Commits landed:
+  - `chummer6-mobile`: `be7e318` (`feat(w3-6): fail-close safehouse continuity in mobile offline truth lane`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-mobile && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
+## 2026-04-04: milestone-6 mobile workspace-lite now fail-closes explicit safehouse continuity across offline-truth summaries, lane labels, and local proof markers
+
+- Trigger:
+  - milestone `6` requires explicit safehouse/travel/offline/mobile continuity with bounded local truth, but workspace-lite offline-truth wording did not explicitly pin safehouse continuity in the same fail-close lane used for cached/stale/can-do-now/needs-online semantics.
+  - this left a drift seam where safehouse continuity intent could soften while release-proof markers still passed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.Core/Application/PlayCampaignWorkspaceLiteProjector.cs`:
+    - made install-local offline truth explicit about safehouse continuity for all roles.
+    - added safehouse-specific wording to `Can do now`, `Needs online`, and offline-truth lane labels (`Offline action lane`, `Can-do-now lane`, `Needs-online lane`).
+  - patched `/docker/chummercomplete/chummer6-mobile/src/Chummer.Play.RegressionChecks/Program.cs`:
+    - added assertions that workspace-lite offline truth summary and lane labels must contain `safehouse` cues.
+  - patched `/docker/chummercomplete/chummer6-mobile/scripts/materialize_mobile_local_release_proof.py`:
+    - fail-closed source-marker requirements for the new safehouse assertions.
+  - regenerated mobile proof artifact:
+    - `/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 -m py_compile scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && python3 scripts/materialize_mobile_local_release_proof.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-mobile && dotnet run --project src/Chummer.Play.RegressionChecks/Chummer.Play.RegressionChecks.csproj` -> FAIL (environment missing private package feeds for `Chummer.Engine.Contracts`, `Chummer.Campaign.Contracts`, `Chummer.Control.Contracts`, `Chummer.Play.Contracts`, `Chummer.Ui.Kit`; restore attempted only against `nuget.org`).
+
 ## 2026-04-04: handoff follow-up commit + push status for W3 singular opposition/event compact packet live-proof slice
 
 - Commits landed:
