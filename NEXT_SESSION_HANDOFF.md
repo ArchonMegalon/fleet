@@ -1,3 +1,36 @@
+## 2026-04-04: milestone-5 organizer event-control lane now fail-closes compact `eventoperation` and `eventoperations` aliases across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - milestone-5 organizer query coverage already fail-closed compact/split/hyphen `eventops`, `eventop`, `event-op`, `event operation`, and `event-operation` families.
+  - compact operation aliases (`eventoperation`, `eventoperations`) were not explicitly canonicalized or executed in service tests, live API/workspace audits, or Playwright script-lock markers.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added compact alias rewrites for `eventoperation` and `eventoperations` onto the governed event-control lane.
+  - patched service/query tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added compact query assertions for `eventoperation` and `eventoperations`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=eventoperation` and `queryText=eventoperations`.
+      - added signed-in workspace route checks for `prepQuery=eventoperation` and `prepQuery=eventoperations`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for compact `eventoperation`/`eventoperations` query preservation and non-empty governed packet results.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded hub live-audit and Playwright marker assertions for the compact aliases.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsEventOpsShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`5` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 organizer prep retrieval now fail-closes compact/split/hyphen event-operation aliases, including compact `eventoperation` and `eventoperations`, across service canonicalization, live API/workspace audits, and browser journey script-locks.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for hostless `releaseProof.baseUrl` origins
 
 - Trigger:
@@ -21,16 +54,16 @@
 - Trigger:
   - frontier milestones `1` and `3` require one non-contradictory release-channel identity across promoted artifacts, packaged-head gate receipts, and startup smoke proof.
   - executable gate already fail-closed channel/version/arch drift in startup smoke and release artifacts, but gate-envelope checks still allowed alias drift to hide in Linux `head` metadata and Windows/macOS envelope fields.
-  - this left seams where `channelId/channel` or `releaseVersion/version` disagreement could pass at the gate-envelope layer while downstream checks looked green.
+  - this left seams where `channelId/channel`, `releaseVersion/version`, or embedded `checks.release_channel_version` disagreement could pass at the gate-envelope layer while downstream checks looked green.
 - Landed:
   - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
     - added alias helpers `payload_channel_id(...)` and `channel_alias_conflicts(...)`.
     - Linux gate validation now records and fail-closes `head.channelId/channel` mismatch or alias conflict against release-channel `channelId`.
     - Linux gate validation now fail-closes conflicting envelope `releaseVersion/version` aliases.
     - Windows gate validation now records and fail-closes top-level `channelId/channel` mismatch/alias conflict and `checks.release_channel_id` mismatch against release-channel `channelId`.
-    - Windows gate validation now fail-closes conflicting envelope `releaseVersion/version` aliases.
+    - Windows gate validation now fail-closes conflicting envelope `releaseVersion/version` aliases and `checks.release_channel_version` drift.
     - macOS gate validation now records and fail-closes top-level `channelId/channel` mismatch/alias conflict and `checks.release_channel_id` mismatch against release-channel `channelId`.
-    - macOS gate validation now fail-closes conflicting envelope `releaseVersion/version` aliases.
+    - macOS gate validation now fail-closes conflicting envelope `releaseVersion/version` aliases and `checks.release_channel_version` drift.
   - patched compliance marker tests:
     - `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`
     - expanded marker assertions for the new channel-alias fail-close reason strings and evidence keys.
