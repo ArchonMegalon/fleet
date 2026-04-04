@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-4/5 campaign-return packet dedupe and roster-handover prep-query aliasing restored for continuity and GM ops rails
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign-return and GM prep lanes to stay stable under continuity shorthand and deduped packet synthesis.
+  - `dotnet test` on the W3 cluster surfaced regressions in `CampaignWorkspaceServerPlaneServiceTests`:
+    - campaign-return summary counts double-counted overlap between `returnChanges` and `aftermathChanges`.
+    - prep-library query alias canonicalization failed `rosterhandover` compact matching in crew-transfer shorthand coverage.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - campaign-return packet counting now deduplicates overlapping return/aftermath change packets before diary and relationship signal totals are computed.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Contracts/Search/PrepLibraryQueryAliasCanonicalizer.cs`:
+    - `rosterhandover`, `rosterhandovers`, and `rosterhandoffs` compact aliases now canonicalize to split `roster` + `handoff` tokens so prep matching works against packet text that carries separated terms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsCrewTransferShorthandAcrossWhitespaceBoundaries|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketDeduplicatesIdenticalAftermathPackageVersions_WhenPayloadRepeatsSameRow|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenPackageIdsDiffer|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.CampaignReturnPacketDeduplicatesSemanticallyIdenticalAftermathPackageVersions_WhenArtifactIdsDiffer|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`430` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending (local commit not yet created in this handoff entry).
+- Push attempts:
+  - not yet attempted for this slice.
+- Exact blocker:
+  - none for implementation and verification; push still expected to require GitHub credentials in this environment.
+
 ## 2026-04-04: milestone-2 registry materializer now active-mutation fail-closes nested localization-gate alias drift in source gate payloads
 
 - Trigger:
