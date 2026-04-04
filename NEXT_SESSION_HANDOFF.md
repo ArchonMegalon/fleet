@@ -150,8 +150,8 @@
   - milestone-3 flagship gate execution no longer burns a lock self-wait interval before visual familiarity proof materialization.
   - concurrent external lock behavior is still fail-safe, but in-script lock recursion now bypasses wait deterministically.
 - Push status:
-  - `chummer6-ui`: local changes staged in this slice; commit/push pending (credential-dependent in this environment).
-  - `fleet`: handoff updated locally in this slice; commit/push pending (credential-dependent in this environment).
+  - `chummer6-ui`: committed locally (`1c751362`); push failed in this environment (`could not read Username for 'https://github.com'`).
+  - `fleet`: committed locally (`f4bc361`); push failed in this environment (`could not read Username for 'https://github.com'`).
 
 ## 2026-04-04: milestone-5 opposition-packet prep retrieval now fail-closes canonical opposition queries (`oppositions`, `encounter`, `enemy`, `hostile`, `adversary`, `threat`) across API and workspace route journeys
 
