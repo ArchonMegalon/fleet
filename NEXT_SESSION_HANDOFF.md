@@ -1,3 +1,24 @@
+## 2026-04-04: hub public chrome no longer self-loops sign-in routing on auth pages while keeping downloads provider handoff intact
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar shell chrome and tab posture to stay predictable under high-friction auth and download entry flows.
+  - `HubPageChromeService.BuildPublicChrome(...)` rewrote sign-in hrefs contextually, but on `/login` and `/auth/*` pages this could point users back into redundant sign-in routing (`/login?next=/login`) instead of preserving canonical auth entry links.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Services/HubPageChromeService.cs`:
+    - `BuildContextualSignInHref(...)` now keeps canonical sign-in hrefs on auth surfaces (`/login`, `/signup`, `/auth/*`) to avoid self-loop redirects.
+    - downloads-specific Google auth-start routing remains unchanged (`/auth/google/start?next=/downloads`).
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/HubPageChromeServiceTests.cs`:
+    - added `BuildPublicChromeKeepsCanonicalSignInOnLoginRoute`.
+    - added `BuildPublicChromeKeepsCanonicalSignInOnAuthStartRoute`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubPageChromeServiceTests" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - sign-in header chrome remains contextual for `/downloads` but no longer rewrites auth-page routes into self-loop style next targets.
+  - public auth entry remains canonical and predictable across login/provider-start surfaces.
+- Push status:
+  - `chummer6-hub`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/HubPageChromeService.cs`, `Chummer.Tests/HubPageChromeServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now treats favor/loyalty pressure as first-class relationship mutations
 
 - Trigger:
