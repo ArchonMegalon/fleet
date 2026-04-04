@@ -24,6 +24,30 @@
 - Exact blocker:
   - local environment has no configured GitHub HTTPS credentials, so commit `3a9cb92e` remains local-only until auth is restored.
 
+## 2026-04-04: milestone-4/5 GM ops lane now script-locks split singular `league ctrl` and `community ctrl` aliases across API and workspace/browser audits
+
+- Commits landed:
+  - `chummer.run-services`: `0f1b7c3c` (`fix(w3): script-lock split league/community ctrl prep aliases`).
+- Trigger:
+  - W3 prep alias canonicalization already resolves split singular `league ctrl` and `community ctrl`, but script-lock rails only covered compact/hyphen and split plural (`ctrls`) variants.
+  - this left a route-proof seam where split singular control shorthand could drift outside governed API/workspace/browser evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added prep-library API probes for `queryText=league%20ctrl` and `queryText=community%20ctrl`.
+    - added mirrored workspace probes for `prepQuery=league%20ctrl` and `prepQuery=community%20ctrl`.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser journey checks for split `league ctrl` and `community ctrl` workspace prep searches, including route-preservation and governed-packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded script-lock assertions for new audit/playwright markers so verify fail-closes if split singular coverage regresses.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
 ## 2026-04-04: milestone-4/5 GM ops prep lane now script-locks hyphen `gm-ctl` and `gm-ctls` aliases across API and workspace/browser audits
 
 - Commits landed:
