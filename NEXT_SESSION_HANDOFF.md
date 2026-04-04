@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-5 GM-ops unresolved board now prioritizes opposition/event-control/roster blockers before newer general unresolved noise
+
+- Trigger:
+  - frontier milestone `5` requires GM operations to keep opposition, event-control, and roster movement blockers foregrounded in one governed lane.
+  - `GmOpsBoardService.GetProjection(...)` only prioritized unresolved rows by severity and recency, so newer generic unresolved checklist noise could outrank milestone-5 domain blockers within the same severity tier.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - unresolved ordering now computes a GM domain and priority per row (`opposition` > `event_control` > `roster_movement` > `general`) after severity and before recency.
+    - added `ResolveGmOpsDomain(...)` and `ResolveGmOpsDomainPriority(...)` helpers with normalized keyword handling for `event control` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsPrioritizeOpsDomainsBeforeNewerGeneralItemsWithinSameSeverity`.
+    - test locks ordering so opposition/event-control/roster unresolved rows stay ahead of newer general unresolved rows when severity is equal.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`16` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - GM unresolved board projection now reflects milestone-5 operator priority by domain, not recency luck, while preserving severity-first ordering.
+  - opposition/event-control/roster blockers remain surfaced first in unresolved triage unless a higher-severity row exists.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: account-gated mac dispatch and release promotion now pass with raw-manifest install routing while public shelf policy stays guest-safe
 
 - Trigger:
