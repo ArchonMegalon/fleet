@@ -21,6 +21,29 @@
   - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-5 live journey audits now fail-close on compact roster-movement aliases `rostertransfer`, `rosterhandoff`, and `crewhandoff`
+
+- Trigger:
+  - frontier milestone `5` requires roster movement to stay a governed first-class lane in both API and signed-in workspace retrieval journeys.
+  - campaign workspace token normalization already supports compact roster aliases `rostertransfer`, `rosterhandoff`, and `crewhandoff`, but live closeout automation only asserted `roster` and `rostermove`.
+  - this left regression windows where compact roster alias retrieval could break without failing signed-in closeout audits.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added API verification for `queryText=rostertransfer`, `queryText=rosterhandoff`, and `queryText=crewhandoff` with non-empty governed packet assertions.
+    - added signed-in workspace route verification for `prepQuery=rostertransfer`, `prepQuery=rosterhandoff`, and `prepQuery=crewhandoff`, including search-result marker and non-empty packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added UI prep-library search checks for compact roster aliases `rostertransfer`, `rosterhandoff`, and `crewhandoff`, with route-preservation and non-empty governed packet assertions.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - expanded verification entrypoint assertions to lock API marker coverage, workspace-route marker coverage, and Playwright marker coverage for all three compact roster aliases.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`370` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - live signed-in milestone-5 audits now fail-close compact roster movement retrieval across `roster`, `rostermove`, `rostertransfer`, `rosterhandoff`, and `crewhandoff`.
+  - roster movement alias retrieval proof is now aligned with canonical token support in both API and signed-in workspace journey checks.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 live journey audits now fail-close on compact plural `eventcontrols` prep retrieval across API and workspace route
 
 - Trigger:
