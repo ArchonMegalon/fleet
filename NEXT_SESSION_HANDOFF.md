@@ -1,20 +1,53 @@
-## 2026-04-04: milestone-4 recap shelf projection now survives duplicate aftermath package ids and keeps the latest timestamp
+## 2026-04-04: milestone-2 localization shelf proof now fail-closes missing en-us localeSummary coverage in registry release verification
+
+- Trigger:
+  - frontier milestone 2 remains blocked by `BLK-009`, and registry release-channel verification accepted localization payloads where `shippingLocales` included `en-us` but `localeSummary` omitted it.
+  - this left a proof-honesty seam where default-locale summary coverage could silently drift while release-channel localization proof still passed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py`:
+    - verifier now requires `releaseProof.uiLocalizationReleaseGate.localeSummary` coverage for every shipping locale, including `en-us`.
+    - enforced `untranslatedKeyCount=0` and `overrideCount >= defaultKeyCount` for all shipping locales before allowing pass.
+  - patched `/docker/chummercomplete/chummer-hub-registry/scripts/ai/verify.sh`:
+    - fixture localization payload now includes an explicit `en-us` locale-summary row.
+    - added a negative regression that removes the `en-us` row and asserts verifier fail-close.
+  - patched `/docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md`:
+    - canonical release-channel contract now states `localeSummary` must carry rows for all shipping locales, including `en-us`.
+  - committed and pushed in `chummer-hub-registry`:
+    - `bb9cad5` — `Require localeSummary coverage for en-us localization proof`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer-hub-registry && python3 -m py_compile scripts/materialize_public_release_channel.py scripts/verify_public_release_channel.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer-hub-registry && bash scripts/ai/verify.sh` -> PASS (includes the new missing-`en-us` localeSummary negative check).
+- Current trusted state:
+  - registry-owned localization proof now fail-closes if any shipping locale (including default `en-us`) is missing from `localeSummary`.
+  - this narrows BLK-009 honesty drift further by requiring complete shipping-locale summary coverage, not just declared locale membership.
+- Push status:
+  - `chummer-hub-registry`: pushed (`fleet/hub-registry` at `bb9cad5`).
+  - `fleet`: pending (credential-dependent in this environment).
+
+## 2026-04-04: milestone-4 recap shelf projection now survives duplicate aftermath/package publication ids and keeps latest continuity timestamps
 
 - Trigger:
   - frontier milestone 4 requires downtime/diary/aftermath return-loop continuity to stay one governed lane even when upstream projection rows repeat.
-  - `BuildRecapShelf(...)` built `aftermathTimes` with `ToDictionary(PackageId, ...)`, so duplicate `PackageId` rows could throw during recap-shelf projection and break campaign continuity rendering.
+  - `BuildRecapShelf(...)` still had duplicate-key crash seams in both aftermath/package and creator-publication lookups:
+    - `aftermathTimes` used `ToDictionary(PackageId, ...)`
+    - `publicationsById` used `ToDictionary(PublicationId, ...)`
+  - duplicate upstream ids in either lane could throw during recap-shelf projection and break campaign continuity rendering.
 - Landed:
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
     - replaced direct `ToDictionary` on aftermath packages with normalized grouping by `PackageId`.
     - aftermath timestamp lookup now keeps the latest `GeneratedAtUtc` per package id and ignores blank package ids, preventing duplicate-row projection crashes.
+    - replaced direct `ToDictionary` on creator publications with normalized grouping by `PublicationId`.
+    - creator-publication lookup now keeps the latest `UpdatedAtUtc` row per publication id, preventing duplicate-id projection crashes and preserving newest publication/trust state.
   - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
     - added `RecapShelfUsesLatestAftermathTimestamp_WhenAftermathPackageIdsRepeat`.
-    - regression proves duplicate `PackageId` payloads do not break shelf projection and resolve to the latest aftermath timestamp.
+    - added `RecapShelfUsesLatestCreatorPublication_WhenPublicationIdsRepeat`.
+    - regressions prove duplicate package/publication ids do not break shelf projection and resolve to latest continuity/publication timestamps.
 - Verification:
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RecapShelfUsesLatestAftermathTimestamp_WhenAftermathPackageIdsRepeat" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warning observed once).
-  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`262` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RecapShelfUsesLatestAftermathTimestamp_WhenAftermathPackageIdsRepeat|FullyQualifiedName~RecapShelfUsesLatestCreatorPublication_WhenPublicationIdsRepeat" --no-restore --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`263` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
 - Current trusted state:
-  - milestone-4 recap-shelf continuity projection no longer fails on duplicate aftermath package ids and consistently uses the newest timestamp for duplicate package rows.
+  - milestone-4 recap-shelf continuity projection no longer fails on duplicate aftermath package or creator publication ids.
+  - duplicate package/publication rows now converge to newest timestamp/state so return-loop shelf output remains stable under projection-row repetition.
   - campaign workspace suite remains green after this recap-shelf hardening.
 - Push status:
   - pending in this environment (credential-dependent).
