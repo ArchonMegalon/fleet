@@ -1,3 +1,37 @@
+## 2026-04-04: milestone-1/3 executable gate now fail-closes malformed release-channel identity/state scalar fields and channel alias drift
+
+- Trigger:
+  - frontier milestones `1` and `3` require installer/update/release-truth identity fields that cannot be silently coerced from malformed JSON scalar types.
+  - executable gate still accepted permissive coercion for `status`, `channelId`/`channel`, `version`, `rolloutState`, and `supportabilityState`, allowing non-string and whitespace-padded drift to normalize without explicit failure.
+  - when both `channelId` and legacy `channel` were present, normalization could ignore disagreement and still proceed.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - added strict helper `normalize_optional_string_scalar(...)`.
+    - release-channel scalar parsing for:
+      - `release_channel.status`
+      - `release_channel.channelId`
+      - `release_channel.channel`
+      - `release_channel.version`
+      - `release_channel.rolloutState`
+      - `release_channel.supportabilityState`
+      now fail-closes non-string values and leading/trailing whitespace with explicit reasons plus normalized/type evidence keys.
+    - added explicit fail-close when both `channelId` and `channel` exist but disagree after normalization.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - extended executable-gate compliance assertions to lock strict release-channel scalar parsing and channel alias mismatch detection.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media" --nologo -v minimal` -> PASS (`1` test).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external tuple blockers only:
+    - missing required desktop install media for `windows`.
+    - missing required desktop install media for `macos`.
+    - missing required platform/head tuples `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`.
+- Current trusted state:
+  - executable proof now fail-closes malformed release-channel scalar identity/state shape drift and channel alias inconsistency instead of silently coercing values.
+  - remaining milestone-1/3 blockers in this workspace remain external promoted Windows/macOS installer tuple availability.
+- Push status:
+  - `chummer6-ui`: pending in this environment (credential-dependent).
+  - `fleet`: pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes permissive flagship desktop-head inventory parsing from flagship receipt
 
 - Trigger:
