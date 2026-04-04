@@ -1024,6 +1024,8 @@ def evaluate_journey(
                     normalized_requests.append(
                         {
                             "tuple_id": str(raw_request.get("tuple_id") or "").strip(),
+                            "tuple_entry_count": int(raw_request.get("tuple_entry_count") or 0),
+                            "tuple_unique": bool(raw_request.get("tuple_unique")),
                             "channel_id": str(raw_request.get("channel_id") or "").strip().lower(),
                             "head_id": str(raw_request.get("head_id") or "").strip().lower(),
                             "platform": str(raw_request.get("platform") or "").strip().lower(),
@@ -1547,6 +1549,8 @@ def evaluate_journey(
                 normalized_requests.append(
                     {
                         "tuple_id": str(request_row.get("tuple_id") or "").strip(),
+                        "tuple_entry_count": int(request_row.get("tuple_entry_count") or 0),
+                        "tuple_unique": bool(request_row.get("tuple_unique")),
                         "channel_id": str(request_row.get("channel_id") or "").strip().lower(),
                         "head_id": str(request_row.get("head_id") or request_row.get("head") or "").strip().lower(),
                         "platform": str(request_row.get("platform") or "").strip().lower(),

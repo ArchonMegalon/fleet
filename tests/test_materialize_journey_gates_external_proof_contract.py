@@ -856,6 +856,8 @@ groups: []
                     "unresolved_external_proof_request_specs": {
                         "avalonia:win-x64:windows": {
                             "channel_id": "preview",
+                            "tuple_entry_count": 1,
+                            "tuple_unique": True,
                             "required_host": "windows",
                             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                             "expected_artifact_id": "avalonia-win-x64-installer",
@@ -887,12 +889,14 @@ groups: []
                             "requests": [
                                 {
                                     "tuple_id": "avalonia:win-x64:windows",
-                                    "channel_id": "stable",
+                                    "tuple_entry_count": 1,
+                                    "tuple_unique": False,
+                                    "channel_id": "preview",
                                     "head_id": "avalonia",
                                     "platform": "windows",
                                     "rid": "win-x64",
                                     "expected_artifact_id": "avalonia-win-x64-installer",
-                                    "expected_installer_file_name": "WRONG-installer.exe",
+                                    "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
                                     "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
                                     "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
                                     "required_proofs": [

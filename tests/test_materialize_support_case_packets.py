@@ -879,6 +879,8 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                 "requests": [
                     {
                         "tuple_id": "blazor-desktop:osx-arm64:macos",
+                        "tuple_entry_count": 1,
+                        "tuple_unique": True,
                         "channel_id": "preview",
                         "head_id": "blazor-desktop",
                         "platform": "macos",
@@ -909,6 +911,8 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                 "requests": [
                     {
                         "tuple_id": "avalonia:win-x64:windows",
+                        "tuple_entry_count": 1,
+                        "tuple_unique": True,
                         "channel_id": "preview",
                         "head_id": "avalonia",
                         "platform": "windows",
@@ -1028,6 +1032,9 @@ def test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuple
     assert packet["packet_kind"] == "external_proof_request"
     assert packet["install_diagnosis"]["external_proof_request"]["tuple_entry_count"] == 2
     assert packet["install_diagnosis"]["external_proof_request"]["tuple_unique"] is False
+    execution_plan_request = payload["unresolved_external_proof_execution_plan"]["host_groups"]["windows"]["requests"][0]
+    assert execution_plan_request["tuple_entry_count"] == 2
+    assert execution_plan_request["tuple_unique"] is False
 
 
 def test_materialize_support_case_packets_normalizes_external_proof_required_proofs_tokens(tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-04T23:09:02Z",
+  "generated_at": "2026-04-04T23:13:12Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -707,7 +707,9 @@
                 "ready"
               ]
             },
-            "tuple_id": "avalonia:osx-arm64:macos"
+            "tuple_entry_count": 1,
+            "tuple_id": "avalonia:osx-arm64:macos",
+            "tuple_unique": true
           },
           {
             "channel_id": "docker",
@@ -738,7 +740,9 @@
                 "ready"
               ]
             },
-            "tuple_id": "blazor-desktop:osx-arm64:macos"
+            "tuple_entry_count": 1,
+            "tuple_id": "blazor-desktop:osx-arm64:macos",
+            "tuple_unique": true
           }
         ],
         "tuples": [
@@ -778,7 +782,9 @@
                 "ready"
               ]
             },
-            "tuple_id": "avalonia:win-x64:windows"
+            "tuple_entry_count": 1,
+            "tuple_id": "avalonia:win-x64:windows",
+            "tuple_unique": true
           },
           {
             "channel_id": "docker",
@@ -809,7 +815,9 @@
                 "ready"
               ]
             },
-            "tuple_id": "blazor-desktop:win-x64:windows"
+            "tuple_entry_count": 1,
+            "tuple_id": "blazor-desktop:win-x64:windows",
+            "tuple_unique": true
           }
         ],
         "tuples": [
