@@ -37,6 +37,15 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: handoff follow-up commit + push status for W1 support smoke-contract normalization slice
+
+- Commits landed:
+  - `fleet`: `113cd94` (`docs(handoff): record w1 support-smoke contract slice commit and push status`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: milestone-1/3 support summary now normalizes startup-smoke receipt contracts and unblocks local report/cluster release gate drift
 
 - Trigger:
