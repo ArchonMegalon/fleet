@@ -1,3 +1,47 @@
+## 2026-04-04: milestone-3 workflow execution proof now enforces per-head contract markers and executable gate consumption
+
+- Trigger:
+  - frontier milestone 3 requires per-head proof that cannot lie across both visual familiarity and workflow execution lanes.
+  - `materialize-desktop-workflow-execution-gate.sh` still treated `headProofs.status` as sufficient per-head workflow proof and did not enforce required head-specific marker families or source test-file integrity.
+  - `materialize-desktop-executable-exit-gate.sh` consumed workflow per-head statuses but not workflow per-head contract-marker evidence.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh`:
+    - added per-head required contract-marker maps for `avalonia` and `blazor-desktop` workflow proof.
+    - added per-marker pass/fail evaluation and explicit missing-marker failure reasons per required head.
+    - added source test-file integrity checks (`exists`, `within repo root`) per head.
+    - published workflow evidence fields:
+      - `required_head_contract_markers`
+      - `flagship_head_contract_marker_statuses`
+      - `flagship_head_missing_contract_markers`
+      - `flagship_head_source_test_file_paths`
+      - `flagship_head_source_test_file_exists`
+      - `flagship_head_source_test_file_within_repo_root`
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh`:
+    - now consumes workflow gate per-head contract-marker evidence.
+    - fails when workflow marker evidence is missing for required heads.
+    - fails when required workflow per-head markers are missing/failing, even when workflow head status is `pass`.
+    - publishes executable evidence fields:
+      - `workflow_execution_head_contract_marker_statuses`
+      - `workflow_execution_head_missing_contract_markers`
+      - `workflow_execution_head_contract_markers_by_head`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - locked workflow materializer and executable materializer contract markers/reason strings for per-head workflow contract enforcement.
+  - refreshed generated gate receipts:
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json`
+    - `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~Desktop_workflow_execution_gate_requires_explicit_executed_family_receipts|FullyQualifiedName~Desktop_executable_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_counts_macos_dmg_media|FullyQualifiedName~Flagship_gate_and_materializers_are_lock_safe_under_concurrent_runs" --nologo -v minimal -m:1` -> PASS (`3` tests on `net10.0`).
+  - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_EXECUTABLE_SKIP_RELEASE_GATE_LOCK_WAIT=1 CHUMMER_DESKTOP_EXECUTABLE_SKIP_DEPENDENCY_MATERIALIZE=1 bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`exit 43`) with unchanged external blockers:
+    - missing promoted desktop install media for `windows` and `macos`
+    - missing required tuple pairs `avalonia:windows`, `blazor-desktop:windows`, `avalonia:macos`, `blazor-desktop:macos`
+- Current trusted state:
+  - per-head workflow execution proof now enforces explicit head-specific contract markers and file-backed test provenance before aggregate executable gate acceptance.
+  - W1 remaining blockers are still external promoted Windows/macOS tuple publication/proof gaps.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 runboard summary now deduplicates identical open objective versions to prevent inflated campaign return attention counts
 
 - Trigger:
