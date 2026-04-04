@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests missingRequiredPlatformHeadRidTuples inventory drift fail-close
+
+- Trigger:
+  - frontier milestone `3` requires tuple-coverage inventories to fail honest when release-channel tuple metadata drifts from promoted installer truth.
+  - the executable gate already fail-closed `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples` inventory drift, but `scripts/ai/verify.sh` had no active mutation that exercised this branch.
+  - that left room for silent regression where this fail-close marker could disappear while verify stayed green.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/ai/verify.sh`:
+    - added fail-close mutation that appends a tampered token to `desktopTupleCoverage.missingRequiredPlatformHeadRidTuples`.
+    - requires non-zero exit from `materialize-desktop-executable-exit-gate.sh`.
+    - requires explicit marker assertion for:
+      - `Release channel desktopTupleCoverage missingRequiredPlatformHeadRidTuples inventory does not match promoted installer tuples.`
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Verify_entrypoint_runs_active_mutation_for_missing_required_platform_head_rid_tuple_inventory_drift`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`21` tests on `net10.0`).
+- Commits landed:
+  - `chummer6-ui`: `7246b430` (`fix(w1): mutation-test missing required tuple inventory drift`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - expected environment blocker remains missing GitHub HTTPS credentials when push is attempted (`fatal: could not read Username for 'https://github.com': No such device or address`).
+
 ## 2026-04-04: milestone-3 desktop executable verify lane now mutation-tests promotedPlatformHeadRidTuples inventory drift fail-close
 
 - Trigger:
