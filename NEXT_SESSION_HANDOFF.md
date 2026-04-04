@@ -59,6 +59,33 @@
   - `chummer6-ui`: local changes landed in this slice; commit/push attempted below (credential-dependent in this environment).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
 
+## 2026-04-04: milestone-2 Hub parity audit now fail-closes malformed/stale nested `releaseProof.uiLocalizationReleaseGate` payloads in release-channel receipts
+
+- Trigger:
+  - frontier milestone `2` depends on release-proof receipts as executable truth for flagship workbench parity, and live release-channel payloads already carry nested `releaseProof.uiLocalizationReleaseGate` evidence.
+  - parity audit validated `releaseProof` core fields, but did not verify nested localization proof shape/status/freshness when present.
+  - this left a drift seam where malformed or stale localization gate payloads could survive verify closeout without tripping the Hub parity lane.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
+    - added optional nested validation for `releaseProof.uiLocalizationReleaseGate` when present.
+    - fail-closes non-object payloads, non-pass status tokens, missing/invalid timestamp aliases, stale timestamps, and excessive future skew.
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation coverage asserting parity-audit fail-close for:
+      - non-object `releaseProof.uiLocalizationReleaseGate`
+      - non-passing `releaseProof.uiLocalizationReleaseGate.status`
+      - missing `releaseProof.uiLocalizationReleaseGate.generatedAt/generated_at`
+      - stale `releaseProof.uiLocalizationReleaseGate.generatedAt`
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/audit-ui-parity.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (mutation lane now includes the new localization-gate fail-close branches, then completes smoke).
+- Current trusted state:
+  - milestone-2 Hub parity closeout now treats nested localization release-proof evidence as governed truth when present, preventing stale/malformed localization gates from bypassing release-channel parity verification.
+- Push status:
+  - `chummer6-hub`: local changes landed in this slice (`scripts/audit-ui-parity.sh`, `scripts/ai/verify.sh`); commit/push attempted below (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-1/3 executable gate now fail-closes publishable+complete channels that keep non-promoted rollout posture
 
 - Trigger:
