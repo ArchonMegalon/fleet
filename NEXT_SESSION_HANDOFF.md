@@ -1,3 +1,35 @@
+## 2026-04-04: milestone-13/14 desktop dialogs now surface sourcebook/settings/custom-data/translator parity from the shared tool catalog
+
+- Trigger:
+  - no-step-back parity audit showed core/catalog posture was already present for sourcebooks, settings/source toggles, custom-data/XML bridge, and translator lanes, but the modern desktop dialogs were still too thin and hid that truth from operators.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/IChummerClient.cs`:
+    - added shared client seams `GetMasterIndexAsync(...)` and `GetTranslatorLanguagesAsync(...)`.
+  - patched runtime + test clients:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/HttpChummerClient.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Desktop.Runtime/InProcessChummerClient.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/FixtureBackedChummerClient.cs`
+    - lightweight presentation test stubs now satisfy the new client seam.
+  - patched shared overview/dialog path:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/IOverviewCommandDispatcher.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/CharacterOverviewPresenter.Commands.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/OverviewCommandDispatcher.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/IDesktopDialogFactory.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Presentation/Overview/DesktopDialogFactory.cs`
+  - behavior changes:
+    - `master_index` dialog now surfaces sourcebook count, snippet coverage, reference-source posture, settings/source-toggle posture, custom-data posture, import-oracle posture, and SR6 successor posture from the shared catalog.
+    - `character_settings` dialog now surfaces rules-environment posture for settings/source toggles/custom-data/XML bridge instead of acting like a thin local-only form.
+    - `translator` dialog now surfaces translator-lane posture, bridge posture, enabled overlay count, and live translator language inventory from the shared catalog.
+  - patched parity proofs:
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/DesktopDialogFactoryTests.cs`
+    - `/docker/chummercomplete/chummer-presentation/Chummer.Tests/Presentation/CharacterOverviewPresenterTests.cs`
+  - patched Fleet parity mirror:
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+- Verification:
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter ...` -> compile/build PASS, but MSTest filter syntax in this environment did not match the new method names for isolated execution.
+  - `cd /docker/chummercomplete/chummer-presentation && dotnet test Chummer.Tests/Chummer.Tests.csproj --list-tests` -> PASS.
+  - `cd /docker/chummercomplete/chummer-presentation && bash scripts/ai/milestones/b15-localization-release-gate.sh` -> PASS (localization still green after dialog changes).
+
 ## 2026-04-04: milestone-16/9 creator publication packets now fail-close sheet-viewer and print/PDF parity evidence retention
 
 - Trigger:
@@ -20,6 +52,38 @@
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for `fleet` push.
+
+## 2026-04-04: milestone-4/5/6 now includes a single EA campaign-workspace-v4 umbrella contract and gate proof marker
+
+- Trigger:
+  - frontier milestones `4`, `5`, and `6` require campaign continuity plus GM and offline/mobile continuity to behave as one product lane, not only as separate packet contracts.
+  - `executive-assistant` already carried all individual W3 packet contracts, but lacked one explicit umbrella contract key proving a single lane across downtime/diary/contacts/heat/aftermath/return + GM ops + safehouse/travel/offline/mobile continuity.
+- Landed:
+  - patched `/docker/EA/ea/app/services/task_contracts.py`:
+    - added built-in task contract key `campaign_workspace_v4_brief` with deliverable type `campaign_workspace_v4_brief` in the groundwork `tool_then_artifact` family.
+  - patched `/docker/EA/tests/test_task_contract_runtime_policy.py`:
+    - extended `test_builtin_w3_campaign_and_gm_contracts_resolve_with_groundwork_runtime_policy` matrix to fail-close `campaign_workspace_v4_brief`.
+  - patched `/docker/EA/tests/test_planner.py`:
+    - extended W3 continuity and campaign/GM planner matrix tests to compile `campaign_workspace_v4_brief` with standard grounded tool-then-artifact flow.
+  - patched `/docker/EA/SKILLS.md`:
+    - added first-class skill catalog row for `campaign_workspace_v4_brief` with integrated memory read set spanning campaign v4, GM ops, and offline/mobile continuity.
+  - patched canonical + mirror journey gates:
+    - `/docker/chummercomplete/chummer-design/products/chummer/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml`
+    - `campaign_session_recover_recap` EA `SKILLS.md` proof now requires ``campaign_workspace_v4_brief`` in addition to existing packet keys.
+  - patched Fleet regression:
+    - `/docker/fleet/tests/test_materialize_journey_gates.py` now fail-closes on the new EA umbrella marker.
+  - regenerated:
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`.
+- Verification:
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest -q tests/test_task_contract_runtime_policy.py -k "builtin_w3_campaign_and_gm_contracts"` -> PASS (`16 passed, 5 deselected`).
+  - `cd /docker/EA && PYTHONPATH=ea python3 -m pytest -q tests/test_planner.py -k "campaign_workspace_v4_brief or campaign_mobile_continuity_contracts_build_tool_then_artifact_plan or campaign_and_gm_ops_contracts_compile_tool_then_artifact_plan"` -> PASS (`21 passed, 11 deselected`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offline_markers"` -> PASS (`1 passed, 16 deselected`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select(.repo=="executive-assistant" and .path=="SKILLS.md") | .must_contain' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (includes ``campaign_workspace_v4_brief``).
+- Exact blocker:
+  - push from this environment still depends on GitHub HTTPS credentials for repos where credentials are absent.
 
 ## 2026-04-04: milestone-10 support packet recovery-route contract now fail-closes action/href drift and update-required routing mismatches
 

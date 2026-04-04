@@ -416,6 +416,204 @@ groups: []
     assert any("repo proof chummer6-ui:Chummer.Blazor/Components/Shell/SectionPane.razor is missing required marker" in reason for reason in payload["journeys"][0]["blocking_reasons"])
 
 
+def test_materialize_journey_gates_marks_external_only_blockers_when_all_blocking_reasons_are_host_constraints(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: install_claim_restore_continue
+    title: Install, claim, restore, continue
+    user_promise: A person can install, claim, restore, and continue.
+    canonical_journeys:
+      - journeys/install-and-update.md
+    owner_repos: [chummer6-ui, fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report]
+      minimum_history_snapshots: 1
+      repo_source_proof:
+        - repo: chummer6-ui
+          path: Chummer.Blazor/Components/Shell/SectionPane.razor
+          must_contain:
+            - current host cannot run promoted macOS installer smoke in synthetic host-constraint test
+      required_project_posture:
+        - project_id: ui
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: ui
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps({"generated_at": generated_at, "summary": {}, "packets": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    journey = payload["journeys"][0]
+    assert journey["state"] == "blocked"
+    assert journey["blocked_by_external_constraints_only"] is True
+    assert journey["signals"]["external_blocking_reason_count"] == 1
+    assert journey["signals"]["local_blocking_reason_count"] == 0
+    assert payload["summary"]["blocked_external_only_count"] == 1
+    assert payload["summary"]["blocked_with_local_count"] == 0
+    assert "platform-host proof lane" in journey["recommended_action"]
+
+
+def test_materialize_journey_gates_marks_mixed_blockers_when_local_and_external_reasons_coexist(
+    tmp_path: Path,
+) -> None:
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path = tmp_path / "JOURNEY_GATES.generated.json"
+    generated_at = fresh_timestamp()
+
+    registry.write_text(
+        """
+product: chummer
+surface: release_control
+version: 1
+journey_gates:
+  - id: install_claim_restore_continue
+    title: Install, claim, restore, continue
+    user_promise: A person can install, claim, restore, and continue.
+    canonical_journeys:
+      - journeys/install-and-update.md
+    owner_repos: [chummer6-ui, fleet]
+    scorecard_refs: {}
+    fleet_gate:
+      required_artifacts: [status_plane, progress_report]
+      minimum_history_snapshots: 1
+      repo_source_proof:
+        - repo: chummer6-ui
+          path: Chummer.Blazor/Components/Shell/SectionPane.razor
+          must_contain:
+            - current host cannot run promoted macOS installer smoke in synthetic host-constraint test
+            - synthetic local blocker marker not present
+      required_project_posture:
+        - project_id: ui
+          minimum_stage: pre_repo_local_complete
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    status_plane.write_text(
+        f"""
+contract_name: fleet.status_plane
+schema_version: 1
+generated_at: '{generated_at}'
+projects:
+  - id: ui
+    readiness_stage: pre_repo_local_complete
+groups: []
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps({"generated_at": generated_at, "summary": {}, "packets": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--registry",
+            str(registry),
+            "--status-plane",
+            str(status_plane),
+            "--progress-report",
+            str(progress_report),
+            "--progress-history",
+            str(progress_history),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    journey = payload["journeys"][0]
+    assert journey["state"] == "blocked"
+    assert journey["blocked_by_external_constraints_only"] is False
+    assert journey["signals"]["external_blocking_reason_count"] == 1
+    assert journey["signals"]["local_blocking_reason_count"] == 1
+    assert payload["summary"]["blocked_external_only_count"] == 0
+    assert payload["summary"]["blocked_with_local_count"] == 1
+
+
 def test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_mismatches(tmp_path: Path) -> None:
     registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
     status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -1379,7 +1577,9 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert 'response["referenceSourceLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["settingsLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["sourceToggleLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["sourceSelectionLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["customDataLaneReceipt"]' in core_api.get("must_contain", [])
+    assert 'response["customDataAuthoringLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["xmlBridgeLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["translatorLaneReceipt"]' in core_api.get("must_contain", [])
     assert 'response["importOracleLaneReceipt"]' in core_api.get("must_contain", [])
@@ -1397,7 +1597,9 @@ def test_build_explain_publish_gate_requires_ui_kit_build_and_explain_markers() 
     assert "BuildReferenceSourceLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildSettingsLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildSourceToggleLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildSourceSelectionLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildCustomDataLaneReceipt" in core_tool_catalog.get("must_contain", [])
+    assert "BuildCustomDataAuthoringLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildXmlBridgeLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildTranslatorLaneReceipt" in core_tool_catalog.get("must_contain", [])
     assert "BuildImportOracleLaneReceipt" in core_tool_catalog.get("must_contain", [])
@@ -1509,6 +1711,7 @@ def test_campaign_session_recover_recap_gate_requires_workspace_v4_and_gm_offlin
     assert "`campaign_travel_continuity_packet`" in executive_assistant_skill_catalog.get("must_contain", [])
     assert "`campaign_offline_continuity_brief`" in executive_assistant_skill_catalog.get("must_contain", [])
     assert "`campaign_mobile_companion_brief`" in executive_assistant_skill_catalog.get("must_contain", [])
+    assert "`campaign_workspace_v4_brief`" in executive_assistant_skill_catalog.get("must_contain", [])
 
 
 def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_gate_proof() -> None:

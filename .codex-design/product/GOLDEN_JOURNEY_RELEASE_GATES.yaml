@@ -185,7 +185,9 @@ journey_gates:
             - 'response["referenceSourceLaneReceipt"]'
             - 'response["settingsLaneReceipt"]'
             - 'response["sourceToggleLaneReceipt"]'
+            - 'response["sourceSelectionLaneReceipt"]'
             - 'response["customDataLaneReceipt"]'
+            - 'response["customDataAuthoringLaneReceipt"]'
             - 'response["xmlBridgeLaneReceipt"]'
             - 'response["translatorLaneReceipt"]'
             - 'response["importOracleLaneReceipt"]'
@@ -204,7 +206,9 @@ journey_gates:
             - BuildReferenceSourceLaneReceipt
             - BuildSettingsLaneReceipt
             - BuildSourceToggleLaneReceipt
+            - BuildSourceSelectionLaneReceipt
             - BuildCustomDataLaneReceipt
+            - BuildCustomDataAuthoringLaneReceipt
             - BuildXmlBridgeLaneReceipt
             - BuildTranslatorLaneReceipt
             - BuildImportOracleLaneReceipt
@@ -364,6 +368,7 @@ journey_gates:
             - "`campaign_travel_continuity_packet`"
             - "`campaign_offline_continuity_brief`"
             - "`campaign_mobile_companion_brief`"
+            - "`campaign_workspace_v4_brief`"
       required_project_posture:
         - project_id: hub
           minimum_stage: pre_repo_local_complete

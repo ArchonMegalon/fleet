@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-04T17:57:40Z",
+  "generated_at": "2026-04-04T18:01:57Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -9,43 +9,45 @@
     "ready_count": 0,
     "warning_count": 3,
     "blocked_count": 3,
+    "blocked_external_only_count": 0,
+    "blocked_with_local_count": 3,
     "recommended_action": "Resolve the blocking golden-journey gaps before widening publish claims."
   },
   "artifact_freshness": {
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-04T17:57:39Z",
+      "at": "2026-04-04T18:01:30Z",
       "state": "fresh",
-      "age_seconds": 1
+      "age_seconds": 27
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
       "at": "2026-04-04T17:18:48Z",
       "state": "fresh",
-      "age_seconds": 2332
+      "age_seconds": 2589
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2378
+      "age_seconds": 2635
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
       "at": "2026-04-04T17:18:02Z",
       "state": "fresh",
-      "age_seconds": 2378
+      "age_seconds": 2635
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
       "at": "2026-04-04T17:18:03Z",
       "state": "fresh",
-      "age_seconds": 2377
+      "age_seconds": 2634
     }
   },
   "journeys": [
@@ -62,6 +64,15 @@
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'blocking_findings_count' expected 0 but was 44."
       ],
+      "external_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'status' expected 'pass' but was 'fail'.",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'blocking_findings_count' expected 0 but was 44."
+      ],
+      "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "ui is at repo_local_complete below target stage publicly_promoted.",
         "hub is at repo_local_complete below target stage publicly_promoted."
@@ -256,7 +267,10 @@
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
-        "support_recovery_route_contract_violation_count": 0
+        "support_recovery_route_contract_violation_count": 0,
+        "external_blocking_reason_count": 0,
+        "local_blocking_reason_count": 5,
+        "blocked_by_external_constraints_only": false
       }
     },
     {
@@ -268,6 +282,11 @@
       "blocking_reasons": [
         "media-factory is at repo_local_complete below minimum stage boundary_pure."
       ],
+      "external_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "media-factory is at repo_local_complete below minimum stage boundary_pure."
+      ],
+      "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "core is at repo_local_complete below target stage boundary_pure.",
         "ui is at repo_local_complete below target stage publicly_promoted.",
@@ -333,7 +352,9 @@
               "response[\"referenceSourceLaneReceipt\"]",
               "response[\"settingsLaneReceipt\"]",
               "response[\"sourceToggleLaneReceipt\"]",
+              "response[\"sourceSelectionLaneReceipt\"]",
               "response[\"customDataLaneReceipt\"]",
+              "response[\"customDataAuthoringLaneReceipt\"]",
               "response[\"xmlBridgeLaneReceipt\"]",
               "response[\"translatorLaneReceipt\"]",
               "response[\"importOracleLaneReceipt\"]",
@@ -355,7 +376,9 @@
               "BuildReferenceSourceLaneReceipt",
               "BuildSettingsLaneReceipt",
               "BuildSourceToggleLaneReceipt",
+              "BuildSourceSelectionLaneReceipt",
               "BuildCustomDataLaneReceipt",
+              "BuildCustomDataAuthoringLaneReceipt",
               "BuildXmlBridgeLaneReceipt",
               "BuildTranslatorLaneReceipt",
               "BuildImportOracleLaneReceipt",
@@ -485,7 +508,10 @@
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
-        "support_recovery_route_contract_violation_count": 0
+        "support_recovery_route_contract_violation_count": 0,
+        "external_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
+        "blocked_by_external_constraints_only": false
       }
     },
     {
@@ -495,6 +521,9 @@
       "state": "warning",
       "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
+      "external_blocking_reasons": [],
+      "local_blocking_reasons": [],
+      "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "hub is at repo_local_complete below target stage publicly_promoted.",
         "mobile is at repo_local_complete below target stage publicly_promoted.",
@@ -606,7 +635,8 @@
               "`campaign_safehouse_readiness_brief`",
               "`campaign_travel_continuity_packet`",
               "`campaign_offline_continuity_brief`",
-              "`campaign_mobile_companion_brief`"
+              "`campaign_mobile_companion_brief`",
+              "`campaign_workspace_v4_brief`"
             ]
           }
         ],
@@ -655,7 +685,10 @@
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
-        "support_recovery_route_contract_violation_count": 0
+        "support_recovery_route_contract_violation_count": 0,
+        "external_blocking_reason_count": 0,
+        "local_blocking_reason_count": 0,
+        "blocked_by_external_constraints_only": false
       }
     },
     {
@@ -665,6 +698,9 @@
       "state": "warning",
       "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
+      "external_blocking_reasons": [],
+      "local_blocking_reasons": [],
+      "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "hub is at repo_local_complete below target stage publicly_promoted.",
         "mobile is at repo_local_complete below target stage publicly_promoted.",
@@ -760,7 +796,10 @@
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
-        "support_recovery_route_contract_violation_count": 0
+        "support_recovery_route_contract_violation_count": 0,
+        "external_blocking_reason_count": 0,
+        "local_blocking_reason_count": 0,
+        "blocked_by_external_constraints_only": false
       }
     },
     {
@@ -770,6 +809,9 @@
       "state": "warning",
       "recommended_action": "Close the remaining target-stage or evidence-depth gap before calling the journey boring.",
       "blocking_reasons": [],
+      "external_blocking_reasons": [],
+      "local_blocking_reasons": [],
+      "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "hub is at repo_local_complete below target stage publicly_promoted.",
         "ui is at repo_local_complete below target stage publicly_promoted."
@@ -870,7 +912,10 @@
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
-        "support_recovery_route_contract_violation_count": 0
+        "support_recovery_route_contract_violation_count": 0,
+        "external_blocking_reason_count": 0,
+        "local_blocking_reason_count": 0,
+        "blocked_by_external_constraints_only": false
       }
     },
     {
@@ -882,6 +927,11 @@
       "blocking_reasons": [
         "fleet is at repo_local_complete below minimum stage package_canonical."
       ],
+      "external_blocking_reasons": [],
+      "local_blocking_reasons": [
+        "fleet is at repo_local_complete below minimum stage package_canonical."
+      ],
+      "blocked_by_external_constraints_only": false,
       "warning_reasons": [
         "hub is at repo_local_complete below target stage publicly_promoted."
       ],
@@ -957,7 +1007,10 @@
         "support_update_required_routed_to_downloads_count": 0,
         "support_update_required_misrouted_case_count": 0,
         "support_install_truth_contract_violation_count": 0,
-        "support_recovery_route_contract_violation_count": 0
+        "support_recovery_route_contract_violation_count": 0,
+        "external_blocking_reason_count": 0,
+        "local_blocking_reason_count": 1,
+        "blocked_by_external_constraints_only": false
       }
     }
   ]
