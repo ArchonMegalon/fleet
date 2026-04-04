@@ -1,3 +1,27 @@
+## 2026-04-04: milestone-4 recap shelf projection now deduplicates semantically identical recap rows before bounded category selection
+
+- Trigger:
+  - frontier milestone 4 (`Campaign workspace v4: downtime, diary, contacts, heat, aftermath, and return loop`) requires recap/diary continuity truth to read as one governed lane without duplicate-row inflation in shelf projection.
+  - `CampaignWorkspaceServerPlaneService.BuildRecapShelf(...)` applied bounded category selection directly on raw `RecapShelf` rows.
+  - semantically identical recap rows with different projection ids could crowd the bounded recap shelf and overstate recap/continuity breadth.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - `BuildRecapShelf(...)` now deduplicates semantic recap rows before bounded category selection.
+    - added semantic dedupe helpers:
+      - `DeduplicateSemanticPublicationRecapVersions(...)`
+      - `BuildPublicationRecapSemanticDedupeKey(...)`
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `RecapShelfDeduplicatesSemanticallyIdenticalRows_WhenProjectionIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~RecapShelfDeduplicatesSemanticallyIdenticalRows_WhenProjectionIdsDiffer|FullyQualifiedName~CampaignWorkspaceSummaryDeduplicatesIdenticalPublicationFamilies_WhenPayloadRepeatsSameRows" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`256` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-4 recap shelf projection now collapses semantic duplicate recap rows before bounded selection, so shelf entries better reflect unique campaign continuity artifacts.
+  - milestone-4/5 campaign and GM-ops packet suites remain green after the shelf dedupe change.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign workspace summary now deduplicates identical recap/consequence/roster versions to prevent inflated publication lane counts
 
 - Trigger:
