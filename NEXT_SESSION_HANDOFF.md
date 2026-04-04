@@ -40,6 +40,15 @@
 - Current trusted state:
   - milestone-4/5 prep-library query behavior now treats `contact`/`contacts` as first-class continuity wording in both campaign workspace and GM ops lanes through the same shared contracts canonicalizer.
 
+## 2026-04-04: follow-up on milestone-2 release-channel parity handoff sync commit and push status
+
+- Commits landed:
+  - `fleet`: `8a0bd70` (`docs(handoff): record milestone-2 release-channel parity drift lock`).
+- Push attempts:
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment currently lacks configured GitHub HTTPS credentials for the `fleet` remote, so this handoff-sync commit remains local-only.
+
 ## 2026-04-04: follow-up on milestone-2 published release-channel parity drift guard commit and push status
 
 - Commits landed:
