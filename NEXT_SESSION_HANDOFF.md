@@ -1,3 +1,56 @@
+## 2026-04-04: milestone-2 parity checklist now fail-closes dense legacy workbench tab/action/dialog-control baselines (combat/info shell + summary/inventory/validation + dialog factory mutations)
+
+- Trigger:
+  - frontier milestone `2` requires legacy-familiar confidence across dense workbench posture and high-friction workflows, not only the earlier shell/core baseline families.
+  - `scripts/generate-parity-checklist.sh` still allowed drift for several dense legacy workbench anchors that are common in SR4/SR6/Chummer5a mental models:
+    - tab posture anchors (`tab-combat`, `tab-info`)
+    - workflow anchors (`summary`, `metadata`, `profile`, `improvements`, `inventory`, `expenses`, `sources`, `rules`, `validate`)
+    - dialog-factory mutation controls (adept/magic/cyberware/quality/vehicle add-edit-delete controls)
+  - the baseline test lock did not explicitly pin those new required markers.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/generate-parity-checklist.sh`:
+    - expanded required milestone-2 tab baseline with `tab-combat` and `tab-info`.
+    - expanded required milestone-2 action baseline with:
+      - `summary`, `metadata`, `profile`, `improvements`, `inventory`, `expenses`, `sources`, `rules`, `validate`.
+    - expanded required milestone-2 desktop control baseline with:
+      - `magic_delete`, `magic_source`, `show_source`.
+    - added `required_milestone2_dialog_factory_controls` baseline and fail-close enforcement for:
+      - `adept_power_add`, `complex_form_add`, `critter_power_add`, `cyberware_add/delete/edit`, `drug_add/delete`, `initiation_add`, `matrix_program_add`, `quality_add/delete`, `spell_add`, `spirit_add`, `vehicle_add/delete/edit`, `vehicle_mod_add`.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/ParityChecklistMilestone2BaselineTests.cs`:
+    - script-lock assertions now pin the newly required tab/action/desktop/dialog-control baseline markers so regressions fail-close.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/generate-parity-checklist.sh` -> PASS (`tabs/actions/desktop-controls` coverage remains `17/17`, `47/47`, `29/29`).
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~ParityChecklistMilestone2BaselineTests|FullyQualifiedName~VerificationEntryPointTests.ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub`: `ed45ffe9` (`fix(milestone-2): harden parity baseline for dense legacy workbench flows`).
+- Push attempts:
+  - pending below in this slice.
+
+## 2026-04-04: fleet supervisor now seeds worker-local GitHub auth and auto-falls back from `/run/secrets` to repo-local ChatGPT auth mirrors
+
+- Trigger:
+  - live shard runs were still reporting `git push` blocker text (`fatal: could not read Username for 'https://github.com': No such device or address`) even though shell-level `gh auth` and worker-style `git push --dry-run` succeeded outside the running loop.
+  - root cause was that worker shells still depended on inherited git/gh auth env surviving through Codex, while the supervisor container itself runs with `HOME=/`; additionally, local operator shells do not expose `/run/secrets/...auth.json`, only `/docker/fleet/secrets/...auth.json`.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - worker homes now copy host `.gitconfig` plus `~/.config/gh/{hosts.yml,config.yml}` into lane-local `.gitconfig` and `.config/gh`.
+    - worker env now points `GIT_CONFIG_GLOBAL`, `XDG_CONFIG_HOME`, and `GH_CONFIG_DIR` at the worker-local seeded copies instead of only host paths.
+    - ChatGPT auth-json resolution now auto-falls back from `/run/secrets/<name>.auth.json` to `/docker/fleet/secrets/<name>.auth.json` via the workspace-local `secrets/` mirror when the container secret path is absent.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - updated git-auth env tests to require the worker-local seeded copies.
+    - added explicit regression coverage for `/run/secrets` -> workspace `secrets/` auth-json fallback.
+- Verification:
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "prepare_direct_worker_environment_preserves_host_git_and_gh_auth or prepare_account_environment_preserves_host_git_and_gh_auth or prepare_direct_worker_environment_falls_back_to_passwd_home_for_git_auth or prepare_account_environment_falls_back_to_workspace_secret_mirror_for_auth_json"` -> PASS (`4 passed`).
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - real account-backed Codex probe using `acct-chatgpt-b` and the patched worker env:
+    - `cd /docker/chummercomplete/chummer6-hub && git push --dry-run` -> PASS (`To https://github.com/ArchonMegalon/chummer6-hub.git ... main -> main`).
+  - live Fleet launcher restarted; new loop PIDs:
+    - `3502996`
+    - `3503221`
+    - `3503485`
+- Current status:
+  - the old GitHub push blocker in `status --json` is now historical output from pre-fix runs; fresh loops are live on the patched supervisor code.
+
 ## 2026-04-04: milestone-2 parity checklist now fail-closes deep legacy magic/resonance workflow families (arts/powers/foci/mentor+critter anchors)
 
 - Trigger:
