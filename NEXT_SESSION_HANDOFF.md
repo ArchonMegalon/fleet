@@ -22,6 +22,35 @@
 - Exact blocker:
   - none for landed milestone-13 sourcebook reference-lane coverage logic; focused `Chummer.Tests` execution remains blocked by pre-existing compile/reference churn in current workspace baseline.
 
+## 2026-04-04: milestone-7 build-handoff now carries explicit crew-fit grounding cues across account and signed-in home surfaces
+
+- Trigger:
+  - frontier milestone `7` requires Build Lab to behave as one creation/advancement/crew-fit surface, but build-handoff receipts only exposed planner coverage without a dedicated crew-fit cue.
+  - users could not see whether a handoff dossier was actually assigned to a governed crew lane at the same decision points where export/viewer/exchange actions are rendered.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Campaign.Contracts/CampaignContracts.cs`:
+    - added optional `CrewFitSummary` to `BuildLabHandoffProjection` so crew-fit grounding is explicit contract truth.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs`:
+    - added `BuildBuildLabCrewFitSummary(...)` and wired `CrewFitSummary` into handoff projection.
+    - planner coverage now includes crew-fit as a fifth checkpoint (`5` total) and emits an explicit `Crew-fit:` coverage line.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - account build-handoff detail renders a dedicated `Crew fit` row and includes the same cue in the build-path summary list.
+    - coverage line cap increased to `PlannerCoverageLines.Take(5)` so the new crew-fit line remains visible.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - signed-in home build-handoff rail now renders `Crew fit: ...` alongside coverage/rule-diff/output continuity cues.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - `CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence` now fail-proves crew-fit coverage (`4 of 5 ...`, `Crew-fit:` line, and `CrewFitSummary` presence).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs` and `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`:
+    - source guards now require crew-fit rendering hooks in account and signed-in home surfaces.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer6-hub` / `chummer.run-services`: `cb01812c` (`feat(w4-7): surface crew-fit grounding in build handoff receipts`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for the landed slice; push is blocked in this environment by missing GitHub credential material.
+
 ## 2026-04-04: milestone-7/8/9/16 account build-handoff detail now keeps every governed export lane visible after JSON exchange promotion
 
 - Trigger:
