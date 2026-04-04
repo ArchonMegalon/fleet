@@ -1,3 +1,30 @@
+## 2026-04-04: milestone-1/3 Windows+macOS exit-gate materializers now forbid legacy chummer5a proof-source fallback
+
+- Trigger:
+  - frontier milestones `1` and `3` require installer/startup-smoke proof that cannot lie about source-of-truth bytes and receipts.
+  - Windows and macOS desktop exit-gate materializers still searched legacy `chummer5a` file trees (`/docker/chummer5a/...`) when promoted tuple artifacts were missing, which could blur blocker diagnostics and source provenance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - removed legacy fallback candidate roots for installer bytes and startup-smoke receipts (`/docker/chummer5a/...` and `/docker/chummercomplete/chummer5a/...`).
+    - removed legacy-specific reason branches tied to chummer5a path resolution.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - removed legacy fallback candidate roots for installer bytes and startup-smoke receipts (`/docker/chummer5a/...` and `/docker/chummercomplete/chummer5a/...`).
+    - removed legacy-specific reason branches tied to chummer5a path resolution.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Windows_and_macos_exit_gate_materializers_do_not_resolve_proof_from_legacy_chummer5a_paths`.
+    - regression now locks that both materializer scripts keep repo-local shelf enforcement while containing no legacy chummer5a fallback strings.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - gate remains expected-fail (`43`) for real missing Windows/macOS promoted tuple artifacts/startup-smoke, but failure reasons no longer include legacy chummer5a proof-source fallback.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`4` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with tuple-missing Windows/macOS blocker reasons only.
+- Current trusted state:
+  - Windows/macOS exit-gate proof materialization is now constrained to repo-local/canonical roots instead of legacy chummer5a fallback paths.
+  - milestone-1/3 executable gate remains fail-honest on the real external blocker: missing promoted Windows/macOS installer bytes and startup-smoke receipts in release-channel truth.
+- Push status:
+  - `chummer6-ui`: committed locally as `0e279a2d`; push pending in this environment (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 parity audit now enforces full visual interaction-key set (13/13) from canonical familiarity gate
 
 - Trigger:
