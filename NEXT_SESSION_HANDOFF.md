@@ -62,6 +62,32 @@
 - Exact blocker:
   - no blocker for landed core/design slice; remote push for design/fleet remains blocked in this environment by missing GitHub HTTPS credentials.
 
+## 2026-04-04: milestone-7/8 home and account Build Lab rails now expose planner-lane cues for grounded crew-fit follow-through
+
+- Trigger:
+  - Build Lab rails already showed summary-level coverage and crew-fit cues, but they still hid the concrete planner lane evidence unless users drilled into a handoff detail pane.
+  - milestones `7/8` require creation/advancement/crew-fit decisions and rule-environment reasoning to stay grounded where users make the first follow-through decision.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/PublicLanding/Home.cshtml`:
+    - signed-in Home Build path rail now renders up to two planner coverage lines from `handoff.PlannerCoverageLines` as `Planner lane: ...` cues.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - account Build paths list now renders the same planner lane cues (`handoff.PlannerCoverageLines.Take(2)`).
+    - account Build paths list now includes `Rule diff: @handoff.RuleEnvironmentDiff.Summary` so diff reasoning remains explicit on list-level decisions.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/PublicLandingBuildLabHandoffViewTests.cs`
+      - source guard now requires `handoff.PlannerCoverageLines.Take(2)` and `Planner lane:`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - source guard now requires `handoff.PlannerCoverageLines.Take(2)`, `Planner lane:`, and `handoff.RuleEnvironmentDiff.Summary`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~PublicLandingBuildLabHandoffViewTests|FullyQualifiedName~CampaignSpineBuildLabHandoffsExposeGovernedExportTargetsAndRuleEnvironmentDiffEvidence" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending local commit in `chummer6-hub` / `chummer.run-services` for this slice.
+  - pending local Fleet handoff refresh commit for this entry.
+- Push attempts:
+  - pending.
+- Exact blocker:
+  - none for this repo-local milestone `7/8` decision-surface slice.
+
 ## 2026-04-04: milestone-14 parity canon now reflects governed settings/source-toggle projection evidence while keeping UX closure explicit
 
 - Trigger:
