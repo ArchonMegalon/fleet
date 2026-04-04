@@ -1,3 +1,14 @@
+## 2026-04-04: follow-up on signoff-smoke alias fail-close commit and push status
+
+- Commits landed:
+  - `chummer6-hub`: `4aff65ee` (`fix(milestone-2): fail-close signoff-smoke localization alias paths`).
+  - `fleet`: `9dc5e5b` (`docs(handoff): record signoff-smoke alias fail-close slice`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commits remain local-only until auth is restored.
+
 ## 2026-04-04: milestone-2 Hub verify now fail-closes non-passing `uiLocalizationReleaseGate.signoffSmokeRunnerStatus` on canonical and alias-only payload paths
 
 - Trigger:
