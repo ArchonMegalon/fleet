@@ -1,3 +1,28 @@
+## 2026-04-04: milestone-5 roster-transfer lanes now deduplicate semantically identical transfer rows when transfer ids drift
+
+- Trigger:
+  - frontier milestones 4/5 require workspace publication summaries and GM event-control packets to report unique governed roster movement truth.
+  - roster-transfer dedupe still keyed on `TransferId`, so semantically identical transfer rows with id drift could inflate roster-transfer and event-control receipt counts.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - switched roster-transfer call sites to semantic dedupe (`DeduplicateSemanticRosterTransferVersions(...)`) for:
+      - `BuildCampaignWorkspaceSummary(...)`
+      - `BuildRosterMovementPrepPacket(...)`
+      - `BuildEventControlPrepPacket(...)`
+    - semantic transfer key now excludes `TransferId` and anchors on dossier/runner/source-target scope, summary, and transfer timestamp.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `CampaignWorkspaceSummaryDeduplicatesSemanticallyIdenticalRosterTransfers_WhenTransferIdsDiffer`.
+    - added `EventControlPacketDeduplicatesSemanticallyIdenticalRosterTransferVersions_WhenTransferIdsDiffer`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceSummaryDeduplicatesSemanticallyIdenticalRosterTransfers_WhenTransferIdsDiffer|FullyQualifiedName~EventControlPacketDeduplicatesSemanticallyIdenticalRosterTransferVersions_WhenTransferIdsDiffer" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`; transient MSBuild copy-retry warnings only).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`265` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && bash scripts/ai/run_services_smoke.sh` -> PASS (`run-services in-process smoke passed`).
+- Current trusted state:
+  - milestone-5 roster-transfer publication/event-control projections now resist transfer-id drift inflation while preserving source/target audit semantics.
+  - campaign workspace + GM ops suites remain green after semantic roster-transfer dedupe expansion.
+- Push status:
+  - pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4/5 campaign and GM packet synthesis now deduplicates semantically identical change-packet rows when packet ids drift
 
 - Trigger:
