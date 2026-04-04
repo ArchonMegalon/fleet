@@ -1,3 +1,28 @@
+## 2026-04-04: follow-up on W1/W3 macOS per-head exit gate crash-proofing for startup-smoke artifact path verification (commit and push status)
+
+- Commits landed:
+  - `chummer6-ui`: `a2200c66` (`fix(w1): prevent macOS exit gate crash on startup-smoke artifact path check`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-ui && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so the commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-1/3 macOS per-head exit gate now avoids NameError crash when validating startup-smoke artifactPath against promoted installer bytes
+
+- Trigger:
+  - `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh` validated startup-smoke `artifactPath` against promoted installer bytes using an undefined variable (`artifact_path`) instead of the resolved promoted installer path.
+  - when a startup-smoke receipt is present, this could crash materialization with `NameError` before emitting fail-honest receipt reasons.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - replaced undefined `artifact_path` reference with `installer_path` in the startup-smoke artifact path resolution check.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/MigrationComplianceTests.cs`:
+    - added script-lock assertion requiring the `installer_path`-based comparison so regressions fail-close.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && bash -n scripts/materialize-macos-desktop-exit-gate.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~MigrationComplianceTests.Macos_exit_gate_prefers_registry_release_truth_with_repo_local_fallback_and_accepts_dmg_media" --nologo -v minimal` -> PASS (`1` test on `net10.0`).
+- Current trusted state:
+  - macOS per-head desktop exit gate now evaluates startup-smoke artifact path integrity without runtime NameError failure, preserving milestone-1/3 fail-honest proof behavior when receipts are present.
+
 ## 2026-04-04: follow-up on milestone-2 releaseProof timestamp drift self-heal in chummer6-hub (commit and push status)
 
 - Commits landed:
