@@ -57,6 +57,47 @@
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
   - local mobile regression execution remains blocked by unavailable internal package feeds in this shell session.
 
+## 2026-04-04: milestone-1/3 install external-proof tuples now carry startup-smoke receipt contract shape for host capture lanes
+
+- Trigger:
+  - W1 install remained correctly blocked as external-only, but `external_proof_requests` rows only named tuple/host/proof and still left host operators to infer the minimum receipt shape from scattered verifier errors.
+  - this slowed cross-host recovery because tuple blockers were machine-readable but not self-describing enough to drive deterministic startup-smoke capture.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `_release_channel_external_proof_requests(...)` now enriches each request row with tuple identity projection:
+      - `head_id`
+      - `rid`
+      - `platform`
+    - each request now includes `startup_smoke_receipt_contract` with required host-proof shape:
+      - `status_any_of`: `["pass","passed","ready"]`
+      - `ready_checkpoint`: `pre_ui_event_loop`
+      - tuple-matched `head_id` / `platform` / `rid`
+      - `host_class_contains` mapped from required host
+  - patched `/docker/fleet/tests/test_materialize_journey_gates.py`:
+    - expanded `test_release_channel_external_proof_requests_normalize_and_dedupe` to assert enriched tuple identity + receipt contract projection.
+    - expanded `test_install_journey_surfaces_release_channel_external_proof_requests` to fail-close the projected startup-smoke receipt contract for Windows tuple blockers.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml`
+    - `/docker/fleet/state/status-plane.verify.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_journey_gates.py tests/test_materialize_journey_gates.py` -> PASS.
+  - `cd /docker/fleet && PYTHONPATH=/docker/fleet/scripts:/docker/fleet python3 -m pytest -q tests/test_materialize_journey_gates.py -k "release_channel_external_proof_requests_normalize_and_dedupe or install_journey_surfaces_release_channel_external_proof_requests"` -> FAIL (`No module named pytest` in this environment).
+  - `cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml --status-json-out state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | .external_proof_requests[0].startup_smoke_receipt_contract' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (contract includes `status_any_of`, `ready_checkpoint`, tuple `head_id/platform/rid`, and `host_class_contains`).
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=2, warning=6, missing=0`).
+- Commits landed:
+  - pending local commit in `fleet` for script/test/handoff updates.
+- Push attempts:
+  - not attempted yet for this slice.
+- Exact blocker:
+  - local environment is missing `pytest`.
+  - install journey remains external-only blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
+
 ## 2026-04-04: milestone-15 utility parity is now release-gated
 
 - Trigger:

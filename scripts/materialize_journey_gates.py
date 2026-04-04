@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import yaml
-from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+try:
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+except ModuleNotFoundError:
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 
 UTC = dt.timezone.utc
@@ -128,6 +131,26 @@ def _resolve_json_path(payload: Any, path: str) -> Any:
 
 
 def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _parse_tuple_identity(tuple_id: str) -> Tuple[str, str, str]:
+        raw = str(tuple_id or "").strip()
+        if not raw:
+            return "", "", ""
+        parts = [part.strip() for part in raw.split(":")]
+        if len(parts) != 3:
+            return "", "", ""
+        return parts[0], parts[1], parts[2]
+
+    def _required_receipt_contract(head: str, rid: str, platform: str, required_host: str) -> Dict[str, Any]:
+        host_value = required_host.strip().lower() or platform.strip().lower() or "required"
+        return {
+            "status_any_of": ["pass", "passed", "ready"],
+            "ready_checkpoint": "pre_ui_event_loop",
+            "head_id": head,
+            "platform": platform,
+            "rid": rid,
+            "host_class_contains": host_value,
+        }
+
     coverage = dict(payload.get("desktopTupleCoverage") or {})
     source_requests = coverage.get("externalProofRequests")
     if not isinstance(source_requests, list):
@@ -144,15 +167,25 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         proof_tokens = [str(token or "").strip() for token in required_proofs if str(token or "").strip()]
         if not proof_tokens:
             continue
+        head, rid, platform = _parse_tuple_identity(tuple_id)
         requests.append(
             {
                 "tuple_id": tuple_id,
                 "required_host": required_host or "required",
                 "required_proofs": sorted(set(proof_tokens)),
+                "head_id": head,
+                "rid": rid,
+                "platform": platform,
                 "expected_artifact_id": str(item.get("expectedArtifactId") or "").strip(),
                 "expected_installer_file_name": str(item.get("expectedInstallerFileName") or "").strip(),
                 "expected_public_install_route": str(item.get("expectedPublicInstallRoute") or "").strip(),
                 "expected_startup_smoke_receipt_path": str(item.get("expectedStartupSmokeReceiptPath") or "").strip(),
+                "startup_smoke_receipt_contract": _required_receipt_contract(
+                    head=head,
+                    rid=rid,
+                    platform=platform,
+                    required_host=required_host,
+                ),
             }
         )
     deduped_by_tuple: Dict[str, Dict[str, Any]] = {}
