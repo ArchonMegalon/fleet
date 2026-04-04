@@ -39488,8 +39488,10 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=3, warning=5, missing=0`).
   - `cd /docker/fleet && jq '.journeys[] | select(.id=="campaign_session_recover_recap") | .fleet_gate.repo_source_proof[] | select(.repo=="executive-assistant") | .path' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (now lists `SKILLS.md`, `ea/app/services/task_contracts.py`, and `tests/test_task_contract_runtime_policy.py`).
 - Commits landed:
-  - pending in this session.
+  - `chummer6-design`: `b689ce8` (`feat(w3-5): require EA runtime-policy proof in campaign journey gate`).
+  - `fleet`: `a19278c` (`feat(w3-5): fail-close EA runtime-policy proof in campaign journey gate`).
 - Push attempts:
-  - pending in this session.
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment still lacks GitHub HTTPS credentials for authenticated push.
