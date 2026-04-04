@@ -973,10 +973,28 @@ def evaluate_journey(
                     for token in (raw_spec.get("proof_capture_commands") or [])
                     if str(token or "").strip()
                 ]
+                tuple_entry_count_value = raw_spec.get("tuple_entry_count")
+                tuple_unique_value = raw_spec.get("tuple_unique")
+                tuple_entry_count = -1
+                if isinstance(tuple_entry_count_value, bool) or not isinstance(tuple_entry_count_value, int):
+                    support_packet_contract_violations.append(
+                        "support packet summary unresolved_external_proof_request_specs "
+                        f"tuple '{tuple_id}' is missing integer tuple_entry_count."
+                    )
+                else:
+                    tuple_entry_count = int(tuple_entry_count_value)
+                tuple_unique = False
+                if not isinstance(tuple_unique_value, bool):
+                    support_packet_contract_violations.append(
+                        "support packet summary unresolved_external_proof_request_specs "
+                        f"tuple '{tuple_id}' is missing boolean tuple_unique."
+                    )
+                else:
+                    tuple_unique = tuple_unique_value
                 normalized[tuple_id] = {
                     "channel_id": str(raw_spec.get("channel_id") or "").strip().lower(),
-                    "tuple_entry_count": int(raw_spec.get("tuple_entry_count") or 0),
-                    "tuple_unique": bool(raw_spec.get("tuple_unique")),
+                    "tuple_entry_count": tuple_entry_count,
+                    "tuple_unique": tuple_unique,
                     "required_host": str(raw_spec.get("required_host") or "").strip().lower(),
                     "required_proofs": required_proofs,
                     "expected_artifact_id": str(raw_spec.get("expected_artifact_id") or "").strip(),
@@ -1021,11 +1039,30 @@ def evaluate_journey(
                         for token in (raw_request.get("proof_capture_commands") or [])
                         if str(token or "").strip()
                     ]
+                    tuple_id = str(raw_request.get("tuple_id") or "").strip()
+                    tuple_entry_count_value = raw_request.get("tuple_entry_count")
+                    tuple_unique_value = raw_request.get("tuple_unique")
+                    tuple_entry_count = -1
+                    if isinstance(tuple_entry_count_value, bool) or not isinstance(tuple_entry_count_value, int):
+                        support_packet_contract_violations.append(
+                            "support packet unresolved_external_proof_execution_plan "
+                            f"host '{host}' tuple '{tuple_id or 'unknown'}' is missing integer tuple_entry_count."
+                        )
+                    else:
+                        tuple_entry_count = int(tuple_entry_count_value)
+                    tuple_unique = False
+                    if not isinstance(tuple_unique_value, bool):
+                        support_packet_contract_violations.append(
+                            "support packet unresolved_external_proof_execution_plan "
+                            f"host '{host}' tuple '{tuple_id or 'unknown'}' is missing boolean tuple_unique."
+                        )
+                    else:
+                        tuple_unique = tuple_unique_value
                     normalized_requests.append(
                         {
-                            "tuple_id": str(raw_request.get("tuple_id") or "").strip(),
-                            "tuple_entry_count": int(raw_request.get("tuple_entry_count") or 0),
-                            "tuple_unique": bool(raw_request.get("tuple_unique")),
+                            "tuple_id": tuple_id,
+                            "tuple_entry_count": tuple_entry_count,
+                            "tuple_unique": tuple_unique,
                             "channel_id": str(raw_request.get("channel_id") or "").strip().lower(),
                             "head_id": str(raw_request.get("head_id") or "").strip().lower(),
                             "platform": str(raw_request.get("platform") or "").strip().lower(),
