@@ -1,3 +1,76 @@
+## 2026-04-04: milestone-6 travel mode now exposes explicit per-lane offline continuity status (downtime/diary, contacts/heat, aftermath, prep)
+
+- Trigger:
+  - travel mode already showed aggregate cache freshness and a single offline actionability sentence, but milestone `6` continuity proof still lacked explicit per-lane status cues.
+  - operators could not immediately see which continuity lanes were ready vs blocked from the same account workspace surface.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Contracts/CampaignWorkspaceServerPlaneContracts.cs`:
+    - `TravelModeReadinessSummary` now includes `OfflineLaneCues`.
+    - added `TravelOfflineLaneCue` (`Lane`, `Status`, `SignalCount`, `Summary`).
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - travel mode now computes deterministic per-lane offline cues for:
+      - `downtime_diary`
+      - `contacts_heat`
+      - `aftermath_recap`
+      - `prep_review`
+    - each lane now fail-closes to `blocked` when no travel-safe claimed device exists.
+    - offline actionability summary now compiles from lane cue state instead of opaque text-only wording.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Views/Accounts/Account.cshtml`:
+    - account workspace travel section now renders per-lane offline status, cue counts, and lane summaries.
+  - patched tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/TravelModeCacheFreshnessTests.cs`
+      - asserts lane cue presence/shape for ready and blocked travel states.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/AccountBuildLabHandoffViewTests.cs`
+      - source guard now requires lane-cue rendering hooks in account travel mode.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - fixture helper updated for expanded travel-mode contract.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~TravelModeCacheFreshnessTests|FullyQualifiedName~AccountBuildLabHandoffViewTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal -m:1 -p:BuildInParallel=false` -> PASS (`389` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - pending (workspace is concurrently dirty across multiple tracked files in `chummer.run-services`; this slice is implemented and verified locally).
+- Push attempts:
+  - not attempted for this slice because scoped commit is pending in the concurrent dirty worktree.
+- Exact blocker:
+  - no product blocker for the implemented milestone-6 lane-proof slice; commit/push is operationally blocked until concurrent dirty worktree state is isolated for safe scoped commit.
+
+## 2026-04-04: sharded root status now reports `active_runs` instead of pretending one shard is the whole fleet
+
+- Trigger:
+  - widened root JSON status still exposed a single top-level `active_run`, which was just the latest non-empty shard run.
+  - with 5 shards active, that was a control-plane lie for machine consumers.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - aggregate state now emits:
+      - `active_run` only when exactly one live shard run exists
+      - `active_runs` when multiple shard runs are active
+    - stale blocker cleanup remains intact (`last_run_blocker` truthful, `historical_last_run_blocker` preserved separately).
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_effective_supervisor_state_uses_active_runs_list_for_multiple_live_shards`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "effective_supervisor_state_uses_active_runs_list_for_multiple_live_shards or reconcile_aggregate_shard_truth_moves_stale_blocker_to_historical_field or render_status_hides_stale_last_blocker_when_newer_active_run_exists"` -> PASS (`3 passed`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status --json` -> PASS; root now carries `active_runs` for all 5 live shards and no misleading singular `active_run`.
+- Exact blocker:
+  - none for this Fleet control-plane truth slice.
+
+## 2026-04-04: Fleet human `status` output now hides stale shard blockers once a newer run is already active
+
+- Trigger:
+  - aggregate JSON status was honest after the stale-blocker suppression work, but human-readable `python3 scripts/chummer_design_supervisor.py status` still printed `last_blocker=...` for shard-2/shard-3.
+  - those blockers were stale historical receipts; both shards already had newer active runs and `current_blocker` was empty.
+- Landed:
+  - patched `/docker/fleet/scripts/chummer_design_supervisor.py`:
+    - shard-line rendering in `_render_status()` now prefers `current_blocker`.
+    - stale `last_run_blocker` text is only shown when there is no newer active run masking it.
+  - patched `/docker/fleet/tests/test_chummer_design_supervisor.py`:
+    - added `test_render_status_hides_stale_last_blocker_when_newer_active_run_exists`.
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/chummer_design_supervisor.py tests/test_chummer_design_supervisor.py` -> PASS.
+  - `cd /docker/fleet && pytest -q tests/test_chummer_design_supervisor.py -k "render_status_hides_stale_last_blocker_when_newer_active_run_exists or render_status_and_trace_include_shard_metadata or render_status_shows_current_and_active_frontier_when_they_differ or heal_state_push_blockers_repairs_verified_not_yet_on_remote_phrase"` -> PASS (`4 passed`).
+  - `cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status` -> PASS; shard-2/shard-3 no longer print stale `last_blocker=` lines while their newer active runs are in flight.
+- Exact blocker:
+  - none for this Fleet control-plane truth slice.
+
 ## 2026-04-04: Fleet supervisor now heals accepted closeouts that still say a verified commit is "not yet on remote"
 
 - Trigger:
