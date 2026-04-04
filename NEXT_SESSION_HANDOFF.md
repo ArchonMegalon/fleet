@@ -20,6 +20,33 @@
   - `chummer6-hub`: local commit/push pending in this environment (`scripts/audit-ui-parity.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: milestone-4/5 compact `preplaunch` and `travelprefetch` shorthand now stay governed across campaign workspace packets and GM unresolved triage
+
+- Trigger:
+  - frontier milestones `4` and `5` require campaign return-loop packet synthesis and GM operations unresolved triage to stay on one governed lane even when operators use compact shorthand.
+  - `CampaignWorkspaceServerPlaneService` only recognized split/underscore prep-launch and travel-prefetch forms (`prep launch`, `prep_launch`, `travel prefetch`, `travel_prefetch`), and `GmOpsBoardService.ResolveGmOpsDomain(...)` had the same gap.
+  - compact forms such as `preplaunch` and `travelprefetch` could under-classify to generic lanes, weakening governed packet fallback and unresolved ordering.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`:
+    - added compact token sets for prep launch (`preplaunch`, `preplaunches`) and travel prefetch (`travelprefetch`, `travelprefetches`).
+    - wired compact tokens into `ContainsPrepLaunchToken(...)` and `ContainsTravelPrefetchToken(...)` so prep-launch, travel-prefetch, and event-control packet fallback all stay governed for compact shorthand.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - expanded event-control unresolved-domain classifier with compact `preplaunch`/`travelprefetch` variants.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`:
+    - added `PrepLaunchPacketFallsBackToCompactPrepLaunchSignalsWhenCanonicalTermsAreMissing`.
+    - added `EventControlPacketFallsBackToCompactPrepLaunchAndTravelPrefetchSignalsWhenCanonicalTermsAreMissing`.
+    - added fixture helper `BuildWorkspaceWithCompactPrepLaunchAndTravelPrefetchSignalsOnly`.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatCompactPrepLaunchAndTravelPrefetchShorthandAsEventControlDomain`.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GetProjection_UnresolvedItemsTreatCompactPrepLaunchAndTravelPrefetchShorthandAsEventControlDomain|FullyQualifiedName~PrepLaunchPacketFallsBackToCompactPrepLaunchSignalsWhenCanonicalTermsAreMissing|FullyQualifiedName~EventControlPacketFallsBackToCompactPrepLaunchAndTravelPrefetchSignalsWhenCanonicalTermsAreMissing|FullyQualifiedName~GmOpsBoardServiceTests|FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests" --nologo -v minimal` -> PASS (`364` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - compact prep-launch/travel-prefetch operator shorthand now resolves consistently across campaign workspace packet synthesis and GM unresolved triage instead of falling through to generic handling.
+  - milestone-4 campaign continuity and milestone-5 GM operations stay aligned for this shorthand family.
+- Push status:
+  - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-5 campaign workspace opposition fallback now classifies `op_for` and `opforce` shorthand
 
 - Trigger:
@@ -38,6 +65,33 @@
   - campaign workspace opposition and event-control fallback no longer demote `op_for`/`opforce` shorthand and now align with GM unresolved-domain classification.
 - Push status:
   - `chummer.run-services`: local commit/push pending in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
+## 2026-04-04: milestone-1/3 Windows+macOS exit-gate materializers now forbid legacy chummer5a proof-source fallback
+
+- Trigger:
+  - frontier milestones `1` and `3` require installer/startup-smoke proof that cannot lie about source-of-truth bytes and receipts.
+  - Windows and macOS desktop exit-gate materializers still searched legacy `chummer5a` file trees (`/docker/chummer5a/...`) when promoted tuple artifacts were missing, which could blur blocker diagnostics and source provenance.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-windows-desktop-exit-gate.sh`:
+    - removed legacy fallback candidate roots for installer bytes and startup-smoke receipts (`/docker/chummer5a/...` and `/docker/chummercomplete/chummer5a/...`).
+    - removed legacy-specific reason branches tied to chummer5a path resolution.
+  - patched `/docker/chummercomplete/chummer6-ui/scripts/materialize-macos-desktop-exit-gate.sh`:
+    - removed legacy fallback candidate roots for installer bytes and startup-smoke receipts (`/docker/chummer5a/...` and `/docker/chummercomplete/chummer5a/...`).
+    - removed legacy-specific reason branches tied to chummer5a path resolution.
+  - patched `/docker/chummercomplete/chummer6-ui/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs`:
+    - added `Windows_and_macos_exit_gate_materializers_do_not_resolve_proof_from_legacy_chummer5a_paths`.
+    - regression now locks that both materializer scripts keep repo-local shelf enforcement while containing no legacy chummer5a fallback strings.
+  - rematerialized `/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json`:
+    - gate remains expected-fail (`43`) for real missing Windows/macOS promoted tuple artifacts/startup-smoke, but failure reasons no longer include legacy chummer5a proof-source fallback.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-ui && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DesktopExecutableGateComplianceTests" --nologo -v minimal` -> PASS (`4` tests).
+  - `cd /docker/chummercomplete/chummer6-ui && bash scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh` -> expected FAIL (`43`) with tuple-missing Windows/macOS blocker reasons only.
+- Current trusted state:
+  - Windows/macOS exit-gate proof materialization is now constrained to repo-local/canonical roots instead of legacy chummer5a fallback paths.
+  - milestone-1/3 executable gate remains fail-honest on the real external blocker: missing promoted Windows/macOS installer bytes and startup-smoke receipts in release-channel truth.
+- Push status:
+  - `chummer6-ui`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
 ## 2026-04-04: milestone-5 event-control fallback now classifies singular compact `seasonop` shorthand
