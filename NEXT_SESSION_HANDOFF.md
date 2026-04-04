@@ -37644,3 +37644,16 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
 - Exact blocker:
   - full `Chummer.Tests` execution remains blocked by pre-existing cross-project namespace/reference instability in this workspace baseline.
   - GitHub HTTPS credentials remain unavailable for push from this environment.
+
+## 2026-04-04: handoff append commit + push status for milestone-17 import-oracle missing-source receipts slice
+
+- Commits landed:
+  - `chummer6-core`: `88bc759e` (`feat(w2-17): surface import-oracle missing-source receipts`).
+  - `chummer6-design`: `d66c87e` (`docs(w2-17): gate import-oracle missing-source evidence`).
+  - `fleet`: `b1bb6ef` (`feat(w2-17): fail-close journey gate on import-oracle missing-source markers`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-core-engine && git push` -> PASS (`fleet/core` updated to `88bc759e`).
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - GitHub HTTPS credentials are unavailable in this environment for `chummer6-design` and `fleet` remotes.
