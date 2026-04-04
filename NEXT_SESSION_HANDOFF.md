@@ -1,3 +1,26 @@
+## 2026-04-04: milestone-5 GM unresolved triage now classifies prep-library packet pressure as a governed domain
+
+- Trigger:
+  - frontier milestone `5` requires prep library operations to remain first-class alongside opposition, event control, and roster movement in the governed GM lane.
+  - `GmOpsBoardService.ResolveGmOpsDomain(...)` recognized opposition/event/roster shorthand but could still classify unresolved prep-library packet pressure as `general`, allowing newer generic unresolved items to outrank packet readiness work.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`:
+    - added `prep_library` domain detection for direct prep-library/prep-packet phrasing (`prep library`, `prep packet`, `prep dossier`, `prep briefing`, `prep binder`, `prep catalog`).
+    - added guarded fallback detection for packet/runbook/playbook/briefing/dossier/library terms when paired with GM prep context (`prep`, `gm`, `campaign`, `session`).
+    - added `prep_library` to domain-priority ordering above `general` so unresolved prep packet pressure remains in governed triage.
+  - patched `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`:
+    - added `GetProjection_UnresolvedItemsTreatPrepLibraryPacketSignalsAsPrepLibraryDomain`.
+    - regression locks ordering so unresolved prep-library packet work stays ahead of newer `general` unresolved noise at equal severity.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`23` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests|FullyQualifiedName~GmOpsBoardServiceTests" --nologo -v minimal` -> PASS (`349` tests on `net10.0` and `net10.0-windows`; transient build-copy retries under concurrent local activity resolved automatically).
+- Current trusted state:
+  - unresolved GM queue projection no longer requires opposition/event/roster terms to keep prep-library packet work governed.
+  - milestone-5 triage now treats prep-library packet readiness as first-class domain pressure instead of `general` backlog noise.
+- Push status:
+  - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`, `Chummer.Tests/GmOpsBoardServiceTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-4 campaign return lane now treats street-cred/public-awareness mutations as first-class relationship signals
 
 - Trigger:
