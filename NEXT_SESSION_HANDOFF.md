@@ -39,6 +39,27 @@
   - `chummer.run-services`: local changes pending commit/push in this environment (`Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`, `Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`; credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
+## 2026-04-04: public `/downloads/files/*` route now stays shelf-governed and no longer exposes withheld mac artifacts
+
+- Trigger:
+  - full `chummer6-hub` verify gate (`bash scripts/ai/verify.sh`) failed in `RunServicesSmoke` on public release-shelf safety: direct file route resolved withheld mac artifacts that were intentionally filtered from the public shelf.
+  - recent raw-manifest fallback hardening for account-gated dispatch fixed signed-in install flows, but `/downloads/files/{**path}` still resolved by path against raw manifest state and could leak hidden artifacts by filename.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Run.Api/Controllers/DownloadsCompatibilityController.cs`:
+    - `/downloads/files/{**path}` now resolves artifacts only from the access-filtered public manifest surface.
+    - added `ResolvePublicManifestArtifactByPath(...)` helper to enforce public-shelf-only path resolution while keeping id-based install handoff routes (`/downloads/get/{artifactId}`, `/downloads/file/{artifactId}`) on their existing account-gated fallback behavior.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/DownloadsCompatibilityControllerTests.cs`:
+    - added `DirectFileRouteDoesNotExposeWithheldMacArtifact` regression coverage to lock `404` behavior for withheld mac file paths.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~DownloadsCompatibilityControllerTests|FullyQualifiedName~RunServicesSmoke" --nologo -v minimal` -> PASS (`7` tests on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, `run-services in-process smoke passed`).
+- Current trusted state:
+  - public direct-file routes are now shelf-governed and fail-closed for withheld artifacts.
+  - signed-in/account-gated install handoff remains intact on explicit artifact-id routes.
+- Push status:
+  - `chummer6-hub` (repo root maps to `/docker/chummercomplete/chummer.run-services` in this workspace): local changes pending commit/push in this environment (`Chummer.Run.Api/Controllers/DownloadsCompatibilityController.cs`, `Chummer.Tests/DownloadsCompatibilityControllerTests.cs`; credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
+
 ## 2026-04-04: milestone-2 UI parity gate now audits active parity-oracle catalogs instead of retired legacy-shell files
 
 - Trigger:
