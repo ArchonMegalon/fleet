@@ -45,9 +45,11 @@
 - Commits landed:
   - `chummer6-design`: `daa6d49` (`feat(w2-15): fail-close utility parity markers in campaign journey gate`).
   - `fleet`: `83b8baf` (`feat(w2-15): enforce utility parity marker contract in journey gates`).
+  - `fleet`: `53eaa1f` (`docs(handoff): record w2-15 utility parity gate hardening slice`).
 - Push attempts:
   - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
   - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` (after handoff commit) -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated push from both `chummer6-design` and `fleet`.
 
