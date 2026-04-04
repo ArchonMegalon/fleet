@@ -20,6 +20,36 @@
   - `chummer6-hub`: local changes landed in this slice (`scripts/ai/verify.sh`, `Chummer.Tests/VerificationEntryPointTests.cs`); commit/push attempted below (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
 
+## 2026-04-04: milestone-5 organizer event-control lane now fail-closes hyphen singular `league-op` and `community-op` aliases across prep canonicalization and live API/UI journeys
+
+- Trigger:
+  - organizer milestone-5 coverage already fail-closed compact plus split/hyphen plural (`leagueops`, `league ops`, `league-ops`, `communityops`, `community ops`, `community-ops`) and operation forms (`*-operation`, `*-operations`).
+  - hyphen singular aliases (`league-op`, `community-op`) were token-supported by split normalization but not explicitly executed and script-locked in service tests, live API/workspace audits, or Playwright journey markers.
+- Landed:
+  - patched service/query tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+    - added explicit `league-op` and `community-op` query assertions for prep matching and GM prep retrieval.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=league-op` and `queryText=community-op`.
+      - added signed-in workspace route checks for `prepQuery=league-op` and `prepQuery=community-op`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `league-op` and `community-op` with route-preservation and non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for `queryText`/`prepQuery` `league-op` and `community-op`.
+      - expanded Playwright marker assertions for `?prepQuery=league-op` / `?prepQuery=community-op` and corresponding hyphen marker labels.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsSplitOpsAndControlShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsCompactShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-5 organizer query proof now explicitly fail-closes hyphen singular, split, compact, and operation variants across event-control, league-control, and community-control retrieval lanes.
+- Push status:
+  - `chummer.run-services`: local changes landed in this slice; commit/push attempted below (credential-dependent).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted below (credential-dependent).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for stale nested `releaseProof.generated_at` alias timestamps
 
 - Trigger:
