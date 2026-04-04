@@ -1,3 +1,57 @@
+## 2026-04-04: follow-up on W3 GM ops `gmctrls` shorthand script-lock closure (commit and push status)
+
+- Commits landed:
+  - `chummer.run-services`: `a2cbbd99` (`fix(w3): script-lock gmctrls shorthand across api and workspace audits`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer.run-services && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment has no configured GitHub credentials for HTTPS remotes, so commit remains local-only until auth is restored.
+
+## 2026-04-04: milestone-4/5 GM operations lane now script-locks compact/split/hyphen `gmctrls` shorthand across live API and workspace journeys
+
+- Trigger:
+  - W3 GM operations shorthand coverage already fail-closed `gmctrl`, `gmctl`, and `gmctls` in canonicalization and unit regressions.
+  - live script-lock rails still skipped `gmctrls` forms (`gmctrls`, `gm ctrls`, `gm-ctrls`) in both API `queryText` probes and workspace `prepQuery` journey checks.
+- Landed:
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`:
+    - added governed prep-library API checks for:
+      - `queryText=gmctrls`
+      - `queryText=gm%20ctrls`
+      - `queryText=gm-ctrls`
+    - added workspace journey checks for:
+      - `prepQuery=gmctrls`
+      - `prepQuery=gm%20ctrls`
+      - `prepQuery=gm-ctrls`
+    - each probe now requires HTTP `200` plus non-empty governed packet results.
+  - patched `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`:
+    - added browser route + body assertions for compact/split/hyphen `gmctrls` workspace prep-search forms.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`2` tests on `net10.0` and `net10.0-windows`).
+- Current trusted state:
+  - milestone-4/5 GM ops shorthand now has live API and browser script-lock coverage for compact/split/hyphen `gmctrls`, reducing wording-drift risk in governed prep retrieval paths.
+
+## 2026-04-04: milestone-2 hub parity verify now self-heals workflow-gate generated_at drift via targeted rematerialization retry
+
+- Commits landed:
+  - `chummer6-hub`: `98ffee76` (`fix(milestone-2): auto-rematerialize workflow gate on generated_at drift`).
+- Trigger:
+  - milestone-2 parity intermittently failed when workflow and visual receipts drifted on nested release-channel `generated_at` timestamps, requiring manual reruns of UI workflow-gate materialization before hub verify could pass.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - wrapped the initial parity audit in `run_ui_parity_audit_with_workflow_gate_retry`.
+    - when failure output matches `milestone-2 workflow/visual release-channel generated_at drift`, verify now runs `/docker/chummercomplete/chummer6-ui/scripts/ai/milestones/materialize-desktop-workflow-execution-gate.sh` once and reruns `scripts/audit-ui-parity.sh`.
+    - non-drift parity failures still fail-close immediately.
+  - patched script-lock coverage in `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs` so verify must keep the workflow-gate drift retry markers and rematerialization hook.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~VerificationEntryPointTests.AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles" --nologo -v minimal` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (`run-services restore drill passed`, `run-services verification passed`, baseline parity passes; expected mutation probes continue to fail-close; final `run-services in-process smoke passed`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer6-hub && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - local environment still lacks configured GitHub HTTPS credentials, so new commits remain local-only until auth is restored.
+
 ## 2026-04-04: follow-up verify after milestone-2 workflow gate rematerialization confirms run-services parity lane remains green
 
 - Verification:
