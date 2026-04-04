@@ -1,3 +1,23 @@
+## 2026-04-04: milestone-14 parity canon now reflects governed settings/source-toggle projection evidence while keeping UX closure explicit
+
+- Trigger:
+  - milestone-14 runtime evidence now projects settings profile counts and source-toggle posture in `chummer6-core`, but parity matrix wording still described settings lane as generic canon-only posture.
+  - this created avoidable drift between executable parity evidence and canonical no-step-back language.
+- Landed:
+  - patched `/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`:
+    - settings family row now states master-index settings projection evidence (`settings.xml` profiles, toggle coverage, stale/governed toggle posture) while keeping explicit note that first-class settings UX consolidation remains open.
+  - patched Fleet design mirror copy:
+    - `/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md`
+- Verification:
+  - `rg -n "master-index settings lane now projects profile counts, toggle coverage" /docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY.md /docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY.md` -> PASS (canon + mirror text aligned).
+- Commits landed:
+  - `chummer6-design`: `3adcd65` (`docs(w14): reflect settings and source-toggle projection evidence`).
+  - `fleet`: pending local commit containing mirror + handoff refresh for this follow-on slice.
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - none for this landed canon sync slice; push remains blocked in this environment by missing GitHub HTTPS credentials.
+
 ## 2026-04-04: milestone-14 master-index now emits explicit settings-profile and source-toggle posture for governed rules-environment parity
 
 - Trigger:
