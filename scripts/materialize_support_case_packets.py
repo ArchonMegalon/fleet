@@ -739,6 +739,23 @@ def _counter_map(values: Iterable[str]) -> Dict[str, int]:
     return {key: counter[key] for key in sorted(counter)}
 
 
+def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
+    request_rows = [
+        dict(row)
+        for row in (release_channel_index.get("external_proof_requests") or [])
+        if isinstance(row, dict)
+    ]
+    host_counts = _counter_map(_normalize_text(item.get("required_host")) for item in request_rows)
+    tuple_counts = _counter_map(_normalize_text(item.get("tuple_id")) for item in request_rows)
+    return {
+        "count": len(request_rows),
+        "host_counts": host_counts,
+        "tuple_counts": tuple_counts,
+        "hosts": sorted(host_counts.keys()),
+        "tuples": sorted(tuple_counts.keys()),
+    }
+
+
 def _closure_waiting_on_release_truth(packet: Dict[str, Any]) -> bool:
     status = _normalize_text(packet.get("status")).lower()
     if status in {"accepted", "fixed"}:
@@ -776,6 +793,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         for item in raw_items
         if isinstance(item, dict) and _normalize_text(item.get("status")).lower() in open_statuses
     ]
+    unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
 
     return {
         "contract_name": "fleet.support_case_packets",
@@ -826,6 +844,11 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
                 for item in open_packets
                 if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
+            "unresolved_external_proof_request_count": int(unresolved_external_proof["count"]),
+            "unresolved_external_proof_request_host_counts": dict(unresolved_external_proof["host_counts"]),
+            "unresolved_external_proof_request_tuple_counts": dict(unresolved_external_proof["tuple_counts"]),
+            "unresolved_external_proof_request_hosts": list(unresolved_external_proof["hosts"]),
+            "unresolved_external_proof_request_tuples": list(unresolved_external_proof["tuples"]),
         },
         "packets": packets,
     }

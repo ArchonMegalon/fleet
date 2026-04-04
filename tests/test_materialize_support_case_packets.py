@@ -16,6 +16,7 @@ SCRIPT = Path("/docker/fleet/scripts/materialize_support_case_packets.py")
 def test_materialize_support_case_packets(tmp_path: Path) -> None:
     source = tmp_path / "support_cases.json"
     out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
     source.write_text(
         json.dumps(
             {
@@ -70,6 +71,8 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
             str(SCRIPT),
             "--source",
             str(source),
+            "--release-channel",
+            str(release_channel),
             "--out",
             str(out_path),
         ],
@@ -95,6 +98,11 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["external_proof_required_case_count"] == 0
     assert payload["summary"]["external_proof_required_host_counts"] == {}
     assert payload["summary"]["external_proof_required_tuple_counts"] == {}
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 0
+    assert payload["summary"]["unresolved_external_proof_request_host_counts"] == {}
+    assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {}
+    assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
+    assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -445,6 +453,11 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["external_proof_required_case_count"] == 0
     assert payload["summary"]["external_proof_required_host_counts"] == {}
     assert payload["summary"]["external_proof_required_tuple_counts"] == {}
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 0
+    assert payload["summary"]["unresolved_external_proof_request_host_counts"] == {}
+    assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {}
+    assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
+    assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
     waiting_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
     assert waiting_packet["install_diagnosis"]["registry_channel_id"] == "preview"
     assert waiting_packet["install_diagnosis"]["registry_release_channel_status"] == "published"
@@ -561,6 +574,11 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
     assert payload["summary"]["external_proof_required_case_count"] == 1
     assert payload["summary"]["external_proof_required_host_counts"] == {"windows": 1}
     assert payload["summary"]["external_proof_required_tuple_counts"] == {"avalonia:win-x64:windows": 1}
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 1
+    assert payload["summary"]["unresolved_external_proof_request_host_counts"] == {"windows": 1}
+    assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {"avalonia:win-x64:windows": 1}
+    assert payload["summary"]["unresolved_external_proof_request_hosts"] == ["windows"]
+    assert payload["summary"]["unresolved_external_proof_request_tuples"] == ["avalonia:win-x64:windows"]
     packet = payload["packets"][0]
     assert packet["install_truth_state"] == "tuple_not_on_promoted_shelf"
     assert packet["install_diagnosis"]["case_tuple_id"] == "avalonia:win-x64:windows"
@@ -580,6 +598,80 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
         ],
     }
     assert packet["recovery_path"]["action_id"] == "open_downloads"
+
+
+def test_materialize_support_case_packets_reports_release_channel_external_proof_backlog_without_open_cases(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(json.dumps({"items": []}, indent=2) + "\n", encoding="utf-8")
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "desktopTupleCoverage": {
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "requiredHost": "windows",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        },
+                        {
+                            "tupleId": "blazor-desktop:osx-arm64:macos",
+                            "head": "blazor-desktop",
+                            "platform": "macos",
+                            "rid": "osx-arm64",
+                            "requiredHost": "macos",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        },
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["open_case_count"] == 0
+    assert payload["summary"]["external_proof_required_case_count"] == 0
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 2
+    assert payload["summary"]["unresolved_external_proof_request_host_counts"] == {"macos": 1, "windows": 1}
+    assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {
+        "avalonia:win-x64:windows": 1,
+        "blazor-desktop:osx-arm64:macos": 1,
+    }
+    assert payload["summary"]["unresolved_external_proof_request_hosts"] == ["macos", "windows"]
+    assert payload["summary"]["unresolved_external_proof_request_tuples"] == [
+        "avalonia:win-x64:windows",
+        "blazor-desktop:osx-arm64:macos",
+    ]
 
 
 def test_materialize_support_case_packets_marks_update_required_when_fixed_version_differs_from_installed_version(tmp_path: Path) -> None:

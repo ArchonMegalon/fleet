@@ -1,3 +1,48 @@
+## 2026-04-04: milestone-1/3 support packets now fail-close unresolved external-proof backlog truth even without open support cases
+
+- Trigger:
+  - W1 install/update/recovery + packaged proof lanes were externally blocked on four Windows/macOS host tuples, but `SUPPORT_CASE_PACKETS.generated.json` could still report zero external-proof pressure whenever no support case was open.
+  - this left a drift seam where journey gates showed external tuple blockers while support summary truth implied no unresolved host-proof backlog.
+- Landed:
+  - patched `/docker/fleet/scripts/materialize_support_case_packets.py`:
+    - added release-channel-backed unresolved external-proof backlog projection in support summary:
+      - `unresolved_external_proof_request_count`
+      - `unresolved_external_proof_request_host_counts`
+      - `unresolved_external_proof_request_tuple_counts`
+      - `unresolved_external_proof_request_hosts`
+      - `unresolved_external_proof_request_tuples`
+    - backlog projection now comes from registry `desktopTupleCoverage.externalProofRequests` even when open-case count is zero.
+  - patched `/docker/fleet/scripts/materialize_journey_gates.py`:
+    - `require_support_install_truth_contract` now fail-closes when support summary unresolved external-proof backlog drifts from release-channel external-proof requests.
+    - added journey signal `support_unresolved_external_proof_request_count`.
+  - patched Fleet regressions:
+    - `/docker/fleet/tests/test_materialize_support_case_packets.py`
+      - tightened baseline assertions for new unresolved-backlog summary keys.
+      - added `test_materialize_support_case_packets_reports_release_channel_external_proof_backlog_without_open_cases`.
+    - `/docker/fleet/tests/test_materialize_journey_gates_external_proof_contract.py`
+      - added `test_install_journey_blocks_when_support_external_proof_backlog_summary_drifts`.
+  - regenerated Fleet artifacts:
+    - `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json`
+    - `/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json`
+    - `/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json`
+    - `/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json`
+- Verification:
+  - `cd /docker/fleet && python3 -m py_compile scripts/materialize_support_case_packets.py scripts/materialize_journey_gates.py tests/test_materialize_support_case_packets.py tests/test_materialize_journey_gates_external_proof_contract.py` -> PASS.
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_support_case_packets.py tests/test_materialize_journey_gates_external_proof_contract.py` -> PASS (`12 passed`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py -k "support_external_proof_request"` -> PASS (`1 passed, 24 deselected`).
+  - `cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS.
+  - `cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json` -> PASS (`fail; ready=4, warning=4, missing=0`).
+  - `cd /docker/fleet && jq '.summary | {external_proof_required_case_count,unresolved_external_proof_request_count,unresolved_external_proof_request_host_counts,unresolved_external_proof_request_tuple_counts}' .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` -> PASS (`unresolved_external_proof_request_count=4`, host split `macos=2`, `windows=2`).
+  - `cd /docker/fleet && jq '.journeys[] | select(.id=="install_claim_restore_continue") | {state,signals:{support_unresolved_external_proof_request_count:.signals.support_unresolved_external_proof_request_count,external_proof_request_count:.signals.external_proof_request_count}}' .codex-studio/published/JOURNEY_GATES.generated.json` -> PASS (both counts `4`, state remains `blocked` for external host-proof reasons).
+- Commits landed:
+  - `fleet`: `<pending>` (`feat(w1-1-3): fail-close unresolved support external-proof backlog drift`).
+- Push attempts:
+  - pending commit.
+- Exact blocker:
+  - install journey still external-only blocked on missing native Windows/macOS promoted installer + startup-smoke tuple receipts.
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
+
 ## 2026-04-04: handoff second push retry for milestone-4/5/6 full mobile continuity+gm marker hardening slice
 
 - Commits pending push:

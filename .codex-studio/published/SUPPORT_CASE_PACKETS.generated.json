@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-04T19:04:58Z",
+  "generated_at": "2026-04-04T19:20:05Z",
   "packets": [],
   "schema_version": 1,
   "source": {
@@ -20,6 +20,27 @@
     "open_case_count": 0,
     "owner_repo_counts": {},
     "status_counts": {},
+    "unresolved_external_proof_request_count": 4,
+    "unresolved_external_proof_request_host_counts": {
+      "macos": 2,
+      "windows": 2
+    },
+    "unresolved_external_proof_request_hosts": [
+      "macos",
+      "windows"
+    ],
+    "unresolved_external_proof_request_tuple_counts": {
+      "avalonia:osx-arm64:macos": 1,
+      "avalonia:win-x64:windows": 1,
+      "blazor-desktop:osx-arm64:macos": 1,
+      "blazor-desktop:win-x64:windows": 1
+    },
+    "unresolved_external_proof_request_tuples": [
+      "avalonia:osx-arm64:macos",
+      "avalonia:win-x64:windows",
+      "blazor-desktop:osx-arm64:macos",
+      "blazor-desktop:win-x64:windows"
+    ],
     "update_required_case_count": 0,
     "update_required_misrouted_case_count": 0,
     "update_required_routed_to_downloads_count": 0

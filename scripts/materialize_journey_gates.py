@@ -588,6 +588,31 @@ def evaluate_journey(
                 "support packets do not prove all update-required cases route to /downloads."
             )
     if bool(fleet_gate.get("require_support_install_truth_contract")):
+        def _counter_map(values: List[str]) -> Dict[str, int]:
+            counts: Dict[str, int] = {}
+            for raw in values:
+                token = str(raw or "").strip()
+                if not token:
+                    continue
+                counts[token] = counts.get(token, 0) + 1
+            return {key: counts[key] for key in sorted(counts)}
+
+        def _normalized_summary_counter(value: Any) -> Dict[str, int]:
+            if not isinstance(value, dict):
+                return {}
+            normalized: Dict[str, int] = {}
+            for key, raw_count in value.items():
+                token = str(key or "").strip()
+                if not token:
+                    continue
+                try:
+                    count = int(raw_count)
+                except (TypeError, ValueError):
+                    continue
+                if count > 0:
+                    normalized[token] = count
+            return {key: normalized[key] for key in sorted(normalized)}
+
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         support_external_proof_required_count = 0
         for index, packet in enumerate(packets, start=1):
@@ -758,6 +783,34 @@ def evaluate_journey(
             blocking_reasons.append(
                 "support packet summary external_proof_required_case_count does not match packet install_diagnosis facts."
             )
+        expected_external_proof_backlog_count = len(external_proof_requests)
+        reported_external_proof_backlog_count = int(
+            support_summary.get("unresolved_external_proof_request_count") or 0
+        )
+        if expected_external_proof_backlog_count != reported_external_proof_backlog_count:
+            blocking_reasons.append(
+                "support packet summary unresolved_external_proof_request_count does not match release-channel external proof backlog."
+            )
+        expected_external_proof_backlog_host_counts = _counter_map(
+            [str(item.get("required_host") or "").strip().lower() for item in external_proof_requests]
+        )
+        reported_external_proof_backlog_host_counts = _normalized_summary_counter(
+            support_summary.get("unresolved_external_proof_request_host_counts")
+        )
+        if expected_external_proof_backlog_host_counts != reported_external_proof_backlog_host_counts:
+            blocking_reasons.append(
+                "support packet summary unresolved_external_proof_request_host_counts does not match release-channel external proof backlog."
+            )
+        expected_external_proof_backlog_tuple_counts = _counter_map(
+            [str(item.get("tuple_id") or "").strip() for item in external_proof_requests]
+        )
+        reported_external_proof_backlog_tuple_counts = _normalized_summary_counter(
+            support_summary.get("unresolved_external_proof_request_tuple_counts")
+        )
+        if expected_external_proof_backlog_tuple_counts != reported_external_proof_backlog_tuple_counts:
+            blocking_reasons.append(
+                "support packet summary unresolved_external_proof_request_tuple_counts does not match release-channel external proof backlog."
+            )
     if bool(fleet_gate.get("require_support_recovery_path_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         for index, packet in enumerate(packets, start=1):
@@ -874,6 +927,9 @@ def evaluate_journey(
         ),
         "support_external_proof_required_case_count": int(
             support_summary.get("external_proof_required_case_count") or 0
+        ),
+        "support_unresolved_external_proof_request_count": int(
+            support_summary.get("unresolved_external_proof_request_count") or 0
         ),
         "support_install_truth_contract_violation_count": len(support_packet_contract_violations),
         "support_recovery_route_contract_violation_count": len(support_recovery_contract_violations),
