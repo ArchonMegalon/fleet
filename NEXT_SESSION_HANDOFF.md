@@ -1,3 +1,25 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for uppercase and empty-segment `releaseProof.proofRoutes` values
+
+- Trigger:
+  - parity audit already fail-closed non-canonical uppercase route casing and empty path segments in nested `releaseProof.proofRoutes`, but Hub verify mutation coverage did not execute those branches.
+  - this left route-shape grammar enforcement partially unproven in Hub’s end-to-end verify harness.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.proofRoutes=["/Home/access"]` and asserted `audit-ui-parity.sh` fails for uppercase route casing.
+    - added mutation `releaseProof.proofRoutes=["/home//access"]` and asserted `audit-ui-parity.sh` fails for empty path segments.
+    - preserved release-channel receipt restore between mutation checks before smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock both new route grammar mutation coverage texts.
+- Verification:
+  - `cd /docker/chummercomplete/chummer6-hub && bash -n scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertions for uppercase and empty-segment `releaseProof.proofRoutes` mutations, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now actively proves all currently enforced `releaseProof.proofRoutes` grammar fail-close branches (`percent/escape`, `query/fragment`, `dot-segment`, `uppercase`, `empty segment`, `duplicate normalized`, `missing required`, `unexpected`) in the mutation lane.
+- Push status:
+  - `chummer6-hub`: committed (`7b24c564`); push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for invalid `releaseProof.baseUrl` scheme, non-origin path/query shape, and userinfo credentials
 
 - Trigger:
