@@ -686,6 +686,7 @@ def evaluate_journey(
     blocking_reasons: List[str] = []
     warning_reasons: List[str] = []
     external_proof_requests: List[Dict[str, Any]] = []
+    release_channel_external_proof_source_present = False
     now = utc_now()
 
     for artifact_name in fleet_gate.get("required_artifacts") or []:
@@ -796,6 +797,7 @@ def evaluate_journey(
                 # Support/install contract checks need the tuple backlog whenever release-channel truth is present,
                 # even when this gate only enforces json_must_be_one_of fields.
                 external_proof_requests = _release_channel_external_proof_requests(proof_payload)
+                release_channel_external_proof_source_present = True
                 validate_release_channel_external_proof_contract = True
 
         if json_required:
@@ -1222,13 +1224,13 @@ def evaluate_journey(
                                         f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands does not declare expected host token '{expected_host_token}'."
                                     )
                         tuple_id = str(external_proof_request.get("tuple_id") or "").strip()
-                        if expected_external_proof_request_by_tuple:
-                            expected_request = expected_external_proof_request_by_tuple.get(tuple_id)
+                        expected_request = expected_external_proof_request_by_tuple.get(tuple_id)
+                        if release_channel_external_proof_source_present:
                             if expected_request is None:
                                 support_packet_contract_violations.append(
                                     f"support packet {packet_id} external proof tuple '{tuple_id or 'unknown'}' is not present in release-channel external proof backlog."
                                 )
-                            else:
+                        if expected_request is not None:
                                 for required_key in (
                                     "channel_id",
                                     "required_host",
