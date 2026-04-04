@@ -39580,3 +39580,14 @@ The main rule for the next session is unchanged: re-derive from `chummer-design`
   - pending.
 - Exact blocker:
   - none for repo-local implementation and verification; push outcome depends on environment GitHub HTTPS credentials.
+
+## 2026-04-04: handoff follow-up commit + push status for milestone-7/8/9/16 media-factory gate-hardening slice
+
+- Commits landed:
+  - `chummer6-design`: `eb1e379` (`feat(w4-7-8-9-16): require media packet parity markers in build-explain gate`).
+  - `fleet`: `41eddf0` (`feat(w4-7-8-9-16): fail-close media factory parity evidence in build gate`).
+- Push attempts:
+  - `cd /docker/chummercomplete/chummer-design && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+  - `cd /docker/fleet && git push` -> FAIL (`fatal: could not read Username for 'https://github.com': No such device or address`).
+- Exact blocker:
+  - environment lacks GitHub HTTPS credentials for authenticated pushes.
