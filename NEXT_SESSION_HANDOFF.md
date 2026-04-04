@@ -1,3 +1,39 @@
+## 2026-04-04: milestone-4/5 continuity and GM-ops lanes now fail-close `debriefing` and `debriefings` aliases across canonicalization plus live API/UI journeys
+
+- Trigger:
+  - after landing `debrief`/`debriefs`, adjacent post-session phrasing `debriefing`/`debriefings` was still outside prep query canonicalization and script-lock coverage.
+  - this left a remaining continuity retrieval seam where workspace and GM prep search could drift on common debriefing wording.
+- Landed:
+  - patched canonicalization services:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs`
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Run.AI/Services/Ops/GmOpsBoardService.cs`
+    - added rewrites:
+      - `debriefing -> recap`
+      - `debriefings -> recap`
+  - expanded unit tests:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/CampaignWorkspaceServerPlaneServiceTests.cs`
+      - continuity plural shorthand test now asserts `debriefing` and `debriefings`.
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/GmOpsBoardServiceTests.cs`
+      - continuity plural shorthand test now asserts `debriefing` and `debriefings`.
+  - patched live journey audits:
+    - `/docker/chummercomplete/chummer.run-services/scripts/hub-live-audit.py`
+      - added prep-library API checks for `queryText=debriefing` and `queryText=debriefings`.
+      - added signed-in workspace route checks for `prepQuery=debriefing` and `prepQuery=debriefings`.
+    - `/docker/chummercomplete/chummer.run-services/scripts/e2e-hub-playwright.cjs`
+      - added browser journey checks for `prepQuery=debriefing` and `prepQuery=debriefings` with route/copy/non-empty governed packet assertions.
+  - patched script-lock assertions:
+    - `/docker/chummercomplete/chummer.run-services/Chummer.Tests/VerificationEntryPointTests.cs`
+      - expanded live-audit marker assertions for `queryText/prepQuery=debriefing` and `queryText/prepQuery=debriefings`.
+      - expanded Playwright marker assertions for `?prepQuery=debriefing`, `?prepQuery=debriefings`, and related continuity copy markers.
+- Verification:
+  - `cd /docker/chummercomplete/chummer.run-services && python3 -m py_compile scripts/hub-live-audit.py` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && node --check scripts/e2e-hub-playwright.cjs` -> PASS.
+  - `cd /docker/chummercomplete/chummer.run-services && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~CampaignWorkspaceServerPlaneServiceTests.PrepLibraryQueryMatchingSupportsContinuityPluralShorthandAcrossWhitespaceAndPunctuation|FullyQualifiedName~GmOpsBoardServiceTests.ListPrepAssets_QuerySupportsContinuityPluralShorthand|FullyQualifiedName~VerificationEntryPointTests.HubLiveAuditSupportsReverseProxiedLocalEdgeMode|FullyQualifiedName~VerificationEntryPointTests.HubCloseoutAndE2EUseReverseProxiedLocalEdgeAudit" --nologo -v minimal` -> PASS (`4` tests on `net10.0` and `net10.0-windows`).
+- Commits landed:
+  - `chummer.run-services`: `6522897c` (`fix(campaign-os): fail-close debriefing continuity aliases`).
+- Push status:
+  - pending push attempt in this environment (credential-dependent).
+
 ## 2026-04-04: follow-up on signoff-smoke alias fail-close commit and push status
 
 - Commits landed:
