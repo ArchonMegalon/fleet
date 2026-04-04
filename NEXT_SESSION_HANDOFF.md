@@ -81,6 +81,19 @@
 - Exact blocker:
   - environment lacks GitHub HTTPS credentials for authenticated pushes.
 
+## 2026-04-04: adjacent fleet status-plane verification suite re-aligned to inventory-normalized semantics
+
+- Trigger:
+  - after enabling full local pytest execution for W1 install/recovery lanes, adjacent Fleet status-plane suites surfaced stale assumptions in `verify_status_plane_semantics` tests.
+  - runtime verification now normalizes admin status through project-inventory completion before comparison; tests that built expected payloads from non-normalized samples were drifting.
+- Landed:
+  - patched `/docker/fleet/tests/test_verify_status_plane_semantics.py`:
+    - added `_normalized_admin_status(...)` helper that applies runtime `_ensure_project_inventory(...)` before `build_expected_status_plane(...)` in pass/fail normalization tests.
+    - made readiness-drift subtest deterministic by mutating `fleet` readiness stage to explicit invalid token (`stage_drifted_for_test`) instead of potentially-equivalent stage values.
+- Verification:
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_verify_status_plane_semantics.py tests/test_materialize_status_plane.py` -> PASS (`31 passed, 1 subtests passed`).
+  - `cd /docker/fleet && python3 -m pytest -q tests/test_materialize_journey_gates.py tests/test_materialize_journey_gates_external_proof_contract.py tests/test_materialize_support_case_packets.py tests/test_support_external_proof_contract_projection.py tests/test_materialize_flagship_product_readiness.py tests/test_materialize_status_plane.py tests/test_verify_status_plane_semantics.py` -> PASS (`107 passed, 1 subtests passed`).
+
 ## 2026-04-04: milestone-1/3 support install-proof regression suite now runs locally and is green after contract hardening
 
 - Trigger:

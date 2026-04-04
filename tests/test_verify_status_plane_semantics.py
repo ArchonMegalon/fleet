@@ -136,12 +136,15 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.verify = _load_module()
 
+    def _normalized_admin_status(self, admin_status: dict) -> dict:
+        return self.verify._ensure_project_inventory(copy.deepcopy(admin_status))
+
     def test_verify_status_plane_passes_when_semantics_match(self) -> None:
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            admin_status = _sample_admin_status()
+            admin_status = self._normalized_admin_status(_sample_admin_status())
             status_plane = self.verify.build_expected_status_plane(admin_status)
             status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
             status_plane_path.write_text(yaml.safe_dump(status_plane, sort_keys=False), encoding="utf-8")
@@ -162,10 +165,13 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
             with TemporaryDirectory() as tmp:
                 tmp_path = Path(tmp)
-                admin_status = _sample_admin_status()
+                admin_status = self._normalized_admin_status(_sample_admin_status())
                 expected = self.verify.build_expected_status_plane(admin_status)
                 drifted = copy.deepcopy(expected)
-                drifted["projects"][0]["readiness_stage"] = "boundary_pure"
+                fleet_project = next(
+                    row for row in drifted["projects"] if isinstance(row, dict) and row.get("id") == "fleet"
+                )
+                fleet_project["readiness_stage"] = "stage_drifted_for_test"
                 status_plane_path = tmp_path / "STATUS_PLANE.generated.yaml"
                 status_plane_path.write_text(yaml.safe_dump(drifted, sort_keys=False), encoding="utf-8")
                 status_json_path = tmp_path / "status.json"
@@ -197,7 +203,7 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            admin_status = _sample_admin_status()
+            admin_status = self._normalized_admin_status(_sample_admin_status())
             expected = self.verify.build_expected_status_plane(admin_status)
             drifted = copy.deepcopy(expected)
             drifted["generated_at"] = "2026-03-23T07:20:00Z"
@@ -214,7 +220,7 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            admin_status = _sample_admin_status()
+            admin_status = self._normalized_admin_status(_sample_admin_status())
             admin_status["projects"][0]["runtime_status"] = "waiting_capacity"
             expected = self.verify.build_expected_status_plane(admin_status)
             self.assertEqual(expected["projects"][0]["runtime_status"], "dispatch_pending")
@@ -230,7 +236,7 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            admin_status = _sample_admin_status()
+            admin_status = self._normalized_admin_status(_sample_admin_status())
             admin_status["projects"][0]["runtime_status"] = "review_fix"
             expected = self.verify.build_expected_status_plane(admin_status)
             self.assertEqual(expected["projects"][0]["runtime_status"], "dispatch_pending")
@@ -246,7 +252,7 @@ class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            admin_status = _sample_admin_status()
+            admin_status = self._normalized_admin_status(_sample_admin_status())
             admin_status["projects"][0]["runtime_status"] = "local_review"
             expected = self.verify.build_expected_status_plane(admin_status)
             self.assertEqual(expected["projects"][0]["runtime_status"], "dispatch_pending")
