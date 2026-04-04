@@ -1,3 +1,24 @@
+## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for incomplete `releaseProof.proofRoutes` required flagship routes
+
+- Trigger:
+  - milestone-2 parity audit already fail-closed when `releaseProof.proofRoutes` missed required flagship routes, but Hub verify mutation coverage still only exercised malformed/duplicate/base-origin route cases.
+  - this left one high-impact route-completeness branch unproven in Hub’s end-to-end verify entrypoint.
+- Landed:
+  - patched `/docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh`:
+    - added mutation `releaseProof.proofRoutes=["/home/access"]` and asserted `audit-ui-parity.sh` fails.
+    - preserved release-channel receipt restore before continuing smoke.
+  - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
+    - extended `VerifyEntrypointRunsUiParityAudit` marker assertions to lock both duplicate-normalized and missing-required-route mutation coverage text.
+- Verification:
+  - `bash -n /docker/chummercomplete/chummer6-hub/scripts/ai/verify.sh` -> PASS.
+  - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~VerificationEntryPointTests.VerifyEntrypointRunsUiParityAudit" --nologo -v minimal` -> PASS (`1` test on `net10.0` and `net10.0-windows`).
+  - `cd /docker/chummercomplete/chummer6-hub && bash scripts/ai/verify.sh` -> PASS (includes expected parity-audit fail-close assertion for missing required `proofRoutes`, then completes smoke).
+- Current trusted state:
+  - Hub verify entrypoint now proves malformed, origin-policy, duplicate-normalized, and required-route completeness fail-close behavior for `releaseProof` route evidence before smoke.
+- Push status:
+  - `chummer6-hub`: commit/push attempted in this slice (credential-dependent in this environment).
+  - `fleet`: handoff updated locally in this slice; commit/push attempted (credential-dependent in this environment).
+
 ## 2026-04-04: milestone-2 Hub verify entrypoint now also proves fail-close for duplicate-normalized `releaseProof.proofRoutes`
 
 - Trigger:
