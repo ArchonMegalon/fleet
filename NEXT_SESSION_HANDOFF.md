@@ -45,22 +45,26 @@
   - `chummer.run-services`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
 
-## 2026-04-04: milestone-2 parity audit now fail-closes missing SR6 workflow parity status evidence
+## 2026-04-04: milestone-2 parity audit now fail-closes SR6 status drift plus stale SR4/SR6/Chummer5a/frontier workflow parity proofs
 
 - Trigger:
-  - frontier milestone `2` requires legacy-familiar workflow parity across SR4, SR6, and Chummer5a mental models.
-  - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` already emitted `sr6_workflow_parity_status`, but Hub parity audit only fail-closed `sr4_workflow_parity_status`, `chummer5a_workflow_parity_status`, and `sr4_sr6_frontier_status`.
-  - this left a drift path where SR6 parity-specific status could regress while the top-level milestone-2 parity audit still passed.
+  - frontier milestone `2` requires legacy-familiar workflow parity across SR4, SR6, and Chummer5a mental models with fresh, provenance-backed evidence.
+  - `DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json` already emitted `sr6_workflow_parity_status` plus per-proof parity evidence timestamps and age fields, but Hub parity audit did not fail-close on SR6 status and did not enforce freshness/provenance constraints for those underlying parity receipts.
+  - this left drift paths where SR6-specific status or stale per-edition parity proofs could regress while the top-level milestone-2 parity audit still passed.
 - Landed:
   - patched `/docker/chummercomplete/chummer6-hub/scripts/audit-ui-parity.sh`:
     - added explicit fail-close `require_pass_status(...)` check for `evidence.sr6_workflow_parity_status`.
+    - added fail-close checks for SR4/SR6/Chummer5a/frontier workflow parity proof provenance and freshness:
+      - requires non-empty per-proof path evidence.
+      - enforces per-proof age ceilings via `workflow_parity_proof_max_age_seconds` (defaulting to receipt freshness ceiling).
+      - fail-closes on stale or future-skewed per-proof `generated_at` timestamps.
   - patched `/docker/chummercomplete/chummer6-hub/Chummer.Tests/VerificationEntryPointTests.cs`:
-    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock `sr6_workflow_parity_status` marker presence in the parity audit script.
+    - expanded `AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles` assertions to lock SR6 parity marker plus per-proof freshness/provenance fail-close markers.
 - Verification:
   - `cd /docker/chummercomplete/chummer6-hub && bash scripts/audit-ui-parity.sh` -> PASS.
   - `cd /docker/chummercomplete/chummer6-hub && dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "FullyQualifiedName~AuditUiParityUsesActiveParityGeneratorInsteadOfRetiredLegacyShellFiles|FullyQualifiedName~VerifyEntrypointRunsUiParityAudit|FullyQualifiedName~ParityChecklistGeneratorFailClosesMalformedParityTokens" --nologo -v minimal` -> PASS (`3` tests on `net10.0` and `net10.0-windows`).
 - Current trusted state:
-  - milestone-2 parity audit now requires SR4, SR6, Chummer5a, and SR4/SR6 frontier parity status markers together, reducing single-edition drift false-pass risk.
+  - milestone-2 parity audit now requires SR4, SR6, Chummer5a, and SR4/SR6 frontier parity status markers together and fails closed if those underlying parity proofs go stale or lose provenance fields.
 - Push status:
   - `chummer6-hub`: local commit/push pending in this environment for this slice (credential-dependent).
   - `fleet`: handoff updated locally in this slice; commit/push pending in this environment (credential-dependent).
