@@ -4156,6 +4156,47 @@ def test_completion_review_frontier_decomposes_visual_familiarity_backlog() -> N
         ]
 
 
+def test_synthetic_completion_review_milestone_keeps_all_external_proof_requests() -> None:
+    module = _load_module()
+
+    milestone = module._synthetic_completion_review_milestone(
+        key="install-proof",
+        title="Completion gate: Install, claim, restore, continue",
+        owners=["fleet"],
+        exit_criteria=[
+            "repo proof field one mismatch",
+            "repo proof field two mismatch",
+            "repo proof field three mismatch",
+            "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact on windows host for tuple avalonia:win-x64:windows.",
+            "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact on windows host for tuple blazor-desktop:win-x64:windows.",
+            "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact on macos host for tuple avalonia:osx-arm64:macos.",
+            "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact on macos host for tuple blazor-desktop:osx-arm64:macos.",
+        ],
+    )
+
+    assert len(milestone.exit_criteria) == 7
+    assert sum("external proof request:" in item.lower() for item in milestone.exit_criteria) == 4
+
+
+def test_synthetic_completion_review_milestone_still_caps_non_external_criteria() -> None:
+    module = _load_module()
+
+    milestone = module._synthetic_completion_review_milestone(
+        key="generic-backlog",
+        title="Completion gate: generic",
+        owners=["fleet"],
+        exit_criteria=[
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+        ],
+    )
+
+    assert milestone.exit_criteria == ["one", "two", "three", "four"]
+
+
 def test_derive_completion_review_context_adds_visual_familiarity_focus_and_guidance() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

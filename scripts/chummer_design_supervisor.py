@@ -2222,13 +2222,25 @@ def _synthetic_completion_review_milestone(
     criteria = [str(item).strip() for item in exit_criteria if str(item).strip()]
     if not criteria:
         criteria = ["Audit and repair the missing completion evidence for this release-proof seam."]
+    trimmed_criteria: List[str] = []
+    external_proof_criteria: List[str] = []
+    seen: Set[str] = set()
+    for item in criteria:
+        if item in seen:
+            continue
+        seen.add(item)
+        if "external proof request:" in item.lower():
+            external_proof_criteria.append(item)
+        elif len(trimmed_criteria) < 4:
+            trimmed_criteria.append(item)
+    trimmed_criteria.extend(external_proof_criteria)
     return Milestone(
         id=_synthetic_completion_review_id(key),
         title=title,
         wave="completion_review",
         status="review_required",
         owners=[str(item).strip() for item in owners if str(item).strip()],
-        exit_criteria=criteria[:4],
+        exit_criteria=trimmed_criteria,
         dependencies=[],
     )
 
