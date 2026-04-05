@@ -89,6 +89,7 @@ RELEASE_CHANNEL_PLATFORM_COVERAGE_MARKERS = (
 )
 REQUIRED_EXTERNAL_PROOF_TOKENS = ("promoted_installer_artifact", "startup_smoke_receipt")
 SUPPORTED_DESKTOP_PLATFORMS = ("linux", "macos", "windows")
+SUPPORTED_DESKTOP_HEADS = ("avalonia", "blazor-desktop")
 
 
 def utc_now() -> dt.datetime:
@@ -543,6 +544,7 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
     for item in requests:
         tuple_id = str(item.get("tuple_id") or "").strip()
         required_host = str(item.get("required_host") or "").strip().lower()
+        tuple_head = str(item.get("head_id") or "").strip().lower()
         tuple_platform = str(item.get("platform") or "").strip().lower()
         proof_tokens = item.get("required_proofs")
         if not tuple_id or not isinstance(proof_tokens, list) or not proof_tokens:
@@ -564,6 +566,13 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
                 f"must use a supported desktop platform token {list(SUPPORTED_DESKTOP_PLATFORMS)!r} but tuple {tuple_id!r} "
                 f"used {tuple_platform!r}."
+            )
+            continue
+        if tuple_head not in SUPPORTED_DESKTOP_HEADS:
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.tupleId' "
+                f"must use a supported desktop head token {list(SUPPORTED_DESKTOP_HEADS)!r} but tuple {tuple_id!r} "
+                f"used {tuple_head!r}."
             )
             continue
         if required_host not in SUPPORTED_DESKTOP_PLATFORMS:
@@ -1007,8 +1016,14 @@ def evaluate_journey(
                 counts[token] = counts.get(token, 0) + 1
             return {key: counts[key] for key in sorted(counts)}
 
-        def _normalized_summary_counter(value: Any, *, field_name: str) -> Dict[str, int]:
+        def _normalized_summary_counter(value: Any, *, field_name: str, field_present: bool) -> Dict[str, int]:
+            if value is None:
+                return {}
             if not isinstance(value, dict):
+                if field_present:
+                    support_packet_contract_violations.append(
+                        f"support packet summary {field_name} must be an object map when present."
+                    )
                 return {}
             normalized: Dict[str, int] = {}
             for key, raw_count in value.items():
@@ -1033,8 +1048,14 @@ def evaluate_journey(
                 return -1
             return int(value)
 
-        def _normalized_summary_tokens(value: Any, *, lower: bool) -> List[str]:
+        def _normalized_summary_tokens(value: Any, *, field_name: str, lower: bool, field_present: bool) -> List[str]:
+            if value is None:
+                return []
             if not isinstance(value, list):
+                if field_present:
+                    support_packet_contract_violations.append(
+                        f"support packet summary {field_name} must be a string list when present."
+                    )
                 return []
             tokens = []
             for raw in value:
@@ -1061,8 +1082,14 @@ def evaluate_journey(
                 "status_any_of": sorted(set(status_any_of)),
             }
 
-        def _normalized_external_proof_summary_specs(value: Any) -> Dict[str, Dict[str, Any]]:
+        def _normalized_external_proof_summary_specs(value: Any, *, field_present: bool) -> Dict[str, Dict[str, Any]]:
+            if value is None:
+                return {}
             if not isinstance(value, dict):
+                if field_present:
+                    support_packet_contract_violations.append(
+                        "support packet summary unresolved_external_proof_request_specs must be an object map when present."
+                    )
                 return {}
             normalized: Dict[str, Dict[str, Any]] = {}
             for raw_tuple, raw_spec in value.items():
@@ -1118,8 +1145,14 @@ def evaluate_journey(
                 }
             return {key: normalized[key] for key in sorted(normalized)}
 
-        def _normalized_external_proof_execution_plan(value: Any) -> Dict[str, Any]:
+        def _normalized_external_proof_execution_plan(value: Any, *, field_present: bool) -> Dict[str, Any]:
+            if value is None:
+                return {"request_count": 0, "hosts": [], "host_groups": {}}
             if not isinstance(value, dict):
+                if field_present:
+                    support_packet_contract_violations.append(
+                        "support packet unresolved_external_proof_execution_plan must be an object map when present."
+                    )
                 return {"request_count": 0, "hosts": [], "host_groups": {}}
 
             host_groups_value = value.get("host_groups")
@@ -1572,12 +1605,14 @@ def evaluate_journey(
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing recovery_path.href."
                     )
+        processed_support_packet_contract_violations = 0
         if support_packet_contract_violations:
             blocking_reasons.extend(support_packet_contract_violations[:5])
             if len(support_packet_contract_violations) > 5:
                 blocking_reasons.append(
                     f"support packet install-truth contract has {len(support_packet_contract_violations) - 5} additional violations."
                 )
+            processed_support_packet_contract_violations = len(support_packet_contract_violations)
         reported_external_proof_required_case_count = _normalized_summary_count(
             support_summary.get("external_proof_required_case_count"),
             field_name="external_proof_required_case_count",
@@ -1599,6 +1634,7 @@ def evaluate_journey(
         reported_external_proof_required_host_counts = _normalized_summary_counter(
             support_summary.get("external_proof_required_host_counts"),
             field_name="external_proof_required_host_counts",
+            field_present="external_proof_required_host_counts" in support_summary,
         )
         if expected_external_proof_required_host_counts != reported_external_proof_required_host_counts:
             blocking_reasons.append(
@@ -1615,6 +1651,7 @@ def evaluate_journey(
         reported_external_proof_required_tuple_counts = _normalized_summary_counter(
             support_summary.get("external_proof_required_tuple_counts"),
             field_name="external_proof_required_tuple_counts",
+            field_present="external_proof_required_tuple_counts" in support_summary,
         )
         if expected_external_proof_required_tuple_counts != reported_external_proof_required_tuple_counts:
             blocking_reasons.append(
@@ -1635,6 +1672,7 @@ def evaluate_journey(
         reported_external_proof_backlog_host_counts = _normalized_summary_counter(
             support_summary.get("unresolved_external_proof_request_host_counts"),
             field_name="unresolved_external_proof_request_host_counts",
+            field_present="unresolved_external_proof_request_host_counts" in support_summary,
         )
         if expected_external_proof_backlog_host_counts != reported_external_proof_backlog_host_counts:
             blocking_reasons.append(
@@ -1643,7 +1681,9 @@ def evaluate_journey(
         expected_external_proof_backlog_hosts = sorted(expected_external_proof_backlog_host_counts.keys())
         reported_external_proof_backlog_hosts = _normalized_summary_tokens(
             support_summary.get("unresolved_external_proof_request_hosts"),
+            field_name="unresolved_external_proof_request_hosts",
             lower=True,
+            field_present="unresolved_external_proof_request_hosts" in support_summary,
         )
         if expected_external_proof_backlog_hosts != reported_external_proof_backlog_hosts:
             blocking_reasons.append(
@@ -1655,6 +1695,7 @@ def evaluate_journey(
         reported_external_proof_backlog_tuple_counts = _normalized_summary_counter(
             support_summary.get("unresolved_external_proof_request_tuple_counts"),
             field_name="unresolved_external_proof_request_tuple_counts",
+            field_present="unresolved_external_proof_request_tuple_counts" in support_summary,
         )
         if expected_external_proof_backlog_tuple_counts != reported_external_proof_backlog_tuple_counts:
             blocking_reasons.append(
@@ -1663,7 +1704,9 @@ def evaluate_journey(
         expected_external_proof_backlog_tuples = sorted(expected_external_proof_backlog_tuple_counts.keys())
         reported_external_proof_backlog_tuples = _normalized_summary_tokens(
             support_summary.get("unresolved_external_proof_request_tuples"),
+            field_name="unresolved_external_proof_request_tuples",
             lower=False,
+            field_present="unresolved_external_proof_request_tuples" in support_summary,
         )
         if expected_external_proof_backlog_tuples != reported_external_proof_backlog_tuples:
             blocking_reasons.append(
@@ -1699,7 +1742,8 @@ def evaluate_journey(
             key: expected_external_proof_backlog_specs[key] for key in sorted(expected_external_proof_backlog_specs)
         }
         reported_external_proof_backlog_specs = _normalized_external_proof_summary_specs(
-            support_summary.get("unresolved_external_proof_request_specs")
+            support_summary.get("unresolved_external_proof_request_specs"),
+            field_present="unresolved_external_proof_request_specs" in support_summary,
         )
         if expected_external_proof_backlog_specs != reported_external_proof_backlog_specs:
             blocking_reasons.append(
@@ -1773,12 +1817,20 @@ def evaluate_journey(
             },
         }
         reported_external_proof_execution_plan = _normalized_external_proof_execution_plan(
-            support_packets.get("unresolved_external_proof_execution_plan")
+            support_packets.get("unresolved_external_proof_execution_plan"),
+            field_present="unresolved_external_proof_execution_plan" in support_packets,
         )
         if expected_external_proof_execution_plan != reported_external_proof_execution_plan:
             blocking_reasons.append(
                 "support packet unresolved_external_proof_execution_plan does not match release-channel external proof backlog."
             )
+        if len(support_packet_contract_violations) > processed_support_packet_contract_violations:
+            new_violations = support_packet_contract_violations[processed_support_packet_contract_violations:]
+            blocking_reasons.extend(new_violations[:5])
+            if len(new_violations) > 5:
+                blocking_reasons.append(
+                    f"support packet install-truth contract has {len(new_violations) - 5} additional violations."
+                )
     if bool(fleet_gate.get("require_support_recovery_path_contract")):
         packets = [dict(item) for item in (support_packets.get("packets") or []) if isinstance(item, dict)]
         for index, packet in enumerate(packets, start=1):
