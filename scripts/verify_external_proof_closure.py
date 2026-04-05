@@ -244,6 +244,11 @@ def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
             "expected_installer_sha256": _normalized_token(
                 item.get("expectedInstallerSha256") or item.get("expected_installer_sha256")
             ).lower(),
+            "startup_smoke_receipt_contract": _normalized_smoke_contract(
+                item.get("startup_smoke_receipt_contract")
+                if item.get("startup_smoke_receipt_contract") is not None
+                else item.get("startupSmokeReceiptContract")
+            ),
             "proof_capture_commands": _normalized_command_list(
                 item.get("proofCaptureCommands") or item.get("proof_capture_commands")
             ),
@@ -277,6 +282,11 @@ def _support_request_row_index(rows: list[tuple[str, int, dict[str, Any]]]) -> d
             "expected_installer_sha256": _normalized_token(
                 item.get("expected_installer_sha256") or item.get("expectedInstallerSha256")
             ).lower(),
+            "startup_smoke_receipt_contract": _normalized_smoke_contract(
+                item.get("startup_smoke_receipt_contract")
+                if item.get("startup_smoke_receipt_contract") is not None
+                else item.get("startupSmokeReceiptContract")
+            ),
             "proof_capture_commands": _normalized_command_list(
                 item.get("proof_capture_commands") or item.get("proofCaptureCommands")
             ),
@@ -312,6 +322,11 @@ def _support_specs_index(value: Any) -> dict[str, dict[str, Any]]:
             "expected_installer_sha256": _normalized_token(
                 raw_spec.get("expected_installer_sha256") or raw_spec.get("expectedInstallerSha256")
             ).lower(),
+            "startup_smoke_receipt_contract": _normalized_smoke_contract(
+                raw_spec.get("startup_smoke_receipt_contract")
+                if raw_spec.get("startup_smoke_receipt_contract") is not None
+                else raw_spec.get("startupSmokeReceiptContract")
+            ),
             "proof_capture_commands": _normalized_command_list(
                 raw_spec.get("proof_capture_commands") or raw_spec.get("proofCaptureCommands")
             ),
@@ -987,6 +1002,8 @@ def main() -> int:
                 "expected_public_install_route",
                 "expected_startup_smoke_receipt_path",
                 "expected_installer_sha256",
+                "startup_smoke_receipt_contract",
+                "proof_capture_commands",
             )
             if (
                 tuple_id in support_plan_request_index
