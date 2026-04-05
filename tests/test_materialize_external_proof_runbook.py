@@ -133,6 +133,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "python3 scripts/materialize_status_plane.py" in payload
     assert "python3 scripts/verify_status_plane_semantics.py" in payload
     assert "python3 scripts/materialize_public_release_channel.py" in payload
+    assert "--proof /docker/chummercomplete/chummer6-ui/Docker/Downloads/release-evidence/public-promotion.json" in payload
+    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in payload
     assert "python3 scripts/verify_public_release_channel.py" in payload
     assert "--release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json" in payload
     assert payload.index("python3 scripts/materialize_status_plane.py") < payload.index(
@@ -163,6 +165,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     )
     assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
     assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
+    assert "--proof /docker/chummercomplete/chummer6-ui/Docker/Downloads/release-evidence/public-promotion.json" in post_capture.read_text(encoding="utf-8")
+    assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in post_capture.read_text(encoding="utf-8")
 
 
 def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequences(tmp_path: Path) -> None:
