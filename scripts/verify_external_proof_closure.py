@@ -18,6 +18,12 @@ DEFAULT_RELEASE_CHANNEL = Path(
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = Path("/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md")
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = Path("/docker/fleet/.codex-studio/published/external-proof-commands")
 DEFAULT_MAX_ARTIFACT_AGE_HOURS = 24
+REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH = (
+    "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"
+)
+REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH = (
+    "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -58,6 +64,29 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
+
+
+def _coerce_external_bundle_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
+    support_packets_path = Path(args.support_packets).resolve()
+    journey_gates_path = Path(args.journey_gates).resolve()
+    release_channel_path = Path(args.release_channel).resolve()
+    runbook_path = Path(args.external_proof_runbook).resolve() if args.external_proof_runbook is not None else None
+    commands_dir_path = (
+        Path(args.external_proof_commands_dir).resolve()
+        if args.external_proof_commands_dir is not None
+        else None
+    )
+    using_default_core_inputs = (
+        support_packets_path == DEFAULT_SUPPORT_PACKETS.resolve()
+        and journey_gates_path == DEFAULT_JOURNEY_GATES.resolve()
+        and release_channel_path == DEFAULT_RELEASE_CHANNEL.resolve()
+    )
+    if using_default_core_inputs:
+        if runbook_path is None:
+            runbook_path = DEFAULT_EXTERNAL_PROOF_RUNBOOK.resolve()
+        if commands_dir_path is None:
+            commands_dir_path = DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR.resolve()
+    return runbook_path, commands_dir_path
 
 
 def _load_json(path: Path, *, label: str) -> Dict[str, Any]:
@@ -1288,14 +1317,7 @@ def main() -> int:
                 f"(delta_seconds={int(deadline_delta_seconds)})"
             )
 
-    external_proof_runbook_path = (
-        Path(args.external_proof_runbook).resolve() if args.external_proof_runbook is not None else None
-    )
-    external_proof_commands_dir = (
-        Path(args.external_proof_commands_dir).resolve()
-        if args.external_proof_commands_dir is not None
-        else None
-    )
+    external_proof_runbook_path, external_proof_commands_dir = _coerce_external_bundle_paths(args)
     runbook_generated_at = ""
     parsed_runbook_generated_at: datetime | None = None
     if external_proof_runbook_path is not None:
@@ -1345,6 +1367,29 @@ def main() -> int:
                     "external proof commands script is not executable: "
                     + str(post_capture_script)
                 )
+            else:
+                try:
+                    post_capture_payload = post_capture_script.read_text(encoding="utf-8")
+                except OSError as exc:
+                    failures.append(
+                        "external proof commands script is unreadable: "
+                        + f"{post_capture_script}: {exc}"
+                    )
+                else:
+                    required_tokens = [
+                        "materialize_public_release_channel.py",
+                        f"--proof {REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH}",
+                        (
+                            "--ui-localization-release-gate "
+                            + REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH
+                        ),
+                    ]
+                    for token in required_tokens:
+                        if token not in post_capture_payload:
+                            failures.append(
+                                "external proof commands script is missing required republish token: "
+                                + token
+                            )
             if has_open_backlog_signal:
                 required_hosts = sorted(
                     {
@@ -1380,17 +1425,29 @@ def main() -> int:
                     host_token = _normalize_host_token(host)
                     capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
                     validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
+                    bundle_script = external_proof_commands_dir / f"bundle-{host_token}-proof.sh"
+                    ingest_script = external_proof_commands_dir / f"ingest-{host_token}-proof-bundle.sh"
                     capture_script_payload = ""
                     validation_script_payload = ""
+                    bundle_script_payload = ""
+                    ingest_script_payload = ""
                     capture_script_loaded = False
                     validation_script_loaded = False
+                    bundle_script_loaded = False
+                    ingest_script_loaded = False
                     capture_wrapper_script = external_proof_commands_dir / f"capture-{host_token}-proof.ps1"
                     validation_wrapper_script = external_proof_commands_dir / f"validate-{host_token}-proof.ps1"
+                    bundle_wrapper_script = external_proof_commands_dir / f"bundle-{host_token}-proof.ps1"
+                    ingest_wrapper_script = external_proof_commands_dir / f"ingest-{host_token}-proof-bundle.ps1"
                     capture_wrapper_payload = ""
                     validation_wrapper_payload = ""
+                    bundle_wrapper_payload = ""
+                    ingest_wrapper_payload = ""
                     capture_wrapper_loaded = False
                     validation_wrapper_loaded = False
-                    for script_path in (capture_script, validation_script):
+                    bundle_wrapper_loaded = False
+                    ingest_wrapper_loaded = False
+                    for script_path in (capture_script, validation_script, bundle_script, ingest_script):
                         if not script_path.is_file():
                             failures.append(
                                 "external proof commands directory is missing required host script: "
@@ -1420,6 +1477,24 @@ def main() -> int:
                                 "external proof validation script is unreadable: "
                                 + f"{validation_script}: {exc}"
                             )
+                    if bundle_script.is_file():
+                        try:
+                            bundle_script_payload = bundle_script.read_text(encoding="utf-8")
+                            bundle_script_loaded = True
+                        except OSError as exc:
+                            failures.append(
+                                "external proof bundle script is unreadable: "
+                                + f"{bundle_script}: {exc}"
+                            )
+                    if ingest_script.is_file():
+                        try:
+                            ingest_script_payload = ingest_script.read_text(encoding="utf-8")
+                            ingest_script_loaded = True
+                        except OSError as exc:
+                            failures.append(
+                                "external proof ingest script is unreadable: "
+                                + f"{ingest_script}: {exc}"
+                            )
                     if host == "windows":
                         if capture_wrapper_script.is_file():
                             try:
@@ -1439,6 +1514,24 @@ def main() -> int:
                                     "external proof windows validation wrapper is unreadable: "
                                     + f"{validation_wrapper_script}: {exc}"
                                 )
+                        if bundle_wrapper_script.is_file():
+                            try:
+                                bundle_wrapper_payload = bundle_wrapper_script.read_text(encoding="utf-8")
+                                bundle_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows bundle wrapper is unreadable: "
+                                    + f"{bundle_wrapper_script}: {exc}"
+                                )
+                        if ingest_wrapper_script.is_file():
+                            try:
+                                ingest_wrapper_payload = ingest_wrapper_script.read_text(encoding="utf-8")
+                                ingest_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows ingest wrapper is unreadable: "
+                                    + f"{ingest_wrapper_script}: {exc}"
+                                )
                     if host == "windows":
                         if capture_wrapper_loaded:
                             _require_windows_wrapper_failfast(
@@ -1450,6 +1543,18 @@ def main() -> int:
                             _require_windows_wrapper_failfast(
                                 payload=validation_wrapper_payload,
                                 wrapper_label="windows validation wrapper",
+                                failures=failures,
+                            )
+                        if bundle_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=bundle_wrapper_payload,
+                                wrapper_label="windows bundle wrapper",
+                                failures=failures,
+                            )
+                        if ingest_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=ingest_wrapper_payload,
+                                wrapper_label="windows ingest wrapper",
                                 failures=failures,
                             )
                     if capture_script_loaded or validation_script_loaded:
@@ -1508,6 +1613,95 @@ def main() -> int:
                                 request.get("expected_installer_sha256")
                                 or request.get("expectedInstallerSha256")
                             ).lower()
+                            expected_public_install_route = _normalized_token(
+                                request.get("expected_public_install_route")
+                                or request.get("expectedPublicInstallRoute")
+                            )
+                            installer_capture_path = ""
+                            if installer_relative_path:
+                                installer_capture_path = (
+                                    "/docker/chummercomplete/chummer6-ui/Docker/Downloads/"
+                                    + installer_relative_path.lstrip("/")
+                                )
+                            elif installer_file_name:
+                                installer_capture_path = (
+                                    "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/"
+                                    + installer_file_name
+                                )
+                            if expected_public_install_route and (
+                                not capture_script_loaded
+                                or expected_public_install_route not in capture_script_payload
+                            ):
+                                failures.append(
+                                    "external proof capture script is missing expected public install route token "
+                                    f"for tuple {tuple_id}: {expected_public_install_route}"
+                                )
+                            if (
+                                host == "windows"
+                                and expected_public_install_route
+                                and (
+                                    not capture_wrapper_loaded
+                                    or expected_public_install_route not in capture_wrapper_payload
+                                )
+                            ):
+                                failures.append(
+                                    "external proof windows capture wrapper is missing expected public install route token "
+                                    f"for tuple {tuple_id}: {expected_public_install_route}"
+                                )
+                            if installer_capture_path and (
+                                not capture_script_loaded
+                                or installer_capture_path not in capture_script_payload
+                            ):
+                                failures.append(
+                                    "external proof capture script does not reference expected installer capture path "
+                                    f"for tuple {tuple_id}: {installer_capture_path}"
+                                )
+                            if (
+                                host == "windows"
+                                and installer_capture_path
+                                and (
+                                    not capture_wrapper_loaded
+                                    or installer_capture_path not in capture_wrapper_payload
+                                )
+                            ):
+                                failures.append(
+                                    "external proof windows capture wrapper does not reference expected installer capture path "
+                                    f"for tuple {tuple_id}: {installer_capture_path}"
+                                )
+                            if installer_sha256:
+                                if (
+                                    not capture_script_loaded
+                                    or "installer-preflight-sha256-mismatch" not in capture_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof capture script is missing installer digest preflight checks "
+                                        f"for tuple {tuple_id}: expected marker 'installer-preflight-sha256-mismatch'"
+                                    )
+                                if (
+                                    not capture_script_loaded
+                                    or installer_sha256 not in capture_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof capture script is missing installer digest preflight token "
+                                        f"for tuple {tuple_id}: sha256={installer_sha256}"
+                                    )
+                                if host == "windows":
+                                    if (
+                                        not capture_wrapper_loaded
+                                        or "installer-preflight-sha256-mismatch" not in capture_wrapper_payload
+                                    ):
+                                        failures.append(
+                                            "external proof windows capture wrapper is missing installer digest preflight checks "
+                                            f"for tuple {tuple_id}: expected marker 'installer-preflight-sha256-mismatch'"
+                                        )
+                                    if (
+                                        not capture_wrapper_loaded
+                                        or installer_sha256 not in capture_wrapper_payload
+                                    ):
+                                        failures.append(
+                                            "external proof windows capture wrapper is missing installer digest preflight token "
+                                            f"for tuple {tuple_id}: sha256={installer_sha256}"
+                                        )
                             receipt_path = _normalized_token(
                                 request.get("expected_startup_smoke_receipt_path")
                                 or request.get("expectedStartupSmokeReceiptPath")
@@ -1650,13 +1844,80 @@ def main() -> int:
                                             "external proof windows validation wrapper is missing startup-smoke contract token "
                                             f"for tuple {tuple_id}: {key}={token}"
                                         )
+                            installer_bundle_relative_path = (
+                                installer_relative_path.lstrip("/")
+                                if installer_relative_path
+                                else (f"files/{installer_file_name}" if installer_file_name else "")
+                            )
+                            installer_bundle_source_path = (
+                                "/docker/chummercomplete/chummer6-ui/Docker/Downloads/"
+                                + installer_bundle_relative_path
+                            ) if installer_bundle_relative_path else ""
+                            if installer_bundle_relative_path and (
+                                not bundle_script_loaded
+                                or installer_bundle_relative_path not in bundle_script_payload
+                            ):
+                                failures.append(
+                                    "external proof bundle script does not reference expected installer bundle path "
+                                    f"for tuple {tuple_id}: {installer_bundle_relative_path}"
+                                )
+                            if installer_bundle_relative_path and (
+                                not ingest_script_loaded
+                                or installer_bundle_relative_path not in ingest_script_payload
+                            ):
+                                failures.append(
+                                    "external proof ingest script does not reference expected installer bundle path "
+                                    f"for tuple {tuple_id}: {installer_bundle_relative_path}"
+                                )
+                            if installer_bundle_source_path and (
+                                not bundle_script_loaded
+                                or installer_bundle_source_path not in bundle_script_payload
+                            ):
+                                failures.append(
+                                    "external proof bundle script does not reference expected installer source path "
+                                    f"for tuple {tuple_id}: {installer_bundle_source_path}"
+                                )
+                            if installer_bundle_relative_path and (
+                                not ingest_script_loaded
+                                or (
+                                    f"test -s \"$TARGET_ROOT/{installer_bundle_relative_path}\"" not in ingest_script_payload
+                                    and f"test -s '$TARGET_ROOT/{installer_bundle_relative_path}'" not in ingest_script_payload
+                                )
+                            ):
+                                failures.append(
+                                    "external proof ingest script is missing expected installer existence check token "
+                                    f"for tuple {tuple_id}: test -s \"$TARGET_ROOT/{installer_bundle_relative_path}\""
+                                )
+                            if receipt_path and (
+                                not bundle_script_loaded
+                                or receipt_path not in bundle_script_payload
+                            ):
+                                failures.append(
+                                    "external proof bundle script does not reference expected startup-smoke receipt path "
+                                    f"for tuple {tuple_id}: {receipt_path}"
+                                )
+                            if receipt_path and (
+                                not ingest_script_loaded
+                                or receipt_path not in ingest_script_payload
+                            ):
+                                failures.append(
+                                    "external proof ingest script does not reference expected startup-smoke receipt path "
+                                    f"for tuple {tuple_id}: {receipt_path}"
+                                )
+                            if receipt_path and (
+                                not ingest_script_loaded
+                                or (
+                                    f"test -s \"$TARGET_ROOT/{receipt_path}\"" not in ingest_script_payload
+                                    and f"test -s '$TARGET_ROOT/{receipt_path}'" not in ingest_script_payload
+                                )
+                            ):
+                                failures.append(
+                                    "external proof ingest script is missing expected startup-smoke receipt existence check token "
+                                    f"for tuple {tuple_id}: test -s \"$TARGET_ROOT/{receipt_path}\""
+                                )
                             expected_artifact_id = _normalized_token(
                                 request.get("expected_artifact_id")
                                 or request.get("expectedArtifactId")
-                            )
-                            expected_public_install_route = _normalized_token(
-                                request.get("expected_public_install_route")
-                                or request.get("expectedPublicInstallRoute")
                             )
                             if expected_artifact_id or expected_public_install_route:
                                 if (
@@ -1751,10 +2012,71 @@ def main() -> int:
                                         "external proof windows validation wrapper is missing wrapped validation command: "
                                         + wrapped_validation_command
                                     )
+                        if host == "windows" and bundle_script_loaded:
+                            for command in _script_commands(bundle_script_payload):
+                                wrapped_bundle_command = _powershell_wrap(command)
+                                if (
+                                    not bundle_wrapper_loaded
+                                    or wrapped_bundle_command not in bundle_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows bundle wrapper is missing wrapped bundle command: "
+                                        + wrapped_bundle_command
+                                    )
+                        if host == "windows" and ingest_script_loaded:
+                            for command in _script_commands(ingest_script_payload):
+                                wrapped_ingest_command = _powershell_wrap(command)
+                                if (
+                                    not ingest_wrapper_loaded
+                                    or wrapped_ingest_command not in ingest_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows ingest wrapper is missing wrapped ingest command: "
+                                        + wrapped_ingest_command
+                                    )
+                        if bundle_script_loaded:
+                            if f"host-proof-bundles/{host_token}" not in bundle_script_payload:
+                                failures.append(
+                                    "external proof bundle script is missing host bundle-root token "
+                                    f"for host {host}: host-proof-bundles/{host_token}"
+                                )
+                            if "tar -czf" not in bundle_script_payload:
+                                failures.append(
+                                    "external proof bundle script is missing bundle archive creation command "
+                                    f"for host {host}: tar -czf"
+                                )
+                            if f"{host_token}-proof-bundle.tgz" not in bundle_script_payload:
+                                failures.append(
+                                    "external proof bundle script is missing bundle archive token "
+                                    f"for host {host}: {host_token}-proof-bundle.tgz"
+                                )
+                        if ingest_script_loaded:
+                            if f"{host_token}-proof-bundle.tgz" not in ingest_script_payload:
+                                failures.append(
+                                    "external proof ingest script is missing bundle archive token "
+                                    f"for host {host}: {host_token}-proof-bundle.tgz"
+                                )
+                            if "if [ ! -s \"$BUNDLE_ARCHIVE\" ]" not in ingest_script_payload:
+                                failures.append(
+                                    "external proof ingest script is missing bundle archive presence guard token "
+                                    f"for host {host}: if [ ! -s \"$BUNDLE_ARCHIVE\" ]"
+                                )
+                            if "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"" not in ingest_script_payload:
+                                failures.append(
+                                    "external proof ingest script is missing bundle archive extract command token "
+                                    f"for host {host}: tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\""
+                                )
+                            if "external-proof-bundle-path-unsafe" not in ingest_script_payload:
+                                failures.append(
+                                    "external proof ingest script is missing archive path-safety guard token "
+                                    f"for host {host}: external-proof-bundle-path-unsafe"
+                                )
                     if host == "windows":
                         windows_scripts = (
                             capture_wrapper_script,
                             validation_wrapper_script,
+                            bundle_wrapper_script,
+                            ingest_wrapper_script,
                         )
                         for script_path in windows_scripts:
                             if not script_path.is_file():

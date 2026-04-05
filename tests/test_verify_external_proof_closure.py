@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import importlib.util
 import json
 import subprocess
 import sys
@@ -8,6 +10,16 @@ from pathlib import Path
 
 
 SCRIPT = Path("/docker/fleet/scripts/verify_external_proof_closure.py")
+MATERIALIZE_EXTERNAL_PROOF_RUNBOOK_SCRIPT = Path("/docker/fleet/scripts/materialize_external_proof_runbook.py")
+
+
+def _load_verify_external_proof_closure_module():
+    spec = importlib.util.spec_from_file_location("verify_external_proof_closure", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -41,8 +53,218 @@ def _write_external_proof_bundle(
     )
     commands_dir.mkdir(parents=True, exist_ok=True)
     post_capture = commands_dir / "republish-after-host-proof.sh"
-    post_capture.write_text("#!/usr/bin/env bash\nset -euo pipefail\necho republish\n", encoding="utf-8")
+    post_capture.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                (
+                    "python3 scripts/materialize_public_release_channel.py "
+                    "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json "
+                    "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
+                ),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     post_capture.chmod(0o755)
+
+
+def _write_open_windows_external_proof_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    deadline_ts = _iso_z(now + timedelta(hours=24))
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:win-x64:windows": {
+                        "required_host": "windows",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expected_artifact_id": "avalonia-win-x64-installer",
+                        "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                        "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expected_installer_sha256": "a" * 64,
+                        "startup_smoke_receipt_contract": {
+                            "ready_checkpoint": "pre_ui_event_loop",
+                            "head_id": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "host_class_contains": "windows",
+                            "status_any_of": ["pass", "ready"],
+                        },
+                        "proof_capture_commands": [
+                            "cd /docker/chummercomplete/chummer6-ui && echo capture-proof"
+                        ],
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": deadline_ts,
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "expected_installer_sha256": "a" * 64,
+                                "startup_smoke_receipt_contract": {
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "windows",
+                                    "rid": "win-x64",
+                                    "host_class_contains": "windows",
+                                    "status_any_of": ["pass", "ready"],
+                                },
+                                "capture_deadline_utc": deadline_ts,
+                                "proof_capture_commands": [
+                                    "cd /docker/chummercomplete/chummer6-ui && echo capture-proof"
+                                ],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-win-x64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                        "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expectedInstallerSha256": "a" * 64,
+                        "startupSmokeReceiptContract": {
+                            "readyCheckpoint": "pre_ui_event_loop",
+                            "headId": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "hostClassContains": "windows",
+                            "statusAnyOf": ["pass", "ready"],
+                        },
+                        "proofCaptureCommands": [
+                            "cd /docker/chummercomplete/chummer6-ui && echo capture-proof"
+                        ],
+                    }
+                ],
+            },
+        },
+    )
+    materialize_result = subprocess.run(
+        [
+            sys.executable,
+            str(MATERIALIZE_EXTERNAL_PROOF_RUNBOOK_SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(runbook),
+            "--commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize_result.returncode == 0, materialize_result.stderr
+    return support_packets, journey_gates, release_channel, runbook, commands_dir
+
+
+def test_coerce_external_bundle_paths_uses_defaults_for_default_core_inputs() -> None:
+    module = _load_verify_external_proof_closure_module()
+    args = argparse.Namespace(
+        support_packets=module.DEFAULT_SUPPORT_PACKETS,
+        journey_gates=module.DEFAULT_JOURNEY_GATES,
+        release_channel=module.DEFAULT_RELEASE_CHANNEL,
+        external_proof_runbook=None,
+        external_proof_commands_dir=None,
+    )
+
+    runbook_path, commands_dir = module._coerce_external_bundle_paths(args)
+
+    assert runbook_path == module.DEFAULT_EXTERNAL_PROOF_RUNBOOK.resolve()
+    assert commands_dir == module.DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR.resolve()
+
+
+def test_coerce_external_bundle_paths_does_not_force_defaults_for_custom_core_inputs(
+    tmp_path: Path,
+) -> None:
+    module = _load_verify_external_proof_closure_module()
+    args = argparse.Namespace(
+        support_packets=tmp_path / "SUPPORT_CASE_PACKETS.generated.json",
+        journey_gates=tmp_path / "JOURNEY_GATES.generated.json",
+        release_channel=tmp_path / "RELEASE_CHANNEL.generated.json",
+        external_proof_runbook=None,
+        external_proof_commands_dir=None,
+    )
+
+    runbook_path, commands_dir = module._coerce_external_bundle_paths(args)
+
+    assert runbook_path is None
+    assert commands_dir is None
 
 
 def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(tmp_path: Path) -> None:
@@ -222,6 +444,113 @@ def test_verify_external_proof_closure_passes_with_explicit_runbook_and_commands
     assert "External-proof closure check passed." in result.stdout
 
 
+def test_verify_external_proof_closure_fails_when_post_capture_script_drops_required_republish_tokens(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "tuple_counts": {},
+                "hosts": [],
+                "tuples": [],
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": release_ts,
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [{"evidence": {"support_packets_generated_at": support_ts}}],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+    (commands_dir / "republish-after-host-proof.sh").write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\necho republish\n",
+        encoding="utf-8",
+    )
+    (commands_dir / "republish-after-host-proof.sh").chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "external proof commands script is missing required republish token: "
+        "materialize_public_release_channel.py"
+    ) in result.stderr
+    assert (
+        "external proof commands script is missing required republish token: "
+        "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"
+    ) in result.stderr
+
+
 def test_verify_external_proof_closure_fails_when_backlog_open_and_host_command_scripts_are_missing(
     tmp_path: Path,
 ) -> None:
@@ -363,6 +692,8 @@ def test_verify_external_proof_closure_fails_when_backlog_open_and_host_command_
     assert "missing required host script" in result.stderr
     assert "capture-windows-proof.sh" in result.stderr
     assert "validate-windows-proof.sh" in result.stderr
+    assert "bundle-windows-proof.sh" in result.stderr
+    assert "ingest-windows-proof-bundle.sh" in result.stderr
 
 
 def test_verify_external_proof_closure_fails_when_windows_validation_wrapper_omits_wrapped_validation_command(
@@ -1077,6 +1408,356 @@ def test_verify_external_proof_closure_fails_when_capture_scripts_omit_required_
     assert result.returncode == 1
     assert "capture script is missing tuple proof_capture_commands entry" in result.stderr
     assert "cd /docker/chummercomplete/chummer6-ui && echo capture-proof" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_capture_script_omits_expected_install_route_token(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["macos"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:osx-arm64:macos": {
+                        "required_host": "macos",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expected_artifact_id": "avalonia-osx-arm64-installer",
+                        "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                        "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                        "expected_installer_sha256": "a" * 64,
+                        "proof_capture_commands": ["echo capture-proof"],
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:osx-arm64:macos"],
+                "unresolved_external_proof_request_host_counts": {"macos": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:osx-arm64:macos": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"macos": 1},
+                "tuple_counts": {"avalonia:osx-arm64:macos": 1},
+                "hosts": ["macos"],
+                "tuples": ["avalonia:osx-arm64:macos"],
+                "specs": {"avalonia:osx-arm64:macos": {"required_host": "macos"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["macos"],
+                "host_groups": {
+                    "macos": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:osx-arm64:macos"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:osx-arm64:macos",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                "expected_installer_sha256": "a" * 64,
+                                "startup_smoke_receipt_contract": {
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "macos",
+                                    "rid": "osx-arm64",
+                                    "host_class_contains": "macos",
+                                    "status_any_of": ["pass", "ready"],
+                                },
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:osx-arm64:macos"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["macos"],
+                "blocked_external_only_tuples": ["avalonia:osx-arm64:macos"],
+                "blocked_external_only_host_counts": {"macos": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["macos"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:macos"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:osx-arm64:macos"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:osx-arm64:macos",
+                        "requiredHost": "macos",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-osx-arm64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-osx-arm64-installer.dmg",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-osx-arm64-installer",
+                        "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                        "expectedInstallerSha256": "a" * 64,
+                        "proofCaptureCommands": ["echo capture-proof"],
+                    }
+                ],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+
+    capture_script = commands_dir / "capture-macos-proof.sh"
+    validate_script = commands_dir / "validate-macos-proof.sh"
+    capture_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "echo capture-proof\n"
+        "echo installer-preflight-sha256-mismatch:sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        "echo /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\n",
+        encoding="utf-8",
+    )
+    validate_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\n"
+        "python3 -c 'print(\"installer-contract-mismatch:sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")'\n"
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json\n"
+        "python3 -c 'print(\"receipt-contract-mismatch:{\\\"head_id\\\": \\\"avalonia\\\", \\\"platform\\\": \\\"macos\\\", \\\"rid\\\": \\\"osx-arm64\\\", \\\"ready_checkpoint\\\": \\\"pre_ui_event_loop\\\", \\\"host_class_contains\\\": \\\"macos\\\"}\")'\n"
+        "python3 -c 'print(\"release-channel-contract-mismatch:tuple=avalonia:osx-arm64:macos expected_artifact=avalonia-osx-arm64-installer expected_route=/downloads/install/avalonia-osx-arm64-installer\")'\n",
+        encoding="utf-8",
+    )
+    capture_script.chmod(0o755)
+    validate_script.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "capture script is missing expected public install route token" in result.stderr
+    assert "/downloads/install/avalonia-osx-arm64-installer" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_capture_script_omits_digest_preflight_marker(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["macos"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:osx-arm64:macos": {
+                        "required_host": "macos",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expected_artifact_id": "avalonia-osx-arm64-installer",
+                        "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                        "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                        "expected_installer_sha256": "a" * 64,
+                        "proof_capture_commands": ["echo capture-proof"],
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:osx-arm64:macos"],
+                "unresolved_external_proof_request_host_counts": {"macos": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:osx-arm64:macos": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"macos": 1},
+                "tuple_counts": {"avalonia:osx-arm64:macos": 1},
+                "hosts": ["macos"],
+                "tuples": ["avalonia:osx-arm64:macos"],
+                "specs": {"avalonia:osx-arm64:macos": {"required_host": "macos"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["macos"],
+                "host_groups": {
+                    "macos": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:osx-arm64:macos"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:osx-arm64:macos",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                "expected_installer_sha256": "a" * 64,
+                                "startup_smoke_receipt_contract": {
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "macos",
+                                    "rid": "osx-arm64",
+                                    "host_class_contains": "macos",
+                                    "status_any_of": ["pass", "ready"],
+                                },
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:osx-arm64:macos"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["macos"],
+                "blocked_external_only_tuples": ["avalonia:osx-arm64:macos"],
+                "blocked_external_only_host_counts": {"macos": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["macos"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:macos"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:osx-arm64:macos"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:osx-arm64:macos",
+                        "requiredHost": "macos",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-osx-arm64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-osx-arm64-installer.dmg",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-osx-arm64-installer",
+                        "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                        "expectedInstallerSha256": "a" * 64,
+                        "proofCaptureCommands": ["echo capture-proof"],
+                    }
+                ],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+
+    capture_script = commands_dir / "capture-macos-proof.sh"
+    validate_script = commands_dir / "validate-macos-proof.sh"
+    capture_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "echo capture-proof\n"
+        "echo /downloads/install/avalonia-osx-arm64-installer\n"
+        "echo /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\n",
+        encoding="utf-8",
+    )
+    validate_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg\n"
+        "python3 -c 'print(\"installer-contract-mismatch:sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")'\n"
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json\n"
+        "python3 -c 'print(\"receipt-contract-mismatch:{\\\"head_id\\\": \\\"avalonia\\\", \\\"platform\\\": \\\"macos\\\", \\\"rid\\\": \\\"osx-arm64\\\", \\\"ready_checkpoint\\\": \\\"pre_ui_event_loop\\\", \\\"host_class_contains\\\": \\\"macos\\\"}\")'\n"
+        "python3 -c 'print(\"release-channel-contract-mismatch:tuple=avalonia:osx-arm64:macos expected_artifact=avalonia-osx-arm64-installer expected_route=/downloads/install/avalonia-osx-arm64-installer\")'\n",
+        encoding="utf-8",
+    )
+    capture_script.chmod(0o755)
+    validate_script.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "capture script is missing installer digest preflight checks" in result.stderr
+    assert "installer-preflight-sha256-mismatch" in result.stderr
 
 
 def test_verify_external_proof_closure_fails_when_empty_validation_script_would_otherwise_mask_tuple_checks(
@@ -5185,3 +5866,82 @@ def test_verify_external_proof_closure_fails_when_validation_scripts_omit_releas
     assert "missing release-channel tuple contract checks" in result.stderr
     assert "expected_artifact_id=avalonia-win-x64-installer" in result.stderr
     assert "expected_public_install_route=/downloads/install/avalonia-win-x64-installer" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_bundle_script_omits_archive_creation_token(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    bundle_script = commands_dir / "bundle-windows-proof.sh"
+    bundle_payload = bundle_script.read_text(encoding="utf-8")
+    bundle_script.write_text(
+        bundle_payload.replace("tar -czf", "echo bundle-archive-disabled"),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof bundle script is missing bundle archive creation command" in result.stderr
+    assert "tar -czf" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_ingest_script_omits_expected_file_existence_check(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    ingest_script = commands_dir / "ingest-windows-proof-bundle.sh"
+    ingest_payload = ingest_script.read_text(encoding="utf-8")
+    ingest_script.write_text(
+        ingest_payload.replace(
+            "test -s '$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe'",
+            "echo installer-file-check-disabled",
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof ingest script is missing expected installer existence check token" in result.stderr
+    assert "test -s \"$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe\"" in result.stderr

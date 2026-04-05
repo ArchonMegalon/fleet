@@ -1,9 +1,9 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-05T04:40:25Z
+- generated_at: 2026-04-05T05:01:59Z
 - unresolved_request_count: 4
 - unresolved_hosts: macos, windows
-- plan_generated_at: 2026-04-05T04:40:24Z
+- plan_generated_at: 2026-04-05T05:01:32Z
 - release_channel_generated_at: 2026-04-05T04:10:31Z
 - capture_deadline_hours: 24
 - capture_deadline_utc: 2026-04-06T04:10:31Z
@@ -15,13 +15,16 @@
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh`
   validation_script: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-macos-proof.sh`
   bundle_script: `/docker/fleet/.codex-studio/published/external-proof-commands/bundle-macos-proof.sh`
+  ingest_script: `/docker/fleet/.codex-studio/published/external-proof-commands/ingest-macos-proof-bundle.sh`
 - host `windows`
   capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh`
   validation_script: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh`
   bundle_script: `/docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh`
+  ingest_script: `/docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh`
   capture_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1`
   validation_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.ps1`
   bundle_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.ps1`
+  ingest_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.ps1`
 - post_capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/republish-after-host-proof.sh`
 
 ## Host: macos
@@ -105,6 +108,26 @@ tar -czf "$SCRIPT_DIR/macos-proof-bundle.tgz" -C "$BUNDLE_ROOT" .
 echo "Wrote $SCRIPT_DIR/macos-proof-bundle.tgz"
 ```
 
+### Commands (Host Ingest)
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLE_ARCHIVE="$SCRIPT_DIR/macos-proof-bundle.tgz"
+TARGET_ROOT=/docker/chummercomplete/chummer6-ui/Docker/Downloads
+if [ ! -s "$BUNDLE_ARCHIVE" ]; then
+  echo "Missing host proof bundle: $BUNDLE_ARCHIVE"
+  exit 1
+fi
+python3 -c 'import pathlib, tarfile; bundle=pathlib.Path(__import__('"'"'os'"'"').environ['"'"'BUNDLE_ARCHIVE'"'"']); bad=[]; with tarfile.open(bundle, '"'"'r:gz'"'"') as t:   for member in t.getmembers():     parts=pathlib.PurePosixPath(member.name).parts;     if member.name.startswith('"'"'/'"'"') or '"'"'..'"'"' in parts:       bad.append(member.name); if bad:   raise SystemExit('"'"'external-proof-bundle-path-unsafe:'"'"' + '"'"','"'"'.join(sorted(set(bad))))'
+mkdir -p "$TARGET_ROOT"
+tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"
+test -s '$TARGET_ROOT/files/chummer-avalonia-osx-arm64-installer.dmg'
+test -s '$TARGET_ROOT/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json'
+test -s '$TARGET_ROOT/files/chummer-blazor-desktop-osx-arm64-installer.dmg'
+test -s '$TARGET_ROOT/startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json'
+echo "Host proof bundle ingest complete: $BUNDLE_ARCHIVE"
+```
+
 ## Host: windows
 
 - shell_hint: Run canonical commands in Git Bash (or WSL bash). PowerShell wrappers are provided below when you need to stay in PowerShell.
@@ -186,6 +209,26 @@ tar -czf "$SCRIPT_DIR/windows-proof-bundle.tgz" -C "$BUNDLE_ROOT" .
 echo "Wrote $SCRIPT_DIR/windows-proof-bundle.tgz"
 ```
 
+### Commands (Host Ingest)
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLE_ARCHIVE="$SCRIPT_DIR/windows-proof-bundle.tgz"
+TARGET_ROOT=/docker/chummercomplete/chummer6-ui/Docker/Downloads
+if [ ! -s "$BUNDLE_ARCHIVE" ]; then
+  echo "Missing host proof bundle: $BUNDLE_ARCHIVE"
+  exit 1
+fi
+python3 -c 'import pathlib, tarfile; bundle=pathlib.Path(__import__('"'"'os'"'"').environ['"'"'BUNDLE_ARCHIVE'"'"']); bad=[]; with tarfile.open(bundle, '"'"'r:gz'"'"') as t:   for member in t.getmembers():     parts=pathlib.PurePosixPath(member.name).parts;     if member.name.startswith('"'"'/'"'"') or '"'"'..'"'"' in parts:       bad.append(member.name); if bad:   raise SystemExit('"'"'external-proof-bundle-path-unsafe:'"'"' + '"'"','"'"'.join(sorted(set(bad))))'
+mkdir -p "$TARGET_ROOT"
+tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"
+test -s '$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe'
+test -s '$TARGET_ROOT/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json'
+test -s '$TARGET_ROOT/files/chummer-blazor-desktop-win-x64-installer.exe'
+test -s '$TARGET_ROOT/startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json'
+echo "Host proof bundle ingest complete: $BUNDLE_ARCHIVE"
+```
+
 ### Commands (PowerShell Wrappers)
 
 ```powershell
@@ -230,13 +273,33 @@ bash -lc 'tar -czf "$SCRIPT_DIR/windows-proof-bundle.tgz" -C "$BUNDLE_ROOT" .'
 bash -lc 'echo "Wrote $SCRIPT_DIR/windows-proof-bundle.tgz"'
 ```
 
+### Commands (PowerShell Ingest Wrappers)
+
+```powershell
+bash -lc 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
+bash -lc 'BUNDLE_ARCHIVE="$SCRIPT_DIR/windows-proof-bundle.tgz"'
+bash -lc 'TARGET_ROOT=/docker/chummercomplete/chummer6-ui/Docker/Downloads'
+bash -lc 'if [ ! -s "$BUNDLE_ARCHIVE" ]; then'
+bash -lc 'echo "Missing host proof bundle: $BUNDLE_ARCHIVE"'
+bash -lc 'exit 1'
+bash -lc 'fi'
+bash -lc 'python3 -c ''import pathlib, tarfile; bundle=pathlib.Path(__import__(''"''"''os''"''"'').environ[''"''"''BUNDLE_ARCHIVE''"''"'']); bad=[]; with tarfile.open(bundle, ''"''"''r:gz''"''"'') as t:   for member in t.getmembers():     parts=pathlib.PurePosixPath(member.name).parts;     if member.name.startswith(''"''"''/''"''"'') or ''"''"''..''"''"'' in parts:       bad.append(member.name); if bad:   raise SystemExit(''"''"''external-proof-bundle-path-unsafe:''"''"'' + ''"''"'',''"''"''.join(sorted(set(bad))))'''
+bash -lc 'mkdir -p "$TARGET_ROOT"'
+bash -lc 'tar -xzf "$BUNDLE_ARCHIVE" -C "$TARGET_ROOT"'
+bash -lc 'test -s ''$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe'''
+bash -lc 'test -s ''$TARGET_ROOT/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json'''
+bash -lc 'test -s ''$TARGET_ROOT/files/chummer-blazor-desktop-win-x64-installer.exe'''
+bash -lc 'test -s ''$TARGET_ROOT/startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json'''
+bash -lc 'echo "Host proof bundle ingest complete: $BUNDLE_ARCHIVE"'
+```
+
 ## After Host Proof Capture
 
 Run these commands after macOS/Windows proofs land to ingest receipts and republish release truth.
 
 ```bash
 cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh
-cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --channel docker --version unpublished --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output .codex-studio/published/RELEASE_CHANNEL.generated.json
+cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json --ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json --channel docker --version unpublished --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --output .codex-studio/published/RELEASE_CHANNEL.generated.json
 cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json
 cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml
 cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml
