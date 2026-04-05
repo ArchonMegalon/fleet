@@ -409,6 +409,25 @@ def _powershell_wrappers(commands: list[str]) -> list[str]:
     return wrapped
 
 
+def _render_powershell_script(commands: list[str], *, no_op_message: str) -> str:
+    wrapped = _powershell_wrappers(commands)
+    lines = [
+        "$ErrorActionPreference = 'Stop'",
+        "Set-StrictMode -Version Latest",
+        "",
+    ]
+    if wrapped:
+        for command in wrapped:
+            lines.append(command)
+            lines.append("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }")
+    else:
+        escaped = no_op_message.replace("'", "''")
+        lines.append(f"Write-Output '{escaped}'")
+    lines.append("exit 0")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
     expected_route = _normalize_text(request.get("expected_public_install_route"))
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
@@ -506,14 +525,18 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
             validation_ps1 = commands_dir / f"validate-{host_token}-proof.ps1"
             _write_file(
                 capture_ps1,
-                "\n".join(capture_wrappers + [""]) if capture_wrappers else "# No windows capture wrappers generated.\n",
+                _render_powershell_script(
+                    capture_commands,
+                    no_op_message=f"No unresolved external-proof commands for host '{host}'.",
+                ),
                 executable=False,
             )
             _write_file(
                 validation_ps1,
-                "\n".join(validation_wrappers + [""])
-                if validation_wrappers
-                else "# No windows validation wrappers generated.\n",
+                _render_powershell_script(
+                    validation_commands,
+                    no_op_message=f"No external-proof validation commands for host '{host}'.",
+                ),
                 executable=False,
             )
             host_file_row["capture_powershell"] = str(capture_ps1)

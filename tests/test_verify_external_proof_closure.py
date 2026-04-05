@@ -1616,6 +1616,160 @@ def test_verify_external_proof_closure_fails_when_windows_validation_wrapper_omi
     assert "windows validation wrapper is missing startup-smoke contract token" in result.stderr
 
 
+def test_verify_external_proof_closure_fails_when_windows_wrappers_omit_fail_fast_tokens(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    tuple_capture_command = "cd /docker/chummercomplete/chummer6-ui && echo capture-proof"
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:win-x64:windows": {
+                        "required_host": "windows",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                                "proof_capture_commands": [tuple_capture_command],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "proofCaptureCommands": [tuple_capture_command],
+                    }
+                ],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+    capture_script = commands_dir / "capture-windows-proof.sh"
+    validate_script = commands_dir / "validate-windows-proof.sh"
+    capture_ps1 = commands_dir / "capture-windows-proof.ps1"
+    validate_ps1 = commands_dir / "validate-windows-proof.ps1"
+    capture_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f"{tuple_capture_command}\n",
+        encoding="utf-8",
+    )
+    validate_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\necho validate\n",
+        encoding="utf-8",
+    )
+    capture_script.chmod(0o755)
+    validate_script.chmod(0o755)
+    capture_ps1.write_text(
+        "bash -lc 'cd /docker/chummercomplete/chummer6-ui && echo capture-proof'\n",
+        encoding="utf-8",
+    )
+    validate_ps1.write_text(
+        "bash -lc 'echo validate'\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "windows capture wrapper is missing fail-fast token" in result.stderr
+    assert "windows validation wrapper is missing fail-fast token" in result.stderr
+
+
 def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: Path) -> None:
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     journey_gates = tmp_path / "JOURNEY_GATES.generated.json"

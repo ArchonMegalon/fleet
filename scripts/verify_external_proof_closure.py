@@ -202,6 +202,23 @@ def _powershell_wrap(command: str) -> str:
     return f"bash -lc '{escaped}'"
 
 
+def _require_windows_wrapper_failfast(
+    *,
+    payload: str,
+    wrapper_label: str,
+    failures: list[str],
+) -> None:
+    required_tokens = (
+        "$ErrorActionPreference = 'Stop'",
+        "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+    )
+    for token in required_tokens:
+        if token not in payload:
+            failures.append(
+                f"external proof {wrapper_label} is missing fail-fast token: {token}"
+            )
+
+
 def _script_commands(payload: str) -> list[str]:
     commands: list[str] = []
     for raw_line in payload.splitlines():
@@ -1422,6 +1439,19 @@ def main() -> int:
                                     "external proof windows validation wrapper is unreadable: "
                                     + f"{validation_wrapper_script}: {exc}"
                                 )
+                    if host == "windows":
+                        if capture_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=capture_wrapper_payload,
+                                wrapper_label="windows capture wrapper",
+                                failures=failures,
+                            )
+                        if validation_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=validation_wrapper_payload,
+                                wrapper_label="windows validation wrapper",
+                                failures=failures,
+                            )
                     if capture_script_loaded or validation_script_loaded:
                         validation_commands = _script_commands(validation_script_payload)
                         support_host_request_rows = [

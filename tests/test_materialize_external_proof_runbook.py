@@ -463,5 +463,11 @@ def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_p
     assert "installer-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
-    assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
-    assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in windows_validate_ps1.read_text(encoding="utf-8")
+    capture_ps1_payload = windows_capture_ps1.read_text(encoding="utf-8")
+    validate_ps1_payload = windows_validate_ps1.read_text(encoding="utf-8")
+    assert "$ErrorActionPreference = 'Stop'" in capture_ps1_payload
+    assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in capture_ps1_payload
+    assert "bash -lc 'echo windows-proof'" in capture_ps1_payload
+    assert "$ErrorActionPreference = 'Stop'" in validate_ps1_payload
+    assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in validate_ps1_payload
+    assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in validate_ps1_payload
