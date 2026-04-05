@@ -567,6 +567,109 @@ def test_verify_external_proof_closure_fails_when_post_capture_script_drops_requ
     ) in result.stderr
 
 
+def test_verify_external_proof_closure_fails_when_post_capture_script_drops_fail_fast_header(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "tuple_counts": {},
+                "hosts": [],
+                "tuples": [],
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": release_ts,
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [{"evidence": {"support_packets_generated_at": support_ts}}],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+    post_capture = commands_dir / "republish-after-host-proof.sh"
+    post_capture.write_text(
+        post_capture.read_text(encoding="utf-8").replace("set -euo pipefail\n", ""),
+        encoding="utf-8",
+    )
+    post_capture.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "external proof commands script is missing fail-fast token: set -euo pipefail"
+    ) in result.stderr
+
+
 def test_verify_external_proof_closure_fails_when_backlog_open_and_host_command_scripts_are_missing(
     tmp_path: Path,
 ) -> None:

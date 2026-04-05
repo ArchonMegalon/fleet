@@ -275,6 +275,23 @@ def _script_commands(payload: str) -> list[str]:
     return commands
 
 
+def _require_bash_failfast(
+    *,
+    payload: str,
+    script_label: str,
+    failures: list[str],
+) -> None:
+    required_tokens = (
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+    )
+    for token in required_tokens:
+        if token not in payload:
+            failures.append(
+                f"external proof {script_label} is missing fail-fast token: {token}"
+            )
+
+
 def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(rows, list):
         return {}
@@ -1391,6 +1408,11 @@ def main() -> int:
                         + f"{post_capture_script}: {exc}"
                     )
                 else:
+                    _require_bash_failfast(
+                        payload=post_capture_payload,
+                        script_label="commands script",
+                        failures=failures,
+                    )
                     required_tokens = [
                         *REQUIRED_POST_CAPTURE_COMMAND_TOKENS,
                         f"--proof {REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH}",
@@ -1478,6 +1500,11 @@ def main() -> int:
                         try:
                             capture_script_payload = capture_script.read_text(encoding="utf-8")
                             capture_script_loaded = True
+                            _require_bash_failfast(
+                                payload=capture_script_payload,
+                                script_label=f"capture script ({host})",
+                                failures=failures,
+                            )
                         except OSError as exc:
                             failures.append(
                                 "external proof capture script is unreadable: "
@@ -1487,6 +1514,11 @@ def main() -> int:
                         try:
                             validation_script_payload = validation_script.read_text(encoding="utf-8")
                             validation_script_loaded = True
+                            _require_bash_failfast(
+                                payload=validation_script_payload,
+                                script_label=f"validation script ({host})",
+                                failures=failures,
+                            )
                         except OSError as exc:
                             failures.append(
                                 "external proof validation script is unreadable: "
@@ -1496,6 +1528,11 @@ def main() -> int:
                         try:
                             bundle_script_payload = bundle_script.read_text(encoding="utf-8")
                             bundle_script_loaded = True
+                            _require_bash_failfast(
+                                payload=bundle_script_payload,
+                                script_label=f"bundle script ({host})",
+                                failures=failures,
+                            )
                         except OSError as exc:
                             failures.append(
                                 "external proof bundle script is unreadable: "
@@ -1505,6 +1542,11 @@ def main() -> int:
                         try:
                             ingest_script_payload = ingest_script.read_text(encoding="utf-8")
                             ingest_script_loaded = True
+                            _require_bash_failfast(
+                                payload=ingest_script_payload,
+                                script_label=f"ingest script ({host})",
+                                failures=failures,
+                            )
                         except OSError as exc:
                             failures.append(
                                 "external proof ingest script is unreadable: "
