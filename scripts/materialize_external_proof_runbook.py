@@ -94,6 +94,30 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _normalized_smoke_contract_map(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    status_tokens = source.get("status_any_of") or source.get("statusAnyOf") or []
+    status_any_of = sorted(
+        {
+            _normalize_text(token).lower()
+            for token in status_tokens
+            if _normalize_text(token)
+        }
+    ) if isinstance(status_tokens, list) else []
+    return {
+        "status_any_of": status_any_of,
+        "ready_checkpoint": _normalize_text(
+            source.get("ready_checkpoint") or source.get("readyCheckpoint")
+        ).lower(),
+        "head_id": _normalize_text(source.get("head_id") or source.get("headId")).lower(),
+        "platform": _normalize_text(source.get("platform")).lower(),
+        "rid": _normalize_text(source.get("rid")).lower(),
+        "host_class_contains": _normalize_text(
+            source.get("host_class_contains") or source.get("hostClassContains")
+        ).lower(),
+    }
+
+
 def _normalize_plan(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {
@@ -150,6 +174,9 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                             "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
                             "expected_startup_smoke_receipt_path": _normalize_text(
                                 row.get("expected_startup_smoke_receipt_path")
+                            ),
+                            "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                                row.get("startup_smoke_receipt_contract")
                             ),
                             "capture_deadline_utc": _normalize_text(row.get("capture_deadline_utc")),
                             "required_proofs": sorted(
@@ -239,6 +266,40 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
         receipt_path = UI_REPO_ROOT / "Docker" / "Downloads" / receipt_relative_path
         commands.append(
             f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(receipt_path))}"
+        )
+        receipt_contract = _normalized_smoke_contract_map(request.get("startup_smoke_receipt_contract"))
+        contract_payload = json.dumps(receipt_contract, sort_keys=True)
+        commands.append(
+            f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+            "python3 -c "
+            + shlex.quote(
+                "import json, pathlib, sys; "
+                f"p=pathlib.Path({str(receipt_path)!r}); "
+                f"contract=json.loads({contract_payload!r}); "
+                "payload=json.loads(p.read_text(encoding='utf-8')); "
+                "payload=payload if isinstance(payload, dict) else {}; "
+                "status=str(payload.get('status') or '').strip().lower(); "
+                "expected_statuses=[str(token).strip().lower() for token in (contract.get('status_any_of') or []) if str(token).strip()]; "
+                "head_id=str(payload.get('headId') or '').strip().lower(); "
+                "platform=str(payload.get('platform') or '').strip().lower(); "
+                "rid=str(payload.get('rid') or '').strip().lower(); "
+                "ready_checkpoint=str(payload.get('readyCheckpoint') or '').strip().lower(); "
+                "host_class=str(payload.get('hostClass') or '').strip().lower(); "
+                "expected_head=str(contract.get('head_id') or '').strip().lower(); "
+                "expected_platform=str(contract.get('platform') or '').strip().lower(); "
+                "expected_rid=str(contract.get('rid') or '').strip().lower(); "
+                "expected_ready=str(contract.get('ready_checkpoint') or '').strip().lower(); "
+                "expected_host_contains=str(contract.get('host_class_contains') or '').strip().lower(); "
+                "sys.exit(0) if ("
+                "(not expected_statuses or status in expected_statuses) and "
+                "(not expected_head or head_id == expected_head) and "
+                "(not expected_platform or platform == expected_platform) and "
+                "(not expected_rid or rid == expected_rid) and "
+                "(not expected_ready or ready_checkpoint == expected_ready) and "
+                "(not expected_host_contains or expected_host_contains in host_class)"
+                ") else sys.exit("
+                "f'receipt-contract-mismatch:{p}:status={status}:head={head_id}:platform={platform}:rid={rid}:ready={ready_checkpoint}:host_class={host_class}:contract={contract}')"
+            )
         )
     return commands
 

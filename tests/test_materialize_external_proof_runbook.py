@@ -36,6 +36,14 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
                                     "expected_installer_sha256": "a" * 64,
                                     "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
                                     "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "avalonia",
+                                        "platform": "windows",
+                                        "rid": "win-x64",
+                                        "host_class_contains": "windows",
+                                        "status_any_of": ["pass", "ready"],
+                                    },
                                     "capture_deadline_utc": "2026-04-06T00:00:00Z",
                                     "proof_capture_commands": [
                                         "echo windows-proof",
@@ -55,6 +63,14 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
                                     "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
                                     "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
                                     "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "blazor-desktop",
+                                        "platform": "macos",
+                                        "rid": "osx-arm64",
+                                        "host_class_contains": "macos",
+                                        "status_any_of": ["pass", "ready"],
+                                    },
                                     "capture_deadline_utc": "2026-04-06T00:00:00Z",
                                     "proof_capture_commands": [
                                         "echo macos-proof",
@@ -126,6 +142,10 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "hashlib.sha256" in payload
     assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in payload
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
+    assert "receipt-contract-mismatch" in payload
+    assert "readyCheckpoint" in payload
+    assert "hostClass" in payload
+    assert "\"head_id\": \"avalonia\"" in payload
     assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in payload
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
@@ -163,6 +183,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in windows_validate.read_text(
         encoding="utf-8"
     )
+    assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
     assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
     assert "--proof /docker/chummercomplete/chummer6-ui/Docker/Downloads/release-evidence/public-promotion.json" in post_capture.read_text(encoding="utf-8")
