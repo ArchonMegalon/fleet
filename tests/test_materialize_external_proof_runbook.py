@@ -104,9 +104,14 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert payload.count("`echo refresh-manifest`") == 2
     assert payload.count("\necho refresh-manifest\n") == 2
     assert "### Commands (Host Consolidated)" in payload
+    assert "### Commands (Host Validation)" in payload
     assert "### Commands (PowerShell Wrappers)" in payload
+    assert "### Commands (PowerShell Validation Wrappers)" in payload
     assert "```powershell" in payload
     assert "bash -lc 'echo windows-proof'" in payload
+    assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in payload
+    assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
+    assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in payload
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
@@ -197,10 +202,12 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     assert payload.count("`echo refresh-manifest`") == 2
     assert payload.count("\necho refresh-manifest\n") == 1
     assert payload.count("${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/") >= 4
-    assert payload.count("\nbash -lc '") >= 3
+    assert payload.count("\nbash -lc '") >= 5
     assert "    - `echo tuple-1-proof`" in payload
     assert "    - `echo tuple-2-proof`" in payload
     assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh\n") == 1
+    assert "### Commands (Host Validation)" in payload
+    assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-") == 2
 
 
 def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -> None:

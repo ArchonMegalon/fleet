@@ -199,6 +199,38 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
+    receipt_relative_path = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
+    if installer_file_name:
+        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+        commands.append(
+            f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(installer_path))}"
+        )
+    if receipt_relative_path:
+        receipt_path = UI_REPO_ROOT / "Docker" / "Downloads" / receipt_relative_path
+        commands.append(
+            f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(receipt_path))}"
+        )
+    return commands
+
+
+def _validation_commands_for_group(group: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    seen: set[str] = set()
+    for row in group.get("requests") or []:
+        if not isinstance(row, dict):
+            continue
+        for command in _validation_commands_for_request(row):
+            normalized = _normalize_text(command)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            commands.append(normalized)
+    return commands
+
+
 def _shell_hint_for_host(host: str) -> str:
     normalized = _normalize_text(host).lower()
     if normalized == "windows":
@@ -330,8 +362,20 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             for command in commands:
                 lines.append(command)
             lines.append("```")
+        validation_commands = _validation_commands_for_group(group)
+        lines.append("")
+        lines.append("### Commands (Host Validation)")
+        lines.append("")
+        if not validation_commands:
+            lines.append("No host validation commands were generated for this host.")
+        else:
+            lines.append("```bash")
+            for command in validation_commands:
+                lines.append(command)
+            lines.append("```")
         if host.lower() == "windows":
             wrappers = _powershell_wrappers(commands)
+            validation_wrappers = _powershell_wrappers(validation_commands)
             lines.append("")
             lines.append("### Commands (PowerShell Wrappers)")
             lines.append("")
@@ -340,6 +384,16 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             else:
                 lines.append("```powershell")
                 for command in wrappers:
+                    lines.append(command)
+                lines.append("```")
+            lines.append("")
+            lines.append("### Commands (PowerShell Validation Wrappers)")
+            lines.append("")
+            if not validation_wrappers:
+                lines.append("No PowerShell validation wrappers were generated for this host.")
+            else:
+                lines.append("```powershell")
+                for command in validation_wrappers:
                     lines.append(command)
                 lines.append("```")
         lines.append("")
