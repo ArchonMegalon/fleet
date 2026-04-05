@@ -5945,3 +5945,41 @@ def test_verify_external_proof_closure_fails_when_ingest_script_omits_expected_f
     assert result.returncode == 1
     assert "external proof ingest script is missing expected installer existence check token" in result.stderr
     assert "test -s \"$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe\"" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_ingest_script_omits_archive_path_safety_validation_token(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    ingest_script = commands_dir / "ingest-windows-proof-bundle.sh"
+    ingest_payload = ingest_script.read_text(encoding="utf-8")
+    ingest_script.write_text(
+        ingest_payload.replace("member.name.startswith(", "member_name_startswith("),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof ingest script is missing archive path-safety validation token" in result.stderr
+    assert "member.name.startswith(" in result.stderr

@@ -2071,6 +2071,28 @@ def main() -> int:
                                     "external proof ingest script is missing archive path-safety guard token "
                                     f"for host {host}: external-proof-bundle-path-unsafe"
                                 )
+                            path_safety_tokens = (
+                                "tarfile.open",
+                                "member.name.startswith(",
+                                " in parts",
+                            )
+                            for token in path_safety_tokens:
+                                if token not in ingest_script_payload:
+                                    failures.append(
+                                        "external proof ingest script is missing archive path-safety validation token "
+                                        f"for host {host}: {token}"
+                                    )
+                            path_safety_index = ingest_script_payload.find("external-proof-bundle-path-unsafe")
+                            extract_index = ingest_script_payload.find("tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"")
+                            if (
+                                path_safety_index >= 0
+                                and extract_index >= 0
+                                and path_safety_index > extract_index
+                            ):
+                                failures.append(
+                                    "external proof ingest script runs bundle extraction before archive path-safety validation "
+                                    f"for host {host}"
+                                )
                     if host == "windows":
                         windows_scripts = (
                             capture_wrapper_script,
