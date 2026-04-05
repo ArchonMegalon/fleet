@@ -46,6 +46,24 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def _safe_int(value: Any, *, field: str, failures: list[str]) -> int:
+    if isinstance(value, bool):
+        failures.append(f"{field} has invalid numeric value")
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    raw = str(value or "").strip()
+    if not raw:
+        return 0
+    try:
+        return int(raw)
+    except ValueError:
+        failures.append(f"{field} has invalid numeric value")
+        return 0
+
+
 def main() -> int:
     args = _parse_args()
     support_packets = _load_json(args.support_packets, label="support packets")
@@ -143,9 +161,21 @@ def main() -> int:
         if isinstance(item, dict)
     ]
 
-    unresolved_count = int(support_summary.get("unresolved_external_proof_request_count") or 0)
-    blocked_external_only_count = int(journey_summary.get("blocked_external_only_count") or 0)
-    support_plan_request_count = int(support_plan.get("request_count") or 0)
+    unresolved_count = _safe_int(
+        support_summary.get("unresolved_external_proof_request_count"),
+        field="support packets summary.unresolved_external_proof_request_count",
+        failures=failures,
+    )
+    blocked_external_only_count = _safe_int(
+        journey_summary.get("blocked_external_only_count"),
+        field="journey gates summary.blocked_external_only_count",
+        failures=failures,
+    )
+    support_plan_request_count = _safe_int(
+        support_plan.get("request_count"),
+        field="support packets unresolved_external_proof_execution_plan.request_count",
+        failures=failures,
+    )
     support_host_count_map = dict(support_summary.get("unresolved_external_proof_request_host_counts") or {})
     support_tuple_count_map = dict(support_summary.get("unresolved_external_proof_request_tuple_counts") or {})
     journey_host_count_map = dict(journey_summary.get("blocked_external_only_host_counts") or {})
@@ -164,7 +194,15 @@ def main() -> int:
             if str(raw_host).strip()
             and isinstance(raw_group, dict)
             and (
-                int(raw_group.get("request_count") or 0) > 0
+                _safe_int(
+                    raw_group.get("request_count"),
+                    field=(
+                        "support packets unresolved_external_proof_execution_plan.host_groups"
+                        f".{str(raw_host).strip()}.request_count"
+                    ),
+                    failures=failures,
+                )
+                > 0
                 or any(str(item).strip() for item in (raw_group.get("tuples") or []))
                 or any(isinstance(item, dict) for item in (raw_group.get("requests") or []))
             )
@@ -252,7 +290,11 @@ def main() -> int:
             }
         )
     elif isinstance(unresolved_backlog_raw, dict):
-        unresolved_backlog_count = int(unresolved_backlog_raw.get("count") or 0)
+        unresolved_backlog_count = _safe_int(
+            unresolved_backlog_raw.get("count"),
+            field="support packets unresolved_external_proof.count",
+            failures=failures,
+        )
         unresolved_backlog_hosts = sorted(
             {
                 str(item).strip()
