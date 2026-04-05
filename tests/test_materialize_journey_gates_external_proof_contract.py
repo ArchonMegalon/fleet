@@ -383,6 +383,82 @@ def test_external_proof_reasons_fail_close_duplicate_missing_tuple_inventory_row
     )
 
 
+def test_external_proof_reasons_fail_close_missing_platform_head_inventory_that_drifts_from_promoted_tuples() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": True,
+            "requiredDesktopPlatforms": ["linux", "windows", "macos"],
+            "requiredDesktopHeads": ["avalonia", "blazor-desktop"],
+            "promotedInstallerTuples": [
+                {
+                    "tupleId": "avalonia:linux:linux-x64",
+                    "head": "avalonia",
+                    "platform": "linux",
+                    "rid": "linux-x64",
+                },
+                {
+                    "tupleId": "blazor-desktop:linux:linux-x64",
+                    "head": "blazor-desktop",
+                    "platform": "linux",
+                    "rid": "linux-x64",
+                },
+            ],
+            "missingRequiredPlatforms": [],
+            "missingRequiredPlatformHeadPairs": [],
+            "missingRequiredPlatformHeadRidTuples": [],
+            "externalProofRequests": [],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.missingRequiredPlatforms' must match requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
+        in reason
+        for reason in reasons
+    )
+    assert any(
+        "desktopTupleCoverage.missingRequiredPlatformHeadPairs' must match requiredDesktopHeads x requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
+        in reason
+        for reason in reasons
+    )
+    assert any(
+        "desktopTupleCoverage.complete' must match requiredDesktopHeads x requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
+        in reason
+        for reason in reasons
+    )
+
+
+def test_external_proof_reasons_fail_close_noncanonical_promoted_installer_tuple_id() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "requiredDesktopPlatforms": ["windows"],
+            "requiredDesktopHeads": ["avalonia"],
+            "promotedInstallerTuples": [
+                {
+                    "tupleId": "Avalonia:Windows:win-x64",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
+                }
+            ],
+            "missingRequiredPlatforms": [],
+            "missingRequiredPlatformHeadPairs": [],
+            "missingRequiredPlatformHeadRidTuples": [],
+            "externalProofRequests": [],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.promotedInstallerTuples[0].tupleId' must be lowercase canonical 'head:platform:rid'"
+        in reason
+        for reason in reasons
+    )
+
+
 def test_external_proof_reasons_fail_close_noncanonical_and_case_variant_duplicate_missing_tuple_rows() -> None:
     payload = {
         "status": "published",

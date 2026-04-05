@@ -374,6 +374,129 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
     requests = _release_channel_external_proof_requests(payload)
     reasons: List[str] = []
     coverage = dict(payload.get("desktopTupleCoverage") or {})
+    required_desktop_platforms_value = coverage.get("requiredDesktopPlatforms")
+    required_desktop_heads_value = coverage.get("requiredDesktopHeads")
+    promoted_installer_tuples_value = coverage.get("promotedInstallerTuples")
+    normalized_required_desktop_platforms: List[str] = []
+    normalized_required_desktop_heads: List[str] = []
+    if required_desktop_platforms_value is not None:
+        if not isinstance(required_desktop_platforms_value, list):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.requiredDesktopPlatforms' "
+                "must be an explicit list when present."
+            )
+        else:
+            normalized_required_desktop_platforms = sorted(
+                {
+                    str(item or "").strip().lower()
+                    for item in required_desktop_platforms_value
+                    if str(item or "").strip()
+                }
+            )
+    if required_desktop_heads_value is not None:
+        if not isinstance(required_desktop_heads_value, list):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.requiredDesktopHeads' "
+                "must be an explicit list when present."
+            )
+        else:
+            normalized_required_desktop_heads = sorted(
+                {
+                    str(item or "").strip().lower()
+                    for item in required_desktop_heads_value
+                    if str(item or "").strip()
+                }
+            )
+    promoted_head_platform_pairs: set[Tuple[str, str]] = set()
+    if promoted_installer_tuples_value is not None:
+        if not isinstance(promoted_installer_tuples_value, list):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.promotedInstallerTuples' "
+                "must be an explicit list when present."
+            )
+        else:
+            for index, row in enumerate(promoted_installer_tuples_value):
+                row_id = f"desktopTupleCoverage.promotedInstallerTuples[{index}]"
+                if not isinstance(row, dict):
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'{row_id}' must be an object."
+                    )
+                    continue
+                head = str(row.get("head") or "").strip().lower()
+                platform = str(row.get("platform") or "").strip().lower()
+                rid = str(row.get("rid") or "").strip().lower()
+                tuple_id = str(row.get("tupleId") or "").strip()
+                if not head or not platform or not rid:
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'{row_id}' must include non-empty head/platform/rid."
+                    )
+                    continue
+                canonical_tuple_id = f"{head}:{platform}:{rid}"
+                if tuple_id and tuple_id != canonical_tuple_id:
+                    reasons.append(
+                        "release_channel.generated.json field "
+                        f"'{row_id}.tupleId' must be lowercase canonical 'head:platform:rid' "
+                        f"but was {tuple_id!r}."
+                    )
+                promoted_head_platform_pairs.add((head, platform))
+    if (
+        normalized_required_desktop_platforms
+        and normalized_required_desktop_heads
+        and isinstance(promoted_installer_tuples_value, list)
+    ):
+        expected_missing_platforms_from_promoted = sorted(
+            {
+                platform
+                for platform in normalized_required_desktop_platforms
+                if (not any(pair_platform == platform for _pair_head, pair_platform in promoted_head_platform_pairs))
+            }
+        )
+        expected_missing_head_pairs_from_promoted = sorted(
+            {
+                f"{head}:{platform}"
+                for head in normalized_required_desktop_heads
+                for platform in normalized_required_desktop_platforms
+                if (head, platform) not in promoted_head_platform_pairs
+            }
+        )
+        reported_missing_platforms = coverage.get("missingRequiredPlatforms")
+        if isinstance(reported_missing_platforms, list):
+            normalized_reported_missing_platforms = sorted(
+                {
+                    str(item or "").strip().lower()
+                    for item in reported_missing_platforms
+                    if str(item or "").strip()
+                }
+            )
+            if normalized_reported_missing_platforms != expected_missing_platforms_from_promoted:
+                reasons.append(
+                    "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' "
+                    "must match requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
+                )
+        reported_missing_head_pairs = coverage.get("missingRequiredPlatformHeadPairs")
+        if isinstance(reported_missing_head_pairs, list):
+            normalized_reported_missing_head_pairs = sorted(
+                {
+                    str(item or "").strip().lower()
+                    for item in reported_missing_head_pairs
+                    if str(item or "").strip()
+                }
+            )
+            if normalized_reported_missing_head_pairs != expected_missing_head_pairs_from_promoted:
+                reasons.append(
+                    "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' "
+                    "must match requiredDesktopHeads x requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
+                )
+        reported_complete = coverage.get("complete")
+        if isinstance(reported_complete, bool):
+            expected_complete_from_promoted = not bool(expected_missing_head_pairs_from_promoted)
+            if reported_complete is not expected_complete_from_promoted:
+                reasons.append(
+                    "release_channel.generated.json field 'desktopTupleCoverage.complete' "
+                    "must match requiredDesktopHeads x requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
+                )
     raw_external_proof_requests = coverage.get("externalProofRequests")
     if raw_external_proof_requests is not None:
         if not isinstance(raw_external_proof_requests, list):
