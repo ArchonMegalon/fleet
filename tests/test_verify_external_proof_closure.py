@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -11,6 +12,10 @@ SCRIPT = Path("/docker/fleet/scripts/verify_external_proof_closure.py")
 
 def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _iso_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(tmp_path: Path) -> None:
@@ -2024,3 +2029,206 @@ def test_verify_external_proof_closure_fails_when_open_plan_request_omits_expect
         "blazor-desktop:osx-arm64:macos:expected_public_install_route, "
         "blazor-desktop:osx-arm64:macos:expected_startup_smoke_receipt_path"
     ) in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_core_evidence_is_stale(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    stale_release_ts = _iso_z(datetime.now(timezone.utc) - timedelta(hours=4))
+    stale_support_ts = _iso_z(datetime.now(timezone.utc) - timedelta(hours=3))
+    _write_json(
+        support_packets,
+        {
+            "generated_at": stale_support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "hosts": [],
+                "tuples": [],
+                "host_counts": {},
+                "tuple_counts": {},
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": stale_support_ts,
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": stale_release_ts,
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "evidence": {"support_packets_generated_at": stale_support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": stale_release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--max-artifact-age-hours",
+            "1",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "release channel generatedAt/generated_at is stale" in result.stderr
+    assert "support packets generated_at/generatedAt is stale" in result.stderr
+    assert "journey gates evidence.support_packets_generated_at is stale" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_deadline_utc_does_not_match_generated_plus_hours(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    release_ts = datetime.now(timezone.utc) - timedelta(seconds=30)
+    support_ts = datetime.now(timezone.utc)
+    wrong_deadline_ts = support_ts + timedelta(hours=26)
+    _write_json(
+        support_packets,
+        {
+            "generated_at": _iso_z(support_ts),
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": ["avalonia:win-x64:windows|windows|docker"],
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": _iso_z(support_ts),
+                "release_channel_generated_at": _iso_z(release_ts),
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(wrong_deadline_ts),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "capture_deadline_utc": _iso_z(wrong_deadline_ts),
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": _iso_z(support_ts)},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": _iso_z(release_ts),
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "capture_deadline_utc does not match support packets generated_at plus capture_deadline_hours" in result.stderr

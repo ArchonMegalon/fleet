@@ -14,6 +14,7 @@ DEFAULT_JOURNEY_GATES = Path("/docker/fleet/.codex-studio/published/JOURNEY_GATE
 DEFAULT_RELEASE_CHANNEL = Path(
     "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
 )
+DEFAULT_MAX_ARTIFACT_AGE_HOURS = 24
 
 
 def _parse_args() -> argparse.Namespace:
@@ -26,6 +27,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--support-packets", type=Path, default=DEFAULT_SUPPORT_PACKETS)
     parser.add_argument("--journey-gates", type=Path, default=DEFAULT_JOURNEY_GATES)
     parser.add_argument("--release-channel", type=Path, default=DEFAULT_RELEASE_CHANNEL)
+    parser.add_argument(
+        "--max-artifact-age-hours",
+        type=int,
+        default=DEFAULT_MAX_ARTIFACT_AGE_HOURS,
+        help=(
+            "Fail closed when release/support/journey evidence timestamps are older than this many hours. "
+            "Set to 0 to disable max-age checks."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -83,6 +93,12 @@ def _parse_iso(value: str) -> datetime | None:
         return datetime.fromisoformat(raw)
     except ValueError:
         return None
+
+
+def _age_seconds(ts: datetime, *, now: datetime) -> float:
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=now.tzinfo)
+    return (now - ts).total_seconds()
 
 
 def main() -> int:
@@ -846,6 +862,12 @@ def main() -> int:
     parsed_release_generated_at = _parse_iso(release_generated_at) if release_generated_at else None
     parsed_support_generated_at = _parse_iso(support_generated_at) if support_generated_at else None
     parsed_capture_deadline_utc = _parse_iso(support_plan_capture_deadline_utc) if support_plan_capture_deadline_utc else None
+    parsed_support_plan_generated_at = _parse_iso(support_plan_generated_at) if support_plan_generated_at else None
+    parsed_journey_support_generated_ats = [
+        parsed
+        for parsed in (_parse_iso(value) for value in journey_support_generated_ats)
+        if parsed is not None
+    ]
     if parsed_release_generated_at and parsed_support_generated_at and parsed_support_generated_at < parsed_release_generated_at:
         failures.append(
             "support packets generated_at/generatedAt is older than release channel generatedAt/generated_at"
@@ -859,6 +881,57 @@ def main() -> int:
         failures.append(
             "support packets unresolved_external_proof_execution_plan.capture_deadline_utc is earlier than support packets generated_at/generatedAt"
         )
+    if (
+        has_open_backlog_signal
+        and parsed_support_generated_at
+        and parsed_capture_deadline_utc
+        and support_plan_capture_deadline_hours > 0
+    ):
+        expected_deadline_utc = parsed_support_generated_at.timestamp() + (support_plan_capture_deadline_hours * 3600)
+        deadline_delta_seconds = abs(parsed_capture_deadline_utc.timestamp() - expected_deadline_utc)
+        if deadline_delta_seconds > 60:
+            failures.append(
+                "support packets unresolved_external_proof_execution_plan.capture_deadline_utc does not match "
+                "support packets generated_at plus capture_deadline_hours "
+                f"(delta_seconds={int(deadline_delta_seconds)})"
+            )
+
+    max_artifact_age_hours = int(args.max_artifact_age_hours or 0)
+    if max_artifact_age_hours < 0:
+        failures.append("--max-artifact-age-hours must be >= 0")
+    if max_artifact_age_hours > 0:
+        max_artifact_age_seconds = max_artifact_age_hours * 3600
+        now_utc = datetime.now((parsed_support_generated_at or parsed_release_generated_at or datetime.now().astimezone()).tzinfo)
+        stale_checks = (
+            ("release channel generatedAt/generated_at", parsed_release_generated_at),
+            ("support packets generated_at/generatedAt", parsed_support_generated_at),
+            ("support packets unresolved_external_proof_execution_plan.generated_at/generatedAt", parsed_support_plan_generated_at),
+        )
+        for label, parsed in stale_checks:
+            if parsed is None:
+                continue
+            age_seconds = _age_seconds(parsed, now=now_utc)
+            if age_seconds > max_artifact_age_seconds:
+                failures.append(
+                    f"{label} is stale (age_seconds={int(age_seconds)} > max_artifact_age_seconds={max_artifact_age_seconds})"
+                )
+            if age_seconds < -300:
+                failures.append(
+                    f"{label} is in the future beyond tolerance (age_seconds={int(age_seconds)})"
+                )
+        if parsed_journey_support_generated_ats:
+            newest_journey_support_ts = max(parsed_journey_support_generated_ats)
+            age_seconds = _age_seconds(newest_journey_support_ts, now=now_utc)
+            if age_seconds > max_artifact_age_seconds:
+                failures.append(
+                    "journey gates evidence.support_packets_generated_at is stale "
+                    f"(age_seconds={int(age_seconds)} > max_artifact_age_seconds={max_artifact_age_seconds})"
+                )
+            if age_seconds < -300:
+                failures.append(
+                    "journey gates evidence.support_packets_generated_at is in the future beyond tolerance "
+                    f"(age_seconds={int(age_seconds)})"
+                )
 
     if failures:
         print("External-proof closure check failed:", file=sys.stderr)
