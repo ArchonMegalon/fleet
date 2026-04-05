@@ -281,10 +281,15 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
     expected_artifact_id = _normalize_text(request.get("expected_artifact_id"))
     expected_public_install_route = _normalize_text(request.get("expected_public_install_route"))
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
+    installer_relative_path = _normalize_text(request.get("expected_installer_relative_path"))
     installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
     receipt_relative_path = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
-    if installer_file_name:
+    installer_path: Path | None = None
+    if installer_relative_path:
+        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / installer_relative_path.lstrip("/")
+    elif installer_file_name:
         installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+    if installer_path is not None:
         commands.append(
             f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(installer_path))}"
         )

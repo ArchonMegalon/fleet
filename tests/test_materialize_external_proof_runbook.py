@@ -276,6 +276,69 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-") == 2
 
 
+def test_materialize_external_proof_runbook_uses_expected_installer_relative_path_in_validation_scripts(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    support_packets.write_text(
+        json.dumps(
+            {
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 1,
+                    "hosts": ["windows"],
+                    "host_groups": {
+                        "windows": {
+                            "request_count": 1,
+                            "tuples": ["avalonia:win-x64:windows"],
+                            "requests": [
+                                {
+                                    "tuple_id": "avalonia:win-x64:windows",
+                                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expected_artifact_id": "avalonia-win-x64-installer",
+                                    "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                    "expected_installer_relative_path": "quarantine/chummer-avalonia-win-x64-installer.exe",
+                                    "expected_installer_sha256": "a" * 64,
+                                    "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                    "capture_deadline_utc": "2026-04-06T00:00:00Z",
+                                    "proof_capture_commands": ["echo capture-proof"],
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    windows_validate = out.parent / "external-proof-commands" / "validate-windows-proof.sh"
+    validate_payload = windows_validate.read_text(encoding="utf-8")
+    assert (
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/chummer-avalonia-win-x64-installer.exe"
+        in validate_payload
+    )
+    assert "/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" not in validate_payload
+
+
 def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -> None:
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
