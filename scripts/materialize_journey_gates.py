@@ -262,6 +262,10 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         provided_expected_installer_file_name = str(item.get("expectedInstallerFileName") or "").strip()
         provided_expected_public_install_route = str(item.get("expectedPublicInstallRoute") or "").strip()
         provided_expected_startup_smoke_receipt_path = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
+        row_channel_id_raw = str(item.get("channelId") or item.get("channel") or "").strip().lower()
+        row_head_raw = str(item.get("head") or item.get("headId") or "").strip().lower()
+        row_platform_raw = str(item.get("platform") or "").strip().lower()
+        row_rid_raw = str(item.get("rid") or "").strip().lower()
         provided_smoke_contract = item.get("startupSmokeReceiptContract")
         provided_smoke_contract_normalized = (
             {
@@ -297,6 +301,19 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "head_id": head,
                 "rid": rid,
                 "platform": platform,
+                "row_channel_id": row_channel_id_raw or release_channel_id,
+                "row_channel_id_provided": bool(row_channel_id_raw),
+                "row_channel_matches_release_channel": not bool(row_channel_id_raw) or row_channel_id_raw == release_channel_id,
+                "row_head": row_head_raw,
+                "row_platform": row_platform_raw,
+                "row_rid": row_rid_raw,
+                "row_head_provided": bool(row_head_raw),
+                "row_platform_provided": bool(row_platform_raw),
+                "row_rid_provided": bool(row_rid_raw),
+                "row_identity_matches_tuple": bool(row_head_raw and row_platform_raw and row_rid_raw)
+                and row_head_raw == head
+                and row_platform_raw == platform
+                and row_rid_raw == rid,
                 "tuple_identity_valid": tuple_identity_valid,
                 "tuple_identity_canonical": tuple_identity_canonical,
                 "required_host_matches_tuple_platform": required_host_matches_tuple_platform,
@@ -375,6 +392,7 @@ def _public_external_proof_request(item: Dict[str, Any]) -> Dict[str, Any]:
 def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str]:
     requests = _release_channel_external_proof_requests(payload)
     reasons: List[str] = []
+    release_channel_id = str(payload.get("channelId") or payload.get("channel") or "").strip().lower()
     coverage = dict(payload.get("desktopTupleCoverage") or {})
     required_desktop_platforms_value = coverage.get("requiredDesktopPlatforms")
     required_desktop_heads_value = coverage.get("requiredDesktopHeads")
@@ -749,6 +767,43 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredHost' "
                 f"must be explicit for tuple {tuple_id}."
+            )
+            continue
+        row_channel_id = str(item.get("row_channel_id") or "").strip().lower()
+        if not bool(item.get("row_channel_id_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.channelId' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+            continue
+        if not bool(item.get("row_channel_matches_release_channel")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.channelId' "
+                f"must match release channel id {release_channel_id!r} for tuple {tuple_id} but was {row_channel_id!r}."
+            )
+            continue
+        if not bool(item.get("row_head_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.head' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+            continue
+        if not bool(item.get("row_platform_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.platform' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+            continue
+        if not bool(item.get("row_rid_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.rid' "
+                f"must be explicit for tuple {tuple_id}."
+            )
+            continue
+        if not bool(item.get("row_identity_matches_tuple")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.head/platform/rid' "
+                f"must match tuple-derived identity for {tuple_id}."
             )
             continue
         if not bool(item.get("tuple_unique")):

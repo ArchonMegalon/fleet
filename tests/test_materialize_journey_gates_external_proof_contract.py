@@ -152,6 +152,10 @@ def test_external_proof_reasons_reject_noncanonical_tuple_spec_fields() -> None:
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                     "expectedArtifactId": "wrong-artifact",
@@ -270,6 +274,7 @@ def test_external_proof_reasons_fail_close_missing_external_proof_rows_when_tupl
 
 def test_external_proof_reasons_fail_close_empty_provided_smoke_contract_and_commands() -> None:
     payload = {
+        "channelId": "stable",
         "status": "published",
         "desktopTupleCoverage": {
             "complete": False,
@@ -277,6 +282,10 @@ def test_external_proof_reasons_fail_close_empty_provided_smoke_contract_and_com
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                     "expectedArtifactId": "avalonia-win-x64-installer",
@@ -733,11 +742,16 @@ def test_install_journey_blocks_when_support_external_proof_backlog_hosts_or_tup
     release_channel.write_text(
         json.dumps(
             {
+                "channelId": "stable",
                 "status": "published",
                 "desktopTupleCoverage": {
                     "externalProofRequests": [
                         {
                             "tupleId": "avalonia:win-x64:windows",
+                            "channelId": "stable",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
                             "requiredHost": "windows",
                             "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                         }
@@ -1796,11 +1810,16 @@ def test_report_journey_projects_release_channel_external_backlog_without_json_m
     release_channel.write_text(
         json.dumps(
             {
+                "channelId": "stable",
                 "status": "published",
                 "desktopTupleCoverage": {
                     "externalProofRequests": [
                         {
                             "tupleId": "avalonia:win-x64:windows",
+                            "channelId": "stable",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
                             "requiredHost": "windows",
                             "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                         }

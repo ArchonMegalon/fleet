@@ -26,10 +26,15 @@ def fresh_timestamp(hours_ago: int = 1) -> str:
 
 def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
     payload = {
+        "channelId": "stable",
         "desktopTupleCoverage": {
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["startup_smoke_receipt", "promoted_installer_artifact", "startup_smoke_receipt"],
                     "expectedArtifactId": "avalonia-win-x64-installer",
@@ -39,12 +44,18 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
                 },
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
                     "platform": "windows",
+                    "rid": "win-x64",
                     "requiredProofs": ["promoted_installer_artifact"],
                 },
                 {
                     "tupleId": "blazor-desktop:osx-arm64:macos",
+                    "channelId": "stable",
+                    "head": "blazor-desktop",
                     "platform": "macos",
+                    "rid": "osx-arm64",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                 },
             ]
@@ -70,6 +81,124 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
     ]
 
 
+def test_release_channel_external_proof_reasons_require_explicit_row_channel_and_identity_fields() -> None:
+    payload = {
+        "channelId": "stable",
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any("externalProofRequests.channelId' must be explicit for tuple avalonia:win-x64:windows" in reason for reason in reasons)
+
+
+def test_release_channel_external_proof_reasons_require_row_channel_and_identity_match_tuple() -> None:
+    payload = {
+        "channelId": "stable",
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "preview",
+                    "head": "blazor-desktop",
+                    "platform": "macos",
+                    "rid": "osx-arm64",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any("externalProofRequests.channelId' must match release channel id 'stable'" in reason for reason in reasons)
+
+
+def test_release_channel_external_proof_reasons_require_row_identity_match_tuple() -> None:
+    payload = {
+        "channelId": "stable",
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "blazor-desktop",
+                    "platform": "windows",
+                    "rid": "win-x64",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any("externalProofRequests.head/platform/rid' must match tuple-derived identity" in reason for reason in reasons)
+
 def test_release_channel_external_proof_reasons_reject_malformed_tuple_identity() -> None:
     payload = {
         "desktopTupleCoverage": {
@@ -91,6 +220,7 @@ def test_release_channel_external_proof_reasons_reject_malformed_tuple_identity(
 
 def test_release_channel_external_proof_reasons_reject_required_host_tuple_platform_mismatch() -> None:
     payload = {
+        "channelId": "stable",
         "desktopTupleCoverage": {
             "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
             "missingRequiredPlatforms": ["windows"],
@@ -98,6 +228,10 @@ def test_release_channel_external_proof_reasons_reject_required_host_tuple_platf
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "macos",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                 }
@@ -112,6 +246,7 @@ def test_release_channel_external_proof_reasons_reject_required_host_tuple_platf
 
 def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() -> None:
     payload = {
+        "channelId": "stable",
         "desktopTupleCoverage": {
             "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
             "missingRequiredPlatforms": ["windows"],
@@ -119,11 +254,19 @@ def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() ->
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                 },
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact"],
                 },
@@ -139,6 +282,7 @@ def test_release_channel_external_proof_reasons_reject_duplicate_tuple_rows() ->
 
 def test_release_channel_external_proof_reasons_reject_required_proofs_contract_drift() -> None:
     payload = {
+        "channelId": "stable",
         "desktopTupleCoverage": {
             "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
             "missingRequiredPlatforms": ["windows"],
@@ -146,6 +290,10 @@ def test_release_channel_external_proof_reasons_reject_required_proofs_contract_
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact"],
                 },
@@ -2657,6 +2805,7 @@ def test_evaluate_journey_preserves_report_gate_identity_during_support_external
     release_channel_path.parent.mkdir(parents=True, exist_ok=True)
     release_channel_payload = {
         "status": "publishable",
+        "channelId": "docker",
         "desktopTupleCoverage": {
             "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
             "missingRequiredPlatforms": ["windows"],
@@ -2665,6 +2814,9 @@ def test_evaluate_journey_preserves_report_gate_identity_during_support_external
                 {
                     "tupleId": "avalonia:win-x64:windows",
                     "channelId": "docker",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                     "expectedArtifactId": "avalonia-win-x64-installer",
@@ -2752,6 +2904,10 @@ def test_build_payload_dedupes_external_proof_host_counts_across_blocked_journey
             "externalProofRequests": [
                 {
                     "tupleId": "avalonia:win-x64:windows",
+                    "channelId": "stable",
+                    "head": "avalonia",
+                    "platform": "windows",
+                    "rid": "win-x64",
                     "requiredHost": "windows",
                     "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                     "expectedArtifactId": "avalonia-win-x64-installer",
