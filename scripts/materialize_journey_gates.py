@@ -1380,6 +1380,15 @@ def evaluate_journey(
                     for token in (raw_spec.get("proof_capture_commands") or [])
                     if str(token or "").strip()
                 ]
+                expected_installer_sha256 = str(raw_spec.get("expected_installer_sha256") or "").strip().lower()
+                if expected_installer_sha256 and (
+                    len(expected_installer_sha256) != 64
+                    or any(ch not in "0123456789abcdef" for ch in expected_installer_sha256)
+                ):
+                    support_packet_contract_violations.append(
+                        "support packet summary unresolved_external_proof_request_specs "
+                        f"tuple '{tuple_id}' has invalid expected_installer_sha256."
+                    )
                 tuple_entry_count_value = raw_spec.get("tuple_entry_count")
                 tuple_unique_value = raw_spec.get("tuple_unique")
                 tuple_entry_count = -1
@@ -1423,6 +1432,8 @@ def evaluate_journey(
                     ),
                     "proof_capture_commands": proof_capture_commands,
                 }
+                if expected_installer_sha256:
+                    normalized[tuple_id]["expected_installer_sha256"] = expected_installer_sha256
             return {key: normalized[key] for key in sorted(normalized)}
 
         def _normalized_external_proof_execution_plan(value: Any, *, field_present: bool) -> Dict[str, Any]:
@@ -1448,6 +1459,7 @@ def evaluate_journey(
                 for raw_request in request_rows:
                     if not isinstance(raw_request, dict):
                         continue
+                    tuple_id = str(raw_request.get("tuple_id") or "").strip()
                     required_proofs = sorted(
                         {
                             str(token or "").strip().lower()
@@ -1460,7 +1472,17 @@ def evaluate_journey(
                         for token in (raw_request.get("proof_capture_commands") or [])
                         if str(token or "").strip()
                     ]
-                    tuple_id = str(raw_request.get("tuple_id") or "").strip()
+                    expected_installer_sha256 = str(
+                        raw_request.get("expected_installer_sha256") or ""
+                    ).strip().lower()
+                    if expected_installer_sha256 and (
+                        len(expected_installer_sha256) != 64
+                        or any(ch not in "0123456789abcdef" for ch in expected_installer_sha256)
+                    ):
+                        support_packet_contract_violations.append(
+                            "support packet unresolved_external_proof_execution_plan "
+                            f"host '{host}' tuple '{tuple_id or 'unknown'}' has invalid expected_installer_sha256."
+                        )
                     tuple_entry_count_value = raw_request.get("tuple_entry_count")
                     tuple_unique_value = raw_request.get("tuple_unique")
                     tuple_entry_count = -1
@@ -1479,8 +1501,7 @@ def evaluate_journey(
                         )
                     else:
                         tuple_unique = tuple_unique_value
-                    normalized_requests.append(
-                        {
+                    normalized_request = {
                             "tuple_id": tuple_id,
                             "tuple_entry_count": tuple_entry_count,
                             "tuple_unique": tuple_unique,
@@ -1512,7 +1533,9 @@ def evaluate_journey(
                             ),
                             "proof_capture_commands": proof_capture_commands,
                         }
-                    )
+                    if expected_installer_sha256:
+                        normalized_request["expected_installer_sha256"] = expected_installer_sha256
+                    normalized_requests.append(normalized_request)
                 normalized_requests = sorted(
                     normalized_requests,
                     key=lambda item: str(item.get("tuple_id") or "").strip(),
@@ -1796,6 +1819,36 @@ def evaluate_journey(
                                         support_packet_contract_violations.append(
                                             f"support packet {packet_id} install_diagnosis.external_proof_request.{required_key} must match release-channel tuple truth '{expected_value}' but was '{actual_value}'."
                                         )
+                                actual_expected_installer_sha256 = str(
+                                    external_proof_request.get("expected_installer_sha256") or ""
+                                ).strip().lower()
+                                expected_expected_installer_sha256 = str(
+                                    expected_request.get("expected_installer_sha256") or ""
+                                ).strip().lower()
+                                if actual_expected_installer_sha256 and (
+                                    len(actual_expected_installer_sha256) != 64
+                                    or any(ch not in "0123456789abcdef" for ch in actual_expected_installer_sha256)
+                                ):
+                                    support_packet_contract_violations.append(
+                                        f"support packet {packet_id} install_diagnosis.external_proof_request.expected_installer_sha256 has invalid format."
+                                    )
+                                if expected_expected_installer_sha256 and (
+                                    len(expected_expected_installer_sha256) != 64
+                                    or any(ch not in "0123456789abcdef" for ch in expected_expected_installer_sha256)
+                                ):
+                                    support_packet_contract_violations.append(
+                                        "release-channel external proof request "
+                                        f"for tuple '{tuple_id}' has invalid expected_installer_sha256 format."
+                                    )
+                                if (
+                                    actual_expected_installer_sha256 or expected_expected_installer_sha256
+                                ) and actual_expected_installer_sha256 != expected_expected_installer_sha256:
+                                    support_packet_contract_violations.append(
+                                        "support packet "
+                                        f"{packet_id} install_diagnosis.external_proof_request.expected_installer_sha256 "
+                                        f"must match release-channel tuple truth '{expected_expected_installer_sha256}' "
+                                        f"but was '{actual_expected_installer_sha256}'."
+                                    )
 
                                 tuple_entry_count_value = external_proof_request.get("tuple_entry_count")
                                 if isinstance(tuple_entry_count_value, bool) or not isinstance(tuple_entry_count_value, int):
@@ -2077,6 +2130,15 @@ def evaluate_journey(
                     for token in (item.get("proof_capture_commands") or [])
                     if str(token or "").strip()
                 ],
+                **(
+                    {
+                        "expected_installer_sha256": str(
+                            item.get("expected_installer_sha256") or ""
+                        ).strip().lower()
+                    }
+                    if str(item.get("expected_installer_sha256") or "").strip()
+                    else {}
+                ),
             }
             for item in external_proof_requests
             for tuple_id in [str(item.get("tuple_id") or "").strip()]
@@ -2146,6 +2208,15 @@ def evaluate_journey(
                             request_row.get("startup_smoke_receipt_contract")
                         ),
                         "proof_capture_commands": proof_capture_commands,
+                        **(
+                            {
+                                "expected_installer_sha256": str(
+                                    request_row.get("expected_installer_sha256") or ""
+                                ).strip().lower()
+                            }
+                            if str(request_row.get("expected_installer_sha256") or "").strip()
+                            else {}
+                        ),
                     }
                 )
             expected_external_proof_execution_plan_host_groups[host] = {
