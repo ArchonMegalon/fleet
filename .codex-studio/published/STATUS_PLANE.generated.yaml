@@ -1,6 +1,6 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-05T02:17:28Z'
+generated_at: '2026-04-05T03:02:54Z'
 source_public_status_generated_at: '2026-04-04T00:00:00Z'
 mission_snapshot: {}
 queue_forecast: {}
@@ -25,7 +25,6 @@ readiness_summary:
   whole_product_final_claim_status: fail
   whole_product_final_claim_ready: 0
   whole_product_final_claim_warning_keys:
-  - desktop_client
   - hub_and_registry
   - horizons_and_public_surface
   - fleet_and_operator_loop
