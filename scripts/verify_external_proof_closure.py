@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,8 @@ DEFAULT_JOURNEY_GATES = Path("/docker/fleet/.codex-studio/published/JOURNEY_GATE
 DEFAULT_RELEASE_CHANNEL = Path(
     "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
 )
+DEFAULT_EXTERNAL_PROOF_RUNBOOK = Path("/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md")
+DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = Path("/docker/fleet/.codex-studio/published/external-proof-commands")
 DEFAULT_MAX_ARTIFACT_AGE_HOURS = 24
 
 
@@ -27,6 +30,24 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--support-packets", type=Path, default=DEFAULT_SUPPORT_PACKETS)
     parser.add_argument("--journey-gates", type=Path, default=DEFAULT_JOURNEY_GATES)
     parser.add_argument("--release-channel", type=Path, default=DEFAULT_RELEASE_CHANNEL)
+    parser.add_argument(
+        "--external-proof-runbook",
+        type=Path,
+        default=None,
+        help=(
+            "Optional markdown runbook path. When set, fail closed if the generated runbook is missing, "
+            "unreadable, stale, or out of sync with support/release timestamps."
+        ),
+    )
+    parser.add_argument(
+        "--external-proof-commands-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional command bundle directory. When set, fail closed if required host scripts are missing or "
+            "non-executable while backlog is open."
+        ),
+    )
     parser.add_argument(
         "--max-artifact-age-hours",
         type=int,
@@ -95,6 +116,24 @@ def _parse_iso(value: str) -> datetime | None:
         return None
 
 
+def _load_text(path: Path, *, label: str) -> str:
+    if not path.is_file():
+        raise SystemExit(f"{label} not found: {path}")
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise SystemExit(f"{label} is unreadable: {path}: {exc}") from exc
+
+
+def _extract_runbook_field(markdown: str, key: str) -> str:
+    needle = f"- {key}:"
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if line.startswith(needle):
+            return line[len(needle) :].strip().strip("`")
+    return ""
+
+
 def _is_sha256_hex(value: Any) -> bool:
     raw = str(value or "").strip().lower()
     return bool(raw) and len(raw) == 64 and all(ch in "0123456789abcdef" for ch in raw)
@@ -106,6 +145,12 @@ def _normalized_platform(value: Any) -> str:
 
 def _normalized_token(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _normalize_host_token(value: str) -> str:
+    text = "".join(ch if ch.isalnum() else "-" for ch in _normalized_token(value).lower())
+    text = text.strip("-")
+    return text or "unknown"
 
 
 def _normalized_string_list(value: Any) -> list[str]:
@@ -1066,6 +1111,99 @@ def main() -> int:
                 f"(delta_seconds={int(deadline_delta_seconds)})"
             )
 
+    external_proof_runbook_path = (
+        Path(args.external_proof_runbook).resolve() if args.external_proof_runbook is not None else None
+    )
+    external_proof_commands_dir = (
+        Path(args.external_proof_commands_dir).resolve()
+        if args.external_proof_commands_dir is not None
+        else None
+    )
+    runbook_generated_at = ""
+    parsed_runbook_generated_at: datetime | None = None
+    if external_proof_runbook_path is not None:
+        runbook_body = _load_text(external_proof_runbook_path, label="external proof runbook")
+        runbook_generated_at = _extract_runbook_field(runbook_body, "generated_at")
+        runbook_plan_generated_at = _extract_runbook_field(runbook_body, "plan_generated_at")
+        runbook_release_generated_at = _extract_runbook_field(runbook_body, "release_channel_generated_at")
+        if not runbook_generated_at:
+            failures.append("external proof runbook generated_at is missing")
+        else:
+            parsed_runbook_generated_at = _parse_iso(runbook_generated_at)
+            if parsed_runbook_generated_at is None:
+                failures.append(
+                    "external proof runbook generated_at is not a valid ISO-8601 timestamp: "
+                    + runbook_generated_at
+                )
+        if not runbook_plan_generated_at:
+            failures.append("external proof runbook plan_generated_at is missing")
+        elif support_generated_at and runbook_plan_generated_at != support_generated_at:
+            failures.append(
+                "external proof runbook plan_generated_at "
+                f"({runbook_plan_generated_at}) does not match support packets generated_at ({support_generated_at})"
+            )
+        if not runbook_release_generated_at:
+            failures.append("external proof runbook release_channel_generated_at is missing")
+        elif release_generated_at and runbook_release_generated_at != release_generated_at:
+            failures.append(
+                "external proof runbook release_channel_generated_at "
+                f"({runbook_release_generated_at}) does not match release channel generatedAt ({release_generated_at})"
+            )
+
+    if external_proof_commands_dir is not None:
+        if not external_proof_commands_dir.is_dir():
+            failures.append(
+                "external proof commands directory is missing or not a directory: "
+                + str(external_proof_commands_dir)
+            )
+        else:
+            post_capture_script = external_proof_commands_dir / "republish-after-host-proof.sh"
+            if not post_capture_script.is_file():
+                failures.append(
+                    "external proof commands directory is missing required script: "
+                    + str(post_capture_script)
+                )
+            elif not os.access(post_capture_script, os.X_OK):
+                failures.append(
+                    "external proof commands script is not executable: "
+                    + str(post_capture_script)
+                )
+            if has_open_backlog_signal:
+                required_hosts = sorted(
+                    {
+                        _normalized_token(host).lower()
+                        for host in (support_plan_hosts + support_plan_hosts_with_backlog)
+                        if _normalized_token(host)
+                    }
+                )
+                for host in required_hosts:
+                    host_token = _normalize_host_token(host)
+                    capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
+                    validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
+                    for script_path in (capture_script, validation_script):
+                        if not script_path.is_file():
+                            failures.append(
+                                "external proof commands directory is missing required host script: "
+                                + str(script_path)
+                            )
+                            continue
+                        if not os.access(script_path, os.X_OK):
+                            failures.append(
+                                "external proof host script is not executable: "
+                                + str(script_path)
+                            )
+                    if host == "windows":
+                        windows_scripts = (
+                            external_proof_commands_dir / "capture-windows-proof.ps1",
+                            external_proof_commands_dir / "validate-windows-proof.ps1",
+                        )
+                        for script_path in windows_scripts:
+                            if not script_path.is_file():
+                                failures.append(
+                                    "external proof commands directory is missing required windows wrapper: "
+                                    + str(script_path)
+                                )
+
     max_artifact_age_hours = int(args.max_artifact_age_hours or 0)
     if max_artifact_age_hours < 0:
         failures.append("--max-artifact-age-hours must be >= 0")
@@ -1077,6 +1215,8 @@ def main() -> int:
             ("support packets generated_at/generatedAt", parsed_support_generated_at),
             ("support packets unresolved_external_proof_execution_plan.generated_at/generatedAt", parsed_support_plan_generated_at),
         )
+        if external_proof_runbook_path is not None:
+            stale_checks += (("external proof runbook generated_at", parsed_runbook_generated_at),)
         for label, parsed in stale_checks:
             if parsed is None:
                 continue
