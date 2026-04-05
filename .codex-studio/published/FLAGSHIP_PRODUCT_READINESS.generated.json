@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-05T03:09:41Z",
+  "generated_at": "2026-04-05T03:41:22Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T21:08:27.946225Z",
-        "ui_executable_gate_age_seconds": 21673,
+        "ui_executable_gate_age_seconds": 23574,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -255,8 +255,8 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-05T03:08:34Z",
-        "release_channel_age_seconds": 67,
+        "release_channel_generated_at": "2026-04-05T03:34:07Z",
+        "release_channel_age_seconds": 435,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -452,6 +452,7 @@
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
             "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -489,6 +490,7 @@
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+            "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -526,6 +528,7 @@
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -691,7 +694,7 @@
       ],
       "evidence": {
         "public_group_deployment_status": "public",
-        "progress_report_generated_at": "2026-04-05T03:08:46Z",
+        "progress_report_generated_at": "2026-04-05T03:34:08Z",
         "install_claim_restore_continue": "blocked",
         "report_cluster_release_notify": "blocked",
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -711,11 +714,11 @@
         "journey_blocked_external_only_count": 2,
         "journey_blocked_with_local_count": 0,
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-05T03:06:15Z",
+        "supervisor_updated_at": "2026-04-05T03:38:25Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

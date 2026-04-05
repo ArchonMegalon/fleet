@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-05T03:09:41Z",
+  "generated_at": "2026-04-05T03:40:44Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -32,37 +32,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-05T03:09:29Z",
+      "at": "2026-04-05T03:40:44Z",
       "state": "fresh",
-      "age_seconds": 12
+      "age_seconds": 0
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-05T03:08:45Z",
+      "at": "2026-04-05T03:34:08Z",
       "state": "fresh",
-      "age_seconds": 56
+      "age_seconds": 396
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-04-05T03:08:46Z",
+      "at": "2026-04-05T03:34:08Z",
       "state": "fresh",
-      "age_seconds": 55
+      "age_seconds": 396
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-04-05T03:08:46Z",
+      "at": "2026-04-05T03:34:08Z",
       "state": "fresh",
-      "age_seconds": 55
+      "age_seconds": 396
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-05T03:09:28Z",
+      "at": "2026-04-05T03:40:44Z",
       "state": "fresh",
-      "age_seconds": 13
+      "age_seconds": 0
     }
   },
   "journeys": [
@@ -109,6 +109,7 @@
           "expected_artifact_id": "avalonia-osx-arm64-installer",
           "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
           "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+          "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
           "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -146,6 +147,7 @@
           "expected_artifact_id": "avalonia-win-x64-installer",
           "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
           "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+          "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
           "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -183,6 +185,7 @@
           "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
           "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
+          "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
           "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -411,7 +414,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -439,6 +442,7 @@
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
             "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -476,6 +480,7 @@
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+            "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -513,6 +518,7 @@
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -875,7 +881,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1283,7 +1289,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1395,7 +1401,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1461,6 +1467,7 @@
           "expected_artifact_id": "avalonia-osx-arm64-installer",
           "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
           "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+          "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
           "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -1498,6 +1505,7 @@
           "expected_artifact_id": "avalonia-win-x64-installer",
           "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
           "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+          "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
           "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -1535,6 +1543,7 @@
           "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
           "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
+          "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
           "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -1690,7 +1699,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1717,6 +1726,7 @@
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
             "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -1754,6 +1764,7 @@
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+            "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -1791,6 +1802,7 @@
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -1933,7 +1945,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:09:28Z",
+        "support_packets_generated_at": "2026-04-05T03:40:44Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",

@@ -1208,6 +1208,29 @@ def main() -> int:
                         if _normalized_token(host)
                     }
                 )
+                required_hosts = sorted(
+                    set(required_hosts).union(
+                        {
+                            _normalized_token(
+                                request.get("required_host")
+                                or (
+                                    _normalized_token(tuple_id).split(":")[2]
+                                    if _normalized_token(tuple_id).count(":") == 2
+                                    else ""
+                                )
+                            ).lower()
+                            for tuple_id, request in release_external_request_index.items()
+                            if _normalized_token(
+                                request.get("required_host")
+                                or (
+                                    _normalized_token(tuple_id).split(":")[2]
+                                    if _normalized_token(tuple_id).count(":") == 2
+                                    else ""
+                                )
+                            )
+                        }
+                    )
+                )
                 for host in required_hosts:
                     host_token = _normalize_host_token(host)
                     capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
@@ -1234,11 +1257,24 @@ def main() -> int:
                                 + f"{validation_script}: {exc}"
                             )
                     if validation_script_payload:
-                        host_request_rows = [
+                        support_host_request_rows = [
                             item
                             for row_host, _, item in support_plan_request_rows
                             if row_host.strip().lower() == host.lower() and isinstance(item, dict)
                         ]
+                        release_host_request_rows = [
+                            dict(request)
+                            for tuple_id, request in release_external_request_index.items()
+                            if (
+                                _normalized_token(request.get("required_host")).lower() == host.lower()
+                                or (
+                                    not _normalized_token(request.get("required_host"))
+                                    and _normalized_token(tuple_id).count(":") == 2
+                                    and _normalized_token(tuple_id).split(":")[2].lower() == host.lower()
+                                )
+                            )
+                        ]
+                        host_request_rows = support_host_request_rows or release_host_request_rows
                         for request in host_request_rows:
                             tuple_id = _normalized_token(request.get("tuple_id") or request.get("tupleId")) or "<unknown>"
                             installer_file_name = _normalized_token(
