@@ -232,6 +232,9 @@ def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
             "expected_installer_file_name": _normalized_token(
                 item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
             ),
+            "expected_installer_relative_path": _normalized_token(
+                item.get("expectedInstallerRelativePath") or item.get("expected_installer_relative_path")
+            ),
             "expected_public_install_route": _normalized_token(
                 item.get("expectedPublicInstallRoute") or item.get("expected_public_install_route")
             ),
@@ -261,6 +264,9 @@ def _support_request_row_index(rows: list[tuple[str, int, dict[str, Any]]]) -> d
             "expected_artifact_id": _normalized_token(item.get("expected_artifact_id") or item.get("expectedArtifactId")),
             "expected_installer_file_name": _normalized_token(
                 item.get("expected_installer_file_name") or item.get("expectedInstallerFileName")
+            ),
+            "expected_installer_relative_path": _normalized_token(
+                item.get("expected_installer_relative_path") or item.get("expectedInstallerRelativePath")
             ),
             "expected_public_install_route": _normalized_token(
                 item.get("expected_public_install_route") or item.get("expectedPublicInstallRoute")
@@ -293,6 +299,9 @@ def _support_specs_index(value: Any) -> dict[str, dict[str, Any]]:
             "expected_artifact_id": _normalized_token(raw_spec.get("expected_artifact_id") or raw_spec.get("expectedArtifactId")),
             "expected_installer_file_name": _normalized_token(
                 raw_spec.get("expected_installer_file_name") or raw_spec.get("expectedInstallerFileName")
+            ),
+            "expected_installer_relative_path": _normalized_token(
+                raw_spec.get("expected_installer_relative_path") or raw_spec.get("expectedInstallerRelativePath")
             ),
             "expected_public_install_route": _normalized_token(
                 raw_spec.get("expected_public_install_route") or raw_spec.get("expectedPublicInstallRoute")
@@ -417,6 +426,31 @@ def main() -> int:
         for item in (journey_gates.get("journeys") or [])
         if isinstance(item, dict)
     ]
+    journey_rows_missing_blockers = sorted(
+        {
+            str(row.get("id") or "").strip() or "<unknown>"
+            for row in journey_rows
+            if "blocking_reasons" in row and "blockers" not in row
+        }
+    )
+    journey_rows_invalid_blockers = sorted(
+        {
+            str(row.get("id") or "").strip() or "<unknown>"
+            for row in journey_rows
+            if "blocking_reasons" in row and "blockers" in row and not isinstance(row.get("blockers"), list)
+        }
+    )
+    journey_rows_blockers_drift = sorted(
+        {
+            str(row.get("id") or "").strip() or "<unknown>"
+            for row in journey_rows
+            if "blocking_reasons" in row
+            and isinstance(row.get("blocking_reasons"), list)
+            and "blockers" in row
+            and isinstance(row.get("blockers"), list)
+            and row.get("blockers") != row.get("blocking_reasons")
+        }
+    )
 
     unresolved_count = _safe_int(
         support_summary.get("unresolved_external_proof_request_count"),
@@ -949,6 +983,7 @@ def main() -> int:
                 "required_proofs",
                 "expected_artifact_id",
                 "expected_installer_file_name",
+                "expected_installer_relative_path",
                 "expected_public_install_route",
                 "expected_startup_smoke_receipt_path",
                 "expected_installer_sha256",
@@ -1124,6 +1159,21 @@ def main() -> int:
         failures.append(
             "journey gates evidence.support_packets_generated_at is missing in journey rows: "
             + ", ".join(journey_rows_missing_support_generated_at)
+        )
+    if journey_rows_missing_blockers:
+        failures.append(
+            "journey gates blockers is missing in journey rows: "
+            + ", ".join(journey_rows_missing_blockers)
+        )
+    if journey_rows_invalid_blockers:
+        failures.append(
+            "journey gates blockers has invalid type in journey rows: "
+            + ", ".join(journey_rows_invalid_blockers)
+        )
+    if journey_rows_blockers_drift:
+        failures.append(
+            "journey gates blockers does not match blocking_reasons in journey rows: "
+            + ", ".join(journey_rows_blockers_drift)
         )
     if release_generated_at and not _parse_iso(release_generated_at):
         failures.append(
@@ -1403,6 +1453,10 @@ def main() -> int:
                                 request.get("expected_installer_file_name")
                                 or request.get("expectedInstallerFileName")
                             )
+                            installer_relative_path = _normalized_token(
+                                request.get("expected_installer_relative_path")
+                                or request.get("expectedInstallerRelativePath")
+                            )
                             installer_sha256 = _normalized_token(
                                 request.get("expected_installer_sha256")
                                 or request.get("expectedInstallerSha256")
@@ -1426,6 +1480,28 @@ def main() -> int:
                                     failures.append(
                                         "external proof windows validation wrapper does not reference expected installer path "
                                         f"for tuple {tuple_id}: {installer_path}"
+                                    )
+                            if installer_relative_path:
+                                installer_relative_token = installer_relative_path.lstrip("/")
+                                installer_relative_absolute = (
+                                    "/docker/chummercomplete/chummer6-ui/Docker/Downloads/"
+                                    + installer_relative_token
+                                )
+                                if (
+                                    not validation_script_loaded
+                                    or installer_relative_absolute not in validation_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof validation script does not reference expected installer relative path "
+                                        f"for tuple {tuple_id}: {installer_relative_path}"
+                                    )
+                                if host == "windows" and (
+                                    not validation_wrapper_loaded
+                                    or installer_relative_absolute not in validation_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows validation wrapper does not reference expected installer relative path "
+                                        f"for tuple {tuple_id}: {installer_relative_path}"
                                     )
                             if installer_sha256:
                                 if not validation_script_loaded or "installer-contract-mismatch" not in validation_script_payload:
