@@ -1797,3 +1797,230 @@ def test_verify_external_proof_closure_fails_when_request_deadline_mismatches_pl
 
     assert result.returncode == 1
     assert "request capture_deadline_utc values do not match plan capture_deadline_utc" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_open_plan_request_has_no_capture_commands(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": ["avalonia:win-x64:windows|windows|docker"],
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": "2026-04-06T01:21:51Z",
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "capture_deadline_utc": "2026-04-06T01:21:51Z",
+                                "proof_capture_commands": [],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": "2026-04-05T01:22:01Z"},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "unresolved_external_proof_execution_plan request rows are missing proof_capture_commands for tuples: "
+        "avalonia:win-x64:windows"
+    ) in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_open_plan_request_omits_expected_fields(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["macos"],
+                "unresolved_external_proof_request_specs": ["blazor-desktop:osx-arm64:macos|macos|docker"],
+                "unresolved_external_proof_request_tuples": ["blazor-desktop:osx-arm64:macos"],
+                "unresolved_external_proof_request_host_counts": {"macos": 1},
+                "unresolved_external_proof_request_tuple_counts": {"blazor-desktop:osx-arm64:macos": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"macos": 1},
+                "tuple_counts": {"blazor-desktop:osx-arm64:macos": 1},
+                "hosts": ["macos"],
+                "tuples": ["blazor-desktop:osx-arm64:macos"],
+                "specs": {"blazor-desktop:osx-arm64:macos": {"required_host": "macos"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": "2026-04-06T01:21:51Z",
+                "request_count": 1,
+                "hosts": ["macos"],
+                "host_groups": {
+                    "macos": {
+                        "request_count": 1,
+                        "tuples": ["blazor-desktop:osx-arm64:macos"],
+                        "requests": [
+                            {
+                                "tuple_id": "blazor-desktop:osx-arm64:macos",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "",
+                                "expected_installer_file_name": "",
+                                "expected_public_install_route": "",
+                                "expected_startup_smoke_receipt_path": "",
+                                "capture_deadline_utc": "2026-04-06T01:21:51Z",
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "blazor-desktop:osx-arm64:macos"}],
+                    "evidence": {"support_packets_generated_at": "2026-04-05T01:22:01Z"},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["macos"],
+                "blocked_external_only_tuples": ["blazor-desktop:osx-arm64:macos"],
+                "blocked_external_only_host_counts": {"macos": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["macos"],
+                "missingRequiredPlatformHeadPairs": ["blazor-desktop:macos"],
+                "missingRequiredPlatformHeadRidTuples": ["blazor-desktop:osx-arm64:macos"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "blazor-desktop:osx-arm64:macos",
+                        "requiredHost": "macos",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "unresolved_external_proof_execution_plan request rows are missing expected fields: "
+        "blazor-desktop:osx-arm64:macos:expected_artifact_id, "
+        "blazor-desktop:osx-arm64:macos:expected_installer_file_name, "
+        "blazor-desktop:osx-arm64:macos:expected_public_install_route, "
+        "blazor-desktop:osx-arm64:macos:expected_startup_smoke_receipt_path"
+    ) in result.stderr

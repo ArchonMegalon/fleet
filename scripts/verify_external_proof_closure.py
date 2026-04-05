@@ -258,6 +258,18 @@ def main() -> int:
             )
         }
     )
+    support_plan_request_rows: list[tuple[str, int, dict[str, Any]]] = []
+    for raw_host, raw_group in support_plan_host_groups.items():
+        host = str(raw_host).strip()
+        if not host or not isinstance(raw_group, dict):
+            continue
+        raw_requests = raw_group.get("requests")
+        if not isinstance(raw_requests, list):
+            continue
+        for index, item in enumerate(raw_requests):
+            if not isinstance(item, dict):
+                continue
+            support_plan_request_rows.append((host, index, dict(item)))
     support_plan_request_deadlines = sorted(
         {
             str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
@@ -276,6 +288,63 @@ def main() -> int:
             for item in (raw_group.get("requests") or [])
             if isinstance(item, dict)
             and not str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
+        }
+    )
+    support_plan_request_rows_missing_required_proofs = sorted(
+        {
+            str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>"
+            for _, _, item in support_plan_request_rows
+            if not {
+                str(token).strip().lower()
+                for token in (
+                    item.get("required_proofs")
+                    if isinstance(item.get("required_proofs"), list)
+                    else item.get("requiredProofs")
+                    if isinstance(item.get("requiredProofs"), list)
+                    else []
+                )
+                if str(token).strip()
+            }.issuperset({"promoted_installer_artifact", "startup_smoke_receipt"})
+        }
+    )
+    support_plan_request_rows_missing_capture_commands = sorted(
+        {
+            str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>"
+            for _, _, item in support_plan_request_rows
+            if not [
+                str(token).strip()
+                for token in (
+                    item.get("proof_capture_commands")
+                    if isinstance(item.get("proof_capture_commands"), list)
+                    else item.get("proofCaptureCommands")
+                    if isinstance(item.get("proofCaptureCommands"), list)
+                    else []
+                )
+                if str(token).strip()
+            ]
+        }
+    )
+    support_plan_request_rows_missing_expected_fields = sorted(
+        {
+            f"{(str(item.get('tuple_id') or item.get('tupleId') or '').strip() or '<unknown>')}:{field}"
+            for _, _, item in support_plan_request_rows
+            for field, value in (
+                ("expected_artifact_id", item.get("expected_artifact_id") or item.get("expectedArtifactId")),
+                (
+                    "expected_installer_file_name",
+                    item.get("expected_installer_file_name") or item.get("expectedInstallerFileName"),
+                ),
+                (
+                    "expected_public_install_route",
+                    item.get("expected_public_install_route") or item.get("expectedPublicInstallRoute"),
+                ),
+                (
+                    "expected_startup_smoke_receipt_path",
+                    item.get("expected_startup_smoke_receipt_path")
+                    or item.get("expectedStartupSmokeReceiptPath"),
+                ),
+            )
+            if not str(value or "").strip()
         }
     )
     support_generated_at = str(
@@ -533,6 +602,22 @@ def main() -> int:
         failures.append(
             "support packets unresolved_external_proof_execution_plan request rows are missing capture_deadline_utc for tuples: "
             + ", ".join(support_plan_request_rows_missing_deadline)
+        )
+    if support_plan_request_rows_missing_required_proofs and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows are missing required_proofs tokens "
+            "(promoted_installer_artifact,startup_smoke_receipt) for tuples: "
+            + ", ".join(support_plan_request_rows_missing_required_proofs)
+        )
+    if support_plan_request_rows_missing_capture_commands and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows are missing proof_capture_commands for tuples: "
+            + ", ".join(support_plan_request_rows_missing_capture_commands)
+        )
+    if support_plan_request_rows_missing_expected_fields and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows are missing expected fields: "
+            + ", ".join(support_plan_request_rows_missing_expected_fields)
         )
     if missing_platforms:
         failures.append(
