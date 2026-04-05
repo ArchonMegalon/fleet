@@ -165,6 +165,28 @@ def _normalized_string_list(value: Any) -> list[str]:
     )
 
 
+def _normalized_smoke_contract(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {
+            "status_any_of": [],
+            "ready_checkpoint": "",
+            "head_id": "",
+            "platform": "",
+            "rid": "",
+            "host_class_contains": "",
+        }
+    return {
+        "status_any_of": _normalized_string_list(value.get("status_any_of") or value.get("statusAnyOf")),
+        "ready_checkpoint": _normalized_token(value.get("ready_checkpoint") or value.get("readyCheckpoint")).lower(),
+        "head_id": _normalized_token(value.get("head_id") or value.get("headId")).lower(),
+        "platform": _normalized_platform(value.get("platform")),
+        "rid": _normalized_token(value.get("rid")).lower(),
+        "host_class_contains": _normalized_token(
+            value.get("host_class_contains") or value.get("hostClassContains")
+        ).lower(),
+    }
+
+
 def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(rows, list):
         return {}
@@ -1078,6 +1100,9 @@ def main() -> int:
     parsed_support_generated_at = _parse_iso(support_generated_at) if support_generated_at else None
     parsed_capture_deadline_utc = _parse_iso(support_plan_capture_deadline_utc) if support_plan_capture_deadline_utc else None
     parsed_support_plan_generated_at = _parse_iso(support_plan_generated_at) if support_plan_generated_at else None
+    parsed_support_plan_release_generated_at = (
+        _parse_iso(support_plan_release_generated_at) if support_plan_release_generated_at else None
+    )
     parsed_journey_support_generated_ats = [
         parsed
         for parsed in (_parse_iso(value) for value in journey_support_generated_ats)
@@ -1087,27 +1112,34 @@ def main() -> int:
         failures.append(
             "support packets generated_at/generatedAt is older than release channel generatedAt/generated_at"
         )
+    deadline_anchor_name = (
+        "support packets unresolved_external_proof_execution_plan.release_channel_generated_at"
+        if parsed_support_plan_release_generated_at
+        else "support packets generated_at/generatedAt"
+    )
+    deadline_anchor_ts = parsed_support_plan_release_generated_at or parsed_support_generated_at
     if (
         has_open_backlog_signal
         and parsed_capture_deadline_utc
-        and parsed_support_generated_at
-        and parsed_capture_deadline_utc < parsed_support_generated_at
+        and deadline_anchor_ts
+        and parsed_capture_deadline_utc < deadline_anchor_ts
     ):
         failures.append(
-            "support packets unresolved_external_proof_execution_plan.capture_deadline_utc is earlier than support packets generated_at/generatedAt"
+            "support packets unresolved_external_proof_execution_plan.capture_deadline_utc is earlier than "
+            + deadline_anchor_name
         )
     if (
         has_open_backlog_signal
-        and parsed_support_generated_at
+        and deadline_anchor_ts
         and parsed_capture_deadline_utc
         and support_plan_capture_deadline_hours > 0
     ):
-        expected_deadline_utc = parsed_support_generated_at.timestamp() + (support_plan_capture_deadline_hours * 3600)
+        expected_deadline_utc = deadline_anchor_ts.timestamp() + (support_plan_capture_deadline_hours * 3600)
         deadline_delta_seconds = abs(parsed_capture_deadline_utc.timestamp() - expected_deadline_utc)
         if deadline_delta_seconds > 60:
             failures.append(
                 "support packets unresolved_external_proof_execution_plan.capture_deadline_utc does not match "
-                "support packets generated_at plus capture_deadline_hours "
+                f"{deadline_anchor_name} plus capture_deadline_hours "
                 f"(delta_seconds={int(deadline_delta_seconds)})"
             )
 
@@ -1180,6 +1212,7 @@ def main() -> int:
                     host_token = _normalize_host_token(host)
                     capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
                     validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
+                    validation_script_payload = ""
                     for script_path in (capture_script, validation_script):
                         if not script_path.is_file():
                             failures.append(
@@ -1192,6 +1225,64 @@ def main() -> int:
                                 "external proof host script is not executable: "
                                 + str(script_path)
                             )
+                    if validation_script.is_file():
+                        try:
+                            validation_script_payload = validation_script.read_text(encoding="utf-8")
+                        except OSError as exc:
+                            failures.append(
+                                "external proof validation script is unreadable: "
+                                + f"{validation_script}: {exc}"
+                            )
+                    if validation_script_payload:
+                        host_request_rows = [
+                            item
+                            for row_host, _, item in support_plan_request_rows
+                            if row_host.strip().lower() == host.lower() and isinstance(item, dict)
+                        ]
+                        for request in host_request_rows:
+                            tuple_id = _normalized_token(request.get("tuple_id") or request.get("tupleId")) or "<unknown>"
+                            receipt_path = _normalized_token(
+                                request.get("expected_startup_smoke_receipt_path")
+                                or request.get("expectedStartupSmokeReceiptPath")
+                            )
+                            if receipt_path and receipt_path not in validation_script_payload:
+                                failures.append(
+                                    "external proof validation script does not reference expected startup-smoke receipt path "
+                                    f"for tuple {tuple_id}: {receipt_path}"
+                                )
+                            smoke_contract = _normalized_smoke_contract(
+                                request.get("startup_smoke_receipt_contract")
+                                if request.get("startup_smoke_receipt_contract") is not None
+                                else request.get("startupSmokeReceiptContract")
+                            )
+                            if receipt_path and (
+                                smoke_contract.get("status_any_of")
+                                or smoke_contract.get("ready_checkpoint")
+                                or smoke_contract.get("head_id")
+                                or smoke_contract.get("platform")
+                                or smoke_contract.get("rid")
+                                or smoke_contract.get("host_class_contains")
+                            ):
+                                if "receipt-contract-mismatch" not in validation_script_payload:
+                                    failures.append(
+                                        "external proof validation script is missing startup-smoke receipt contract checks "
+                                        f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
+                                    )
+                                for key, value in (
+                                    ("head_id", smoke_contract.get("head_id")),
+                                    ("platform", smoke_contract.get("platform")),
+                                    ("rid", smoke_contract.get("rid")),
+                                    ("ready_checkpoint", smoke_contract.get("ready_checkpoint")),
+                                    ("host_class_contains", smoke_contract.get("host_class_contains")),
+                                ):
+                                    token = str(value or "").strip().lower()
+                                    if not token:
+                                        continue
+                                    if f"\"{key}\": \"{token}\"" not in validation_script_payload:
+                                        failures.append(
+                                            "external proof validation script is missing startup-smoke contract token "
+                                            f"for tuple {tuple_id}: {key}={token}"
+                                        )
                     if host == "windows":
                         windows_scripts = (
                             external_proof_commands_dir / "capture-windows-proof.ps1",
