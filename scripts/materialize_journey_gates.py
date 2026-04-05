@@ -266,6 +266,9 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         provided_expected_artifact_id = str(item.get("expectedArtifactId") or "").strip()
         provided_expected_installer_file_name = str(item.get("expectedInstallerFileName") or "").strip()
         provided_expected_installer_relative_path = str(item.get("expectedInstallerRelativePath") or "").strip()
+        provided_expected_installer_sha256 = str(
+            item.get("expectedInstallerSha256") or item.get("expected_installer_sha256") or ""
+        ).strip().lower()
         provided_expected_public_install_route = str(item.get("expectedPublicInstallRoute") or "").strip()
         provided_expected_startup_smoke_receipt_path = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
         row_channel_id_raw = str(item.get("channelId") or item.get("channel") or "").strip().lower()
@@ -297,8 +300,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             if isinstance(provided_commands, list)
             else []
         )
-        requests.append(
-            {
+        request_payload: Dict[str, Any] = {
                 "tuple_id": tuple_id,
                 "channel_id": release_channel_id,
                 "required_host": effective_required_host or "required",
@@ -355,7 +357,10 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                     else canonical_proof_capture_commands
                 ),
             }
-        )
+        if provided_expected_installer_sha256:
+            request_payload["expected_installer_sha256"] = provided_expected_installer_sha256
+            request_payload["expected_installer_sha256_provided"] = True
+        requests.append(request_payload)
     deduped_by_tuple: Dict[str, Dict[str, Any]] = {}
     tuple_occurrence_counts: Dict[str, int] = {}
     for request in requests:
@@ -384,6 +389,7 @@ EXTERNAL_PROOF_REQUEST_PUBLIC_KEYS: Tuple[str, ...] = (
     "expected_artifact_id",
     "expected_installer_file_name",
     "expected_installer_relative_path",
+    "expected_installer_sha256",
     "expected_public_install_route",
     "expected_startup_smoke_receipt_path",
     "startup_smoke_receipt_contract",

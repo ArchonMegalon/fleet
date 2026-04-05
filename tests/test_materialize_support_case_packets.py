@@ -551,6 +551,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
                             "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                             "expectedArtifactId": "avalonia-win-x64-installer",
                             "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                            "expectedInstallerSha256": "b" * 64,
                             "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
                             "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
                             "startupSmokeReceiptContract": {
@@ -608,6 +609,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+            "expected_installer_sha256": "b" * 64,
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -638,6 +640,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
         "expected_artifact_id": "avalonia-win-x64-installer",
         "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
         "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+        "expected_installer_sha256": "b" * 64,
         "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
         "startup_smoke_receipt_contract": {

@@ -529,6 +529,9 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                         else ""
                     )
                 ),
+                "expected_installer_sha256": _normalize_text(
+                    item.get("expectedInstallerSha256") or item.get("expected_installer_sha256")
+                ).lower(),
                 "expected_public_install_route": _normalize_text(
                     item.get("expectedPublicInstallRoute") or item.get("expected_public_install_route")
                 ),
@@ -858,7 +861,19 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "tuple_present_on_promoted_shelf": bool(promoted_tuple),
             "case_tuple_id": expected_tuple_id,
             "external_proof_required": bool(external_proof_request),
-            "external_proof_request": {
+            "external_proof_request": (
+                lambda request_payload: (
+                    request_payload
+                    if not _normalize_text(external_proof_request.get("expected_installer_sha256"))
+                    else {
+                        **request_payload,
+                        "expected_installer_sha256": _normalize_text(
+                            external_proof_request.get("expected_installer_sha256")
+                        ).lower(),
+                    }
+                )
+            )(
+                {
                 "tuple_id": _normalize_text(external_proof_request.get("tuple_id")),
                 "channel_id": _normalize_text(external_proof_request.get("channel_id")),
                 "tuple_entry_count": int(external_proof_request.get("tuple_entry_count") or 0),
@@ -890,7 +905,8 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
                     for token in (external_proof_request.get("proof_capture_commands") or [])
                     if _normalize_text(token)
                 ],
-            },
+                }
+            ),
             "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
             "case_installed_version": installed_version,
             "case_version_matches_registry_release": bool(
@@ -934,7 +950,7 @@ def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
         for token in (row.get("proof_capture_commands") or [])
         if _normalize_text(token)
     ]
-    return {
+    payload: Dict[str, Any] = {
         "channel_id": _normalize_text(row.get("channel_id")).lower(),
         "tuple_entry_count": int(row.get("tuple_entry_count") or 0),
         "tuple_unique": bool(row.get("tuple_unique")),
@@ -948,6 +964,10 @@ def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
         "startup_smoke_receipt_contract": _normalized_smoke_contract_map(row.get("startup_smoke_receipt_contract")),
         "proof_capture_commands": proof_capture_commands,
     }
+    expected_installer_sha256 = _normalize_text(row.get("expected_installer_sha256")).lower()
+    if expected_installer_sha256:
+        payload["expected_installer_sha256"] = expected_installer_sha256
+    return payload
 
 
 def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
@@ -1001,8 +1021,7 @@ def _external_proof_execution_plan(
         rows = sorted(grouped[host], key=lambda item: _normalize_text(item.get("tuple_id")))
         request_items = []
         for row in rows:
-            request_items.append(
-                {
+            request_payload: Dict[str, Any] = {
                     "tuple_id": _normalize_text(row.get("tuple_id")),
                     "tuple_entry_count": int(row.get("tuple_entry_count") or 0),
                     "tuple_unique": bool(row.get("tuple_unique")),
@@ -1032,7 +1051,10 @@ def _external_proof_execution_plan(
                         if _normalize_text(token)
                     ],
                 }
-            )
+            expected_installer_sha256 = _normalize_text(row.get("expected_installer_sha256")).lower()
+            if expected_installer_sha256:
+                request_payload["expected_installer_sha256"] = expected_installer_sha256
+            request_items.append(request_payload)
         host_groups[host] = {
             "request_count": len(request_items),
             "tuples": [item["tuple_id"] for item in request_items if item.get("tuple_id")],
@@ -1065,6 +1087,7 @@ def _external_proof_operator_packet(
     expected_artifact_id = _normalize_text(row.get("expected_artifact_id"))
     expected_installer_file_name = _normalize_text(row.get("expected_installer_file_name"))
     expected_installer_relative_path = _normalize_text(row.get("expected_installer_relative_path"))
+    expected_installer_sha256 = _normalize_text(row.get("expected_installer_sha256")).lower()
     expected_public_install_route = _normalize_text(row.get("expected_public_install_route"))
     expected_startup_smoke_receipt_path = _normalize_text(row.get("expected_startup_smoke_receipt_path"))
     required_proofs = [
@@ -1129,7 +1152,16 @@ def _external_proof_operator_packet(
             "tuple_present_on_promoted_shelf": False,
             "case_tuple_id": tuple_id,
             "external_proof_required": True,
-            "external_proof_request": {
+            "external_proof_request": (
+                lambda request_payload: (
+                    request_payload
+                    if not expected_installer_sha256
+                    else {
+                        **request_payload,
+                        "expected_installer_sha256": expected_installer_sha256,
+                    }
+                )
+            )({
                 "tuple_id": tuple_id,
                 "channel_id": channel_id,
                 "tuple_entry_count": int(row.get("tuple_entry_count") or 0),
@@ -1145,7 +1177,7 @@ def _external_proof_operator_packet(
                     row.get("startup_smoke_receipt_contract")
                 ),
                 "proof_capture_commands": proof_capture_commands,
-            },
+            }),
             "fix_availability_summary": _normalize_text(release_channel_index.get("fix_availability_summary")),
             "case_installed_version": "",
             "case_version_matches_registry_release": False,

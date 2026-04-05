@@ -134,6 +134,9 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                             "expected_installer_relative_path": _normalize_text(
                                 row.get("expected_installer_relative_path")
                             ),
+                            "expected_installer_sha256": _normalize_text(
+                                row.get("expected_installer_sha256")
+                            ).lower(),
                             "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
                             "expected_startup_smoke_receipt_path": _normalize_text(
                                 row.get("expected_startup_smoke_receipt_path")
@@ -202,12 +205,26 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
 def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
+    installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
     receipt_relative_path = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
     if installer_file_name:
         installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
         commands.append(
             f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(installer_path))}"
         )
+        if installer_sha256:
+            commands.append(
+                f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+                "python3 -c "
+                + shlex.quote(
+                    "import hashlib, pathlib, sys; "
+                    f"p=pathlib.Path({str(installer_path)!r}); "
+                    f"expected={installer_sha256!r}; "
+                    "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
+                    "sys.exit(0) if digest==expected else sys.exit("
+                    "f'mismatch:{p}:{digest}:expected:{expected}')"
+                )
+            )
     if receipt_relative_path:
         receipt_path = UI_REPO_ROOT / "Docker" / "Downloads" / receipt_relative_path
         commands.append(
@@ -328,6 +345,7 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             artifact_id = _normalize_text(request.get("expected_artifact_id")) or "(missing)"
             installer = _normalize_text(request.get("expected_installer_file_name")) or "(missing)"
             installer_relative_path = _normalize_text(request.get("expected_installer_relative_path")) or "(missing)"
+            installer_sha256 = _normalize_text(request.get("expected_installer_sha256")) or "(missing)"
             route = _normalize_text(request.get("expected_public_install_route")) or "(missing)"
             receipt_path = _normalize_text(request.get("expected_startup_smoke_receipt_path")) or "(missing)"
             capture_deadline_utc = _normalize_text(request.get("capture_deadline_utc"))
@@ -340,6 +358,7 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             lines.append(f"  artifact_id: `{artifact_id}`")
             lines.append(f"  installer_file: `{installer}`")
             lines.append(f"  installer_relative_path: `{installer_relative_path}`")
+            lines.append(f"  installer_sha256: `{installer_sha256}`")
             lines.append(f"  public_route: `{route}`")
             lines.append(f"  startup_smoke_receipt: `{receipt_path}`")
             lines.append(f"  capture_deadline_utc: `{capture_deadline_utc or '(missing)'}`")

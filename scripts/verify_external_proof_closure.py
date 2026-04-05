@@ -95,6 +95,11 @@ def _parse_iso(value: str) -> datetime | None:
         return None
 
 
+def _is_sha256_hex(value: Any) -> bool:
+    raw = str(value or "").strip().lower()
+    return bool(raw) and len(raw) == 64 and all(ch in "0123456789abcdef" for ch in raw)
+
+
 def _age_seconds(ts: datetime, *, now: datetime) -> float:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=now.tzinfo)
@@ -363,6 +368,18 @@ def main() -> int:
             if not str(value or "").strip()
         }
     )
+    support_plan_request_rows_invalid_expected_sha256 = sorted(
+        {
+            str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>"
+            for _, _, item in support_plan_request_rows
+            for value in [
+                item.get("expected_installer_sha256")
+                if item.get("expected_installer_sha256") is not None
+                else item.get("expectedInstallerSha256")
+            ]
+            if str(value or "").strip() and not _is_sha256_hex(value)
+        }
+    )
     support_generated_at = str(
         support_packets.get("generated_at") or support_packets.get("generatedAt") or ""
     ).strip()
@@ -457,6 +474,16 @@ def main() -> int:
                 failures.append(
                     "release channel desktopTupleCoverage.externalProofRequests"
                     f"[{index}] requiredProofs is missing required tokens: {', '.join(missing_required_proofs)}"
+                )
+            expected_installer_sha256 = (
+                request.get("expectedInstallerSha256")
+                if request.get("expectedInstallerSha256") is not None
+                else request.get("expected_installer_sha256")
+            )
+            if str(expected_installer_sha256 or "").strip() and not _is_sha256_hex(expected_installer_sha256):
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] expectedInstallerSha256 must be a 64-character lowercase sha256 hex digest"
                 )
     unresolved_tuples = [
         str(item).strip()
@@ -634,6 +661,11 @@ def main() -> int:
         failures.append(
             "support packets unresolved_external_proof_execution_plan request rows are missing expected fields: "
             + ", ".join(support_plan_request_rows_missing_expected_fields)
+        )
+    if support_plan_request_rows_invalid_expected_sha256 and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows have invalid expected_installer_sha256 values for tuples: "
+            + ", ".join(support_plan_request_rows_invalid_expected_sha256)
         )
     if missing_platforms:
         failures.append(

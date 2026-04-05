@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-05T02:17:29Z",
+  "generated_at": "2026-04-05T02:38:40Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -687,14 +687,14 @@
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-04-06T02:17:27Z",
-    "generated_at": "2026-04-05T02:17:29Z",
+    "capture_deadline_utc": "2026-04-06T02:38:39Z",
+    "generated_at": "2026-04-05T02:38:40Z",
     "host_groups": {
       "macos": {
         "request_count": 2,
         "requests": [
           {
-            "capture_deadline_utc": "2026-04-06T02:17:27Z",
+            "capture_deadline_utc": "2026-04-06T02:38:39Z",
             "channel_id": "docker",
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
@@ -729,7 +729,7 @@
             "tuple_unique": true
           },
           {
-            "capture_deadline_utc": "2026-04-06T02:17:27Z",
+            "capture_deadline_utc": "2026-04-06T02:38:39Z",
             "channel_id": "docker",
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
@@ -773,7 +773,7 @@
         "request_count": 2,
         "requests": [
           {
-            "capture_deadline_utc": "2026-04-06T02:17:27Z",
+            "capture_deadline_utc": "2026-04-06T02:38:39Z",
             "channel_id": "docker",
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
@@ -808,7 +808,7 @@
             "tuple_unique": true
           },
           {
-            "capture_deadline_utc": "2026-04-06T02:17:27Z",
+            "capture_deadline_utc": "2026-04-06T02:38:39Z",
             "channel_id": "docker",
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
@@ -853,7 +853,7 @@
       "macos",
       "windows"
     ],
-    "release_channel_generated_at": "2026-04-05T02:17:27Z",
+    "release_channel_generated_at": "2026-04-05T02:38:39Z",
     "request_count": 4
   }
 }

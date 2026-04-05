@@ -32,6 +32,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
                                     "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                     "expected_artifact_id": "avalonia-win-x64-installer",
                                     "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                    "expected_installer_sha256": "a" * 64,
                                     "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
                                     "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
                                     "capture_deadline_utc": "2026-04-06T00:00:00Z",
@@ -110,6 +111,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "```powershell" in payload
     assert "bash -lc 'echo windows-proof'" in payload
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in payload
+    assert "hashlib.sha256" in payload
+    assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in payload
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
     assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in payload
     assert "  commands:" in payload
