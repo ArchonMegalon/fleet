@@ -105,6 +105,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
+    assert "python3 scripts/materialize_public_release_channel.py" in payload
+    assert "python3 scripts/verify_public_release_channel.py" in payload
     assert "python3 scripts/materialize_journey_gates.py" in payload
     assert "python3 scripts/verify_external_proof_closure.py" in payload
     assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
