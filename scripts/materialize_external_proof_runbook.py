@@ -133,6 +133,15 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _commands_for_request(request: dict[str, Any]) -> list[str]:
+    commands: list[str] = []
+    for command in request.get("proof_capture_commands") or []:
+        normalized = _normalize_text(command)
+        if normalized:
+            commands.append(normalized)
+    return commands
+
+
 def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
     lines: list[str] = []
     request_count = int(plan.get("request_count") or 0)
@@ -178,8 +187,15 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             lines.append(f"  installer_file: `{installer}`")
             lines.append(f"  public_route: `{route}`")
             lines.append(f"  startup_smoke_receipt: `{receipt_path}`")
+            tuple_commands = _commands_for_request(request)
+            lines.append("  commands:")
+            if not tuple_commands:
+                lines.append("    - (none)")
+            else:
+                for command in tuple_commands:
+                    lines.append(f"    - `{command}`")
         lines.append("")
-        lines.append("### Commands")
+        lines.append("### Commands (Host Consolidated)")
         lines.append("")
         commands = _commands_for_group(group)
         if not commands:
