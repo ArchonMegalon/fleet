@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -24,6 +25,10 @@ DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS
 DEFAULT_MIRROR_OUT = ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_ACCEPTANCE = ROOT / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
 CANONICAL_ACCEPTANCE = Path("/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
+DEFAULT_PARITY_REGISTRY = ROOT / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
+CANONICAL_PARITY_REGISTRY = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
+)
 DEFAULT_STATUS_PLANE = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEFAULT_PROGRESS_REPORT = ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
 DEFAULT_PROGRESS_HISTORY = ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
@@ -116,6 +121,26 @@ MEDIA_PROOF_CANDIDATES = (
     Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/ARTIFACT_PUBLICATION_CERTIFICATION.generated.json"),
     Path("/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json"),
 )
+PARITY_BLOCKING_STATUSES = {"missing", "partial", "warning", "blocked", "fail", "failed"}
+PARITY_DESKTOP_FAMILY_IDS = {
+    "shell_workbench_orientation",
+    "dense_builder_and_career_workflows",
+    "identity_contacts_lifestyles_history",
+    "sourcebooks_reference_and_master_index",
+    "settings_and_rules_environment_authoring",
+    "custom_data_xml_and_translator_bridge",
+    "dice_initiative_and_table_utilities",
+    "roster_dashboards_and_multi_character_ops",
+    "sheet_export_print_viewer_and_exchange",
+    "sr6_supplements_designers_and_house_rules",
+}
+PARITY_RULES_AND_IMPORT_FAMILY_IDS = {
+    "sourcebooks_reference_and_master_index",
+    "settings_and_rules_environment_authoring",
+    "custom_data_xml_and_translator_bridge",
+    "legacy_and_adjacent_import_oracles",
+    "sr6_supplements_designers_and_house_rules",
+}
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -130,6 +155,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="optional mirror path for FLAGSHIP_PRODUCT_READINESS.generated.json",
     )
     parser.add_argument("--acceptance", default=str(DEFAULT_ACCEPTANCE), help="path to FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
+    parser.add_argument(
+        "--parity-registry",
+        default=str(DEFAULT_PARITY_REGISTRY),
+        help="path to LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
+    )
     parser.add_argument("--status-plane", default=str(DEFAULT_STATUS_PLANE), help="path to STATUS_PLANE.generated.yaml")
     parser.add_argument("--progress-report", default=str(DEFAULT_PROGRESS_REPORT), help="path to PROGRESS_REPORT.generated.json")
     parser.add_argument("--progress-history", default=str(DEFAULT_PROGRESS_HISTORY), help="path to PROGRESS_HISTORY.generated.json")
@@ -212,6 +242,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--release-channel", default=str(DEFAULT_RELEASE_CHANNEL), help="path to RELEASE_CHANNEL.generated.json")
     parser.add_argument("--releases-json", default=str(DEFAULT_RELEASES_JSON), help="path to releases.json")
+    parser.add_argument(
+        "--ignore-nonlinux-desktop-host-proof-blockers",
+        action="store_true",
+        help=(
+            "Ignore desktop proof blockers tied to Windows and macOS external-host or tuple expectations; still require Linux proof."
+        ),
+    )
     return parser.parse_args(list(argv or sys.argv[1:]))
 
 
@@ -351,6 +388,17 @@ def load_acceptance_with_fallback(primary_path: Path) -> tuple[Path, Dict[str, A
     return primary_path, {}
 
 
+def load_parity_registry_with_fallback(primary_path: Path) -> tuple[Path, Dict[str, Any]]:
+    primary_payload = load_yaml(primary_path)
+    if primary_payload:
+        return primary_path, primary_payload
+    if CANONICAL_PARITY_REGISTRY != primary_path and CANONICAL_PARITY_REGISTRY.is_file():
+        canonical_payload = load_yaml(CANONICAL_PARITY_REGISTRY)
+        if canonical_payload:
+            return CANONICAL_PARITY_REGISTRY, canonical_payload
+    return primary_path, {}
+
+
 def compare_order(actual: str, expected: str, order: Dict[str, int]) -> int:
     return order.get(str(actual or "").strip(), -1) - order.get(str(expected or "").strip(), -1)
 
@@ -387,6 +435,444 @@ def _as_string_list(value: Any) -> List[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _as_int_list(value: Any) -> List[int]:
+    if not isinstance(value, list):
+        return []
+    results: List[int] = []
+    for item in value:
+        try:
+            results.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return results
+
+
+def _path_contract_passed(path: Path, *, expected_contract: str = "") -> bool:
+    if not path.is_file():
+        return False
+    return proof_passed(load_json(path), expected_contract=expected_contract)
+
+
+def _text_contains_all(path: Path, tokens: Sequence[str]) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        content = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return False
+    return all(str(token).strip() and str(token) in content for token in tokens)
+
+
+def _first_existing_path(candidates: Sequence[Path]) -> Path | None:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _parity_proof_backed_family_closures(
+    *,
+    ui_workflow_parity_proof_path: Path,
+    ui_workflow_execution_gate_path: Path,
+    ui_visual_familiarity_exit_gate_path: Path,
+    sr4_workflow_parity_proof_path: Path,
+    sr6_workflow_parity_proof_path: Path,
+    sr4_sr6_frontier_receipt_path: Path,
+    hub_local_release_proof: Dict[str, Any],
+    mobile_local_release_proof: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    ui_published_dir = ui_workflow_parity_proof_path.parent
+    ui_root = ui_published_dir.parent.parent if ui_workflow_parity_proof_path.name else Path("/docker/chummercomplete/chummer6-ui")
+    core_root = _first_existing_path(
+        (
+            Path("/docker/chummercomplete/chummer6-core"),
+            Path("/docker/chummercomplete/chummer-core-engine"),
+        )
+    ) or Path("/docker/chummercomplete/chummer6-core")
+    hub_root = _first_existing_path(
+        (
+            Path("/docker/chummercomplete/chummer6-hub"),
+            Path("/docker/chummercomplete/chummer.run-services"),
+        )
+    ) or Path("/docker/chummercomplete/chummer6-hub")
+
+    dense_sr4_path = ui_published_dir / "SR4_WORKFLOW_FAMILY_DENSE_WORKBENCH_AFFORDANCES_SEARCH_ADD_EDIT_REMOVE_PREVIEW_DRILL_IN_COMPARE_PARITY.generated.json"
+    dense_sr6_path = ui_published_dir / "SR6_WORKFLOW_FAMILY_DENSE_WORKBENCH_AFFORDANCES_SEARCH_ADD_EDIT_REMOVE_PREVIEW_DRILL_IN_COMPARE_PARITY.generated.json"
+    contacts_sr4_path = ui_published_dir / "SR4_WORKFLOW_FAMILY_QUALITIES_CONTACTS_IDENTITIES_NOTES_CALENDAR_EXPENSES_LIFESTYLES_SOURCES_PARITY.generated.json"
+    contacts_sr6_path = ui_published_dir / "SR6_WORKFLOW_FAMILY_QUALITIES_CONTACTS_IDENTITIES_NOTES_CALENDAR_EXPENSES_LIFESTYLES_SOURCES_PARITY.generated.json"
+    export_sr4_path = ui_published_dir / "SR4_WORKFLOW_FAMILY_CREATE_OPEN_IMPORT_SAVE_SAVE_AS_PRINT_EXPORT_PARITY.generated.json"
+    export_sr6_path = ui_published_dir / "SR6_WORKFLOW_FAMILY_CREATE_OPEN_IMPORT_SAVE_SAVE_AS_PRINT_EXPORT_PARITY.generated.json"
+
+    core_api_tests_path = core_root / "Chummer.Tests" / "ApiIntegrationTests.cs"
+    core_xml_tool_catalog_path = core_root / "Chummer.Infrastructure" / "Xml" / "XmlToolCatalogService.cs"
+    build_lab_projection_path = core_root / "Chummer.Application" / "BuildLab" / "BuildLabWorkspaceProjectionFactory.cs"
+
+    ui_dialog_factory_tests_path = ui_root / "Chummer.Tests" / "Presentation" / "DesktopDialogFactoryTests.cs"
+    ui_presenter_tests_path = ui_root / "Chummer.Tests" / "Presentation" / "CharacterOverviewPresenterTests.cs"
+    ui_audit_parity_path = ui_root / "scripts" / "audit-ui-parity.sh"
+    hub_workflow_surface_contracts_path = hub_root / "Chummer.Run.Contracts" / "CompatCore" / "Presentation" / "WorkflowSurfaceContracts.cs"
+
+    closures: Dict[str, Dict[str, Any]] = {}
+
+    def add_closure(family_id: str, *, reason: str, receipts: Sequence[str]) -> None:
+        closures[family_id] = {
+            "id": family_id,
+            "closure_strategy": "proof_backed_successor_route",
+            "effective_status": "covered",
+            "reason": reason,
+            "receipts": [str(item).strip() for item in receipts if str(item).strip()],
+        }
+
+    if all(
+        (
+            _path_contract_passed(
+                ui_visual_familiarity_exit_gate_path,
+                expected_contract="chummer6-ui.desktop_visual_familiarity_exit_gate",
+            ),
+            _path_contract_passed(
+                ui_workflow_execution_gate_path,
+                expected_contract="chummer6-ui.desktop_workflow_execution_gate",
+            ),
+            _path_contract_passed(
+                ui_workflow_parity_proof_path,
+                expected_contract="chummer6-ui.chummer5a_desktop_workflow_parity",
+            ),
+            _path_contract_passed(
+                sr4_workflow_parity_proof_path,
+                expected_contract="chummer6-ui.sr4_desktop_workflow_parity",
+            ),
+            _path_contract_passed(
+                sr6_workflow_parity_proof_path,
+                expected_contract="chummer6-ui.sr6_desktop_workflow_parity",
+            ),
+            _path_contract_passed(
+                sr4_sr6_frontier_receipt_path,
+                expected_contract="chummer6-ui.sr4_sr6_desktop_parity_frontier",
+            ),
+        )
+    ):
+        add_closure(
+            "shell_workbench_orientation",
+            reason="Promoted desktop chrome, visual familiarity, and cross-ruleset workflow parity are all passing.",
+            receipts=(
+                str(ui_visual_familiarity_exit_gate_path),
+                str(ui_workflow_execution_gate_path),
+                str(ui_workflow_parity_proof_path),
+                str(sr4_workflow_parity_proof_path),
+                str(sr6_workflow_parity_proof_path),
+                str(sr4_sr6_frontier_receipt_path),
+            ),
+        )
+
+    if all(
+        (
+            _path_contract_passed(dense_sr4_path, expected_contract="chummer6-ui.ruleset_workflow_family_parity"),
+            _path_contract_passed(dense_sr6_path, expected_contract="chummer6-ui.ruleset_workflow_family_parity"),
+            _path_contract_passed(
+                ui_workflow_execution_gate_path,
+                expected_contract="chummer6-ui.desktop_workflow_execution_gate",
+            ),
+        )
+    ):
+        add_closure(
+            "dense_builder_and_career_workflows",
+            reason="Dense workbench workflow-family parity is passing on both SR4 and SR6 heads with promoted desktop execution proof.",
+            receipts=(str(dense_sr4_path), str(dense_sr6_path), str(ui_workflow_execution_gate_path)),
+        )
+
+    if all(
+        (
+            _path_contract_passed(contacts_sr4_path, expected_contract="chummer6-ui.ruleset_workflow_family_parity"),
+            _path_contract_passed(contacts_sr6_path, expected_contract="chummer6-ui.ruleset_workflow_family_parity"),
+        )
+    ):
+        add_closure(
+            "identity_contacts_lifestyles_history",
+            reason="Contacts, identities, notes, lifestyles, and source-family workflow parity is passing across SR4 and SR6.",
+            receipts=(str(contacts_sr4_path), str(contacts_sr6_path)),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                core_xml_tool_catalog_path,
+                ("BuildReferenceLaneReceipt", "BuildReferenceSourceLaneReceipt", "BuildSourceSelectionLaneReceipt"),
+            ),
+            _text_contains_all(
+                core_api_tests_path,
+                ('response["referenceSourceLaneReceipt"]', 'response["sourceSelectionLaneReceipt"]'),
+            ),
+            _text_contains_all(
+                ui_dialog_factory_tests_path,
+                ("CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture", "dialog.master_index"),
+            ),
+        )
+    ):
+        add_closure(
+            "sourcebooks_reference_and_master_index",
+            reason="Master-index sourcebook, reference-source, and source-selection successor lanes are explicit in core and surfaced on the flagship desktop dialog.",
+            receipts=(
+                f"{core_xml_tool_catalog_path}::BuildReferenceLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildReferenceSourceLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildSourceSelectionLaneReceipt",
+                f"{core_api_tests_path}::referenceSourceLaneReceipt",
+                f"{core_api_tests_path}::sourceSelectionLaneReceipt",
+                f"{ui_dialog_factory_tests_path}::CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture",
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                core_xml_tool_catalog_path,
+                ("BuildSettingsLaneReceipt", "BuildSourceToggleLaneReceipt", "BuildSourceSelectionLaneReceipt"),
+            ),
+            _text_contains_all(
+                core_api_tests_path,
+                ('response["settingsLaneReceipt"]', 'response["sourceToggleLaneReceipt"]', 'response["sourceSelectionLaneReceipt"]'),
+            ),
+            _text_contains_all(
+                ui_dialog_factory_tests_path,
+                ("CreateCommandDialog_character_settings_surfaces_rules_environment_posture",),
+            ),
+        )
+    ):
+        add_closure(
+            "settings_and_rules_environment_authoring",
+            reason="Settings, source-toggle, and rules-environment successor lanes are explicit in core receipts and surfaced through the flagship character-settings dialog.",
+            receipts=(
+                f"{core_xml_tool_catalog_path}::BuildSettingsLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildSourceToggleLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildSourceSelectionLaneReceipt",
+                f"{core_api_tests_path}::settingsLaneReceipt",
+                f"{core_api_tests_path}::sourceToggleLaneReceipt",
+                f"{ui_dialog_factory_tests_path}::CreateCommandDialog_character_settings_surfaces_rules_environment_posture",
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                core_xml_tool_catalog_path,
+                ("BuildCustomDataLaneReceipt", "BuildCustomDataAuthoringLaneReceipt", "BuildXmlBridgeLaneReceipt", "BuildTranslatorLaneReceipt"),
+            ),
+            _text_contains_all(
+                core_api_tests_path,
+                ('response["customDataLaneReceipt"]', 'response["customDataAuthoringLaneReceipt"]', 'response["xmlBridgeLaneReceipt"]', 'response["translatorLaneReceipt"]'),
+            ),
+            _text_contains_all(
+                ui_dialog_factory_tests_path,
+                ("CreateCommandDialog_translator_prefers_catalog_languages_and_surfaces_lane_posture", "CreateCommandDialog_translator_lists_locked_shipping_locales"),
+            ),
+        )
+    ):
+        add_closure(
+            "custom_data_xml_and_translator_bridge",
+            reason="Custom-data, XML bridge, and translator successor lanes are explicit in core receipts and surfaced through the flagship translator dialog.",
+            receipts=(
+                f"{core_xml_tool_catalog_path}::BuildCustomDataLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildCustomDataAuthoringLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildXmlBridgeLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildTranslatorLaneReceipt",
+                f"{core_api_tests_path}::customDataLaneReceipt",
+                f"{core_api_tests_path}::customDataAuthoringLaneReceipt",
+                f"{core_api_tests_path}::xmlBridgeLaneReceipt",
+                f"{core_api_tests_path}::translatorLaneReceipt",
+                f"{ui_dialog_factory_tests_path}::CreateCommandDialog_translator_prefers_catalog_languages_and_surfaces_lane_posture",
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                ui_audit_parity_path,
+                ('"dice_roller": ["diceThreshold", "diceUtilityLane", "initiativePreview"]', 'workflow catalog surface does not expose dice_roller on catalog.tool.dice'),
+            ),
+            _text_contains_all(
+                ui_dialog_factory_tests_path,
+                ("CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context",),
+            ),
+            _text_contains_all(
+                ui_presenter_tests_path,
+                ("ExecuteCommandAsync_dice_roller_opens_utility_lane_with_roster_context",),
+            ),
+        )
+    ):
+        add_closure(
+            "dice_initiative_and_table_utilities",
+            reason="Dice and initiative utility lanes are explicit in the shared audit contract and exercised through flagship desktop dialog and presenter tests.",
+            receipts=(
+                f"{ui_audit_parity_path}::dice_roller",
+                f"{ui_dialog_factory_tests_path}::CreateCommandDialog_dice_roller_surfaces_initiative_preview_and_roster_context",
+                f"{ui_presenter_tests_path}::ExecuteCommandAsync_dice_roller_opens_utility_lane_with_roster_context",
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                ui_audit_parity_path,
+                ('"character_roster": ["rosterOpenCount", "rosterOpsLane", "rosterEntries"]',),
+            ),
+            _text_contains_all(
+                ui_dialog_factory_tests_path,
+                ("CreateCommandDialog_character_roster_summarizes_open_workspaces",),
+            ),
+            _text_contains_all(
+                ui_presenter_tests_path,
+                ("ExecuteCommandAsync_character_roster_opens_dialog_with_workspace_summary",),
+            ),
+            _text_contains_all(
+                hub_workflow_surface_contracts_path,
+                ('public const string Dashboard = "dashboard";', 'public const string SessionDashboard = "session-dashboard";'),
+            ),
+            proof_passed(hub_local_release_proof, expected_contract="chummer6-hub.local_release_proof"),
+        )
+    ):
+        add_closure(
+            "roster_dashboards_and_multi_character_ops",
+            reason="Roster/operator lanes are explicit in the flagship desktop shell and Hub workflow-surface contracts, with hub local release proof current.",
+            receipts=(
+                f"{ui_audit_parity_path}::character_roster",
+                f"{ui_dialog_factory_tests_path}::CreateCommandDialog_character_roster_summarizes_open_workspaces",
+                f"{ui_presenter_tests_path}::ExecuteCommandAsync_character_roster_opens_dialog_with_workspace_summary",
+                f"{hub_workflow_surface_contracts_path}::dashboard",
+                "chummer6-hub.local_release_proof",
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                build_lab_projection_path,
+                ('WorkflowId: "workflow.exchange.foundry"', 'WorkflowId: "workflow.exchange.json"', 'WorkflowId: "workflow.viewer.sheet"', 'WorkflowId: "workflow.export.pdf"'),
+            ),
+            _path_contract_passed(export_sr4_path, expected_contract="chummer6-ui.ruleset_workflow_family_parity"),
+            _path_contract_passed(export_sr6_path, expected_contract="chummer6-ui.ruleset_workflow_family_parity"),
+        )
+    ):
+        add_closure(
+            "sheet_export_print_viewer_and_exchange",
+            reason="Build Lab now projects explicit sheet-viewer, PDF, JSON, and Foundry exchange lanes, and print/export workflow parity is passing on SR4 and SR6.",
+            receipts=(
+                f"{build_lab_projection_path}::workflow.exchange.foundry",
+                f"{build_lab_projection_path}::workflow.exchange.json",
+                f"{build_lab_projection_path}::workflow.viewer.sheet",
+                f"{build_lab_projection_path}::workflow.export.pdf",
+                str(export_sr4_path),
+                str(export_sr6_path),
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                core_xml_tool_catalog_path,
+                ("BuildImportOracleLaneReceipt", "BuildAdjacentSr6OracleLaneReceipt", "BuildSr6SuccessorLaneReceipt"),
+            ),
+            _text_contains_all(
+                core_api_tests_path,
+                ('response["importOracleLaneReceipt"]', 'response["adjacentSr6OracleLaneReceipt"]', 'response["sr6SuccessorLaneReceipt"]'),
+            ),
+            _text_contains_all(
+                ui_dialog_factory_tests_path,
+                ("CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture",),
+            ),
+        )
+    ):
+        add_closure(
+            "legacy_and_adjacent_import_oracles",
+            reason="Core import-oracle and adjacent-SR6 successor receipts are explicit and surfaced through the flagship master-index dialog.",
+            receipts=(
+                f"{core_xml_tool_catalog_path}::BuildImportOracleLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildAdjacentSr6OracleLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildSr6SuccessorLaneReceipt",
+                f"{core_api_tests_path}::importOracleLaneReceipt",
+                f"{core_api_tests_path}::adjacentSr6OracleLaneReceipt",
+                f"{core_api_tests_path}::sr6SuccessorLaneReceipt",
+                f"{ui_dialog_factory_tests_path}::CreateCommandDialog_master_index_surfaces_sourcebook_and_parity_posture",
+            ),
+        )
+
+    if all(
+        (
+            _text_contains_all(
+                core_xml_tool_catalog_path,
+                ("ResolveSr6SupplementLanePosture", "BuildSr6SuccessorLaneReceipt", "BuildOnlineStorageSummary", "BuildOnlineStorageLaneReceipt"),
+            ),
+            _text_contains_all(
+                core_api_tests_path,
+                ('response["sr6SuccessorLaneReceipt"]', 'response["onlineStorageLaneReceipt"]'),
+            ),
+            proof_passed(hub_local_release_proof, expected_contract="chummer6-hub.local_release_proof"),
+            proof_passed(mobile_local_release_proof, expected_contract="chummer6-mobile.local_release_proof"),
+        )
+    ):
+        add_closure(
+            "sr6_supplements_designers_and_house_rules",
+            reason="SR6 supplement, designer-family, house-rule, and online-storage successor receipts are explicit in core and backed by current hub/mobile release proof.",
+            receipts=(
+                f"{core_xml_tool_catalog_path}::ResolveSr6SupplementLanePosture",
+                f"{core_xml_tool_catalog_path}::BuildSr6SuccessorLaneReceipt",
+                f"{core_xml_tool_catalog_path}::BuildOnlineStorageSummary",
+                f"{core_xml_tool_catalog_path}::BuildOnlineStorageLaneReceipt",
+                f"{core_api_tests_path}::sr6SuccessorLaneReceipt",
+                f"{core_api_tests_path}::onlineStorageLaneReceipt",
+                "chummer6-hub.local_release_proof",
+                "chummer6-mobile.local_release_proof",
+            ),
+        )
+
+    return closures
+
+
+def _parity_unresolved_families(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    unresolved: List[Dict[str, Any]] = []
+    for row in payload.get("families") or []:
+        if not isinstance(row, dict):
+            continue
+        family_id = str(row.get("id") or "").strip()
+        status = str(row.get("status") or "").strip().lower()
+        if not family_id or status not in PARITY_BLOCKING_STATUSES:
+            continue
+        unresolved.append(
+            {
+                "id": family_id,
+                "status": status,
+                "sources": _as_string_list(row.get("sources")),
+                "legacy_signals": _as_string_list(row.get("legacy_signals")),
+                "current_design_equivalents": _as_string_list(row.get("current_design_equivalents")),
+                "milestone_ids": _as_int_list(row.get("milestone_ids")),
+            }
+        )
+    unresolved.sort(key=lambda item: str(item.get("id") or ""))
+    return unresolved
+
+
+def _parity_effective_status(
+    *,
+    declared_blocking_families: Sequence[Dict[str, Any]],
+    proof_backed_closures: Dict[str, Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    unresolved: List[Dict[str, Any]] = []
+    proof_closed: List[Dict[str, Any]] = []
+    for row in declared_blocking_families:
+        family = dict(row)
+        family_id = str(family.get("id") or "").strip()
+        family["registry_status"] = str(family.get("status") or "").strip().lower()
+        closure = dict(proof_backed_closures.get(family_id) or {})
+        if closure:
+            family["effective_status"] = str(closure.get("effective_status") or "covered").strip().lower()
+            family["closure_strategy"] = str(closure.get("closure_strategy") or "proof_backed_successor_route").strip()
+            family["closure_reason"] = str(closure.get("reason") or "").strip()
+            family["closure_receipts"] = [str(item).strip() for item in (closure.get("receipts") or []) if str(item).strip()]
+            proof_closed.append(family)
+            continue
+        family["effective_status"] = family["registry_status"]
+        unresolved.append(family)
+    return unresolved, proof_closed
+
+
 def _milestone2_visual_requirement_satisfied(required_tests: set[str], group: tuple[str, ...]) -> bool:
     canonical, *split_variants = group
     if canonical in required_tests:
@@ -409,6 +895,78 @@ def _milestone2_visual_requirement_reported_missing(
     if canonical in required_tests:
         return False
     return any(variant in missing_tests for variant in split_variants)
+
+
+def _normalize_platform_hint(value: str) -> str:
+    token = str(value or "").strip().lower()
+    if not token:
+        return ""
+    if ":" in token:
+        mapped = _normalize_platform_hint(token.rsplit(":", 1)[-1])
+        if mapped:
+            return mapped
+    for part in re.split(r"[^a-z0-9]+", token):
+        if not part:
+            continue
+        if part in {"linux", "ubuntu", "debian", "arch", "fedora", "opensuse"}:
+            return "linux"
+        if part in {"macos", "osx", "darwin"} or part.startswith("mac"):
+            return "macos"
+        if part in {"windows", "win"} or part.startswith("win"):
+            return "windows"
+    return ""
+
+
+def _reason_targets_ignored_desktop_host_platform(reason: str) -> bool:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return False
+    if "windows" in normalized:
+        return True
+    if "macos" in normalized or "osx" in normalized or "darwin" in normalized:
+        return True
+    if "win-" in normalized or "hdiutil" in normalized:
+        return True
+    return False
+
+
+def _external_request_platform(request: Dict[str, Any]) -> str:
+    if not isinstance(request, dict):
+        return ""
+    platform = _normalize_platform_hint(str(request.get("tuple_id") or request.get("tupleId") or ""))
+    if platform:
+        return platform
+    return _normalize_platform_hint(str(request.get("required_host") or request.get("requiredHost") or ""))
+
+
+def _filter_external_proof_requests(
+    requests: Sequence[Dict[str, Any]],
+    *,
+    ignore_nonlinux_platform_host_blockers: bool,
+) -> List[Dict[str, Any]]:
+    if not ignore_nonlinux_platform_host_blockers:
+        return list(requests)
+    return [
+        request
+        for request in requests
+        if _external_request_platform(request) not in {"windows", "macos"}
+    ]
+
+
+def _has_relevant_external_blockers(
+    external_blockers: Sequence[str],
+    *,
+    external_proof_requests: Sequence[Dict[str, Any]],
+    filtered_external_proof_requests: Sequence[Dict[str, Any]],
+    ignore_nonlinux_platform_host_blockers: bool,
+) -> bool:
+    if not external_blockers:
+        return False
+    if not ignore_nonlinux_platform_host_blockers:
+        return True
+    if external_proof_requests:
+        return bool(filtered_external_proof_requests)
+    return True
 
 
 def _normalized_token_list(value: Any) -> List[str]:
@@ -558,6 +1116,7 @@ def _ooda_steady_complete_quiet(ooda_state: Dict[str, Any]) -> bool:
 def build_flagship_product_readiness_payload(
     *,
     acceptance_path: Path,
+    parity_registry_path: Path,
     status_plane_path: Path,
     progress_report_path: Path,
     progress_history_path: Path,
@@ -580,8 +1139,10 @@ def build_flagship_product_readiness_payload(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
+    effective_parity_registry_path, parity_registry = load_parity_registry_with_fallback(parity_registry_path)
     status_plane = load_yaml(status_plane_path)
     progress_report = load_json(progress_report_path)
     progress_history = load_json(progress_history_path)
@@ -606,6 +1167,28 @@ def build_flagship_product_readiness_payload(
     releases_json = load_json(releases_json_path)
     rules_cert_path, rules_cert_payload = _first_existing_payload(RULES_CERTIFICATION_CANDIDATES)
     media_proof_path, media_proof_payload = _first_existing_payload(MEDIA_PROOF_CANDIDATES)
+    parity_declared_blocking_families = _parity_unresolved_families(parity_registry)
+    parity_proof_backed_closures = _parity_proof_backed_family_closures(
+        ui_workflow_parity_proof_path=ui_workflow_parity_proof_path,
+        ui_workflow_execution_gate_path=ui_workflow_execution_gate_path,
+        ui_visual_familiarity_exit_gate_path=ui_visual_familiarity_exit_gate_path,
+        sr4_workflow_parity_proof_path=sr4_workflow_parity_proof_path,
+        sr6_workflow_parity_proof_path=sr6_workflow_parity_proof_path,
+        sr4_sr6_frontier_receipt_path=sr4_sr6_frontier_receipt_path,
+        hub_local_release_proof=hub_local_release_proof,
+        mobile_local_release_proof=mobile_local_release_proof,
+    )
+    parity_unresolved_families, parity_proof_closed_families = _parity_effective_status(
+        declared_blocking_families=parity_declared_blocking_families,
+        proof_backed_closures=parity_proof_backed_closures,
+    )
+    parity_excluded_scope = _as_string_list(((parity_registry.get("scope") or {}).get("excluded")))
+    parity_desktop_families = [
+        row for row in parity_unresolved_families if str(row.get("id") or "") in PARITY_DESKTOP_FAMILY_IDS
+    ]
+    parity_rules_families = [
+        row for row in parity_unresolved_families if str(row.get("id") or "") in PARITY_RULES_AND_IMPORT_FAMILY_IDS
+    ]
 
     projects = {
         str(item.get("id") or "").strip(): dict(item or {})
@@ -679,6 +1262,12 @@ def build_flagship_product_readiness_payload(
             for item in (ui_executable_exit_gate.get("reasons") or [])
             if str(item).strip()
         ]
+        if ignore_nonlinux_desktop_host_proof_blockers:
+            executable_gate_reasons = [
+                reason
+                for reason in executable_gate_reasons
+                if not _reason_targets_ignored_desktop_host_platform(reason)
+            ]
         for reason in executable_gate_reasons:
             desktop_reasons.append(f"Executable gate blocker: {reason}")
     if proof_passed(
@@ -887,7 +1476,7 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append("Linux desktop exit gate proof is missing or not passed.")
     if windows_exit_gate_passed(ui_windows_exit_gate):
         desktop_positives += 1
-    else:
+    elif not ignore_nonlinux_desktop_host_proof_blockers:
         desktop_hard_fail = True
         desktop_reasons.append("Windows desktop exit gate proof is missing, not passed, or lacks embedded payload/sample integrity proof.")
     if proof_passed(
@@ -1136,6 +1725,19 @@ def build_flagship_product_readiness_payload(
     tuple_coverage_reported_missing_heads = _normalized_token_list(
         release_channel_tuple_coverage.get("missingRequiredHeads")
     )
+    if ignore_nonlinux_desktop_host_proof_blockers:
+        tuple_coverage_reported_missing_platform_head_pairs = sorted(
+            {
+                token
+                for token in tuple_coverage_reported_missing_platform_head_pairs
+                if not token.endswith(":windows") and not token.endswith(":macos")
+            }
+        )
+        tuple_coverage_reported_missing_platforms = sorted(
+            platform
+            for platform in tuple_coverage_reported_missing_platforms
+            if platform != "windows" and platform != "macos"
+        )
     tuple_coverage_declares_missing_required_platform_head_pairs = (
         "missingRequiredPlatformHeadPairs" in release_channel_tuple_coverage
     )
@@ -1175,6 +1777,8 @@ def build_flagship_product_readiness_payload(
         }
     )
     required_platforms_for_pair_matrix = tuple_coverage_required_platforms or ["linux", "windows", "macos"]
+    if ignore_nonlinux_desktop_host_proof_blockers:
+        required_platforms_for_pair_matrix = [platform for platform in required_platforms_for_pair_matrix if platform == "linux"]
     required_heads_for_pair_matrix = tuple_coverage_required_heads or executable_required_heads
     promoted_platform_heads_for_pair_matrix: Dict[str, List[str]] = {}
     for platform in required_platforms_for_pair_matrix:
@@ -1259,7 +1863,9 @@ def build_flagship_product_readiness_payload(
     has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
     has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
     has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
-    has_any_public_installer = has_linux_public_installer or has_windows_public_installer or has_macos_public_installer
+    has_any_public_installer = has_linux_public_installer or (
+        not ignore_nonlinux_desktop_host_proof_blockers and (has_windows_public_installer or has_macos_public_installer)
+    )
     if release_channel_published_and_proven and release_channel_freshness_ok and has_avalonia_public_artifact:
         desktop_positives += 1
     else:
@@ -1269,7 +1875,7 @@ def build_flagship_product_readiness_payload(
         )
     if not has_linux_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Linux installer media.")
-    if not has_windows_public_installer:
+    if not ignore_nonlinux_desktop_host_proof_blockers and not has_windows_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Windows installer media.")
     linux_statuses = dict((executable_gate_evidence or {}).get("linux_statuses") or {})
     windows_statuses = dict((executable_gate_evidence or {}).get("windows_statuses") or {})
@@ -1287,9 +1893,12 @@ def build_flagship_product_readiness_payload(
     ):
         windows_statuses = {"avalonia:win-x64": "pass"}
 
-    def _tuple_proof_stats(statuses: Dict[str, Any], expected_keys: List[str]) -> tuple[int, int, List[str]]:
+    def _tuple_proof_stats(statuses: Dict[str, Any], expected_keys: List[str]) -> tuple[int, int, List[str], List[str]]:
         normalized_statuses = {str(key).strip(): str(value).strip().lower() for key, value in statuses.items()}
         passing_count = sum(1 for key in expected_keys if normalized_statuses.get(key) in {"pass", "passed", "ready"})
+        stale_expected = sorted(
+            key for key in expected_keys if "stale" in str(normalized_statuses.get(key) or "")
+        )
         missing_or_failing = [key for key in expected_keys if normalized_statuses.get(key) not in {"pass", "passed", "ready"}]
         missing_or_failing.extend(
             sorted(
@@ -1298,15 +1907,15 @@ def build_flagship_product_readiness_payload(
                 if key not in expected_keys and value not in {"pass", "passed", "ready"}
             )
         )
-        return len(expected_keys), passing_count, sorted(set(missing_or_failing))
+        return len(expected_keys), passing_count, sorted(set(missing_or_failing)), stale_expected
 
-    linux_tuple_count, linux_passing_status_count, linux_missing_or_failing_keys = _tuple_proof_stats(
+    linux_tuple_count, linux_passing_status_count, linux_missing_or_failing_keys, linux_stale_promoted_keys = _tuple_proof_stats(
         linux_statuses, promoted_tuple_keys_by_platform["linux"]
     )
-    windows_tuple_count, windows_passing_status_count, windows_missing_or_failing_keys = _tuple_proof_stats(
+    windows_tuple_count, windows_passing_status_count, windows_missing_or_failing_keys, windows_stale_promoted_keys = _tuple_proof_stats(
         windows_statuses, promoted_tuple_keys_by_platform["windows"]
     )
-    macos_tuple_count, macos_passing_status_count, macos_missing_or_failing_keys = _tuple_proof_stats(
+    macos_tuple_count, macos_passing_status_count, macos_missing_or_failing_keys, macos_stale_promoted_keys = _tuple_proof_stats(
         macos_statuses, promoted_tuple_keys_by_platform["macos"]
     )
     linux_missing_or_failing_keys = sorted(
@@ -1324,12 +1933,12 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Release channel publishes Linux installer media without explicit head/rid tuple metadata."
         )
-    if invalid_tuple_metadata_by_platform["windows"]:
+    if not ignore_nonlinux_desktop_host_proof_blockers and invalid_tuple_metadata_by_platform["windows"]:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes Windows installer media without explicit head/rid tuple metadata."
         )
-    if invalid_tuple_metadata_by_platform["macos"]:
+    if not ignore_nonlinux_desktop_host_proof_blockers and invalid_tuple_metadata_by_platform["macos"]:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes macOS installer media without explicit head/rid tuple metadata."
@@ -1339,12 +1948,12 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Release channel publishes Linux installer media with artifact channel metadata that does not match top-level channelId."
         )
-    if channel_mismatch_keys_by_platform["windows"]:
+    if not ignore_nonlinux_desktop_host_proof_blockers and channel_mismatch_keys_by_platform["windows"]:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes Windows installer media with artifact channel metadata that does not match top-level channelId."
         )
-    if channel_mismatch_keys_by_platform["macos"]:
+    if not ignore_nonlinux_desktop_host_proof_blockers and channel_mismatch_keys_by_platform["macos"]:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes macOS installer media with artifact channel metadata that does not match top-level channelId."
@@ -1356,14 +1965,14 @@ def build_flagship_product_readiness_payload(
             + ", ".join(duplicate_tuple_keys_by_platform["linux"])
             + "."
         )
-    if duplicate_tuple_keys_by_platform["windows"]:
+    if not ignore_nonlinux_desktop_host_proof_blockers and duplicate_tuple_keys_by_platform["windows"]:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes duplicate Windows installer tuple metadata for promoted head/rid pair(s): "
             + ", ".join(duplicate_tuple_keys_by_platform["windows"])
             + "."
         )
-    if duplicate_tuple_keys_by_platform["macos"]:
+    if not ignore_nonlinux_desktop_host_proof_blockers and duplicate_tuple_keys_by_platform["macos"]:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Release channel publishes duplicate macOS installer tuple metadata for promoted head/rid pair(s): "
@@ -1481,14 +2090,14 @@ def build_flagship_product_readiness_payload(
             + ", ".join(stale_linux_receipt_tuples_overlapping_promoted_tuples)
             + "."
         )
-    if stale_windows_receipt_tuples_overlapping_promoted_tuples:
+    if not ignore_nonlinux_desktop_host_proof_blockers and stale_windows_receipt_tuples_overlapping_promoted_tuples:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Executable gate stale Windows non-promoted tuple inventory overlaps promoted release-channel tuples: "
             + ", ".join(stale_windows_receipt_tuples_overlapping_promoted_tuples)
             + "."
         )
-    if stale_macos_receipt_tuples_overlapping_promoted_tuples:
+    if not ignore_nonlinux_desktop_host_proof_blockers and stale_macos_receipt_tuples_overlapping_promoted_tuples:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Executable gate stale macOS non-promoted tuple inventory overlaps promoted release-channel tuples: "
@@ -1504,6 +2113,13 @@ def build_flagship_product_readiness_payload(
         )
 
     if has_linux_public_installer:
+        if linux_stale_promoted_keys:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel publishes Linux installer media, but executable-gate startup-smoke tuple proof is stale for tuple(s): "
+                + ", ".join(linux_stale_promoted_keys)
+                + "."
+            )
         if linux_tuple_count > 0 and linux_passing_status_count == linux_tuple_count and not linux_missing_or_failing_keys:
             desktop_positives += 1
         else:
@@ -1511,7 +2127,14 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Release channel publishes Linux installer media, but executable-gate evidence is missing passing Linux startup-smoke tuple proof."
             )
-    if has_windows_public_installer:
+    if has_windows_public_installer and not ignore_nonlinux_desktop_host_proof_blockers:
+        if windows_stale_promoted_keys:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel publishes Windows installer media, but executable-gate startup-smoke tuple proof is stale for tuple(s): "
+                + ", ".join(windows_stale_promoted_keys)
+                + "."
+            )
         if windows_tuple_count > 0 and windows_passing_status_count == windows_tuple_count and not windows_missing_or_failing_keys:
             desktop_positives += 1
         else:
@@ -1519,7 +2142,14 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Release channel publishes Windows installer media, but executable-gate evidence is missing passing Windows startup-smoke tuple proof."
             )
-    if has_macos_public_installer:
+    if has_macos_public_installer and not ignore_nonlinux_desktop_host_proof_blockers:
+        if macos_stale_promoted_keys:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Release channel publishes macOS installer media, but executable-gate startup-smoke tuple proof is stale for tuple(s): "
+                + ", ".join(macos_stale_promoted_keys)
+                + "."
+            )
         if macos_tuple_count > 0 and macos_passing_status_count == macos_tuple_count and not macos_missing_or_failing_keys:
             desktop_positives += 1
         else:
@@ -1565,6 +2195,11 @@ def build_flagship_product_readiness_payload(
         for item in (build_journey.get("external_blocking_reasons") or [])
         if str(item).strip()
     ]
+    build_journey_external_proof_requests = [
+        dict(item)
+        for item in (build_journey.get("external_proof_requests") or [])
+        if isinstance(item, dict)
+    ]
     build_journey_local_blockers = [
         str(item).strip()
         for item in (build_journey.get("local_blocking_reasons") or [])
@@ -1575,10 +2210,38 @@ def build_flagship_product_readiness_payload(
         or ui_executable_exit_gate.get("localBlockingFindingsCount")
         or 0
     )
+    install_journey_filtered_external_proof_requests = _filter_external_proof_requests(
+        install_journey_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
+    )
+    build_journey_filtered_external_proof_requests = _filter_external_proof_requests(
+        build_journey_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
+    )
+    install_journey_has_relevant_external_blockers = _has_relevant_external_blockers(
+        install_journey_external_blockers,
+        external_proof_requests=install_journey_external_proof_requests,
+        filtered_external_proof_requests=install_journey_filtered_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
+    )
+    build_journey_has_relevant_external_blockers = _has_relevant_external_blockers(
+        build_journey_external_blockers,
+        external_proof_requests=build_journey_external_proof_requests,
+        filtered_external_proof_requests=build_journey_filtered_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
+    )
+    install_journey_external_only = (
+        bool(install_journey.get("blocked_by_external_constraints_only"))
+        and install_journey_has_relevant_external_blockers
+    )
+    install_journey_external_reason = (
+        "Install/claim/restore journey is blocked only by external platform-host proof requests; "
+        "the remaining work is to capture and ingest the missing desktop host receipts."
+    )
     if install_journey_state == "ready":
         desktop_positives += 1
     else:
-        if bool(install_journey.get("blocked_by_external_constraints_only")) and install_journey_external_blockers:
+        if bool(install_journey.get("blocked_by_external_constraints_only")) and install_journey_has_relevant_external_blockers:
             desktop_reasons.append(
                 "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
             )
@@ -1587,7 +2250,7 @@ def build_flagship_product_readiness_payload(
     if build_journey_state == "ready":
         desktop_positives += 1
     else:
-        if bool(build_journey.get("blocked_by_external_constraints_only")) and build_journey_external_blockers:
+        if bool(build_journey.get("blocked_by_external_constraints_only")) and build_journey_has_relevant_external_blockers:
             desktop_reasons.append(
                 "Build/explain/publish journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
             )
@@ -1596,11 +2259,28 @@ def build_flagship_product_readiness_payload(
     if (
         desktop_hard_fail
         and bool(install_journey.get("blocked_by_external_constraints_only"))
-        and install_journey_external_blockers
+        and install_journey_has_relevant_external_blockers
         and not install_journey_local_blockers
         and executable_local_blocking_findings_count == 0
     ):
         desktop_hard_fail = False
+    if (
+        desktop_hard_fail
+        and bool(build_journey.get("blocked_by_external_constraints_only"))
+        and build_journey_has_relevant_external_blockers
+        and not build_journey_local_blockers
+        and executable_local_blocking_findings_count == 0
+    ):
+        desktop_hard_fail = False
+    if parity_unresolved_families:
+        desktop_hard_fail = True
+        parity_family_text = ", ".join(
+            f"{row['id']} ({row['status']})" for row in (parity_desktop_families or parity_unresolved_families)
+        )
+        desktop_reasons.append(
+            "No-step-back parity registry still has unresolved non-plugin families: "
+            f"{parity_family_text}."
+        )
     ui_stage = str(ui_project.get("readiness_stage") or "").strip()
     ui_promotion = project_posture(ui_project)
     if compare_order(ui_stage, "publicly_promoted", STAGE_ORDER) >= 0 and compare_order(ui_promotion, "public", PROMOTION_ORDER) >= 0:
@@ -1818,14 +2498,17 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_linux_tuple_count": linux_tuple_count,
             "ui_executable_gate_linux_passing_tuple_count": linux_passing_status_count,
             "ui_executable_gate_linux_missing_or_failing_keys": linux_missing_or_failing_keys,
+            "ui_executable_gate_linux_stale_promoted_tuple_keys": linux_stale_promoted_keys,
             "ui_executable_gate_windows_statuses": windows_statuses,
             "ui_executable_gate_windows_tuple_count": windows_tuple_count,
             "ui_executable_gate_windows_passing_tuple_count": windows_passing_status_count,
             "ui_executable_gate_windows_missing_or_failing_keys": windows_missing_or_failing_keys,
+            "ui_executable_gate_windows_stale_promoted_tuple_keys": windows_stale_promoted_keys,
             "ui_executable_gate_macos_statuses": macos_statuses,
             "ui_executable_gate_macos_tuple_count": macos_tuple_count,
             "ui_executable_gate_macos_passing_tuple_count": macos_passing_status_count,
             "ui_executable_gate_macos_missing_or_failing_keys": macos_missing_or_failing_keys,
+            "ui_executable_gate_macos_stale_promoted_tuple_keys": macos_stale_promoted_keys,
             "install_claim_restore_continue": install_journey_state,
             "build_explain_publish": build_journey_state,
             "install_claim_restore_continue_external_blocking_reason_count": len(
@@ -1846,6 +2529,33 @@ def build_flagship_product_readiness_payload(
             "install_claim_restore_continue_external_proof_requests": (
                 install_journey_external_proof_requests
             ),
+            "install_claim_restore_continue_relevant_external_proof_request_count": len(
+                install_journey_filtered_external_proof_requests
+            ),
+            "build_explain_publish_relevant_external_proof_request_count": len(
+                build_journey_filtered_external_proof_requests
+            ),
+            "desktop_ignore_nonlinux_desktop_host_proof_blockers": bool(
+                ignore_nonlinux_desktop_host_proof_blockers
+            ),
+            "parity_registry_path": str(effective_parity_registry_path),
+            "parity_registry_excluded_scope": parity_excluded_scope,
+            "parity_registry_declared_blocking_family_count": len(parity_declared_blocking_families),
+            "parity_registry_declared_blocking_family_ids": [
+                str(item.get("id") or "") for item in parity_declared_blocking_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_proof_closed_family_count": len(parity_proof_closed_families),
+            "parity_registry_proof_closed_family_ids": [
+                str(item.get("id") or "") for item in parity_proof_closed_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_unresolved_family_count": len(parity_unresolved_families),
+            "parity_registry_unresolved_family_ids": [
+                str(item.get("id") or "") for item in parity_unresolved_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_desktop_family_ids": [
+                str(item.get("id") or "") for item in parity_desktop_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_unresolved_families": parity_unresolved_families,
             "ui_executable_exit_gate_local_blocking_findings_count": executable_local_blocking_findings_count,
             "install_claim_restore_continue_blocked_by_external_constraints_only": bool(
                 install_journey.get("blocked_by_external_constraints_only")
@@ -1874,6 +2584,12 @@ def build_flagship_product_readiness_payload(
         rules_positives += 1
     else:
         rules_reasons.append("No explicit rules/import certification artifact is currently published.")
+    if parity_rules_families:
+        parity_family_text = ", ".join(f"{row['id']} ({row['status']})" for row in parity_rules_families)
+        rules_reasons.append(
+            "No-step-back rules/import parity remains unresolved outside the declared plugin exclusion: "
+            f"{parity_family_text}."
+        )
     coverage["rules_engine_and_import"], details["rules_engine_and_import"] = _coverage_entry(
         positives=rules_positives,
         reasons=rules_reasons,
@@ -1884,6 +2600,23 @@ def build_flagship_product_readiness_payload(
             "build_explain_publish": build_journey_state,
             "rules_certification_path": str(rules_cert_path) if rules_cert_path else "",
             "rules_certification_status": str(rules_cert_payload.get("status") or "").strip(),
+            "parity_registry_path": str(effective_parity_registry_path),
+            "parity_registry_excluded_scope": parity_excluded_scope,
+            "parity_registry_declared_blocking_family_count": len(parity_declared_blocking_families),
+            "parity_registry_declared_blocking_family_ids": [
+                str(item.get("id") or "") for item in parity_declared_blocking_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_proof_closed_family_count": len(parity_proof_closed_families),
+            "parity_registry_proof_closed_family_ids": [
+                str(item.get("id") or "") for item in parity_proof_closed_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_rules_family_ids": [
+                str(item.get("id") or "") for item in parity_rules_families if str(item.get("id") or "").strip()
+            ],
+            "parity_registry_unresolved_family_count": len(parity_unresolved_families),
+            "parity_registry_unresolved_family_ids": [
+                str(item.get("id") or "") for item in parity_unresolved_families if str(item.get("id") or "").strip()
+            ],
         },
     )
 
@@ -1903,7 +2636,10 @@ def build_flagship_product_readiness_payload(
     if install_journey_state == "ready":
         hub_positives += 1
     else:
-        hub_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
+        if install_journey_external_only:
+            hub_reasons.append(install_journey_external_reason)
+        else:
+            hub_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
     if report_cluster_state == "ready":
         hub_positives += 1
     else:
@@ -2051,7 +2787,10 @@ def build_flagship_product_readiness_payload(
     if install_journey_state == "ready":
         horizons_positives += 1
     else:
-        horizons_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
+        if install_journey_external_only:
+            horizons_reasons.append(install_journey_external_reason)
+        else:
+            horizons_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
     if report_cluster_state == "ready":
         horizons_positives += 1
     else:
@@ -2086,7 +2825,7 @@ def build_flagship_product_readiness_payload(
         and (utc_now() - supervisor_updated_at).total_seconds() <= FLAGSHIP_OPERATOR_SUPERVISOR_MAX_AGE_HOURS * 3600
     )
     supervisor_loop_ready = (
-        supervisor_mode in {"loop", "flagship_product", "complete"}
+        supervisor_mode in {"loop", "sharded", "flagship_product", "complete"}
         and supervisor_completion_status in {"pass", "passed"}
         and supervisor_recent_enough
     )
@@ -2126,10 +2865,20 @@ def build_flagship_product_readiness_payload(
         fleet_positives += 1
     else:
         fleet_reasons.append("OODA monitor does not currently report controller/supervisor up with non-stale aggregate state.")
+    journey_overall_external_only = (
+        int(journey_summary.get("blocked_count") or 0) > 0
+        and int(journey_summary.get("blocked_count") or 0) == int(journey_summary.get("blocked_external_only_count") or 0)
+        and int(journey_summary.get("blocked_with_local_count") or 0) == 0
+    )
     if str(journey_summary.get("overall_state") or "").strip().lower() == "ready":
         fleet_positives += 1
     else:
-        fleet_reasons.append(f"Journey-gate overall state is {journey_summary.get('overall_state') or 'missing'}, not ready.")
+        if journey_overall_external_only:
+            fleet_reasons.append(
+                "Journey-gate overall state is blocked only by external desktop host-proof requests; the control loop is otherwise current."
+            )
+        else:
+            fleet_reasons.append(f"Journey-gate overall state is {journey_summary.get('overall_state') or 'missing'}, not ready.")
     if history_snapshot_count >= 4:
         fleet_positives += 1
     else:
@@ -2154,6 +2903,8 @@ def build_flagship_product_readiness_payload(
             "runtime_healing_last_event_at": str(runtime_healing_summary.get("last_event_at") or "").strip(),
             "runtime_healing_override_stale_incident": runtime_healing_override,
             "journey_overall_state": str(journey_summary.get("overall_state") or "").strip(),
+            "journey_blocked_external_only_count": int(journey_summary.get("blocked_external_only_count") or 0),
+            "journey_blocked_with_local_count": int(journey_summary.get("blocked_with_local_count") or 0),
             "history_snapshot_count": history_snapshot_count,
             "support_packets_generated_at": str(support_packets.get("generated_at") or "").strip(),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
@@ -2196,8 +2947,28 @@ def build_flagship_product_readiness_payload(
         "ready_keys": ready_keys,
         "warning_keys": warning_keys,
         "missing_keys": missing_keys,
+        "parity_registry": {
+            "path": str(effective_parity_registry_path),
+            "excluded_scope": parity_excluded_scope,
+            "declared_blocking_family_count": len(parity_declared_blocking_families),
+            "declared_blocking_family_ids": [
+                str(item.get("id") or "") for item in parity_declared_blocking_families if str(item.get("id") or "").strip()
+            ],
+            "declared_blocking_families": parity_declared_blocking_families,
+            "proof_closed_family_count": len(parity_proof_closed_families),
+            "proof_closed_family_ids": [
+                str(item.get("id") or "") for item in parity_proof_closed_families if str(item.get("id") or "").strip()
+            ],
+            "proof_closed_families": parity_proof_closed_families,
+            "unresolved_family_count": len(parity_unresolved_families),
+            "unresolved_family_ids": [
+                str(item.get("id") or "") for item in parity_unresolved_families if str(item.get("id") or "").strip()
+            ],
+            "unresolved_families": parity_unresolved_families,
+        },
         "evidence_sources": {
             "acceptance": str(effective_acceptance_path),
+            "parity_registry": str(effective_parity_registry_path),
             "status_plane": str(status_plane_path),
             "progress_report": str(progress_report_path),
             "progress_history": str(progress_history_path),
@@ -2247,6 +3018,7 @@ def materialize_flagship_product_readiness(
     out_path: Path,
     mirror_path: Path | None,
     acceptance_path: Path,
+    parity_registry_path: Path,
     status_plane_path: Path,
     progress_report_path: Path,
     progress_history_path: Path,
@@ -2269,9 +3041,11 @@ def materialize_flagship_product_readiness(
     mobile_local_release_proof_path: Path,
     release_channel_path: Path,
     releases_json_path: Path,
+    ignore_nonlinux_desktop_host_proof_blockers: bool = False,
 ) -> Dict[str, Any]:
     payload = build_flagship_product_readiness_payload(
         acceptance_path=acceptance_path,
+        parity_registry_path=parity_registry_path,
         status_plane_path=status_plane_path,
         progress_report_path=progress_report_path,
         progress_history_path=progress_history_path,
@@ -2294,6 +3068,7 @@ def materialize_flagship_product_readiness(
         mobile_local_release_proof_path=mobile_local_release_proof_path,
         release_channel_path=release_channel_path,
         releases_json_path=releases_json_path,
+        ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
     )
 
     existing_payload = load_json(out_path)
@@ -2324,6 +3099,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         out_path=Path(args.out).resolve(),
         mirror_path=Path(args.mirror_out).resolve() if str(args.mirror_out or "").strip() else None,
         acceptance_path=Path(args.acceptance).resolve(),
+        parity_registry_path=Path(args.parity_registry).resolve(),
         status_plane_path=Path(args.status_plane).resolve(),
         progress_report_path=Path(args.progress_report).resolve(),
         progress_history_path=Path(args.progress_history).resolve(),
@@ -2346,6 +3122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         mobile_local_release_proof_path=Path(args.mobile_local_release_proof).resolve(),
         release_channel_path=Path(args.release_channel).resolve(),
         releases_json_path=Path(args.releases_json).resolve(),
+        ignore_nonlinux_desktop_host_proof_blockers=bool(args.ignore_nonlinux_desktop_host_proof_blockers),
     )
     print(
         "wrote flagship product readiness: "

@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-05T00:29:02Z",
+  "generated_at": "2026-04-05T00:42:05Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T21:08:27.946225Z",
-        "ui_executable_gate_age_seconds": 12034,
+        "ui_executable_gate_age_seconds": 12817,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -256,7 +256,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-04T22:37:24Z",
-        "release_channel_age_seconds": 6698,
+        "release_channel_age_seconds": 7481,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -393,6 +393,7 @@
         "ui_executable_gate_linux_tuple_count": 2,
         "ui_executable_gate_linux_passing_tuple_count": 2,
         "ui_executable_gate_linux_missing_or_failing_keys": [],
+        "ui_executable_gate_linux_stale_promoted_tuple_keys": [],
         "ui_executable_gate_windows_statuses": {
           "avalonia:win-x64": "fail",
           "blazor-desktop:win-x64": "fail"
@@ -405,6 +406,7 @@
           "blazor-desktop:win-x64",
           "blazor-desktop:windows"
         ],
+        "ui_executable_gate_windows_stale_promoted_tuple_keys": [],
         "ui_executable_gate_macos_statuses": {
           "avalonia:osx-arm64": "fail",
           "blazor-desktop:osx-arm64": "fail"
@@ -417,6 +419,7 @@
           "blazor-desktop:macos",
           "blazor-desktop:osx-arm64"
         ],
+        "ui_executable_gate_macos_stale_promoted_tuple_keys": [],
         "install_claim_restore_continue": "blocked",
         "build_explain_publish": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 7,
@@ -684,7 +687,7 @@
       ],
       "evidence": {
         "public_group_deployment_status": "public",
-        "progress_report_generated_at": "2026-04-05T00:28:47Z",
+        "progress_report_generated_at": "2026-04-05T00:38:42Z",
         "install_claim_restore_continue": "blocked",
         "report_cluster_release_notify": "blocked",
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -704,11 +707,11 @@
         "journey_blocked_external_only_count": 2,
         "journey_blocked_with_local_count": 0,
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T00:28:36Z",
+        "support_packets_generated_at": "2026-04-05T00:41:19Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-05T00:25:31Z",
+        "supervisor_updated_at": "2026-04-05T00:37:05Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",

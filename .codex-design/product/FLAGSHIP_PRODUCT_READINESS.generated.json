@@ -1,13 +1,13 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-04T21:56:49Z",
+  "generated_at": "2026-04-05T00:42:05Z",
   "status": "fail",
   "summary": {
     "ready_count": 4,
     "warning_count": 4,
     "missing_count": 0,
-    "history_snapshot_count": 10
+    "history_snapshot_count": 11
   },
   "source_documents": [
     "FLAGSHIP_PRODUCT_BAR.md",
@@ -155,7 +155,7 @@
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
         "ui_executable_gate_generated_at": "2026-04-04T21:08:27.946225Z",
-        "ui_executable_gate_age_seconds": 2901,
+        "ui_executable_gate_age_seconds": 12817,
         "ui_linux_exit_gate_status": "passed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -255,8 +255,8 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-04T20:22:27Z",
-        "release_channel_age_seconds": 5662,
+        "release_channel_generated_at": "2026-04-04T22:37:24Z",
+        "release_channel_age_seconds": 7481,
         "release_channel_freshness_max_age_seconds": 86400,
         "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
@@ -393,6 +393,7 @@
         "ui_executable_gate_linux_tuple_count": 2,
         "ui_executable_gate_linux_passing_tuple_count": 2,
         "ui_executable_gate_linux_missing_or_failing_keys": [],
+        "ui_executable_gate_linux_stale_promoted_tuple_keys": [],
         "ui_executable_gate_windows_statuses": {
           "avalonia:win-x64": "fail",
           "blazor-desktop:win-x64": "fail"
@@ -405,6 +406,7 @@
           "blazor-desktop:win-x64",
           "blazor-desktop:windows"
         ],
+        "ui_executable_gate_windows_stale_promoted_tuple_keys": [],
         "ui_executable_gate_macos_statuses": {
           "avalonia:osx-arm64": "fail",
           "blazor-desktop:osx-arm64": "fail"
@@ -417,6 +419,7 @@
           "blazor-desktop:macos",
           "blazor-desktop:osx-arm64"
         ],
+        "ui_executable_gate_macos_stale_promoted_tuple_keys": [],
         "install_claim_restore_continue": "blocked",
         "build_explain_publish": "ready",
         "install_claim_restore_continue_external_blocking_reason_count": 7,
@@ -626,7 +629,8 @@
       "status": "warning",
       "summary": "Hub and registry flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked only by external platform-host proof requests; the remaining work is to capture and ingest the missing desktop host receipts."
+        "Install/claim/restore journey is blocked only by external platform-host proof requests; the remaining work is to capture and ingest the missing desktop host receipts.",
+        "Report/cluster/release/notify journey is blocked, not ready."
       ],
       "evidence": {
         "hub_stage": "publicly_promoted",
@@ -636,7 +640,7 @@
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
         "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "ready"
+        "report_cluster_release_notify": "blocked"
       }
     },
     "mobile_play_shell": {
@@ -678,13 +682,14 @@
       "status": "warning",
       "summary": "Horizons and public-surface flagship proof is still incomplete.",
       "reasons": [
-        "Install/claim/restore journey is blocked only by external platform-host proof requests; the remaining work is to capture and ingest the missing desktop host receipts."
+        "Install/claim/restore journey is blocked only by external platform-host proof requests; the remaining work is to capture and ingest the missing desktop host receipts.",
+        "Report/cluster/release/notify journey is blocked, not ready."
       ],
       "evidence": {
         "public_group_deployment_status": "public",
-        "progress_report_generated_at": "2026-04-04T21:38:14Z",
+        "progress_report_generated_at": "2026-04-05T00:38:42Z",
         "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "ready",
+        "report_cluster_release_notify": "blocked",
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
       }
     },
@@ -699,14 +704,14 @@
         "runtime_healing_last_event_at": "",
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
-        "journey_blocked_external_only_count": 1,
+        "journey_blocked_external_only_count": 2,
         "journey_blocked_with_local_count": 0,
-        "history_snapshot_count": 10,
-        "support_packets_generated_at": "2026-04-04T21:56:36Z",
+        "history_snapshot_count": 11,
+        "support_packets_generated_at": "2026-04-05T00:41:19Z",
         "dispatchable_truth_ready": true,
         "supervisor_mode": "loop",
         "supervisor_completion_status": "pass",
-        "supervisor_updated_at": "2026-04-04T21:55:40Z",
+        "supervisor_updated_at": "2026-04-05T00:37:05Z",
         "supervisor_recent_enough": true,
         "ooda_controller": "up",
         "ooda_supervisor": "up",
@@ -752,7 +757,7 @@
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/state.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
