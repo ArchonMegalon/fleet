@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -27,6 +27,7 @@ DEFAULT_RUNTIME_ENV_CANDIDATES = (
     ROOT / ".env",
 )
 RUNTIME_ENV_PATHS_ENV = "FLEET_RUNTIME_ENV_PATHS"
+EXTERNAL_PROOF_CAPTURE_DEADLINE_HOURS = 24
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -58,6 +59,32 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    raw = _normalize_text(value)
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _deadline_hours() -> int:
+    raw = _normalize_text(os.environ.get("FLEET_EXTERNAL_PROOF_CAPTURE_DEADLINE_HOURS", ""))
+    if not raw:
+        return EXTERNAL_PROOF_CAPTURE_DEADLINE_HOURS
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return EXTERNAL_PROOF_CAPTURE_DEADLINE_HOURS
+    return parsed if parsed > 0 else EXTERNAL_PROOF_CAPTURE_DEADLINE_HOURS
 
 
 def _runtime_env_candidates() -> List[Path]:
@@ -549,6 +576,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "channel_id": channel_id,
+        "generated_at": _normalize_text(release_channel.get("generatedAt") or release_channel.get("generated_at")),
         "status": _normalize_text(release_channel.get("status")).lower(),
         "version": _normalize_text(release_channel.get("version") or release_channel.get("releaseVersion")),
         "rollout_state": _normalize_text(release_channel.get("rolloutState") or release_channel.get("rollout_state")).lower(),
@@ -945,7 +973,11 @@ def _external_proof_backlog_summary(release_channel_index: Dict[str, Any]) -> Di
     }
 
 
-def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
+def _external_proof_execution_plan(
+    release_channel_index: Dict[str, Any],
+    *,
+    generated_at: str,
+) -> Dict[str, Any]:
     request_rows = [
         dict(row)
         for row in (release_channel_index.get("external_proof_requests") or [])
@@ -957,6 +989,14 @@ def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dic
         grouped.setdefault(host, []).append(row)
 
     host_groups: Dict[str, Any] = {}
+    generated_at_ts = _parse_iso(generated_at)
+    release_channel_generated_at = _normalize_text(release_channel_index.get("generated_at"))
+    release_channel_generated_at_ts = _parse_iso(release_channel_generated_at)
+    deadline_hours = _deadline_hours()
+    anchor_ts = release_channel_generated_at_ts or generated_at_ts
+    capture_deadline_utc = ""
+    if anchor_ts is not None:
+        capture_deadline_utc = (anchor_ts + timedelta(hours=deadline_hours)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     for host in sorted(grouped.keys()):
         rows = sorted(grouped[host], key=lambda item: _normalize_text(item.get("tuple_id")))
         request_items = []
@@ -975,6 +1015,7 @@ def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dic
                     "expected_installer_relative_path": _normalize_text(row.get("expected_installer_relative_path")),
                     "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
                     "expected_startup_smoke_receipt_path": _normalize_text(row.get("expected_startup_smoke_receipt_path")),
+                    "capture_deadline_utc": capture_deadline_utc,
                     "required_proofs": sorted(
                         {
                             _normalize_text(token).lower()
@@ -999,6 +1040,10 @@ def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dic
         }
 
     return {
+        "generated_at": generated_at,
+        "release_channel_generated_at": release_channel_generated_at,
+        "capture_deadline_hours": deadline_hours,
+        "capture_deadline_utc": capture_deadline_utc,
         "request_count": len(request_rows),
         "hosts": sorted(host_groups.keys()),
         "host_groups": host_groups,
@@ -1139,6 +1184,7 @@ def _needs_human_response(packet: Dict[str, Any]) -> bool:
 
 
 def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
+    generated_at = _utc_now_iso()
     raw_items = source_payload.get("items") or []
     open_statuses = {
         "new",
@@ -1157,7 +1203,10 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         if packet["status"] in open_statuses
     ]
     unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
-    unresolved_external_proof_execution_plan = _external_proof_execution_plan(release_channel_index)
+    unresolved_external_proof_execution_plan = _external_proof_execution_plan(
+        release_channel_index,
+        generated_at=generated_at,
+    )
     packet_external_tuple_ids = {
         _normalize_text((packet.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
         for packet in case_packets
@@ -1181,7 +1230,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
     return {
         "contract_name": "fleet.support_case_packets",
         "schema_version": 1,
-        "generated_at": _utc_now_iso(),
+        "generated_at": generated_at,
         "source": {
             "source_kind": _source_kind(source_label),
             "reported_count": int(source_payload.get("count") or len(raw_items)),

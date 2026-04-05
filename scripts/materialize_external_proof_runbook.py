@@ -31,6 +31,21 @@ def utc_now_iso() -> str:
     return dt.datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _parse_iso(value: Any) -> dt.datetime | None:
+    raw = _normalize_text(value)
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = dt.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -47,9 +62,31 @@ def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    raw = _normalize_text(value)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _normalize_plan(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
-        return {"request_count": 0, "hosts": [], "host_groups": {}}
+        return {
+            "request_count": 0,
+            "hosts": [],
+            "host_groups": {},
+            "generated_at": "",
+            "release_channel_generated_at": "",
+            "capture_deadline_hours": 0,
+            "capture_deadline_utc": "",
+        }
 
     request_count_raw = value.get("request_count")
     request_count = request_count_raw if isinstance(request_count_raw, int) and not isinstance(request_count_raw, bool) else 0
@@ -93,6 +130,7 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                             "expected_startup_smoke_receipt_path": _normalize_text(
                                 row.get("expected_startup_smoke_receipt_path")
                             ),
+                            "capture_deadline_utc": _normalize_text(row.get("capture_deadline_utc")),
                             "required_proofs": sorted(
                                 {
                                     _normalize_text(token).lower()
@@ -124,6 +162,10 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
         ),
         "hosts": hosts,
         "host_groups": host_groups,
+        "generated_at": _normalize_text(value.get("generated_at")),
+        "release_channel_generated_at": _normalize_text(value.get("release_channel_generated_at")),
+        "capture_deadline_hours": _safe_int(value.get("capture_deadline_hours"), default=0),
+        "capture_deadline_utc": _normalize_text(value.get("capture_deadline_utc")),
     }
 
 
@@ -169,6 +211,12 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
     lines.append(f"- generated_at: {generated_at}")
     lines.append(f"- unresolved_request_count: {request_count}")
     lines.append(f"- unresolved_hosts: {', '.join(hosts) if hosts else '(none)'}")
+    lines.append(f"- plan_generated_at: {_normalize_text(plan.get('generated_at')) or '(missing)'}")
+    lines.append(
+        f"- release_channel_generated_at: {_normalize_text(plan.get('release_channel_generated_at')) or '(missing)'}"
+    )
+    lines.append(f"- capture_deadline_hours: {_safe_int(plan.get('capture_deadline_hours'), default=0)}")
+    lines.append(f"- capture_deadline_utc: {_normalize_text(plan.get('capture_deadline_utc')) or '(missing)'}")
     lines.append("")
 
     if request_count <= 0 or not host_groups:
@@ -198,6 +246,11 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             installer_relative_path = _normalize_text(request.get("expected_installer_relative_path")) or "(missing)"
             route = _normalize_text(request.get("expected_public_install_route")) or "(missing)"
             receipt_path = _normalize_text(request.get("expected_startup_smoke_receipt_path")) or "(missing)"
+            capture_deadline_utc = _normalize_text(request.get("capture_deadline_utc"))
+            deadline_state = "unknown"
+            deadline_dt = _parse_iso(capture_deadline_utc)
+            if deadline_dt is not None:
+                deadline_state = "overdue" if deadline_dt < dt.datetime.now(UTC) else "pending"
             lines.append(f"- `{tuple_id}`")
             lines.append(f"  required_proofs: `{required_proofs}`")
             lines.append(f"  artifact_id: `{artifact_id}`")
@@ -205,6 +258,8 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             lines.append(f"  installer_relative_path: `{installer_relative_path}`")
             lines.append(f"  public_route: `{route}`")
             lines.append(f"  startup_smoke_receipt: `{receipt_path}`")
+            lines.append(f"  capture_deadline_utc: `{capture_deadline_utc or '(missing)'}`")
+            lines.append(f"  capture_deadline_state: `{deadline_state}`")
             tuple_commands = _commands_for_request(request)
             lines.append("  commands:")
             if not tuple_commands:

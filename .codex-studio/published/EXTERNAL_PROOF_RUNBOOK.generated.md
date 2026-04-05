@@ -1,8 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-05T00:57:46Z
+- generated_at: 2026-04-05T01:02:22Z
 - unresolved_request_count: 4
 - unresolved_hosts: macos, windows
+- plan_generated_at: 2026-04-05T01:02:21Z
+- release_channel_generated_at: 2026-04-05T01:01:17Z
+- capture_deadline_hours: 24
+- capture_deadline_utc: 2026-04-06T01:01:17Z
 
 ## Host: macos
 
@@ -18,6 +22,8 @@
   installer_relative_path: `files/chummer-avalonia-osx-arm64-installer.dmg`
   public_route: `/downloads/install/avalonia-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`
+  capture_deadline_utc: `2026-04-06T01:01:17Z`
+  capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke`
     - `cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh`
@@ -28,6 +34,8 @@
   installer_relative_path: `files/chummer-blazor-desktop-osx-arm64-installer.dmg`
   public_route: `/downloads/install/blazor-desktop-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json`
+  capture_deadline_utc: `2026-04-06T01:01:17Z`
+  capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke`
     - `cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh`
@@ -54,6 +62,8 @@ cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLA
   installer_relative_path: `files/chummer-avalonia-win-x64-installer.exe`
   public_route: `/downloads/install/avalonia-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
+  capture_deadline_utc: `2026-04-06T01:01:17Z`
+  capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke`
     - `cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh`
@@ -64,6 +74,8 @@ cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLA
   installer_relative_path: `files/chummer-blazor-desktop-win-x64-installer.exe`
   public_route: `/downloads/install/blazor-desktop-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json`
+  capture_deadline_utc: `2026-04-06T01:01:17Z`
+  capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe blazor-desktop win-x64 Chummer.Blazor.Desktop.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke`
     - `cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh`

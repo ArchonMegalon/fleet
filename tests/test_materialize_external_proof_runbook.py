@@ -18,6 +18,10 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
                 "unresolved_external_proof_execution_plan": {
                     "request_count": 2,
                     "hosts": ["macos", "windows"],
+                    "generated_at": "2026-04-05T00:00:00Z",
+                    "release_channel_generated_at": "2026-04-05T00:00:00Z",
+                    "capture_deadline_hours": 24,
+                    "capture_deadline_utc": "2026-04-06T00:00:00Z",
                     "host_groups": {
                         "windows": {
                             "request_count": 1,
@@ -30,6 +34,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
                                     "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
                                     "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
                                     "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                    "capture_deadline_utc": "2026-04-06T00:00:00Z",
                                     "proof_capture_commands": [
                                         "echo windows-proof",
                                         "echo refresh-manifest",
@@ -48,6 +53,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
                                     "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
                                     "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
                                     "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+                                    "capture_deadline_utc": "2026-04-06T00:00:00Z",
                                     "proof_capture_commands": [
                                         "echo macos-proof",
                                         "echo refresh-manifest",
@@ -83,14 +89,22 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "# External Proof Runbook" in payload
     assert "## Host: windows" in payload
     assert "## Host: macos" in payload
+    assert "plan_generated_at: 2026-04-05T00:00:00Z" in payload
+    assert "capture_deadline_hours: 24" in payload
+    assert "capture_deadline_utc: 2026-04-06T00:00:00Z" in payload
     assert "`avalonia:win-x64:windows`" in payload
     assert "`blazor-desktop:osx-arm64:macos`" in payload
+    assert "capture_deadline_state: `pending`" in payload or "capture_deadline_state: `overdue`" in payload
     assert "echo windows-proof" in payload
     assert "echo macos-proof" in payload
     assert payload.count("`echo refresh-manifest`") == 2
     assert payload.count("\necho refresh-manifest\n") == 2
     assert "### Commands (Host Consolidated)" in payload
     assert "  commands:" in payload
+    assert "## After Host Proof Capture" in payload
+    assert "python3 scripts/materialize_support_case_packets.py" in payload
+    assert "python3 scripts/materialize_journey_gates.py" in payload
+    assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
 
 
 def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequences(tmp_path: Path) -> None:
@@ -165,6 +179,7 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     assert payload.count("\necho refresh-manifest\n") == 1
     assert "    - `echo tuple-1-proof`" in payload
     assert "    - `echo tuple-2-proof`" in payload
+    assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh\n") == 1
 
 
 def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -> None:

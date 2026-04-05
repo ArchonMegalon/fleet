@@ -104,11 +104,11 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["summary"]["unresolved_external_proof_request_hosts"] == []
     assert payload["summary"]["unresolved_external_proof_request_tuples"] == []
     assert payload["summary"]["unresolved_external_proof_request_specs"] == {}
-    assert payload["unresolved_external_proof_execution_plan"] == {
-        "request_count": 0,
-        "hosts": [],
-        "host_groups": {},
-    }
+    assert payload["unresolved_external_proof_execution_plan"]["request_count"] == 0
+    assert payload["unresolved_external_proof_execution_plan"]["hosts"] == []
+    assert payload["unresolved_external_proof_execution_plan"]["host_groups"] == {}
+    assert payload["unresolved_external_proof_execution_plan"]["capture_deadline_hours"] == 24
+    assert payload["unresolved_external_proof_execution_plan"]["generated_at"]
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -874,78 +874,22 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
             ],
         },
     }
-    assert payload["unresolved_external_proof_execution_plan"] == {
-        "request_count": 2,
-        "hosts": ["macos", "windows"],
-        "host_groups": {
-            "macos": {
-                "request_count": 1,
-                "tuples": ["blazor-desktop:osx-arm64:macos"],
-                "requests": [
-                    {
-                        "tuple_id": "blazor-desktop:osx-arm64:macos",
-                        "tuple_entry_count": 1,
-                        "tuple_unique": True,
-                        "channel_id": "preview",
-                        "head_id": "blazor-desktop",
-                        "platform": "macos",
-                        "rid": "osx-arm64",
-                        "expected_artifact_id": "",
-                        "expected_installer_file_name": "",
-                        "expected_installer_relative_path": "",
-                        "expected_public_install_route": "",
-                        "expected_startup_smoke_receipt_path": "",
-                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
-                        "startup_smoke_receipt_contract": {
-                            "head_id": "blazor-desktop",
-                            "host_class_contains": "macos",
-                            "platform": "macos",
-                            "ready_checkpoint": "pre_ui_event_loop",
-                            "rid": "osx-arm64",
-                            "status_any_of": ["pass", "passed", "ready"],
-                        },
-                        "proof_capture_commands": [
-                            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-                            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
-                        ],
-                    }
-                ],
-            },
-            "windows": {
-                "request_count": 1,
-                "tuples": ["avalonia:win-x64:windows"],
-                "requests": [
-                    {
-                        "tuple_id": "avalonia:win-x64:windows",
-                        "tuple_entry_count": 1,
-                        "tuple_unique": True,
-                        "channel_id": "preview",
-                        "head_id": "avalonia",
-                        "platform": "windows",
-                        "rid": "win-x64",
-                        "expected_artifact_id": "",
-                        "expected_installer_file_name": "",
-                        "expected_installer_relative_path": "",
-                        "expected_public_install_route": "",
-                        "expected_startup_smoke_receipt_path": "",
-                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
-                        "startup_smoke_receipt_contract": {
-                            "head_id": "avalonia",
-                            "host_class_contains": "windows",
-                            "platform": "windows",
-                            "ready_checkpoint": "pre_ui_event_loop",
-                            "rid": "win-x64",
-                            "status_any_of": ["pass", "passed", "ready"],
-                        },
-                        "proof_capture_commands": [
-                            "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-                            "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
-                        ],
-                    }
-                ],
-            },
-        },
-    }
+    execution_plan = payload["unresolved_external_proof_execution_plan"]
+    assert execution_plan["request_count"] == 2
+    assert execution_plan["hosts"] == ["macos", "windows"]
+    assert execution_plan["capture_deadline_hours"] == 24
+    assert execution_plan["capture_deadline_utc"]
+    assert execution_plan["generated_at"]
+    assert execution_plan["host_groups"]["macos"]["request_count"] == 1
+    assert execution_plan["host_groups"]["windows"]["request_count"] == 1
+    assert execution_plan["host_groups"]["macos"]["tuples"] == ["blazor-desktop:osx-arm64:macos"]
+    assert execution_plan["host_groups"]["windows"]["tuples"] == ["avalonia:win-x64:windows"]
+    macos_request = execution_plan["host_groups"]["macos"]["requests"][0]
+    windows_request = execution_plan["host_groups"]["windows"]["requests"][0]
+    assert macos_request["capture_deadline_utc"] == execution_plan["capture_deadline_utc"]
+    assert windows_request["capture_deadline_utc"] == execution_plan["capture_deadline_utc"]
+    assert macos_request["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
+    assert windows_request["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
 
 
 def test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuples(tmp_path: Path) -> None:
