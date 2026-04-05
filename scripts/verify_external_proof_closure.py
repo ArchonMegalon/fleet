@@ -264,6 +264,13 @@ def main() -> int:
             if str((row.get("evidence") or {}).get("support_packets_generated_at") or "").strip()
         }
     )
+    journey_rows_missing_support_generated_at = sorted(
+        {
+            str(row.get("id") or "").strip() or "<unknown>"
+            for row in journey_rows
+            if not str((row.get("evidence") or {}).get("support_packets_generated_at") or "").strip()
+        }
+    )
     missing_platforms = [
         str(item).strip()
         for item in (missing_platforms_raw or [])
@@ -557,6 +564,11 @@ def main() -> int:
     if not journey_support_generated_ats:
         failures.append(
             "journey gates evidence.support_packets_generated_at is missing from all journey rows"
+        )
+    if journey_rows_missing_support_generated_at:
+        failures.append(
+            "journey gates evidence.support_packets_generated_at is missing in journey rows: "
+            + ", ".join(journey_rows_missing_support_generated_at)
         )
     if release_generated_at and not _parse_iso(release_generated_at):
         failures.append(
