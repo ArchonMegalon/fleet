@@ -844,7 +844,7 @@ def test_verify_external_proof_closure_fails_when_capture_scripts_omit_required_
     validate_script = commands_dir / "validate-windows-proof.sh"
     capture_ps1 = commands_dir / "capture-windows-proof.ps1"
     validate_ps1 = commands_dir / "validate-windows-proof.ps1"
-    capture_script.write_text("#!/usr/bin/env bash\nset -euo pipefail\necho wrong-capture\n", encoding="utf-8")
+    capture_script.write_text("#!/usr/bin/env bash\nset -euo pipefail\n", encoding="utf-8")
     validate_script.write_text(
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe\n"

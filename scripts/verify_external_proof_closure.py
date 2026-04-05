@@ -1310,7 +1310,7 @@ def main() -> int:
                                 if request.get("proof_capture_commands") is not None
                                 else request.get("proofCaptureCommands")
                             )
-                            if capture_commands and capture_script_payload:
+                            if capture_commands:
                                 for command in capture_commands:
                                     if command not in capture_script_payload:
                                         failures.append(
