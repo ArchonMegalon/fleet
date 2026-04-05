@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import shlex
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--support-packets", type=Path, default=DEFAULT_SUPPORT_PACKETS)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--commands-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional directory for generated command scripts. "
+            "Defaults to <out-dir>/external-proof-commands."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -300,7 +310,105 @@ def _commands_for_request(request: dict[str, Any]) -> list[str]:
     return commands
 
 
-def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
+def _normalize_host_token(value: str) -> str:
+    text = "".join(ch if ch.isalnum() else "-" for ch in _normalize_text(value).lower())
+    text = text.strip("-")
+    return text or "unknown"
+
+
+def _render_bash_script(commands: list[str], *, no_op_message: str) -> str:
+    lines = ["#!/usr/bin/env bash", "set -euo pipefail", ""]
+    if commands:
+        lines.extend(commands)
+    else:
+        lines.append(f"echo {shlex.quote(no_op_message)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _write_file(path: Path, content: str, *, executable: bool) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    mode = 0o755 if executable else 0o644
+    os.chmod(path, mode)
+
+
+def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> dict[str, Any]:
+    hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
+    host_groups = plan.get("host_groups") or {}
+    host_files: list[dict[str, str]] = []
+    commands_dir.mkdir(parents=True, exist_ok=True)
+
+    for host in hosts:
+        group = host_groups.get(host)
+        if not isinstance(group, dict):
+            continue
+        host_token = _normalize_host_token(host)
+        capture_commands = _commands_for_group(group)
+        validation_commands = _validation_commands_for_group(group)
+        capture_script = commands_dir / f"capture-{host_token}-proof.sh"
+        validation_script = commands_dir / f"validate-{host_token}-proof.sh"
+        _write_file(
+            capture_script,
+            _render_bash_script(
+                capture_commands,
+                no_op_message=f"No unresolved external-proof commands for host '{host}'.",
+            ),
+            executable=True,
+        )
+        _write_file(
+            validation_script,
+            _render_bash_script(
+                validation_commands,
+                no_op_message=f"No external-proof validation commands for host '{host}'.",
+            ),
+            executable=True,
+        )
+        host_file_row: dict[str, str] = {
+            "host": host,
+            "capture_script": str(capture_script),
+            "validation_script": str(validation_script),
+        }
+        if host.lower() == "windows":
+            capture_wrappers = _powershell_wrappers(capture_commands)
+            validation_wrappers = _powershell_wrappers(validation_commands)
+            capture_ps1 = commands_dir / f"capture-{host_token}-proof.ps1"
+            validation_ps1 = commands_dir / f"validate-{host_token}-proof.ps1"
+            _write_file(
+                capture_ps1,
+                "\n".join(capture_wrappers + [""]) if capture_wrappers else "# No windows capture wrappers generated.\n",
+                executable=False,
+            )
+            _write_file(
+                validation_ps1,
+                "\n".join(validation_wrappers + [""])
+                if validation_wrappers
+                else "# No windows validation wrappers generated.\n",
+                executable=False,
+            )
+            host_file_row["capture_powershell"] = str(capture_ps1)
+            host_file_row["validation_powershell"] = str(validation_ps1)
+        host_files.append(host_file_row)
+
+    post_capture_script = commands_dir / "republish-after-host-proof.sh"
+    _write_file(
+        post_capture_script,
+        _render_bash_script(
+            _post_capture_republish_commands(),
+            no_op_message="No post-capture republish commands were generated.",
+        ),
+        executable=True,
+    )
+    return {
+        "commands_dir": str(commands_dir),
+        "hosts": host_files,
+        "post_capture_script": str(post_capture_script),
+    }
+
+
+def materialize_markdown(
+    plan: dict[str, Any], *, generated_at: str, command_files: dict[str, Any] | None = None
+) -> str:
     lines: list[str] = []
     request_count = int(plan.get("request_count") or 0)
     hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
@@ -318,6 +426,31 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
     lines.append(f"- capture_deadline_hours: {_safe_int(plan.get('capture_deadline_hours'), default=0)}")
     lines.append(f"- capture_deadline_utc: {_normalize_text(plan.get('capture_deadline_utc')) or '(missing)'}")
     lines.append("")
+    if isinstance(command_files, dict) and _normalize_text(command_files.get("commands_dir")):
+        lines.append("## Generated Command Files")
+        lines.append("")
+        lines.append(f"- commands_dir: `{_normalize_text(command_files.get('commands_dir'))}`")
+        for host_row in command_files.get("hosts") or []:
+            if not isinstance(host_row, dict):
+                continue
+            host = _normalize_text(host_row.get("host")) or "unknown"
+            capture_script = _normalize_text(host_row.get("capture_script"))
+            validation_script = _normalize_text(host_row.get("validation_script"))
+            capture_powershell = _normalize_text(host_row.get("capture_powershell"))
+            validation_powershell = _normalize_text(host_row.get("validation_powershell"))
+            lines.append(f"- host `{host}`")
+            if capture_script:
+                lines.append(f"  capture_script: `{capture_script}`")
+            if validation_script:
+                lines.append(f"  validation_script: `{validation_script}`")
+            if capture_powershell:
+                lines.append(f"  capture_powershell: `{capture_powershell}`")
+            if validation_powershell:
+                lines.append(f"  validation_powershell: `{validation_powershell}`")
+        post_capture_script = _normalize_text(command_files.get("post_capture_script"))
+        if post_capture_script:
+            lines.append(f"- post_capture_script: `{post_capture_script}`")
+        lines.append("")
 
     if request_count <= 0 or not host_groups:
         lines.append("No unresolved external-proof requests are currently queued.")
@@ -434,7 +567,13 @@ def main() -> int:
     args = parse_args()
     support_packets = _load_support_packets(args.support_packets)
     plan = _normalize_plan(support_packets.get("unresolved_external_proof_execution_plan"))
-    markdown = materialize_markdown(plan, generated_at=utc_now_iso())
+    commands_dir = (
+        Path(args.commands_dir).resolve()
+        if args.commands_dir is not None
+        else (args.out.parent / "external-proof-commands").resolve()
+    )
+    command_files = _materialize_command_files(plan, commands_dir=commands_dir)
+    markdown = materialize_markdown(plan, generated_at=utc_now_iso(), command_files=command_files)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(markdown, encoding="utf-8")
     return 0

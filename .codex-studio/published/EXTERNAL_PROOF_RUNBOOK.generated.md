@@ -1,12 +1,25 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-05T03:02:57Z
+- generated_at: 2026-04-05T03:08:48Z
 - unresolved_request_count: 4
 - unresolved_hosts: macos, windows
-- plan_generated_at: 2026-04-05T03:02:55Z
-- release_channel_generated_at: 2026-04-05T03:02:54Z
+- plan_generated_at: 2026-04-05T03:08:47Z
+- release_channel_generated_at: 2026-04-05T03:08:34Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-04-06T03:02:54Z
+- capture_deadline_utc: 2026-04-06T03:08:34Z
+
+## Generated Command Files
+
+- commands_dir: `/docker/fleet/.codex-studio/published/external-proof-commands`
+- host `macos`
+  capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-macos-proof.sh`
+  validation_script: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-macos-proof.sh`
+- host `windows`
+  capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh`
+  validation_script: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh`
+  capture_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1`
+  validation_powershell: `/docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.ps1`
+- post_capture_script: `/docker/fleet/.codex-studio/published/external-proof-commands/republish-after-host-proof.sh`
 
 ## Host: macos
 
@@ -24,7 +37,7 @@
   installer_sha256: `(missing)`
   public_route: `/downloads/install/avalonia-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`
-  capture_deadline_utc: `2026-04-06T03:02:54Z`
+  capture_deadline_utc: `2026-04-06T03:08:34Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg; fi`
@@ -38,7 +51,7 @@
   installer_sha256: `(missing)`
   public_route: `/downloads/install/blazor-desktop-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json`
-  capture_deadline_utc: `2026-04-06T03:02:54Z`
+  capture_deadline_utc: `2026-04-06T03:08:34Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/blazor-desktop-osx-arm64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg; fi`
@@ -80,7 +93,7 @@ cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chumme
   installer_sha256: `(missing)`
   public_route: `/downloads/install/avalonia-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
-  capture_deadline_utc: `2026-04-06T03:02:54Z`
+  capture_deadline_utc: `2026-04-06T03:08:34Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-win-x64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe; fi`
@@ -94,7 +107,7 @@ cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chumme
   installer_sha256: `(missing)`
   public_route: `/downloads/install/blazor-desktop-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json`
-  capture_deadline_utc: `2026-04-06T03:02:54Z`
+  capture_deadline_utc: `2026-04-06T03:08:34Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/blazor-desktop-win-x64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe; fi`

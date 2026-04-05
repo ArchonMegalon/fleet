@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -87,7 +88,18 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
 
     assert result.returncode == 0, result.stderr
     payload = out.read_text(encoding="utf-8")
+    commands_dir = out.parent / "external-proof-commands"
+    windows_capture = commands_dir / "capture-windows-proof.sh"
+    windows_validate = commands_dir / "validate-windows-proof.sh"
+    windows_capture_ps1 = commands_dir / "capture-windows-proof.ps1"
+    windows_validate_ps1 = commands_dir / "validate-windows-proof.ps1"
+    macos_capture = commands_dir / "capture-macos-proof.sh"
+    macos_validate = commands_dir / "validate-macos-proof.sh"
+    post_capture = commands_dir / "republish-after-host-proof.sh"
+
     assert "# External Proof Runbook" in payload
+    assert "## Generated Command Files" in payload
+    assert f"commands_dir: `{commands_dir}`" in payload
     assert "## Host: windows" in payload
     assert "## Host: macos" in payload
     assert "shell_hint: Run canonical commands in Git Bash (or WSL bash)." in payload
@@ -132,6 +144,23 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "python3 scripts/materialize_journey_gates.py" in payload
     assert "python3 scripts/verify_external_proof_closure.py" in payload
     assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
+    assert windows_capture.is_file()
+    assert windows_validate.is_file()
+    assert windows_capture_ps1.is_file()
+    assert windows_validate_ps1.is_file()
+    assert macos_capture.is_file()
+    assert macos_validate.is_file()
+    assert post_capture.is_file()
+    assert os.access(windows_capture, os.X_OK)
+    assert os.access(macos_capture, os.X_OK)
+    assert os.access(post_capture, os.X_OK)
+    assert "echo windows-proof" in windows_capture.read_text(encoding="utf-8")
+    assert "echo macos-proof" in macos_capture.read_text(encoding="utf-8")
+    assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in windows_validate.read_text(
+        encoding="utf-8"
+    )
+    assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
+    assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
 
 
 def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequences(tmp_path: Path) -> None:
@@ -247,5 +276,9 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
 
     assert result.returncode == 0, result.stderr
     payload = out.read_text(encoding="utf-8")
+    commands_dir = out.parent / "external-proof-commands"
     assert "unresolved_request_count: 0" in payload
+    assert "## Generated Command Files" in payload
+    assert f"commands_dir: `{commands_dir}`" in payload
     assert "No unresolved external-proof requests are currently queued." in payload
+    assert (commands_dir / "republish-after-host-proof.sh").is_file()

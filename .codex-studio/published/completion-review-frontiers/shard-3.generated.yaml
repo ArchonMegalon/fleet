@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-05T03:05:32Z'
+generated_at: '2026-04-05T03:09:42Z'
 mode: completion_review
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -31,15 +31,17 @@ focus:
   - mobile
 completion_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: 'Only external host-proof gaps remain: run the missing macos, windows proof
+    lane for 4 desktop tuple(s), ingest receipts, and then republish release truth.'
 receipt_audit:
   status: pass
   reason: recent supervisor history ends with a trusted structured worker receipt
-  latest_run_id: 20260405T030133Z
+  latest_run_id: 20260405T030532Z
   latest_run_reason: ''
 journey_gate_audit:
   status: fail
-  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  reason: 'Only external host-proof gaps remain: run the missing macos, windows proof
+    lane for 4 desktop tuple(s), ingest receipts, and then republish release truth.'
   blocked_journey_count: 2
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
@@ -52,7 +54,7 @@ weekly_pulse_audit:
   status: fail
   reason: weekly product pulse still reports the active wave as active
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-05T03:04:18Z'
+  generated_at: '2026-04-05T03:09:29Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local queue items remain outside the design registry
@@ -84,8 +86,6 @@ frontier:
     field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected []
     but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos',
     'blazor-desktop:win-x64:windows'].
-  - release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands'
-    must match tuple-derived canonical command sequence for avalonia:osx-arm64:macos.
   - 'release_channel.generated.json field ''desktopTupleCoverage.missingRequiredPlatformHeadRidTuples''
     external proof request: capture promoted_installer_artifact, startup_smoke_receipt
     on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId
@@ -110,3 +110,12 @@ frontier:
     blazor-desktop-win-x64-installer, installer chummer-blazor-desktop-win-x64-installer.exe,
     public route /downloads/install/blazor-desktop-win-x64-installer, startup-smoke
     receipt startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json.'
+eta:
+  status: recovery
+  eta_human: 2h-6h
+  eta_confidence: medium
+  basis: completion_review_recovery
+  blocking_reason: ''
+  summary: Registry closure is not yet trustworthy; recovery still needs golden journey
+    proof. Blocked journeys=2, warning journeys=0, review frontier=1, decomposed_frontier=0,
+    backlog_tail=0.
