@@ -708,3 +708,71 @@ def test_verify_external_proof_closure_fails_when_journey_external_proof_request
 
     assert result.returncode == 1
     assert "malformed external_proof_requests payload in journey rows: install_claim_restore_continue" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_unresolved_external_proof_shape_is_invalid(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_specs": {},
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": "invalid-shape",
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [{"evidence": {"support_packets_generated_at": "2026-04-05T01:22:01Z"}}],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatformHeadRidTuples": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "unresolved_external_proof has invalid type" in result.stderr
