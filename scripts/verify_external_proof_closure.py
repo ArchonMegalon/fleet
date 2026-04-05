@@ -47,6 +47,14 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def _dict_field(value: Any, *, field: str, failures: list[str]) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if value not in (None, "", []):
+        failures.append(f"{field} has invalid type")
+    return {}
+
+
 def _safe_int(value: Any, *, field: str, failures: list[str]) -> int:
     if isinstance(value, bool):
         failures.append(f"{field} has invalid numeric value")
@@ -189,9 +197,21 @@ def main() -> int:
         field="support packets unresolved_external_proof_execution_plan.request_count",
         failures=failures,
     )
-    support_host_count_map = dict(support_summary.get("unresolved_external_proof_request_host_counts") or {})
-    support_tuple_count_map = dict(support_summary.get("unresolved_external_proof_request_tuple_counts") or {})
-    journey_host_count_map = dict(journey_summary.get("blocked_external_only_host_counts") or {})
+    support_host_count_map = _dict_field(
+        support_summary.get("unresolved_external_proof_request_host_counts"),
+        field="support packets summary.unresolved_external_proof_request_host_counts",
+        failures=failures,
+    )
+    support_tuple_count_map = _dict_field(
+        support_summary.get("unresolved_external_proof_request_tuple_counts"),
+        field="support packets summary.unresolved_external_proof_request_tuple_counts",
+        failures=failures,
+    )
+    journey_host_count_map = _dict_field(
+        journey_summary.get("blocked_external_only_host_counts"),
+        field="journey gates summary.blocked_external_only_host_counts",
+        failures=failures,
+    )
     support_plan_hosts = sorted(
         {
             str(item).strip()
@@ -199,7 +219,11 @@ def main() -> int:
             if str(item).strip()
         }
     )
-    support_plan_host_groups = dict(support_plan.get("host_groups") or {})
+    support_plan_host_groups = _dict_field(
+        support_plan.get("host_groups"),
+        field="support packets unresolved_external_proof_execution_plan.host_groups",
+        failures=failures,
+    )
     support_plan_hosts_with_backlog = sorted(
         {
             str(raw_host).strip()
@@ -322,9 +346,21 @@ def main() -> int:
                 if str(item).strip()
             }
         )
-        unresolved_backlog_host_counts = dict(unresolved_backlog_raw.get("host_counts") or {})
-        unresolved_backlog_tuple_counts = dict(unresolved_backlog_raw.get("tuple_counts") or {})
-        unresolved_backlog_specs = dict(unresolved_backlog_raw.get("specs") or {})
+        unresolved_backlog_host_counts = _dict_field(
+            unresolved_backlog_raw.get("host_counts"),
+            field="support packets unresolved_external_proof.host_counts",
+            failures=failures,
+        )
+        unresolved_backlog_tuple_counts = _dict_field(
+            unresolved_backlog_raw.get("tuple_counts"),
+            field="support packets unresolved_external_proof.tuple_counts",
+            failures=failures,
+        )
+        unresolved_backlog_specs = _dict_field(
+            unresolved_backlog_raw.get("specs"),
+            field="support packets unresolved_external_proof.specs",
+            failures=failures,
+        )
     elif unresolved_backlog_raw is not None:
         failures.append("support packets unresolved_external_proof has invalid type (expected array or object)")
     blocked_external_only_tuples = [
