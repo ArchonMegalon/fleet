@@ -216,6 +216,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             continue
         tuple_id = str(item.get("tupleId") or "").strip()
         required_host = str(item.get("requiredHost") or item.get("platform") or "").strip().lower()
+        required_host_provided = bool(str(item.get("requiredHost") or "").strip())
         required_proofs = item.get("requiredProofs")
         if not tuple_id or not isinstance(required_proofs, list):
             continue
@@ -291,6 +292,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "tuple_id": tuple_id,
                 "channel_id": release_channel_id,
                 "required_host": effective_required_host or "required",
+                "required_host_provided": required_host_provided,
                 "required_proofs": sorted(set(proof_tokens)),
                 "head_id": head,
                 "rid": rid,
@@ -741,6 +743,12 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredHost' "
                 f"must be one of {list(SUPPORTED_DESKTOP_PLATFORMS)!r} for tuple {tuple_id} but was {required_host!r}."
+            )
+            continue
+        if not bool(item.get("required_host_provided")):
+            reasons.append(
+                "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.requiredHost' "
+                f"must be explicit for tuple {tuple_id}."
             )
             continue
         if not bool(item.get("tuple_unique")):

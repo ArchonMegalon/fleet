@@ -204,6 +204,46 @@ def test_external_proof_reasons_fail_close_malformed_external_proof_rows() -> No
     )
 
 
+def test_external_proof_reasons_require_explicit_required_host() -> None:
+    payload = {
+        "status": "published",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "desktopTupleCoverage.externalProofRequests.requiredHost' must be explicit" in reason
+        for reason in reasons
+    )
+
+
 def test_external_proof_reasons_fail_close_missing_external_proof_rows_when_tuples_are_missing() -> None:
     payload = {
         "status": "published",
