@@ -16,6 +16,9 @@ DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_P
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR = "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}"
 UI_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+REGISTRY_RELEASE_CHANNEL_PATH = Path(
+    "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
+)
 
 
 def _post_capture_republish_commands() -> list[str]:
@@ -274,6 +277,9 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
 
 def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
+    tuple_id = _normalize_text(request.get("tuple_id"))
+    expected_artifact_id = _normalize_text(request.get("expected_artifact_id"))
+    expected_public_install_route = _normalize_text(request.get("expected_public_install_route"))
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
     installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
     receipt_relative_path = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
@@ -332,6 +338,31 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
                 "(not expected_host_contains or expected_host_contains in host_class)"
                 ") else sys.exit("
                 "f'receipt-contract-mismatch:{p}:status={status}:head={head_id}:platform={platform}:rid={rid}:ready={ready_checkpoint}:host_class={host_class}:contract={contract}')"
+                )
+            )
+    if tuple_id and (expected_artifact_id or expected_public_install_route):
+        commands.append(
+            f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+            "python3 -c "
+            + shlex.quote(
+                "import json, pathlib, sys; "
+                f"p=pathlib.Path({str(REGISTRY_RELEASE_CHANNEL_PATH)!r}); "
+                f"tuple_id={tuple_id!r}; "
+                f"expected_artifact={expected_artifact_id!r}; "
+                f"expected_route={expected_public_install_route!r}; "
+                "payload=json.loads(p.read_text(encoding='utf-8')); "
+                "coverage=payload.get('desktopTupleCoverage') if isinstance(payload, dict) else {}; "
+                "coverage=coverage if isinstance(coverage, dict) else {}; "
+                "rows=coverage.get('externalProofRequests') if isinstance(coverage, dict) else []; "
+                "rows=rows if isinstance(rows, list) else []; "
+                "row=next((item for item in rows if isinstance(item, dict) and str(item.get('tupleId') or item.get('tuple_id') or '').strip()==tuple_id), None); "
+                "sys.exit(f'release-channel-contract-mismatch:{tuple_id}:missing-external-proof-row') if row is None else None; "
+                "artifact=str(row.get('expectedArtifactId') or row.get('expected_artifact_id') or '').strip(); "
+                "route=str(row.get('expectedPublicInstallRoute') or row.get('expected_public_install_route') or '').strip(); "
+                "artifact_ok=(not expected_artifact) or artifact==expected_artifact; "
+                "route_ok=(not expected_route) or route==expected_route; "
+                "sys.exit(0) if artifact_ok and route_ok else sys.exit("
+                "f'release-channel-contract-mismatch:{tuple_id}:artifact={artifact}:expected_artifact={expected_artifact}:route={route}:expected_route={expected_route}')"
             )
         )
     return commands

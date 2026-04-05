@@ -141,6 +141,10 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in payload
     assert "hashlib.sha256" in payload
     assert "installer-contract-mismatch" in payload
+    assert "release-channel-contract-mismatch" in payload
+    assert "expected_artifact=" in payload
+    assert "expected_route=" in payload
+    assert "avalonia-win-x64-installer" in payload
     assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in payload
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
     assert "receipt-contract-mismatch" in payload
@@ -185,6 +189,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
         encoding="utf-8"
     )
     assert "installer-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
+    assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
     assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
@@ -393,6 +398,7 @@ def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_p
     assert "`avalonia:win-x64:windows`" in payload
     assert "echo windows-proof" in windows_capture.read_text(encoding="utf-8")
     assert "installer-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
+    assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
     assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in windows_validate_ps1.read_text(encoding="utf-8")

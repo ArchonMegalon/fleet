@@ -590,6 +590,18 @@ def main() -> int:
             if str(value or "").strip() and not _is_sha256_hex(value)
         }
     )
+    support_plan_request_rows_missing_expected_sha256 = sorted(
+        {
+            str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>"
+            for _, _, item in support_plan_request_rows
+            for value in [
+                item.get("expected_installer_sha256")
+                if item.get("expected_installer_sha256") is not None
+                else item.get("expectedInstallerSha256")
+            ]
+            if not str(value or "").strip()
+        }
+    )
     support_generated_at = str(
         support_packets.get("generated_at") or support_packets.get("generatedAt") or ""
     ).strip()
@@ -632,6 +644,7 @@ def main() -> int:
         if str(item).strip()
     ]
     external_request_tuples: list[str] = []
+    release_external_request_rows_missing_expected_sha256: list[str] = []
     if isinstance(external_proof_requests_raw, list):
         for index, request in enumerate(external_proof_requests_raw):
             if not isinstance(request, dict):
@@ -690,6 +703,8 @@ def main() -> int:
                 if request.get("expectedInstallerSha256") is not None
                 else request.get("expected_installer_sha256")
             )
+            if not str(expected_installer_sha256 or "").strip():
+                release_external_request_rows_missing_expected_sha256.append(tuple_id)
             if str(expected_installer_sha256 or "").strip() and not _is_sha256_hex(expected_installer_sha256):
                 failures.append(
                     "release channel desktopTupleCoverage.externalProofRequests"
@@ -877,6 +892,11 @@ def main() -> int:
             "support packets unresolved_external_proof_execution_plan request rows have invalid expected_installer_sha256 values for tuples: "
             + ", ".join(support_plan_request_rows_invalid_expected_sha256)
         )
+    if support_plan_request_rows_missing_expected_sha256 and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows are missing expected_installer_sha256 for tuples: "
+            + ", ".join(support_plan_request_rows_missing_expected_sha256)
+        )
     if missing_platforms:
         failures.append(
             "release channel missingRequiredPlatforms is not empty: "
@@ -903,6 +923,11 @@ def main() -> int:
         failures.append(
             "release channel desktopTupleCoverage.externalProofRequests contains duplicate tupleId rows: "
             + ", ".join(duplicate_external_request_tuples)
+        )
+    if release_external_request_rows_missing_expected_sha256:
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests rows are missing expectedInstallerSha256 for tuples: "
+            + ", ".join(sorted(set(release_external_request_rows_missing_expected_sha256)))
         )
     if missing_tuples and sorted(set(external_request_tuples)) != sorted(set(missing_tuples)):
         failures.append(
@@ -1501,6 +1526,96 @@ def main() -> int:
                                         failures.append(
                                             "external proof windows validation wrapper is missing startup-smoke contract token "
                                             f"for tuple {tuple_id}: {key}={token}"
+                                        )
+                            expected_artifact_id = _normalized_token(
+                                request.get("expected_artifact_id")
+                                or request.get("expectedArtifactId")
+                            )
+                            expected_public_install_route = _normalized_token(
+                                request.get("expected_public_install_route")
+                                or request.get("expectedPublicInstallRoute")
+                            )
+                            if expected_artifact_id or expected_public_install_route:
+                                if (
+                                    not validation_script_loaded
+                                    or "release-channel-contract-mismatch" not in validation_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof validation script is missing release-channel tuple contract checks "
+                                        f"for tuple {tuple_id}: expected marker 'release-channel-contract-mismatch'"
+                                    )
+                                if (
+                                    not validation_script_loaded
+                                    or tuple_id not in validation_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof validation script is missing release-channel tuple token "
+                                        f"for tuple {tuple_id}: tuple_id={tuple_id}"
+                                    )
+                                if (
+                                    expected_artifact_id
+                                    and (
+                                        not validation_script_loaded
+                                        or "expected_artifact=" not in validation_script_payload
+                                        or expected_artifact_id not in validation_script_payload
+                                    )
+                                ):
+                                    failures.append(
+                                        "external proof validation script is missing release-channel artifact token "
+                                        f"for tuple {tuple_id}: expected_artifact_id={expected_artifact_id}"
+                                    )
+                                if (
+                                    expected_public_install_route
+                                    and (
+                                        not validation_script_loaded
+                                        or "expected_route=" not in validation_script_payload
+                                        or expected_public_install_route not in validation_script_payload
+                                    )
+                                ):
+                                    failures.append(
+                                        "external proof validation script is missing release-channel install-route token "
+                                        f"for tuple {tuple_id}: expected_public_install_route={expected_public_install_route}"
+                                    )
+                                if host == "windows":
+                                    if (
+                                        not validation_wrapper_loaded
+                                        or "release-channel-contract-mismatch" not in validation_wrapper_payload
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing release-channel tuple contract checks "
+                                            f"for tuple {tuple_id}: expected marker 'release-channel-contract-mismatch'"
+                                        )
+                                    if (
+                                        not validation_wrapper_loaded
+                                        or tuple_id not in validation_wrapper_payload
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing release-channel tuple token "
+                                            f"for tuple {tuple_id}: tuple_id={tuple_id}"
+                                        )
+                                    if (
+                                        expected_artifact_id
+                                        and (
+                                            not validation_wrapper_loaded
+                                            or "expected_artifact=" not in validation_wrapper_payload
+                                            or expected_artifact_id not in validation_wrapper_payload
+                                        )
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing release-channel artifact token "
+                                            f"for tuple {tuple_id}: expected_artifact_id={expected_artifact_id}"
+                                        )
+                                    if (
+                                        expected_public_install_route
+                                        and (
+                                            not validation_wrapper_loaded
+                                            or "expected_route=" not in validation_wrapper_payload
+                                            or expected_public_install_route not in validation_wrapper_payload
+                                        )
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing release-channel install-route token "
+                                            f"for tuple {tuple_id}: expected_public_install_route={expected_public_install_route}"
                                         )
                         if host == "windows" and validation_commands:
                             for command in validation_commands:

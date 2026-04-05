@@ -4217,3 +4217,312 @@ def test_verify_external_proof_closure_checks_required_hosts_from_release_channe
     assert "missing required host script" in result.stderr
     assert "capture-windows-proof.sh" in result.stderr
     assert "validate-windows-proof.sh" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_external_backlog_rows_omit_expected_sha256(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": ["avalonia:win-x64:windows|windows|docker"],
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "proof_capture_commands": ["echo capture"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-win-x64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                        "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "request rows are missing expected_installer_sha256 for tuples: avalonia:win-x64:windows" in result.stderr
+    assert "rows are missing expectedInstallerSha256 for tuples: avalonia:win-x64:windows" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_validation_scripts_omit_release_channel_contract_checks(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:win-x64:windows": {
+                        "required_host": "windows",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expected_artifact_id": "avalonia-win-x64-installer",
+                        "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                        "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expected_installer_sha256": "a" * 64,
+                        "proof_capture_commands": ["cd /docker/chummercomplete/chummer6-ui && echo capture-proof"],
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "expected_installer_sha256": "a" * 64,
+                                "startup_smoke_receipt_contract": {
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "windows",
+                                    "rid": "win-x64",
+                                    "host_class_contains": "windows",
+                                    "status_any_of": ["pass", "ready"],
+                                },
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                                "proof_capture_commands": [
+                                    "cd /docker/chummercomplete/chummer6-ui && echo capture-proof"
+                                ],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-win-x64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                        "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expectedInstallerSha256": "a" * 64,
+                        "proofCaptureCommands": ["cd /docker/chummercomplete/chummer6-ui && echo capture-proof"],
+                    }
+                ],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+    capture_script = commands_dir / "capture-windows-proof.sh"
+    validate_script = commands_dir / "validate-windows-proof.sh"
+    capture_ps1 = commands_dir / "capture-windows-proof.ps1"
+    validate_ps1 = commands_dir / "validate-windows-proof.ps1"
+    capture_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\ncd /docker/chummercomplete/chummer6-ui && echo capture-proof\n",
+        encoding="utf-8",
+    )
+    validate_script.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe\n"
+        "python3 -c 'print(\"installer-contract-mismatch:sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")'\n"
+        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json\n"
+        "python3 -c 'print(\"receipt-contract-mismatch:{\\\"head_id\\\": \\\"avalonia\\\", \\\"platform\\\": \\\"windows\\\", "
+        "\\\"rid\\\": \\\"win-x64\\\", \\\"ready_checkpoint\\\": \\\"pre_ui_event_loop\\\", \\\"host_class_contains\\\": "
+        "\\\"windows\\\"}\")'\n",
+        encoding="utf-8",
+    )
+    capture_script.chmod(0o755)
+    validate_script.chmod(0o755)
+    capture_ps1.write_text(
+        "bash -lc 'cd /docker/chummercomplete/chummer6-ui && echo capture-proof'\n",
+        encoding="utf-8",
+    )
+    validate_ps1.write_text(
+        "bash -lc 'test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'\n"
+        "bash -lc 'python3 -c ''print(\"installer-contract-mismatch:sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\")'''\n"
+        "bash -lc 'test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json'\n"
+        "bash -lc 'python3 -c ''print(\"receipt-contract-mismatch:{\\\"head_id\\\": \\\"avalonia\\\", \\\"platform\\\": \\\"windows\\\", "
+        "\\\"rid\\\": \\\"win-x64\\\", \\\"ready_checkpoint\\\": \\\"pre_ui_event_loop\\\", \\\"host_class_contains\\\": \\\"windows\\\"}\")'''\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "missing release-channel tuple contract checks" in result.stderr
+    assert "expected_artifact_id=avalonia-win-x64-installer" in result.stderr
+    assert "expected_public_install_route=/downloads/install/avalonia-win-x64-installer" in result.stderr
