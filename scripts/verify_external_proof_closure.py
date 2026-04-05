@@ -197,6 +197,11 @@ def _normalized_command_list(value: Any) -> list[str]:
     ]
 
 
+def _powershell_wrap(command: str) -> str:
+    escaped = _normalized_token(command).replace("'", "''")
+    return f"bash -lc '{escaped}'"
+
+
 def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(rows, list):
         return {}
@@ -1258,6 +1263,12 @@ def main() -> int:
                     validation_script_payload = ""
                     capture_script_loaded = False
                     validation_script_loaded = False
+                    capture_wrapper_script = external_proof_commands_dir / f"capture-{host_token}-proof.ps1"
+                    validation_wrapper_script = external_proof_commands_dir / f"validate-{host_token}-proof.ps1"
+                    capture_wrapper_payload = ""
+                    validation_wrapper_payload = ""
+                    capture_wrapper_loaded = False
+                    validation_wrapper_loaded = False
                     for script_path in (capture_script, validation_script):
                         if not script_path.is_file():
                             failures.append(
@@ -1288,6 +1299,25 @@ def main() -> int:
                                 "external proof validation script is unreadable: "
                                 + f"{validation_script}: {exc}"
                             )
+                    if host == "windows":
+                        if capture_wrapper_script.is_file():
+                            try:
+                                capture_wrapper_payload = capture_wrapper_script.read_text(encoding="utf-8")
+                                capture_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows capture wrapper is unreadable: "
+                                    + f"{capture_wrapper_script}: {exc}"
+                                )
+                        if validation_wrapper_script.is_file():
+                            try:
+                                validation_wrapper_payload = validation_wrapper_script.read_text(encoding="utf-8")
+                                validation_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows validation wrapper is unreadable: "
+                                    + f"{validation_wrapper_script}: {exc}"
+                                )
                     if capture_script_loaded or validation_script_loaded:
                         support_host_request_rows = [
                             item
@@ -1321,6 +1351,16 @@ def main() -> int:
                                             "external proof capture script is missing tuple proof_capture_commands entry "
                                             f"for tuple {tuple_id}: {command}"
                                         )
+                                    if host == "windows":
+                                        wrapped_capture_command = _powershell_wrap(command)
+                                        if (
+                                            not capture_wrapper_loaded
+                                            or wrapped_capture_command not in capture_wrapper_payload
+                                        ):
+                                            failures.append(
+                                                "external proof windows capture wrapper is missing tuple proof_capture_commands entry "
+                                                f"for tuple {tuple_id}: {wrapped_capture_command}"
+                                            )
                             installer_file_name = _normalized_token(
                                 request.get("expected_installer_file_name")
                                 or request.get("expectedInstallerFileName")
@@ -1401,8 +1441,8 @@ def main() -> int:
                                         )
                     if host == "windows":
                         windows_scripts = (
-                            external_proof_commands_dir / "capture-windows-proof.ps1",
-                            external_proof_commands_dir / "validate-windows-proof.ps1",
+                            capture_wrapper_script,
+                            validation_wrapper_script,
                         )
                         for script_path in windows_scripts:
                             if not script_path.is_file():
