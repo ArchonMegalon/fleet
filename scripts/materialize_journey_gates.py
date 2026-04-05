@@ -1723,10 +1723,19 @@ def evaluate_journey(
                             expected_installer_file_name = str(
                                 external_proof_request.get("expected_installer_file_name") or ""
                             ).strip()
+                            expected_installer_relative_path = str(
+                                external_proof_request.get("expected_installer_relative_path") or ""
+                            ).strip()
                             required_host = str(external_proof_request.get("required_host") or "").strip().lower()
                             if not any("run-desktop-startup-smoke.sh" in token for token in normalized_commands):
                                 support_packet_contract_violations.append(
                                     f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands is missing run-desktop-startup-smoke.sh."
+                                )
+                            if expected_installer_relative_path and not any(
+                                expected_installer_relative_path in token for token in normalized_commands
+                            ):
+                                support_packet_contract_violations.append(
+                                    f"support packet {packet_id} install_diagnosis.external_proof_request.proof_capture_commands does not reference expected installer path '{expected_installer_relative_path}'."
                                 )
                             if expected_installer_file_name and not any(
                                 expected_installer_file_name in token for token in normalized_commands

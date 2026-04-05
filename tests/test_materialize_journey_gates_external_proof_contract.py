@@ -2063,6 +2063,7 @@ groups: []
                                 "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
                                 "expected_artifact_id": "avalonia-win-x64-installer",
                                 "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
                                 "expected_public_install_route": "/downloads/install/wrong-route",
                                 "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
                                 "startup_smoke_receipt_contract": {
@@ -2074,7 +2075,7 @@ groups: []
                                     "host_class_contains": "windows",
                                 },
                                 "proof_capture_commands": [
-                                    "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                                    "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
                                     "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
                                 ],
                             },
@@ -2110,6 +2111,11 @@ groups: []
     assert journey["state"] == "blocked"
     assert any(
         "external_proof_request.expected_public_install_route must match release-channel tuple truth"
+        in reason
+        for reason in journey["blocking_reasons"]
+    )
+    assert any(
+        "proof_capture_commands does not reference expected installer path 'files/chummer-avalonia-win-x64-installer.exe'."
         in reason
         for reason in journey["blocking_reasons"]
     )
