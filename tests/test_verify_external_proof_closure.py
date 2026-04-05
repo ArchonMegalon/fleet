@@ -26,9 +26,14 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
                 "unresolved_external_proof_request_hosts": [],
                 "unresolved_external_proof_request_specs": [],
                 "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
             },
             "unresolved_external_proof": [],
             "unresolved_external_proof_execution_plan": {
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
                 "release_channel_generated_at": "2026-04-05T01:21:51Z",
             },
         },
@@ -47,6 +52,7 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
                 "blocked_external_only_count": 0,
                 "blocked_external_only_hosts": [],
                 "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
             }
         },
     )
@@ -94,6 +100,11 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
                     "avalonia:osx-arm64:macos",
                     "blazor-desktop:win-x64:windows",
                 ],
+                "unresolved_external_proof_request_host_counts": {"macos": 1, "windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {
+                    "avalonia:osx-arm64:macos": 1,
+                    "blazor-desktop:win-x64:windows": 1,
+                },
             }
         },
     )
@@ -110,6 +121,7 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
             "summary": {
                 "blocked_external_only_count": 1,
                 "blocked_external_only_tuples": ["avalonia:osx-arm64:macos"],
+                "blocked_external_only_host_counts": {"macos": 1},
             }
         },
     )
@@ -161,6 +173,8 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
                 "unresolved_external_proof_request_hosts": ["windows"],
                 "unresolved_external_proof_request_specs": ["avalonia:win-x64:windows|windows|docker"],
                 "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
             },
             "unresolved_external_proof": [
                 {
@@ -168,6 +182,15 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
                 }
             ],
             "unresolved_external_proof_execution_plan": {
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    }
+                },
                 "release_channel_generated_at": "2026-04-05T01:21:51Z",
             },
         },
@@ -188,6 +211,7 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
                 "blocked_external_only_count": 0,
                 "blocked_external_only_hosts": ["windows"],
                 "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
             },
         },
     )
@@ -220,6 +244,11 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
     assert result.returncode == 1
     assert "unresolved_external_proof_request_tuples is not empty" in result.stderr
     assert "blocked_external_only_tuples is not empty" in result.stderr
+    assert "unresolved_external_proof_execution_plan.request_count=1" in result.stderr
+    assert "unresolved_external_proof_execution_plan.hosts is not empty: windows" in result.stderr
+    assert "unresolved_external_proof_execution_plan.host_groups still contain backlog: windows" in result.stderr
+    assert "unresolved_external_proof_request_host_counts is not empty: windows:1" in result.stderr
+    assert "blocked_external_only_host_counts is not empty: windows:1" in result.stderr
     assert "external_proof_requests in journey rows" in result.stderr
 
 
@@ -235,6 +264,9 @@ def test_verify_external_proof_closure_fails_when_cross_plane_timestamps_drift(t
                 "unresolved_external_proof_request_count": 0,
             },
             "unresolved_external_proof_execution_plan": {
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
                 "release_channel_generated_at": "2026-04-05T01:21:51Z",
             },
         },
@@ -286,3 +318,83 @@ def test_verify_external_proof_closure_fails_when_cross_plane_timestamps_drift(t
         in result.stderr
     )
     assert "journey gates evidence.support_packets_generated_at values do not match support packets generated_at" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_execution_plan_backlog_remains_with_zero_summaries(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": [],
+            "unresolved_external_proof_execution_plan": {
+                "request_count": 0,
+                "hosts": ["macos"],
+                "host_groups": {
+                    "macos": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:osx-arm64:macos"],
+                        "requests": [{"tuple_id": "avalonia:osx-arm64:macos"}],
+                    }
+                },
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatformHeadRidTuples": [],
+            }
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "unresolved_external_proof_execution_plan.hosts is not empty: macos" in result.stderr
+    assert "unresolved_external_proof_execution_plan.host_groups still contain backlog: macos" in result.stderr

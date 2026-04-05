@@ -58,6 +58,31 @@ def main() -> int:
 
     unresolved_count = int(support_summary.get("unresolved_external_proof_request_count") or 0)
     blocked_external_only_count = int(journey_summary.get("blocked_external_only_count") or 0)
+    support_plan_request_count = int(support_plan.get("request_count") or 0)
+    support_host_count_map = dict(support_summary.get("unresolved_external_proof_request_host_counts") or {})
+    support_tuple_count_map = dict(support_summary.get("unresolved_external_proof_request_tuple_counts") or {})
+    journey_host_count_map = dict(journey_summary.get("blocked_external_only_host_counts") or {})
+    support_plan_hosts = sorted(
+        {
+            str(item).strip()
+            for item in (support_plan.get("hosts") or [])
+            if str(item).strip()
+        }
+    )
+    support_plan_host_groups = dict(support_plan.get("host_groups") or {})
+    support_plan_hosts_with_backlog = sorted(
+        {
+            str(raw_host).strip()
+            for raw_host, raw_group in support_plan_host_groups.items()
+            if str(raw_host).strip()
+            and isinstance(raw_group, dict)
+            and (
+                int(raw_group.get("request_count") or 0) > 0
+                or any(str(item).strip() for item in (raw_group.get("tuples") or []))
+                or any(isinstance(item, dict) for item in (raw_group.get("requests") or []))
+            )
+        }
+    )
     support_generated_at = str(
         support_packets.get("generated_at") or support_packets.get("generatedAt") or ""
     ).strip()
@@ -122,9 +147,39 @@ def main() -> int:
         failures.append(
             f"support packets unresolved_external_proof_request_count={unresolved_count} (expected 0)"
         )
+    if support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.request_count="
+            f"{support_plan_request_count} (expected 0)"
+        )
     if blocked_external_only_count > 0:
         failures.append(
             f"journey gates blocked_external_only_count={blocked_external_only_count} (expected 0)"
+        )
+    if support_host_count_map:
+        failures.append(
+            "support packets unresolved_external_proof_request_host_counts is not empty: "
+            + ", ".join(f"{host}:{count}" for host, count in sorted(support_host_count_map.items()))
+        )
+    if support_tuple_count_map:
+        failures.append(
+            "support packets unresolved_external_proof_request_tuple_counts is not empty: "
+            + ", ".join(f"{tuple_id}:{count}" for tuple_id, count in sorted(support_tuple_count_map.items()))
+        )
+    if journey_host_count_map:
+        failures.append(
+            "journey gates blocked_external_only_host_counts is not empty: "
+            + ", ".join(f"{host}:{count}" for host, count in sorted(journey_host_count_map.items()))
+        )
+    if support_plan_hosts:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.hosts is not empty: "
+            + ", ".join(support_plan_hosts)
+        )
+    if support_plan_hosts_with_backlog:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.host_groups still contain backlog: "
+            + ", ".join(support_plan_hosts_with_backlog)
         )
     if missing_tuples:
         failures.append(
