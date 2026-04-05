@@ -89,6 +89,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "# External Proof Runbook" in payload
     assert "## Host: windows" in payload
     assert "## Host: macos" in payload
+    assert "shell_hint: Run canonical commands in Git Bash (or WSL bash)." in payload
+    assert "shell_hint: Run commands in a POSIX shell (bash/zsh) on the required host." in payload
     assert "plan_generated_at: 2026-04-05T00:00:00Z" in payload
     assert "capture_deadline_hours: 24" in payload
     assert "capture_deadline_utc: 2026-04-06T00:00:00Z" in payload
@@ -102,6 +104,9 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert payload.count("`echo refresh-manifest`") == 2
     assert payload.count("\necho refresh-manifest\n") == 2
     assert "### Commands (Host Consolidated)" in payload
+    assert "### Commands (PowerShell Wrappers)" in payload
+    assert "```powershell" in payload
+    assert "bash -lc 'echo windows-proof'" in payload
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
@@ -191,7 +196,8 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     payload = out.read_text(encoding="utf-8")
     assert payload.count("`echo refresh-manifest`") == 2
     assert payload.count("\necho refresh-manifest\n") == 1
-    assert payload.count("${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/") == 4
+    assert payload.count("${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/") >= 4
+    assert payload.count("\nbash -lc '") >= 3
     assert "    - `echo tuple-1-proof`" in payload
     assert "    - `echo tuple-2-proof`" in payload
     assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh\n") == 1

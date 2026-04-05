@@ -199,6 +199,27 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _shell_hint_for_host(host: str) -> str:
+    normalized = _normalize_text(host).lower()
+    if normalized == "windows":
+        return (
+            "Run canonical commands in Git Bash (or WSL bash). "
+            "PowerShell wrappers are provided below when you need to stay in PowerShell."
+        )
+    return "Run commands in a POSIX shell (bash/zsh) on the required host."
+
+
+def _powershell_wrappers(commands: list[str]) -> list[str]:
+    wrapped: list[str] = []
+    for command in commands:
+        normalized = _normalize_text(command)
+        if not normalized:
+            continue
+        escaped = normalized.replace("'", "''")
+        wrapped.append(f"bash -lc '{escaped}'")
+    return wrapped
+
+
 def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
     expected_route = _normalize_text(request.get("expected_public_install_route"))
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
@@ -260,6 +281,7 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             continue
         lines.append(f"## Host: {host}")
         lines.append("")
+        lines.append(f"- shell_hint: {_shell_hint_for_host(host)}")
         lines.append(f"- request_count: {int(group.get('request_count') or 0)}")
         tuples = [str(item) for item in (group.get("tuples") or []) if str(item)]
         lines.append(f"- tuples: {', '.join(tuples) if tuples else '(none)'}")
@@ -308,6 +330,18 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             for command in commands:
                 lines.append(command)
             lines.append("```")
+        if host.lower() == "windows":
+            wrappers = _powershell_wrappers(commands)
+            lines.append("")
+            lines.append("### Commands (PowerShell Wrappers)")
+            lines.append("")
+            if not wrappers:
+                lines.append("No PowerShell wrappers were generated for this host.")
+            else:
+                lines.append("```powershell")
+                for command in wrappers:
+                    lines.append(command)
+                lines.append("```")
         lines.append("")
 
     lines.append("## After Host Proof Capture")
