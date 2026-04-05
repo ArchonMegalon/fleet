@@ -58,11 +58,23 @@ def _write_external_proof_bundle(
             [
                 "#!/usr/bin/env bash",
                 "set -euo pipefail",
+                "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
                 (
-                    "python3 scripts/materialize_public_release_channel.py "
+                    "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py "
                     "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json "
                     "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
                 ),
+                "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
+                "cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
+                "cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml",
+                "cd /docker/fleet && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json",
+                "cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+                "cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json",
+                "cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+                "cd /docker/fleet && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
+                "cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+                "cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
+                "cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status >/dev/null",
                 "",
             ]
         ),
@@ -541,6 +553,10 @@ def test_verify_external_proof_closure_fails_when_post_capture_script_drops_requ
     )
 
     assert result.returncode == 1
+    assert (
+        "external proof commands script is missing required republish token: "
+        "generate-releases-manifest.sh"
+    ) in result.stderr
     assert (
         "external proof commands script is missing required republish token: "
         "materialize_public_release_channel.py"

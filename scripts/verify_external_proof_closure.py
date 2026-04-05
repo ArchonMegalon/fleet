@@ -24,6 +24,21 @@ REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH = (
 REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH = (
     "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
 )
+REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
+    "generate-releases-manifest.sh",
+    "materialize_public_release_channel.py",
+    "verify_public_release_channel.py",
+    "materialize_status_plane.py",
+    "verify_status_plane_semantics.py",
+    "materialize_public_progress_report.py",
+    "materialize_support_case_packets.py",
+    "materialize_journey_gates.py",
+    "materialize_external_proof_runbook.py",
+    "verify_external_proof_closure.py",
+    "materialize_flagship_product_readiness.py",
+    "materialize_weekly_product_pulse_snapshot.py",
+    "chummer_design_supervisor.py status",
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -1377,7 +1392,7 @@ def main() -> int:
                     )
                 else:
                     required_tokens = [
-                        "materialize_public_release_channel.py",
+                        *REQUIRED_POST_CAPTURE_COMMAND_TOKENS,
                         f"--proof {REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH}",
                         (
                             "--ui-localization-release-gate "
