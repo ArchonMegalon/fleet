@@ -187,6 +187,16 @@ def _normalized_smoke_contract(value: Any) -> dict[str, Any]:
     }
 
 
+def _normalized_command_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [
+        _normalized_token(item)
+        for item in value
+        if _normalized_token(item)
+    ]
+
+
 def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(rows, list):
         return {}
@@ -214,6 +224,9 @@ def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
             "expected_installer_sha256": _normalized_token(
                 item.get("expectedInstallerSha256") or item.get("expected_installer_sha256")
             ).lower(),
+            "proof_capture_commands": _normalized_command_list(
+                item.get("proofCaptureCommands") or item.get("proof_capture_commands")
+            ),
         }
     return index
 
@@ -241,6 +254,9 @@ def _support_request_row_index(rows: list[tuple[str, int, dict[str, Any]]]) -> d
             "expected_installer_sha256": _normalized_token(
                 item.get("expected_installer_sha256") or item.get("expectedInstallerSha256")
             ).lower(),
+            "proof_capture_commands": _normalized_command_list(
+                item.get("proof_capture_commands") or item.get("proofCaptureCommands")
+            ),
         }
     return index
 
@@ -270,6 +286,9 @@ def _support_specs_index(value: Any) -> dict[str, dict[str, Any]]:
             "expected_installer_sha256": _normalized_token(
                 raw_spec.get("expected_installer_sha256") or raw_spec.get("expectedInstallerSha256")
             ).lower(),
+            "proof_capture_commands": _normalized_command_list(
+                raw_spec.get("proof_capture_commands") or raw_spec.get("proofCaptureCommands")
+            ),
         }
     return index
 
@@ -1235,6 +1254,7 @@ def main() -> int:
                     host_token = _normalize_host_token(host)
                     capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
                     validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
+                    capture_script_payload = ""
                     validation_script_payload = ""
                     for script_path in (capture_script, validation_script):
                         if not script_path.is_file():
@@ -1247,6 +1267,14 @@ def main() -> int:
                             failures.append(
                                 "external proof host script is not executable: "
                                 + str(script_path)
+                            )
+                    if capture_script.is_file():
+                        try:
+                            capture_script_payload = capture_script.read_text(encoding="utf-8")
+                        except OSError as exc:
+                            failures.append(
+                                "external proof capture script is unreadable: "
+                                + f"{capture_script}: {exc}"
                             )
                     if validation_script.is_file():
                         try:
@@ -1277,6 +1305,18 @@ def main() -> int:
                         host_request_rows = support_host_request_rows or release_host_request_rows
                         for request in host_request_rows:
                             tuple_id = _normalized_token(request.get("tuple_id") or request.get("tupleId")) or "<unknown>"
+                            capture_commands = _normalized_command_list(
+                                request.get("proof_capture_commands")
+                                if request.get("proof_capture_commands") is not None
+                                else request.get("proofCaptureCommands")
+                            )
+                            if capture_commands and capture_script_payload:
+                                for command in capture_commands:
+                                    if command not in capture_script_payload:
+                                        failures.append(
+                                            "external proof capture script is missing tuple proof_capture_commands entry "
+                                            f"for tuple {tuple_id}: {command}"
+                                        )
                             installer_file_name = _normalized_token(
                                 request.get("expected_installer_file_name")
                                 or request.get("expectedInstallerFileName")
