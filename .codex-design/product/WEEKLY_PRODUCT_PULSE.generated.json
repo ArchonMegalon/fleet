@@ -1,8 +1,8 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-04-04T23:56:21Z",
-  "as_of": "2026-04-04",
+  "generated_at": "2026-04-05T00:25:51Z",
+  "as_of": "2026-04-05",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
   "progress_history_source": "products/chummer/PROGRESS_HISTORY.generated.json",
@@ -58,25 +58,25 @@
       ]
     }
   ],
-  "oldest_blocker_days": 0,
+  "oldest_blocker_days": 1,
   "design_drift_count": 0,
   "public_promise_drift_count": 0,
   "governor_decisions": [
     {
-      "decision_id": "2026-04-04-focus-next-12-biggest-wins",
+      "decision_id": "2026-04-05-focus-next-12-biggest-wins",
       "action": "focus_shift",
-      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 10 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 11 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
       "cited_signals": [
         "overall_progress_percent=100",
-        "history_snapshot_count=10",
-        "oldest_blocker_days=0",
+        "history_snapshot_count=11",
+        "oldest_blocker_days=1",
         "phase_label=Public-fit polish",
         "longest_pole=Core Engine",
         "active_wave_status=active"
       ]
     },
     {
-      "decision_id": "2026-04-04-launch-governance",
+      "decision_id": "2026-04-05-launch-governance",
       "action": "freeze_launch",
       "reason": "Freeze launch expansion while 2 golden journey(s) remain blocked and journey health is blocked.",
       "cited_signals": [
@@ -139,25 +139,25 @@
         ]
       }
     ],
-    "oldest_blocker_days": 0,
+    "oldest_blocker_days": 1,
     "design_drift_count": 0,
     "public_promise_drift_count": 0,
     "governor_decisions": [
       {
-        "decision_id": "2026-04-04-focus-next-12-biggest-wins",
+        "decision_id": "2026-04-05-focus-next-12-biggest-wins",
         "action": "focus_shift",
-        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 10 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 11 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
         "cited_signals": [
           "overall_progress_percent=100",
-          "history_snapshot_count=10",
-          "oldest_blocker_days=0",
+          "history_snapshot_count=11",
+          "oldest_blocker_days=1",
           "phase_label=Public-fit polish",
           "longest_pole=Core Engine",
           "active_wave_status=active"
         ]
       },
       {
-        "decision_id": "2026-04-04-launch-governance",
+        "decision_id": "2026-04-05-launch-governance",
         "action": "freeze_launch",
         "reason": "Freeze launch expansion while 2 golden journey(s) remain blocked and journey health is blocked.",
         "cited_signals": [
@@ -175,7 +175,7 @@
     "current_recommended_wave": "Next 12 Biggest Wins",
     "overall_progress_percent": 100,
     "phase_label": "Public-fit polish",
-    "history_snapshot_count": 10,
+    "history_snapshot_count": 11,
     "longest_pole": "Core Engine",
     "launch_readiness": "Hold launch expansion pending route-canary validation. 2 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
@@ -189,7 +189,7 @@
     "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
     "scorecard_metric_count": 22,
     "automation_alignment": {
-      "state": "misaligned",
+      "state": "aligned",
       "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
       "active_open_milestone_ids": [
         1,
@@ -208,17 +208,24 @@
         18
       ],
       "handoff_frontier_milestone_ids": [
-        4,
-        5,
-        6
+        1,
+        3,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
       ],
-      "out_of_program_frontier_milestone_ids": [
-        4,
-        5,
-        6
-      ],
+      "out_of_program_frontier_milestone_ids": [],
       "handoff_source": "/docker/fleet/NEXT_SESSION_HANDOFF.md",
-      "summary": "Automation frontier drifts outside active program open milestones and must be corrected before promotion."
+      "summary": "Automation frontier aligns with the active program open milestones."
     },
     "closure_health": {
       "state": "watch",
@@ -235,22 +242,18 @@
       "local_release_proof_status": "unknown",
       "proven_journey_count": 0,
       "proven_route_count": 0,
-      "history_snapshot_count": 10,
-      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 10 weekly snapshots are on record for the current public trust posture."
+      "history_snapshot_count": 11,
+      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 11 weekly snapshots are on record for the current public trust posture."
     },
     "progress_trend": {
       "state": "steady",
       "direction": "flat",
       "delta_percent": 0,
-      "from_as_of": "2026-04-03",
-      "to_as_of": "2026-04-04",
-      "summary": "Flat trend 0% from 2026-04-03 to 2026-04-04. Trend window: 2026-03-27 73% -> 2026-03-28 100% -> 2026-03-29 100% -> 2026-03-31 100% -> 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100% -> 2026-04-04 100%.",
+      "from_as_of": "2026-04-04",
+      "to_as_of": "2026-04-05",
+      "summary": "Flat trend 0% from 2026-04-04 to 2026-04-05. Trend window: 2026-03-28 100% -> 2026-03-29 100% -> 2026-03-31 100% -> 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100% -> 2026-04-04 100% -> 2026-04-05 100%.",
       "sample_count": 8,
       "samples": [
-        {
-          "as_of": "2026-03-27",
-          "overall_progress_percent": 73
-        },
         {
           "as_of": "2026-03-28",
           "overall_progress_percent": 100
@@ -277,6 +280,10 @@
         },
         {
           "as_of": "2026-04-04",
+          "overall_progress_percent": 100
+        },
+        {
+          "as_of": "2026-04-05",
           "overall_progress_percent": 100
         }
       ]

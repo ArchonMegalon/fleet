@@ -112,6 +112,7 @@ def main() -> int:
     missing_platforms_raw = tuple_coverage.get("missingRequiredPlatforms")
     missing_head_pairs_raw = tuple_coverage.get("missingRequiredPlatformHeadPairs")
     missing_tuples_raw = tuple_coverage.get("missingRequiredPlatformHeadRidTuples")
+    external_proof_requests_raw = tuple_coverage.get("externalProofRequests")
     if "missingRequiredPlatforms" not in tuple_coverage:
         failures.append("release channel desktopTupleCoverage.missingRequiredPlatforms is missing")
     elif not isinstance(missing_platforms_raw, list):
@@ -130,6 +131,10 @@ def main() -> int:
         failures.append(
             "release channel desktopTupleCoverage.missingRequiredPlatformHeadRidTuples is not an array"
         )
+    if "externalProofRequests" not in tuple_coverage:
+        failures.append("release channel desktopTupleCoverage.externalProofRequests is missing")
+    elif not isinstance(external_proof_requests_raw, list):
+        failures.append("release channel desktopTupleCoverage.externalProofRequests is not an array")
 
     support_summary_key_types = {
         "unresolved_external_proof_request_count": (int, float, str),
@@ -286,6 +291,60 @@ def main() -> int:
         for item in (missing_tuples_raw or [])
         if str(item).strip()
     ]
+    external_request_tuples: list[str] = []
+    if isinstance(external_proof_requests_raw, list):
+        for index, request in enumerate(external_proof_requests_raw):
+            if not isinstance(request, dict):
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] is not an object"
+                )
+                continue
+            tuple_id = str(request.get("tupleId") or request.get("tuple_id") or "").strip()
+            if not tuple_id:
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] is missing tupleId"
+                )
+                continue
+            external_request_tuples.append(tuple_id)
+            tuple_parts = tuple_id.split(":")
+            if len(tuple_parts) != 3:
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] tupleId is malformed: {tuple_id}"
+                )
+            required_host = str(request.get("requiredHost") or request.get("required_host") or "").strip().lower()
+            if required_host and required_host not in {"windows", "macos", "linux"}:
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] requiredHost is invalid: {required_host}"
+                )
+            if required_host and len(tuple_parts) == 3 and tuple_parts[2].strip().lower() != required_host:
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] requiredHost ({required_host}) does not match tuple platform ({tuple_parts[2].strip().lower()})"
+                )
+            required_proofs_raw = request.get("requiredProofs")
+            if required_proofs_raw is None:
+                required_proofs_raw = request.get("required_proofs")
+            if not isinstance(required_proofs_raw, list) or not all(
+                isinstance(token, str) for token in required_proofs_raw
+            ):
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] requiredProofs must be a string array"
+                )
+                continue
+            required_proofs = {str(token).strip().lower() for token in required_proofs_raw if str(token).strip()}
+            missing_required_proofs = sorted(
+                {"promoted_installer_artifact", "startup_smoke_receipt"} - required_proofs
+            )
+            if missing_required_proofs:
+                failures.append(
+                    "release channel desktopTupleCoverage.externalProofRequests"
+                    f"[{index}] requiredProofs is missing required tokens: {', '.join(missing_required_proofs)}"
+                )
     unresolved_tuples = [
         str(item).strip()
         for item in (support_summary.get("unresolved_external_proof_request_tuples") or [])
@@ -451,6 +510,26 @@ def main() -> int:
         failures.append(
             "release channel missingRequiredPlatformHeadRidTuples is not empty: "
             + ", ".join(missing_tuples)
+        )
+    duplicate_external_request_tuples = sorted(
+        {
+            tuple_id
+            for tuple_id in external_request_tuples
+            if external_request_tuples.count(tuple_id) > 1
+        }
+    )
+    if duplicate_external_request_tuples:
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests contains duplicate tupleId rows: "
+            + ", ".join(duplicate_external_request_tuples)
+        )
+    if missing_tuples and sorted(set(external_request_tuples)) != sorted(set(missing_tuples)):
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests tupleId set does not match missingRequiredPlatformHeadRidTuples"
+        )
+    if not missing_tuples and external_request_tuples:
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests must be empty when missingRequiredPlatformHeadRidTuples is empty"
         )
     if unresolved_tuples:
         failures.append(
