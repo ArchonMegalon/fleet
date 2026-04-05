@@ -1256,6 +1256,8 @@ def main() -> int:
                     validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
                     capture_script_payload = ""
                     validation_script_payload = ""
+                    capture_script_loaded = False
+                    validation_script_loaded = False
                     for script_path in (capture_script, validation_script):
                         if not script_path.is_file():
                             failures.append(
@@ -1271,6 +1273,7 @@ def main() -> int:
                     if capture_script.is_file():
                         try:
                             capture_script_payload = capture_script.read_text(encoding="utf-8")
+                            capture_script_loaded = True
                         except OSError as exc:
                             failures.append(
                                 "external proof capture script is unreadable: "
@@ -1279,12 +1282,13 @@ def main() -> int:
                     if validation_script.is_file():
                         try:
                             validation_script_payload = validation_script.read_text(encoding="utf-8")
+                            validation_script_loaded = True
                         except OSError as exc:
                             failures.append(
                                 "external proof validation script is unreadable: "
                                 + f"{validation_script}: {exc}"
                             )
-                    if validation_script_payload:
+                    if capture_script_loaded or validation_script_loaded:
                         support_host_request_rows = [
                             item
                             for row_host, _, item in support_plan_request_rows
@@ -1312,7 +1316,7 @@ def main() -> int:
                             )
                             if capture_commands:
                                 for command in capture_commands:
-                                    if command not in capture_script_payload:
+                                    if not capture_script_loaded or command not in capture_script_payload:
                                         failures.append(
                                             "external proof capture script is missing tuple proof_capture_commands entry "
                                             f"for tuple {tuple_id}: {command}"
@@ -1333,23 +1337,25 @@ def main() -> int:
                                 installer_path = (
                                     f"/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/{installer_file_name}"
                                 )
-                                if installer_path not in validation_script_payload:
+                                if not validation_script_loaded or installer_path not in validation_script_payload:
                                     failures.append(
                                         "external proof validation script does not reference expected installer path "
                                         f"for tuple {tuple_id}: {installer_path}"
                                     )
                             if installer_sha256:
-                                if "installer-contract-mismatch" not in validation_script_payload:
+                                if not validation_script_loaded or "installer-contract-mismatch" not in validation_script_payload:
                                     failures.append(
                                         "external proof validation script is missing installer digest contract checks "
                                         f"for tuple {tuple_id}: expected marker 'installer-contract-mismatch'"
                                     )
-                                if installer_sha256 not in validation_script_payload:
+                                if not validation_script_loaded or installer_sha256 not in validation_script_payload:
                                     failures.append(
                                         "external proof validation script is missing installer digest contract token "
                                         f"for tuple {tuple_id}: sha256={installer_sha256}"
                                     )
-                            if receipt_path and receipt_path not in validation_script_payload:
+                            if receipt_path and (
+                                not validation_script_loaded or receipt_path not in validation_script_payload
+                            ):
                                 failures.append(
                                     "external proof validation script does not reference expected startup-smoke receipt path "
                                     f"for tuple {tuple_id}: {receipt_path}"
@@ -1367,7 +1373,10 @@ def main() -> int:
                                 or smoke_contract.get("rid")
                                 or smoke_contract.get("host_class_contains")
                             ):
-                                if "receipt-contract-mismatch" not in validation_script_payload:
+                                if (
+                                    not validation_script_loaded
+                                    or "receipt-contract-mismatch" not in validation_script_payload
+                                ):
                                     failures.append(
                                         "external proof validation script is missing startup-smoke receipt contract checks "
                                         f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
@@ -1382,7 +1391,10 @@ def main() -> int:
                                     token = str(value or "").strip().lower()
                                     if not token:
                                         continue
-                                    if f"\"{key}\": \"{token}\"" not in validation_script_payload:
+                                    if (
+                                        not validation_script_loaded
+                                        or f"\"{key}\": \"{token}\"" not in validation_script_payload
+                                    ):
                                         failures.append(
                                             "external proof validation script is missing startup-smoke contract token "
                                             f"for tuple {tuple_id}: {key}={token}"
