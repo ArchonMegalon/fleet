@@ -459,6 +459,55 @@ def test_external_proof_reasons_fail_close_noncanonical_promoted_installer_tuple
     )
 
 
+def test_external_proof_reasons_fail_close_rollout_and_supportability_states_when_coverage_is_incomplete() -> None:
+    payload = {
+        "status": "published",
+        "rolloutState": "complete",
+        "supportabilityState": "healthy",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+    assert any(
+        "field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        in reason
+        for reason in reasons
+    )
+    assert any(
+        "field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
+        in reason
+        for reason in reasons
+    )
+
+
 def test_external_proof_reasons_fail_close_noncanonical_and_case_variant_duplicate_missing_tuple_rows() -> None:
     payload = {
         "status": "published",

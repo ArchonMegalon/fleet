@@ -497,6 +497,45 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
                     "release_channel.generated.json field 'desktopTupleCoverage.complete' "
                     "must match requiredDesktopHeads x requiredDesktopPlatforms coverage derived from promotedInstallerTuples."
                 )
+    normalized_missing_platforms_for_posture = sorted(
+        {
+            str(item or "").strip().lower()
+            for item in (coverage.get("missingRequiredPlatforms") or [])
+            if str(item or "").strip()
+        }
+    ) if isinstance(coverage.get("missingRequiredPlatforms"), list) else []
+    normalized_missing_head_pairs_for_posture = sorted(
+        {
+            str(item or "").strip().lower()
+            for item in (coverage.get("missingRequiredPlatformHeadPairs") or [])
+            if str(item or "").strip()
+        }
+    ) if isinstance(coverage.get("missingRequiredPlatformHeadPairs"), list) else []
+    normalized_missing_tuples_for_posture = sorted(
+        {
+            str(item or "").strip().lower()
+            for item in (coverage.get("missingRequiredPlatformHeadRidTuples") or [])
+            if str(item or "").strip()
+        }
+    ) if isinstance(coverage.get("missingRequiredPlatformHeadRidTuples"), list) else []
+    rollout_state = str(payload.get("rolloutState") or "").strip().lower()
+    supportability_state = str(payload.get("supportabilityState") or "").strip().lower()
+    declared_coverage_incomplete = bool(
+        normalized_missing_platforms_for_posture
+        or normalized_missing_head_pairs_for_posture
+        or normalized_missing_tuples_for_posture
+    )
+    if declared_coverage_incomplete:
+        if rollout_state and rollout_state != "coverage_incomplete":
+            reasons.append(
+                "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' "
+                "while desktopTupleCoverage reports missing platform/head/tuple inventory."
+            )
+        if supportability_state and supportability_state != "review_required":
+            reasons.append(
+                "release_channel.generated.json field 'supportabilityState' must be 'review_required' "
+                "while desktopTupleCoverage reports missing platform/head/tuple inventory."
+            )
     raw_external_proof_requests = coverage.get("externalProofRequests")
     if raw_external_proof_requests is not None:
         if not isinstance(raw_external_proof_requests, list):
