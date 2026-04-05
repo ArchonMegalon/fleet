@@ -79,6 +79,43 @@ def main() -> int:
         for item in (tuple_coverage.get("missingRequiredPlatformHeadRidTuples") or [])
         if str(item).strip()
     ]
+    unresolved_tuples = [
+        str(item).strip()
+        for item in (support_summary.get("unresolved_external_proof_request_tuples") or [])
+        if str(item).strip()
+    ]
+    unresolved_hosts = [
+        str(item).strip()
+        for item in (support_summary.get("unresolved_external_proof_request_hosts") or [])
+        if str(item).strip()
+    ]
+    unresolved_specs = [
+        str(item).strip()
+        for item in (support_summary.get("unresolved_external_proof_request_specs") or [])
+        if str(item).strip()
+    ]
+    unresolved_entries = [
+        dict(item)
+        for item in (support_packets.get("unresolved_external_proof") or [])
+        if isinstance(item, dict)
+    ]
+    blocked_external_only_tuples = [
+        str(item).strip()
+        for item in (journey_summary.get("blocked_external_only_tuples") or [])
+        if str(item).strip()
+    ]
+    blocked_external_only_hosts = [
+        str(item).strip()
+        for item in (journey_summary.get("blocked_external_only_hosts") or [])
+        if str(item).strip()
+    ]
+    journey_rows_with_external_requests = sorted(
+        {
+            str(row.get("id") or "").strip() or "<unknown>"
+            for row in journey_rows
+            if isinstance(row.get("external_proof_requests"), list) and row.get("external_proof_requests")
+        }
+    )
 
     failures: list[str] = []
     if unresolved_count > 0:
@@ -93,6 +130,49 @@ def main() -> int:
         failures.append(
             "release channel missingRequiredPlatformHeadRidTuples is not empty: "
             + ", ".join(missing_tuples)
+        )
+    if unresolved_tuples:
+        failures.append(
+            "support packets unresolved_external_proof_request_tuples is not empty: "
+            + ", ".join(unresolved_tuples)
+        )
+    if unresolved_hosts:
+        failures.append(
+            "support packets unresolved_external_proof_request_hosts is not empty: "
+            + ", ".join(unresolved_hosts)
+        )
+    if unresolved_specs:
+        failures.append(
+            "support packets unresolved_external_proof_request_specs is not empty: "
+            + ", ".join(unresolved_specs)
+        )
+    if unresolved_entries:
+        failures.append(
+            "support packets unresolved_external_proof still contains unresolved entries: "
+            + ", ".join(sorted({str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>" for item in unresolved_entries}))
+        )
+    if blocked_external_only_tuples:
+        failures.append(
+            "journey gates blocked_external_only_tuples is not empty: "
+            + ", ".join(blocked_external_only_tuples)
+        )
+    if blocked_external_only_hosts:
+        failures.append(
+            "journey gates blocked_external_only_hosts is not empty: "
+            + ", ".join(blocked_external_only_hosts)
+        )
+    if journey_rows_with_external_requests:
+        failures.append(
+            "journey gates still report external_proof_requests in journey rows: "
+            + ", ".join(journey_rows_with_external_requests)
+        )
+    if missing_tuples and unresolved_tuples and sorted(set(missing_tuples)) != sorted(set(unresolved_tuples)):
+        failures.append(
+            "support packets unresolved_external_proof_request_tuples does not match release channel missingRequiredPlatformHeadRidTuples"
+        )
+    if missing_tuples and blocked_external_only_tuples and sorted(set(missing_tuples)) != sorted(set(blocked_external_only_tuples)):
+        failures.append(
+            "journey gates blocked_external_only_tuples does not match release channel missingRequiredPlatformHeadRidTuples"
         )
     if not release_generated_at:
         failures.append(
