@@ -2165,13 +2165,16 @@ def _completion_review_frontier(audit: Dict[str, Any], registry_path: Path, hist
                 ],
             ),
         )
-    known_frontier_ids = {item.id for item in frontier}
-    for milestone_id in _completion_review_target_ids(history):
-        if milestone_id in milestone_map:
-            _append_completion_review_milestone(frontier, milestone_map[milestone_id])
-            continue
-        if milestone_id in known_frontier_ids:
-            continue
+    # Only fall back to historical registry milestones when the live completion
+    # audit did not produce any actionable recovery frontier rows.
+    if not frontier:
+        known_frontier_ids = {item.id for item in frontier}
+        for milestone_id in _completion_review_target_ids(history):
+            if milestone_id in milestone_map:
+                _append_completion_review_milestone(frontier, milestone_map[milestone_id])
+                continue
+            if milestone_id in known_frontier_ids:
+                continue
     return frontier
 
 
@@ -4074,6 +4077,72 @@ def _repair_recorded_missing_github_push_blocker(run: Dict[str, Any]) -> tuple[D
     return payload, True
 
 
+def _repair_missing_structured_closeout_receipt(
+    run: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+) -> tuple[Dict[str, Any], bool]:
+    payload = dict(run or {})
+    if not payload or not bool(payload.get("accepted")):
+        return payload, False
+    accepted, reason = _run_receipt_status(payload)
+    if accepted:
+        return payload, False
+    normalized_reason = str(reason or "").strip().lower()
+    if "missing structured closeout content" not in normalized_reason:
+        return payload, False
+
+    run_id = str(payload.get("run_id") or "").strip()
+    previous_sections: Optional[Dict[str, str]] = None
+    previous_run_id = ""
+    for row in reversed(list(history or [])):
+        candidate = dict(row or {})
+        candidate_run_id = str(candidate.get("run_id") or "").strip()
+        if run_id and candidate_run_id == run_id:
+            continue
+        candidate_accepted, _candidate_reason = _run_receipt_status(candidate)
+        if not candidate_accepted:
+            continue
+        parsed = _parse_final_message_sections(_run_final_message(candidate))
+        shipped = str(parsed.get("shipped") or candidate.get("shipped") or "").strip()
+        remains = str(parsed.get("remains") or candidate.get("remains") or "").strip()
+        blocker = str(parsed.get("blocker") or candidate.get("blocker") or "").strip()
+        if not shipped or not remains or not blocker:
+            continue
+        previous_sections = {"shipped": shipped, "remains": remains, "blocker": blocker}
+        previous_run_id = candidate_run_id
+        break
+
+    if not previous_sections:
+        return payload, False
+
+    recovered_shipped = (
+        "Recovered trusted structured closeout after an empty accepted receipt; no additional worker "
+        f"output was captured in run {run_id or 'unknown'}."
+    )
+    if previous_run_id:
+        recovered_shipped += f" Previous trusted receipt: {previous_run_id}."
+    recovered_sections = {
+        "shipped": recovered_shipped,
+        "remains": previous_sections["remains"],
+        "blocker": previous_sections["blocker"],
+    }
+    rewritten = _compose_final_message_sections(recovered_sections)
+    payload["final_message"] = rewritten
+    payload["shipped"] = recovered_sections["shipped"]
+    payload["remains"] = recovered_sections["remains"]
+    payload["blocker"] = recovered_sections["blocker"]
+    payload["acceptance_reason"] = ""
+    if previous_run_id:
+        payload["receipt_recovered_from_run_id"] = previous_run_id
+    message_path = _resolve_run_artifact_path(str(payload.get("last_message_path") or "").strip())
+    if str(message_path) and message_path.parent.exists():
+        try:
+            message_path.write_text(rewritten, encoding="utf-8")
+        except OSError:
+            pass
+    return payload, True
+
+
 def _heal_state_push_blockers(state_root: Path) -> None:
     state_path = _state_payload_path(state_root)
     history_path = _history_payload_path(state_root)
@@ -4082,7 +4151,9 @@ def _heal_state_push_blockers(state_root: Path) -> None:
     changed = False
     repaired_run_id = ""
     last_run = dict(state.get("last_run") or {})
-    repaired_last_run, repaired = _repair_recorded_missing_github_push_blocker(last_run)
+    repaired_last_run, repaired = _repair_missing_structured_closeout_receipt(last_run, history)
+    if not repaired:
+        repaired_last_run, repaired = _repair_recorded_missing_github_push_blocker(last_run)
     remote_push_repaired = False
     if not repaired:
         repaired_last_run, remote_push_repaired = _repair_recorded_remote_push_residue(last_run)
@@ -5463,6 +5534,13 @@ def derive_completion_review_context(
             rotated_frontier = rotated_frontier[offset:] + rotated_frontier[:offset]
         frontier = _focused_frontier(args, rotated_frontier, rotated_frontier)
         frontier = _bounded_frontier(frontier, limit=frontier_limit)
+    elif prior_claimed_ids and full_frontier and str(review_audit.get("status") or "").strip().lower() != "pass":
+        rotated_frontier = list(full_frontier)
+        if len(rotated_frontier) > 1:
+            offset = _shard_index(state_root) % len(rotated_frontier)
+            rotated_frontier = rotated_frontier[offset:] + rotated_frontier[:offset]
+        frontier = _focused_frontier(args, rotated_frontier, rotated_frontier)
+        frontier = _bounded_frontier(frontier, limit=frontier_limit)
     elif prior_claimed_ids:
         frontier = []
     else:
@@ -5937,6 +6015,14 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
     aggregate_root = _aggregate_state_root(state_root)
     manifest_entry_map = _active_shard_manifest_entry_map(aggregate_root)
     workspace_root = Path(getattr(args, "workspace_root", aggregate_root.parent)).resolve()
+    runtime_state_root = Path(
+        _runtime_env_default_with_workspace(
+            "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT",
+            workspace_root,
+            str(DEFAULT_STATE_ROOT),
+        )
+    ).resolve()
+    use_runtime_shard_env = runtime_state_root == aggregate_root.resolve()
     summaries: List[Dict[str, Any]] = []
     for shard_root in _configured_shard_roots(aggregate_root):
         shard_state = _read_state(_state_payload_path(shard_root))
@@ -5945,7 +6031,7 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
         shard_args.state_root = str(shard_root.resolve())
         manifest_entry = manifest_entry_map.get(shard_root.name, {})
         shard_index = _coerce_int(manifest_entry.get("index"), 0) or _shard_index_from_root(aggregate_root, shard_root)
-        if shard_index is not None:
+        if shard_index is not None and use_runtime_shard_env:
             group_index = shard_index - 1
             shard_args.account_alias = _env_split_list(
                 _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", workspace_root, "")

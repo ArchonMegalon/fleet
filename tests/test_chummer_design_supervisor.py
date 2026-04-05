@@ -4924,6 +4924,77 @@ def test_heal_state_push_blockers_repairs_verified_not_yet_on_remote_phrase() ->
         assert history[-1]["remains"] == "frontier milestones `1`, `2`, `3` remain open"
 
 
+def test_heal_state_push_blockers_repairs_empty_accepted_receipt_from_previous_trusted_run() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp) / "state" / "chummer_design_supervisor" / "shard-3"
+        prior_run_dir = state_root / "runs" / "run-prior"
+        latest_run_dir = state_root / "runs" / "run-latest"
+        prior_run_dir.mkdir(parents=True, exist_ok=True)
+        latest_run_dir.mkdir(parents=True, exist_ok=True)
+
+        prior_message_path = prior_run_dir / "last_message.txt"
+        prior_message_path.write_text(
+            "What shipped: refreshed release proof artifacts\n\n"
+            "What remains: external host proofs for 4 tuples\n\n"
+            "Exact blocker: macos/windows startup-smoke receipts still required\n",
+            encoding="utf-8",
+        )
+        latest_message_path = latest_run_dir / "last_message.txt"
+        latest_message_path.write_text("", encoding="utf-8")
+
+        prior_payload = {
+            "run_id": "run-prior",
+            "accepted": True,
+            "worker_exit_code": 0,
+            "shipped": "refreshed release proof artifacts",
+            "remains": "external host proofs for 4 tuples",
+            "blocker": "macos/windows startup-smoke receipts still required",
+            "final_message": prior_message_path.read_text(encoding="utf-8"),
+            "last_message_path": str(prior_message_path),
+        }
+        latest_payload = {
+            "run_id": "run-latest",
+            "accepted": True,
+            "worker_exit_code": 0,
+            "shipped": "",
+            "remains": "",
+            "blocker": "",
+            "final_message": "",
+            "last_message_path": str(latest_message_path),
+        }
+
+        module._write_json(
+            state_root / "state.json",
+            {
+                "updated_at": "2026-04-05T00:31:17Z",
+                "mode": "loop",
+                "last_run": dict(latest_payload),
+            },
+        )
+        (state_root / "history.jsonl").write_text(
+            json.dumps(prior_payload) + "\n" + json.dumps(latest_payload) + "\n",
+            encoding="utf-8",
+        )
+
+        module._heal_state_push_blockers(state_root)
+
+        state = module._read_state(state_root / "state.json")
+        history = module._read_history(state_root / "history.jsonl", limit=0)
+        repaired_latest = history[-1]
+        repaired_message = latest_message_path.read_text(encoding="utf-8")
+
+        assert state["last_run"]["run_id"] == "run-latest"
+        assert state["last_run"]["accepted"] is True
+        assert state["last_run"]["remains"] == "external host proofs for 4 tuples"
+        assert state["last_run"]["blocker"] == "macos/windows startup-smoke receipts still required"
+        assert repaired_latest["receipt_recovered_from_run_id"] == "run-prior"
+        assert "Recovered trusted structured closeout" in repaired_latest["shipped"]
+        assert "What shipped:" in repaired_message
+        assert "What remains: external host proofs for 4 tuples" in repaired_message
+        assert "Exact blocker: macos/windows startup-smoke receipts still required" in repaired_message
+
+
 def test_open_milestone_shard_frontier_uses_active_manifest_to_avoid_stranded_slices() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -5368,6 +5439,7 @@ def test_run_supervisor_launcher_exits_loudly_when_frontier_probe_fails() -> Non
                 "PATH": f"{root}:{os.environ['PATH']}",
                 "CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS": "2",
                 "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(root / "state" / "chummer_design_supervisor"),
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS": "",
             },
             capture_output=True,
             text=True,
