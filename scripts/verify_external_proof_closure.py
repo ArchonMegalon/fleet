@@ -202,6 +202,18 @@ def _powershell_wrap(command: str) -> str:
     return f"bash -lc '{escaped}'"
 
 
+def _script_commands(payload: str) -> list[str]:
+    commands: list[str] = []
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#!"):
+            continue
+        if line in {"set -e", "set -u", "set -o pipefail", "set -eu", "set -euo pipefail"}:
+            continue
+        commands.append(line)
+    return commands
+
+
 def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(rows, list):
         return {}
@@ -1319,6 +1331,7 @@ def main() -> int:
                                     + f"{validation_wrapper_script}: {exc}"
                                 )
                     if capture_script_loaded or validation_script_loaded:
+                        validation_commands = _script_commands(validation_script_payload)
                         support_host_request_rows = [
                             item
                             for row_host, _, item in support_plan_request_rows
@@ -1489,6 +1502,17 @@ def main() -> int:
                                             "external proof windows validation wrapper is missing startup-smoke contract token "
                                             f"for tuple {tuple_id}: {key}={token}"
                                         )
+                        if host == "windows" and validation_commands:
+                            for command in validation_commands:
+                                wrapped_validation_command = _powershell_wrap(command)
+                                if (
+                                    not validation_wrapper_loaded
+                                    or wrapped_validation_command not in validation_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows validation wrapper is missing wrapped validation command: "
+                                        + wrapped_validation_command
+                                    )
                     if host == "windows":
                         windows_scripts = (
                             capture_wrapper_script,
