@@ -941,3 +941,54 @@ def test_verify_external_proof_closure_fails_when_unresolved_external_proof_shap
 
     assert result.returncode == 1
     assert "unresolved_external_proof has invalid type" in result.stderr
+
+
+def test_verify_external_proof_closure_fail_closes_malformed_top_level_objects_without_traceback(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": [1],
+            "unresolved_external_proof_execution_plan": [1],
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "summary": [1],
+            "journeys": [],
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": [1],
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Traceback" not in result.stderr
+    assert "support packets summary is missing or not an object" in result.stderr
+    assert "journey gates summary is missing or not an object" in result.stderr
+    assert "release channel desktopTupleCoverage is missing or not an object" in result.stderr
+    assert "support packets unresolved_external_proof_execution_plan is missing or not an object" in result.stderr

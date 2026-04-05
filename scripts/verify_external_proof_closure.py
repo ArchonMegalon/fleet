@@ -40,6 +40,12 @@ def _load_json(path: Path, *, label: str) -> Dict[str, Any]:
     return payload
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
 def main() -> int:
     args = _parse_args()
     support_packets = _load_json(args.support_packets, label="support packets")
@@ -57,10 +63,10 @@ def main() -> int:
     if not isinstance(raw_tuple_coverage, dict):
         failures.append("release channel desktopTupleCoverage is missing or not an object")
 
-    support_summary = dict(raw_support_summary or {})
-    journey_summary = dict(raw_journey_summary or {})
-    tuple_coverage = dict(raw_tuple_coverage or {})
-    support_plan = dict(support_packets.get("unresolved_external_proof_execution_plan") or {})
+    support_summary = _as_dict(raw_support_summary)
+    journey_summary = _as_dict(raw_journey_summary)
+    tuple_coverage = _as_dict(raw_tuple_coverage)
+    support_plan = _as_dict(support_packets.get("unresolved_external_proof_execution_plan"))
     if not isinstance(support_packets.get("unresolved_external_proof_execution_plan"), dict):
         failures.append("support packets unresolved_external_proof_execution_plan is missing or not an object")
 
