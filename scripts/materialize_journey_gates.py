@@ -794,6 +794,10 @@ def evaluate_journey(
     warning_reasons: List[str] = []
     external_proof_requests: List[Dict[str, Any]] = []
     release_channel_external_proof_source_present = False
+    release_channel_expected_channel_id = ""
+    release_channel_expected_status = ""
+    release_channel_expected_version = ""
+    release_channel_generated_at: dt.datetime | None = None
     now = utc_now()
 
     for artifact_name in fleet_gate.get("required_artifacts") or []:
@@ -906,6 +910,14 @@ def evaluate_journey(
                 external_proof_requests = _release_channel_external_proof_requests(proof_payload)
                 release_channel_external_proof_source_present = True
                 validate_release_channel_external_proof_contract = True
+                release_channel_expected_channel_id = str(
+                    proof_payload.get("channelId") or proof_payload.get("channel") or ""
+                ).strip()
+                release_channel_expected_status = str(proof_payload.get("status") or "").strip()
+                release_channel_expected_version = str(proof_payload.get("version") or "").strip()
+                release_channel_generated_at = parse_iso(
+                    proof_payload.get("generated_at") or proof_payload.get("generatedAt")
+                )
 
         if json_required:
             assert proof_payload is not None
@@ -1007,6 +1019,22 @@ def evaluate_journey(
                 "support packets do not prove all update-required cases route to /downloads."
             )
     if bool(fleet_gate.get("require_support_install_truth_contract")):
+        if release_channel_external_proof_source_present:
+            if release_channel_generated_at is None:
+                support_packet_contract_violations.append(
+                    "release channel install-truth proof is missing parseable generated_at/generatedAt timestamp."
+                )
+            else:
+                support_generated_at_parsed = parse_iso(support_generated_at)
+                if support_generated_at_parsed is None:
+                    support_packet_contract_violations.append(
+                        "support packet install-truth proof is missing parseable generated_at timestamp."
+                    )
+                elif support_generated_at_parsed < release_channel_generated_at:
+                    support_packet_contract_violations.append(
+                        "support packet install-truth proof predates release-channel truth and may be stale for the current release."
+                    )
+
         def _counter_map(values: List[str]) -> Dict[str, int]:
             counts: Dict[str, int] = {}
             for raw in values:
@@ -1314,13 +1342,43 @@ def evaluate_journey(
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing install_diagnosis.registry_channel_id."
                     )
+                elif (
+                    release_channel_expected_channel_id
+                    and str(install_diagnosis.get("registry_channel_id") or "").strip().lower()
+                    != release_channel_expected_channel_id.lower()
+                ):
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} install_diagnosis.registry_channel_id must match release-channel value "
+                        f"'{release_channel_expected_channel_id}' but was "
+                        f"'{str(install_diagnosis.get('registry_channel_id') or '').strip()}'."
+                    )
                 if not str(install_diagnosis.get("registry_release_channel_status") or "").strip():
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing install_diagnosis.registry_release_channel_status."
                     )
+                elif (
+                    release_channel_expected_status
+                    and str(install_diagnosis.get("registry_release_channel_status") or "").strip().lower()
+                    != release_channel_expected_status.lower()
+                ):
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} install_diagnosis.registry_release_channel_status must match release-channel value "
+                        f"'{release_channel_expected_status}' but was "
+                        f"'{str(install_diagnosis.get('registry_release_channel_status') or '').strip()}'."
+                    )
                 if not str(install_diagnosis.get("registry_release_version") or "").strip():
                     support_packet_contract_violations.append(
                         f"support packet {packet_id} is missing install_diagnosis.registry_release_version."
+                    )
+                elif (
+                    release_channel_expected_version
+                    and str(install_diagnosis.get("registry_release_version") or "").strip()
+                    != release_channel_expected_version
+                ):
+                    support_packet_contract_violations.append(
+                        f"support packet {packet_id} install_diagnosis.registry_release_version must match release-channel value "
+                        f"'{release_channel_expected_version}' but was "
+                        f"'{str(install_diagnosis.get('registry_release_version') or '').strip()}'."
                     )
                 if not str(install_diagnosis.get("registry_release_proof_status") or "").strip():
                     support_packet_contract_violations.append(
