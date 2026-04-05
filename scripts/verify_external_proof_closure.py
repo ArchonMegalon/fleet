@@ -86,6 +86,9 @@ def main() -> int:
     support_generated_at = str(
         support_packets.get("generated_at") or support_packets.get("generatedAt") or ""
     ).strip()
+    support_plan_generated_at = str(
+        support_plan.get("generated_at") or support_plan.get("generatedAt") or ""
+    ).strip()
     release_generated_at = str(
         release_channel.get("generatedAt") or release_channel.get("generated_at") or ""
     ).strip()
@@ -236,6 +239,15 @@ def main() -> int:
     if not support_generated_at:
         failures.append(
             "support packets generated_at/generatedAt is missing (cannot prove closure freshness)"
+        )
+    if not support_plan_generated_at:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.generated_at/generatedAt is missing"
+        )
+    if support_plan_generated_at and support_generated_at and support_plan_generated_at != support_generated_at:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.generated_at "
+            f"({support_plan_generated_at}) does not match support packets generated_at ({support_generated_at})"
         )
     if not support_plan_release_generated_at:
         failures.append(

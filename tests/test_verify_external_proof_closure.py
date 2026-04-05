@@ -31,6 +31,7 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
             },
             "unresolved_external_proof": [],
             "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
                 "request_count": 0,
                 "hosts": [],
                 "host_groups": {},
@@ -182,6 +183,7 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
                 }
             ],
             "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
                 "request_count": 1,
                 "hosts": ["windows"],
                 "host_groups": {
@@ -264,6 +266,7 @@ def test_verify_external_proof_closure_fails_when_cross_plane_timestamps_drift(t
                 "unresolved_external_proof_request_count": 0,
             },
             "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
                 "request_count": 0,
                 "hosts": [],
                 "host_groups": {},
@@ -338,6 +341,7 @@ def test_verify_external_proof_closure_fails_when_execution_plan_backlog_remains
             },
             "unresolved_external_proof": [],
             "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
                 "request_count": 0,
                 "hosts": ["macos"],
                 "host_groups": {
@@ -398,3 +402,72 @@ def test_verify_external_proof_closure_fails_when_execution_plan_backlog_remains
     assert result.returncode == 1
     assert "unresolved_external_proof_execution_plan.hosts is not empty: macos" in result.stderr
     assert "unresolved_external_proof_execution_plan.host_groups still contain backlog: macos" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_execution_plan_generated_at_drifts(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:02Z",
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatformHeadRidTuples": [],
+            }
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "unresolved_external_proof_execution_plan.generated_at (2026-04-05T01:22:02Z) "
+        "does not match support packets generated_at (2026-04-05T01:22:01Z)"
+        in result.stderr
+    )
