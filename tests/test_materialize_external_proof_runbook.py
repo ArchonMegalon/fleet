@@ -107,10 +107,13 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     commands_dir = out.parent / "external-proof-commands"
     windows_capture = commands_dir / "capture-windows-proof.sh"
     windows_validate = commands_dir / "validate-windows-proof.sh"
+    windows_bundle = commands_dir / "bundle-windows-proof.sh"
     windows_capture_ps1 = commands_dir / "capture-windows-proof.ps1"
     windows_validate_ps1 = commands_dir / "validate-windows-proof.ps1"
+    windows_bundle_ps1 = commands_dir / "bundle-windows-proof.ps1"
     macos_capture = commands_dir / "capture-macos-proof.sh"
     macos_validate = commands_dir / "validate-macos-proof.sh"
+    macos_bundle = commands_dir / "bundle-macos-proof.sh"
     post_capture = commands_dir / "republish-after-host-proof.sh"
 
     assert "# External Proof Runbook" in payload
@@ -134,10 +137,13 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert payload.count("\necho refresh-manifest\n") == 2
     assert "### Commands (Host Consolidated)" in payload
     assert "### Commands (Host Validation)" in payload
+    assert "### Commands (Host Bundle)" in payload
     assert "### Commands (PowerShell Wrappers)" in payload
     assert "### Commands (PowerShell Validation Wrappers)" in payload
+    assert "### Commands (PowerShell Bundle Wrappers)" in payload
     assert "```powershell" in payload
     assert "bash -lc 'echo windows-proof'" in payload
+    assert "installer-preflight-sha256-mismatch" in payload
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in payload
     assert "hashlib.sha256" in payload
     assert "installer-contract-mismatch" in payload
@@ -175,13 +181,18 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
     assert windows_capture.is_file()
     assert windows_validate.is_file()
+    assert windows_bundle.is_file()
     assert windows_capture_ps1.is_file()
     assert windows_validate_ps1.is_file()
+    assert windows_bundle_ps1.is_file()
     assert macos_capture.is_file()
     assert macos_validate.is_file()
+    assert macos_bundle.is_file()
     assert post_capture.is_file()
     assert os.access(windows_capture, os.X_OK)
+    assert os.access(windows_bundle, os.X_OK)
     assert os.access(macos_capture, os.X_OK)
+    assert os.access(macos_bundle, os.X_OK)
     assert os.access(post_capture, os.X_OK)
     assert "echo windows-proof" in windows_capture.read_text(encoding="utf-8")
     assert "echo macos-proof" in macos_capture.read_text(encoding="utf-8")
@@ -192,6 +203,16 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
+    assert "bash -lc 'SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"'" in windows_bundle_ps1.read_text(encoding="utf-8")
+    assert "tar -czf \"$SCRIPT_DIR/windows-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" ." in windows_bundle.read_text(
+        encoding="utf-8"
+    )
+    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in windows_bundle.read_text(
+        encoding="utf-8"
+    )
+    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in windows_bundle.read_text(
+        encoding="utf-8"
+    )
     assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
     assert "--proof " not in post_capture.read_text(encoding="utf-8")
     assert "--ui-localization-release-gate " not in post_capture.read_text(encoding="utf-8")
@@ -330,8 +351,16 @@ def test_materialize_external_proof_runbook_uses_expected_installer_relative_pat
     )
 
     assert result.returncode == 0, result.stderr
+    windows_capture = out.parent / "external-proof-commands" / "capture-windows-proof.sh"
     windows_validate = out.parent / "external-proof-commands" / "validate-windows-proof.sh"
+    capture_payload = windows_capture.read_text(encoding="utf-8")
     validate_payload = windows_validate.read_text(encoding="utf-8")
+    assert (
+        "/docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/chummer-avalonia-win-x64-installer.exe"
+        in capture_payload
+    )
+    assert "/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" not in capture_payload
+    assert "installer-preflight-sha256-mismatch" in capture_payload
     assert (
         "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/chummer-avalonia-win-x64-installer.exe"
         in validate_payload

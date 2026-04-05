@@ -275,6 +275,51 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _bundle_relative_paths_for_group(group: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    seen: set[str] = set()
+    for row in group.get("requests") or []:
+        if not isinstance(row, dict):
+            continue
+        installer_relative_path = _normalize_text(row.get("expected_installer_relative_path"))
+        installer_file_name = _normalize_text(row.get("expected_installer_file_name"))
+        receipt_relative_path = _normalize_text(row.get("expected_startup_smoke_receipt_path"))
+        installer_path = installer_relative_path or (f"files/{installer_file_name}" if installer_file_name else "")
+        for rel in (installer_path, receipt_relative_path):
+            normalized = _normalize_text(rel).lstrip("/")
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            paths.append(normalized)
+    return paths
+
+
+def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str) -> list[str]:
+    bundle_paths = _bundle_relative_paths_for_group(group)
+    commands = [
+        "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
+        f"BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
+        "rm -rf \"$BUNDLE_ROOT\"",
+        "mkdir -p \"$BUNDLE_ROOT\"",
+    ]
+    if not bundle_paths:
+        commands.append(f"echo {shlex.quote('No host proof files were queued for bundling.')}")
+        return commands
+    for rel in bundle_paths:
+        src = UI_REPO_ROOT / "Docker" / "Downloads" / rel
+        dst = f"$BUNDLE_ROOT/{rel}"
+        dst_dir = f"$BUNDLE_ROOT/{Path(rel).parent.as_posix()}"
+        commands.append(f"mkdir -p {shlex.quote(dst_dir)}")
+        commands.append(f"cp -f {shlex.quote(str(src))} {shlex.quote(dst)}")
+    commands.extend(
+        [
+            f"tar -czf \"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" .",
+            f"echo \"Wrote $SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
+        ]
+    )
+    return commands
+
+
 def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
     tuple_id = _normalize_text(request.get("tuple_id"))
@@ -430,15 +475,39 @@ def _render_powershell_script(commands: list[str], *, no_op_message: str) -> str
 
 def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
     expected_route = _normalize_text(request.get("expected_public_install_route"))
+    installer_relative_path = _normalize_text(request.get("expected_installer_relative_path"))
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
-    if not expected_route or not installer_file_name:
+    installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
+    if not expected_route:
         return ""
     if not expected_route.startswith("/"):
         expected_route = "/" + expected_route
-    installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+    if installer_relative_path:
+        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / installer_relative_path.lstrip("/")
+    elif installer_file_name:
+        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+    else:
+        return ""
+    digest_preflight = ""
+    if installer_sha256:
+        digest_preflight = (
+            "python3 -c "
+            + shlex.quote(
+                "import hashlib, pathlib; "
+                f"p=pathlib.Path({str(installer_path)!r}); "
+                f"expected={installer_sha256!r}; "
+                "import sys; "
+                "sys.exit(0) if (not p.is_file()) else None; "
+                "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
+                "sys.exit(0) if digest==expected else print("
+                "f'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}') or p.unlink()"
+            )
+            + " && "
+        )
     return (
         f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
         f"mkdir -p {shlex.quote(str(installer_path.parent))} && "
+        f"{digest_preflight}"
         f"if [ ! -s {shlex.quote(str(installer_path))} ]; then "
         f"curl -fL --retry 3 --retry-delay 2 "
         f"\"{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}{expected_route}\" "
@@ -495,8 +564,10 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
         host_token = _normalize_host_token(host)
         capture_commands = _commands_for_group(group)
         validation_commands = _validation_commands_for_group(group)
+        bundle_commands = _bundle_commands_for_group(group, host_token=host_token)
         capture_script = commands_dir / f"capture-{host_token}-proof.sh"
         validation_script = commands_dir / f"validate-{host_token}-proof.sh"
+        bundle_script = commands_dir / f"bundle-{host_token}-proof.sh"
         _write_file(
             capture_script,
             _render_bash_script(
@@ -513,16 +584,27 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
             ),
             executable=True,
         )
+        _write_file(
+            bundle_script,
+            _render_bash_script(
+                bundle_commands,
+                no_op_message=f"No external-proof bundle commands were generated for host '{host}'.",
+            ),
+            executable=True,
+        )
         host_file_row: dict[str, str] = {
             "host": host,
             "capture_script": str(capture_script),
             "validation_script": str(validation_script),
+            "bundle_script": str(bundle_script),
         }
         if host.lower() == "windows":
             capture_wrappers = _powershell_wrappers(capture_commands)
             validation_wrappers = _powershell_wrappers(validation_commands)
+            bundle_wrappers = _powershell_wrappers(bundle_commands)
             capture_ps1 = commands_dir / f"capture-{host_token}-proof.ps1"
             validation_ps1 = commands_dir / f"validate-{host_token}-proof.ps1"
+            bundle_ps1 = commands_dir / f"bundle-{host_token}-proof.ps1"
             _write_file(
                 capture_ps1,
                 _render_powershell_script(
@@ -539,8 +621,17 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
                 ),
                 executable=False,
             )
+            _write_file(
+                bundle_ps1,
+                _render_powershell_script(
+                    bundle_commands,
+                    no_op_message=f"No external-proof bundle commands were generated for host '{host}'.",
+                ),
+                executable=False,
+            )
             host_file_row["capture_powershell"] = str(capture_ps1)
             host_file_row["validation_powershell"] = str(validation_ps1)
+            host_file_row["bundle_powershell"] = str(bundle_ps1)
         host_files.append(host_file_row)
 
     post_capture_script = commands_dir / "republish-after-host-proof.sh"
@@ -591,15 +682,21 @@ def materialize_markdown(
             validation_script = _normalize_text(host_row.get("validation_script"))
             capture_powershell = _normalize_text(host_row.get("capture_powershell"))
             validation_powershell = _normalize_text(host_row.get("validation_powershell"))
+            bundle_script = _normalize_text(host_row.get("bundle_script"))
+            bundle_powershell = _normalize_text(host_row.get("bundle_powershell"))
             lines.append(f"- host `{host}`")
             if capture_script:
                 lines.append(f"  capture_script: `{capture_script}`")
             if validation_script:
                 lines.append(f"  validation_script: `{validation_script}`")
+            if bundle_script:
+                lines.append(f"  bundle_script: `{bundle_script}`")
             if capture_powershell:
                 lines.append(f"  capture_powershell: `{capture_powershell}`")
             if validation_powershell:
                 lines.append(f"  validation_powershell: `{validation_powershell}`")
+            if bundle_powershell:
+                lines.append(f"  bundle_powershell: `{bundle_powershell}`")
         post_capture_script = _normalize_text(command_files.get("post_capture_script"))
         if post_capture_script:
             lines.append(f"- post_capture_script: `{post_capture_script}`")
@@ -668,6 +765,7 @@ def materialize_markdown(
                 lines.append(command)
             lines.append("```")
         validation_commands = _validation_commands_for_group(group)
+        bundle_commands = _bundle_commands_for_group(group, host_token=_normalize_host_token(host))
         lines.append("")
         lines.append("### Commands (Host Validation)")
         lines.append("")
@@ -678,9 +776,20 @@ def materialize_markdown(
             for command in validation_commands:
                 lines.append(command)
             lines.append("```")
+        lines.append("")
+        lines.append("### Commands (Host Bundle)")
+        lines.append("")
+        if not bundle_commands:
+            lines.append("No host bundle commands were generated for this host.")
+        else:
+            lines.append("```bash")
+            for command in bundle_commands:
+                lines.append(command)
+            lines.append("```")
         if host.lower() == "windows":
             wrappers = _powershell_wrappers(commands)
             validation_wrappers = _powershell_wrappers(validation_commands)
+            bundle_wrappers = _powershell_wrappers(bundle_commands)
             lines.append("")
             lines.append("### Commands (PowerShell Wrappers)")
             lines.append("")
@@ -699,6 +808,16 @@ def materialize_markdown(
             else:
                 lines.append("```powershell")
                 for command in validation_wrappers:
+                    lines.append(command)
+                lines.append("```")
+            lines.append("")
+            lines.append("### Commands (PowerShell Bundle Wrappers)")
+            lines.append("")
+            if not bundle_wrappers:
+                lines.append("No PowerShell bundle wrappers were generated for this host.")
+            else:
+                lines.append("```powershell")
+                for command in bundle_wrappers:
                     lines.append(command)
                 lines.append("```")
         lines.append("")
