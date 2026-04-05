@@ -100,6 +100,113 @@ def _is_sha256_hex(value: Any) -> bool:
     return bool(raw) and len(raw) == 64 and all(ch in "0123456789abcdef" for ch in raw)
 
 
+def _normalized_platform(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _normalized_token(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalized_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return sorted(
+        {
+            _normalized_token(token).lower()
+            for token in value
+            if _normalized_token(token)
+        }
+    )
+
+
+def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(rows, list):
+        return {}
+    index: dict[str, dict[str, Any]] = {}
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        tuple_id = _normalized_token(item.get("tupleId") or item.get("tuple_id"))
+        if not tuple_id:
+            continue
+        index[tuple_id] = {
+            "tuple_id": tuple_id,
+            "required_host": _normalized_platform(item.get("requiredHost") or item.get("required_host")),
+            "required_proofs": _normalized_string_list(item.get("requiredProofs") or item.get("required_proofs")),
+            "expected_artifact_id": _normalized_token(item.get("expectedArtifactId") or item.get("expected_artifact_id")),
+            "expected_installer_file_name": _normalized_token(
+                item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
+            ),
+            "expected_public_install_route": _normalized_token(
+                item.get("expectedPublicInstallRoute") or item.get("expected_public_install_route")
+            ),
+            "expected_startup_smoke_receipt_path": _normalized_token(
+                item.get("expectedStartupSmokeReceiptPath") or item.get("expected_startup_smoke_receipt_path")
+            ),
+            "expected_installer_sha256": _normalized_token(
+                item.get("expectedInstallerSha256") or item.get("expected_installer_sha256")
+            ).lower(),
+        }
+    return index
+
+
+def _support_request_row_index(rows: list[tuple[str, int, dict[str, Any]]]) -> dict[str, dict[str, Any]]:
+    index: dict[str, dict[str, Any]] = {}
+    for _, _, item in rows:
+        tuple_id = _normalized_token(item.get("tuple_id") or item.get("tupleId"))
+        if not tuple_id:
+            continue
+        index[tuple_id] = {
+            "tuple_id": tuple_id,
+            "required_host": _normalized_platform(item.get("required_host") or item.get("requiredHost") or item.get("platform")),
+            "required_proofs": _normalized_string_list(item.get("required_proofs") or item.get("requiredProofs")),
+            "expected_artifact_id": _normalized_token(item.get("expected_artifact_id") or item.get("expectedArtifactId")),
+            "expected_installer_file_name": _normalized_token(
+                item.get("expected_installer_file_name") or item.get("expectedInstallerFileName")
+            ),
+            "expected_public_install_route": _normalized_token(
+                item.get("expected_public_install_route") or item.get("expectedPublicInstallRoute")
+            ),
+            "expected_startup_smoke_receipt_path": _normalized_token(
+                item.get("expected_startup_smoke_receipt_path") or item.get("expectedStartupSmokeReceiptPath")
+            ),
+            "expected_installer_sha256": _normalized_token(
+                item.get("expected_installer_sha256") or item.get("expectedInstallerSha256")
+            ).lower(),
+        }
+    return index
+
+
+def _support_specs_index(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    index: dict[str, dict[str, Any]] = {}
+    for raw_tuple_id, raw_spec in value.items():
+        tuple_id = _normalized_token(raw_tuple_id)
+        if not tuple_id or not isinstance(raw_spec, dict):
+            continue
+        index[tuple_id] = {
+            "tuple_id": tuple_id,
+            "required_host": _normalized_platform(raw_spec.get("required_host") or raw_spec.get("requiredHost")),
+            "required_proofs": _normalized_string_list(raw_spec.get("required_proofs") or raw_spec.get("requiredProofs")),
+            "expected_artifact_id": _normalized_token(raw_spec.get("expected_artifact_id") or raw_spec.get("expectedArtifactId")),
+            "expected_installer_file_name": _normalized_token(
+                raw_spec.get("expected_installer_file_name") or raw_spec.get("expectedInstallerFileName")
+            ),
+            "expected_public_install_route": _normalized_token(
+                raw_spec.get("expected_public_install_route") or raw_spec.get("expectedPublicInstallRoute")
+            ),
+            "expected_startup_smoke_receipt_path": _normalized_token(
+                raw_spec.get("expected_startup_smoke_receipt_path") or raw_spec.get("expectedStartupSmokeReceiptPath")
+            ),
+            "expected_installer_sha256": _normalized_token(
+                raw_spec.get("expected_installer_sha256") or raw_spec.get("expectedInstallerSha256")
+            ).lower(),
+        }
+    return index
+
+
 def _age_seconds(ts: datetime, *, now: datetime) -> float:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=now.tzinfo)
@@ -701,6 +808,37 @@ def main() -> int:
     if not missing_tuples and external_request_tuples:
         failures.append(
             "release channel desktopTupleCoverage.externalProofRequests must be empty when missingRequiredPlatformHeadRidTuples is empty"
+        )
+    release_external_request_index = _release_external_request_index(external_proof_requests_raw)
+    support_plan_request_index = _support_request_row_index(support_plan_request_rows)
+    support_specs_index = _support_specs_index(unresolved_specs_raw)
+    projection_drift_rows = sorted(
+        {
+            f"{tuple_id}:{field}"
+            for tuple_id, expected in release_external_request_index.items()
+            for field in (
+                "required_host",
+                "required_proofs",
+                "expected_artifact_id",
+                "expected_installer_file_name",
+                "expected_public_install_route",
+                "expected_startup_smoke_receipt_path",
+                "expected_installer_sha256",
+            )
+            if (
+                tuple_id in support_plan_request_index
+                and support_plan_request_index[tuple_id].get(field) != expected.get(field)
+            )
+            or (
+                tuple_id in support_specs_index
+                and support_specs_index[tuple_id].get(field) != expected.get(field)
+            )
+        }
+    )
+    if projection_drift_rows:
+        failures.append(
+            "support external-proof projections drift from release channel desktopTupleCoverage.externalProofRequests for fields: "
+            + ", ".join(projection_drift_rows)
         )
     if unresolved_tuples:
         failures.append(
