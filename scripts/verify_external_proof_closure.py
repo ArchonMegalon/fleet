@@ -1382,6 +1382,13 @@ def main() -> int:
                                         "external proof validation script does not reference expected installer path "
                                         f"for tuple {tuple_id}: {installer_path}"
                                     )
+                                if host == "windows" and (
+                                    not validation_wrapper_loaded or installer_path not in validation_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows validation wrapper does not reference expected installer path "
+                                        f"for tuple {tuple_id}: {installer_path}"
+                                    )
                             if installer_sha256:
                                 if not validation_script_loaded or "installer-contract-mismatch" not in validation_script_payload:
                                     failures.append(
@@ -1393,11 +1400,35 @@ def main() -> int:
                                         "external proof validation script is missing installer digest contract token "
                                         f"for tuple {tuple_id}: sha256={installer_sha256}"
                                     )
+                                if host == "windows":
+                                    if (
+                                        not validation_wrapper_loaded
+                                        or "installer-contract-mismatch" not in validation_wrapper_payload
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing installer digest contract checks "
+                                            f"for tuple {tuple_id}: expected marker 'installer-contract-mismatch'"
+                                        )
+                                    if (
+                                        not validation_wrapper_loaded
+                                        or installer_sha256 not in validation_wrapper_payload
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing installer digest contract token "
+                                            f"for tuple {tuple_id}: sha256={installer_sha256}"
+                                        )
                             if receipt_path and (
                                 not validation_script_loaded or receipt_path not in validation_script_payload
                             ):
                                 failures.append(
                                     "external proof validation script does not reference expected startup-smoke receipt path "
+                                    f"for tuple {tuple_id}: {receipt_path}"
+                                )
+                            if host == "windows" and receipt_path and (
+                                not validation_wrapper_loaded or receipt_path not in validation_wrapper_payload
+                            ):
+                                failures.append(
+                                    "external proof windows validation wrapper does not reference expected startup-smoke receipt path "
                                     f"for tuple {tuple_id}: {receipt_path}"
                                 )
                             smoke_contract = _normalized_smoke_contract(
@@ -1421,6 +1452,14 @@ def main() -> int:
                                         "external proof validation script is missing startup-smoke receipt contract checks "
                                         f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
                                     )
+                                if host == "windows" and (
+                                    not validation_wrapper_loaded
+                                    or "receipt-contract-mismatch" not in validation_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows validation wrapper is missing startup-smoke receipt contract checks "
+                                        f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
+                                    )
                                 for key, value in (
                                     ("head_id", smoke_contract.get("head_id")),
                                     ("platform", smoke_contract.get("platform")),
@@ -1437,6 +1476,17 @@ def main() -> int:
                                     ):
                                         failures.append(
                                             "external proof validation script is missing startup-smoke contract token "
+                                            f"for tuple {tuple_id}: {key}={token}"
+                                        )
+                                    if (
+                                        host == "windows"
+                                        and (
+                                            not validation_wrapper_loaded
+                                            or f"\"{key}\": \"{token}\"" not in validation_wrapper_payload
+                                        )
+                                    ):
+                                        failures.append(
+                                            "external proof windows validation wrapper is missing startup-smoke contract token "
                                             f"for tuple {tuple_id}: {key}={token}"
                                         )
                     if host == "windows":
