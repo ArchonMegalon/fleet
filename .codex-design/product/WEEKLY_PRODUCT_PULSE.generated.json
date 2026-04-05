@@ -1,7 +1,7 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-04-05T00:25:51Z",
+  "generated_at": "2026-04-05T02:50:28Z",
   "as_of": "2026-04-05",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
@@ -181,7 +181,7 @@
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
       "canary_status": "Canary evidence is still accumulating",
-      "review_due": "2026-04-18",
+      "review_due": "2026-04-19",
       "next_decision": "Hold broad promotion until public route canary coverage exists."
     },
     "journey_gate_source": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
@@ -189,7 +189,7 @@
     "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
     "scorecard_metric_count": 22,
     "automation_alignment": {
-      "state": "aligned",
+      "state": "misaligned",
       "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
       "active_open_milestone_ids": [
         1,
@@ -208,24 +208,17 @@
         18
       ],
       "handoff_frontier_milestone_ids": [
-        1,
-        3,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18
+        4,
+        5,
+        6
       ],
-      "out_of_program_frontier_milestone_ids": [],
+      "out_of_program_frontier_milestone_ids": [
+        4,
+        5,
+        6
+      ],
       "handoff_source": "/docker/fleet/NEXT_SESSION_HANDOFF.md",
-      "summary": "Automation frontier aligns with the active program open milestones."
+      "summary": "Automation frontier drifts outside active program open milestones and must be corrected before promotion."
     },
     "closure_health": {
       "state": "watch",
