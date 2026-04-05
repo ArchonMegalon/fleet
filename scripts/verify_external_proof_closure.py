@@ -46,10 +46,79 @@ def main() -> int:
     journey_gates = _load_json(args.journey_gates, label="journey gates")
     release_channel = _load_json(args.release_channel, label="release channel")
 
-    support_summary = dict(support_packets.get("summary") or {})
-    journey_summary = dict(journey_gates.get("summary") or {})
-    tuple_coverage = dict(release_channel.get("desktopTupleCoverage") or {})
+    failures: list[str] = []
+    raw_support_summary = support_packets.get("summary")
+    raw_journey_summary = journey_gates.get("summary")
+    raw_tuple_coverage = release_channel.get("desktopTupleCoverage")
+    if not isinstance(raw_support_summary, dict):
+        failures.append("support packets summary is missing or not an object")
+    if not isinstance(raw_journey_summary, dict):
+        failures.append("journey gates summary is missing or not an object")
+    if not isinstance(raw_tuple_coverage, dict):
+        failures.append("release channel desktopTupleCoverage is missing or not an object")
+
+    support_summary = dict(raw_support_summary or {})
+    journey_summary = dict(raw_journey_summary or {})
+    tuple_coverage = dict(raw_tuple_coverage or {})
     support_plan = dict(support_packets.get("unresolved_external_proof_execution_plan") or {})
+    if not isinstance(support_packets.get("unresolved_external_proof_execution_plan"), dict):
+        failures.append("support packets unresolved_external_proof_execution_plan is missing or not an object")
+
+    missing_tuples_raw = tuple_coverage.get("missingRequiredPlatformHeadRidTuples")
+    if "missingRequiredPlatformHeadRidTuples" not in tuple_coverage:
+        failures.append(
+            "release channel desktopTupleCoverage.missingRequiredPlatformHeadRidTuples is missing"
+        )
+    elif not isinstance(missing_tuples_raw, list):
+        failures.append(
+            "release channel desktopTupleCoverage.missingRequiredPlatformHeadRidTuples is not an array"
+        )
+
+    support_summary_key_types = {
+        "unresolved_external_proof_request_count": (int, float, str),
+        "unresolved_external_proof_request_hosts": list,
+        "unresolved_external_proof_request_tuples": list,
+        "unresolved_external_proof_request_host_counts": dict,
+        "unresolved_external_proof_request_tuple_counts": dict,
+    }
+    for key, expected in support_summary_key_types.items():
+        if key not in support_summary:
+            failures.append(f"support packets summary.{key} is missing")
+            continue
+        if not isinstance(support_summary.get(key), expected):
+            failures.append(f"support packets summary.{key} has invalid type")
+    if "unresolved_external_proof_request_specs" not in support_summary:
+        failures.append("support packets summary.unresolved_external_proof_request_specs is missing")
+    elif not isinstance(support_summary.get("unresolved_external_proof_request_specs"), (dict, list)):
+        failures.append("support packets summary.unresolved_external_proof_request_specs has invalid type")
+
+    journey_summary_key_types = {
+        "blocked_external_only_count": (int, float, str),
+        "blocked_external_only_hosts": list,
+        "blocked_external_only_tuples": list,
+        "blocked_external_only_host_counts": dict,
+    }
+    for key, expected in journey_summary_key_types.items():
+        if key not in journey_summary:
+            failures.append(f"journey gates summary.{key} is missing")
+            continue
+        if not isinstance(journey_summary.get(key), expected):
+            failures.append(f"journey gates summary.{key} has invalid type")
+
+    support_plan_key_types = {
+        "request_count": (int, float, str),
+        "hosts": list,
+        "host_groups": dict,
+    }
+    for key, expected in support_plan_key_types.items():
+        if key not in support_plan:
+            failures.append(f"support packets unresolved_external_proof_execution_plan.{key} is missing")
+            continue
+        if not isinstance(support_plan.get(key), expected):
+            failures.append(
+                f"support packets unresolved_external_proof_execution_plan.{key} has invalid type"
+            )
+
     journey_rows = [
         dict(item)
         for item in (journey_gates.get("journeys") or [])
@@ -104,7 +173,7 @@ def main() -> int:
     )
     missing_tuples = [
         str(item).strip()
-        for item in (tuple_coverage.get("missingRequiredPlatformHeadRidTuples") or [])
+        for item in (missing_tuples_raw or [])
         if str(item).strip()
     ]
     unresolved_tuples = [
@@ -173,6 +242,8 @@ def main() -> int:
         unresolved_backlog_host_counts = dict(unresolved_backlog_raw.get("host_counts") or {})
         unresolved_backlog_tuple_counts = dict(unresolved_backlog_raw.get("tuple_counts") or {})
         unresolved_backlog_specs = dict(unresolved_backlog_raw.get("specs") or {})
+    elif unresolved_backlog_raw is not None:
+        failures.append("support packets unresolved_external_proof has invalid type (expected array or object)")
     blocked_external_only_tuples = [
         str(item).strip()
         for item in (journey_summary.get("blocked_external_only_tuples") or [])
@@ -190,8 +261,18 @@ def main() -> int:
             if isinstance(row.get("external_proof_requests"), list) and row.get("external_proof_requests")
         }
     )
+    journey_rows_with_malformed_external_requests = sorted(
+        {
+            str(row.get("id") or "").strip() or "<unknown>"
+            for row in journey_rows
+            if (
+                "external_proof_requests" in row
+                and not isinstance(row.get("external_proof_requests"), list)
+                and row.get("external_proof_requests") not in (None, "")
+            )
+        }
+    )
 
-    failures: list[str] = []
     if unresolved_count > 0:
         failures.append(
             f"support packets unresolved_external_proof_request_count={unresolved_count} (expected 0)"
@@ -299,6 +380,11 @@ def main() -> int:
         failures.append(
             "journey gates still report external_proof_requests in journey rows: "
             + ", ".join(journey_rows_with_external_requests)
+        )
+    if journey_rows_with_malformed_external_requests:
+        failures.append(
+            "journey gates have malformed external_proof_requests payload in journey rows: "
+            + ", ".join(journey_rows_with_malformed_external_requests)
         )
     if missing_tuples and unresolved_tuples and sorted(set(missing_tuples)) != sorted(set(unresolved_tuples)):
         failures.append(
