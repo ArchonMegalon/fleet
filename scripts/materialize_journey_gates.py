@@ -2276,9 +2276,21 @@ def build_payload(
         for item in (row.get("external_proof_requests") or [])
         if isinstance(item, dict)
     ]
+    blocked_external_only_requests_by_tuple: Dict[str, Dict[str, Any]] = {}
+    blocked_external_only_requests_without_tuple: List[Dict[str, Any]] = []
+    for item in blocked_external_only_requests:
+        tuple_id = str(item.get("tuple_id") or "").strip()
+        if tuple_id:
+            blocked_external_only_requests_by_tuple[tuple_id.lower()] = dict(item)
+            continue
+        blocked_external_only_requests_without_tuple.append(dict(item))
+    blocked_external_only_unique_requests = [
+        blocked_external_only_requests_by_tuple[key]
+        for key in sorted(blocked_external_only_requests_by_tuple)
+    ] + blocked_external_only_requests_without_tuple
     blocked_external_only_host_counts: Dict[str, int] = {}
     blocked_external_only_tuples: List[str] = []
-    for item in blocked_external_only_requests:
+    for item in blocked_external_only_unique_requests:
         host = str(item.get("required_host") or "").strip().lower()
         tuple_id = str(item.get("tuple_id") or "").strip()
         if host:
@@ -2304,7 +2316,11 @@ def build_payload(
         if blocked_external_only and len(blocked_external_only) == len(blocked):
             blocking_mode = "external_only"
             host_label = ", ".join(blocked_external_only_hosts) if blocked_external_only_hosts else "required platform"
-            tuple_count = len(blocked_external_only_tuples) or len(blocked_external_only_requests) or len(blocked_external_only)
+            tuple_count = (
+                len(blocked_external_only_tuples)
+                or len(blocked_external_only_unique_requests)
+                or len(blocked_external_only)
+            )
             recommended_action = (
                 f"Only external host-proof gaps remain: run the missing {host_label} proof lane for "
                 f"{tuple_count} desktop tuple(s), ingest receipts, and then republish release truth."

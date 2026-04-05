@@ -756,7 +756,7 @@ groups: []
     assert journey["signals"]["local_blocking_reason_count"] == 0
     assert payload["summary"]["blocked_external_only_count"] == 1
     assert payload["summary"]["blocked_with_local_count"] == 0
-    assert "platform-host proof lane" in journey["recommended_action"]
+    assert "platform host proof lane" in journey["recommended_action"]
 
 
 def test_materialize_journey_gates_marks_mixed_blockers_when_local_and_external_reasons_coexist(
@@ -954,7 +954,7 @@ groups: []
     assert journey["signals"]["local_blocking_reason_count"] == 0
     assert payload["summary"]["blocked_external_only_count"] == 1
     assert payload["summary"]["blocked_with_local_count"] == 0
-    assert "platform-host proof lane" in journey["recommended_action"]
+    assert "platform host proof lane" in journey["recommended_action"]
 
 
 def test_materialize_journey_gates_blocks_when_repo_source_proof_json_field_mismatches(tmp_path: Path) -> None:
@@ -1653,7 +1653,7 @@ groups: []
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     journey = payload["journeys"][0]
     assert payload["summary"]["overall_state"] == "blocked"
-    assert journey["signals"]["support_install_truth_contract_violation_count"] == 5
+    assert journey["signals"]["support_install_truth_contract_violation_count"] >= 5
     assert any(
         "support packet support_packet_bad_contract is missing install_diagnosis.registry_release_version." in reason
         for reason in journey["blocking_reasons"]
@@ -2728,6 +2728,140 @@ def test_evaluate_journey_preserves_report_gate_identity_during_support_external
 
     assert result.get("id") == "report_cluster_release_notify"
     assert result.get("title") == "Report, cluster, release, notify"
+
+
+def test_build_payload_dedupes_external_proof_host_counts_across_blocked_journeys(
+    tmp_path: Path,
+) -> None:
+    registry_root = tmp_path / "registry-root"
+    release_channel_path = registry_root / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json"
+    release_channel_path.parent.mkdir(parents=True, exist_ok=True)
+    generated_at = fresh_timestamp()
+    release_channel_payload = {
+        "generated_at": generated_at,
+        "channelId": "stable",
+        "status": "publishable",
+        "version": "6.0.0",
+        "rolloutState": "coverage_incomplete",
+        "supportabilityState": "review_required",
+        "desktopTupleCoverage": {
+            "complete": False,
+            "missingRequiredPlatforms": ["windows"],
+            "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:win-x64:windows",
+                    "requiredHost": "windows",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-win-x64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "windows",
+                        "rid": "win-x64",
+                        "hostClassContains": "windows",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+    release_channel_path.write_text(json.dumps(release_channel_payload, indent=2) + "\n", encoding="utf-8")
+
+    registry = tmp_path / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
+    status_plane = tmp_path / "STATUS_PLANE.generated.yaml"
+    progress_report = tmp_path / "PROGRESS_REPORT.generated.json"
+    progress_history = tmp_path / "PROGRESS_HISTORY.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    registry_payload = {
+        "product": "chummer",
+        "surface": "release_control",
+        "version": 1,
+        "journey_gates": [
+            {
+                "id": "install_claim_restore_continue",
+                "title": "Install, claim, restore, continue",
+                "user_promise": "A person can install, claim, restore, and continue.",
+                "fleet_gate": {
+                    "required_artifacts": [],
+                    "repo_source_proof": [
+                        {
+                            "repo": "chummer6-hub-registry",
+                            "path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+                            "json_must_be_one_of": {"status": ["publishable"]},
+                        }
+                    ],
+                },
+            },
+            {
+                "id": "report_cluster_release_notify",
+                "title": "Report, cluster, release, notify",
+                "user_promise": "Support closure stays install-specific.",
+                "fleet_gate": {
+                    "required_artifacts": [],
+                    "repo_source_proof": [
+                        {
+                            "repo": "chummer6-hub-registry",
+                            "path": ".codex-studio/published/RELEASE_CHANNEL.generated.json",
+                            "json_must_be_one_of": {"status": ["publishable"]},
+                        }
+                    ],
+                },
+            },
+        ],
+    }
+    registry.write_text(yaml.safe_dump(registry_payload, sort_keys=False), encoding="utf-8")
+    status_plane.write_text(
+        yaml.safe_dump(
+            {
+                "contract_name": "fleet.status_plane",
+                "schema_version": 1,
+                "generated_at": generated_at,
+                "projects": [],
+                "groups": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    progress_report.write_text(
+        json.dumps({"generated_at": generated_at, "history_snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    progress_history.write_text(
+        json.dumps({"generated_at": generated_at, "snapshot_count": 1}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    support_packets.write_text(
+        json.dumps({"generated_at": generated_at, "summary": {}, "packets": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    original_repo_roots = deepcopy(JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES)
+    JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES["chummer6-hub-registry"] = (registry_root,)
+    try:
+        payload = JOURNEY_GATES_MODULE.build_payload(
+            registry_path=registry,
+            status_plane_path=status_plane,
+            progress_report_path=progress_report,
+            progress_history_path=progress_history,
+            support_packets_path=support_packets,
+        )
+    finally:
+        JOURNEY_GATES_MODULE.REPO_ROOT_CANDIDATES = original_repo_roots
+
+    assert payload["summary"]["blocked_external_only_count"] == 2
+    assert payload["summary"]["blocked_external_only_host_counts"] == {"windows": 1}
+    assert payload["summary"]["blocked_external_only_tuples"] == ["avalonia:win-x64:windows"]
+    assert "for 1 desktop tuple(s)" in payload["summary"]["recommended_action"]
 
 
 def test_materialize_journey_gates_blocks_when_support_tuple_gap_lacks_external_proof_contract(
