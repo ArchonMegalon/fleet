@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-05T03:44:46Z",
+  "generated_at": "2026-04-05T04:11:07Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -32,37 +32,37 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-05T03:44:46Z",
+      "at": "2026-04-05T04:11:00Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 7
     },
     "status_plane": {
       "artifact": "status_plane",
       "available": true,
-      "at": "2026-04-05T03:34:08Z",
+      "at": "2026-04-05T04:10:59Z",
       "state": "fresh",
-      "age_seconds": 638
+      "age_seconds": 8
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-04-05T03:34:08Z",
+      "at": "2026-04-05T04:10:13Z",
       "state": "fresh",
-      "age_seconds": 638
+      "age_seconds": 54
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-04-05T03:34:08Z",
+      "at": "2026-04-05T04:10:13Z",
       "state": "fresh",
-      "age_seconds": 638
+      "age_seconds": 54
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-05T03:44:46Z",
+      "at": "2026-04-05T04:10:46Z",
       "state": "fresh",
-      "age_seconds": 0
+      "age_seconds": 21
     }
   },
   "journeys": [
@@ -223,6 +223,7 @@
           "expected_artifact_id": "blazor-desktop-win-x64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
           "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+          "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
           "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -414,7 +415,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:44:46Z",
+        "support_packets_generated_at": "2026-04-05T04:10:46Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -556,6 +557,7 @@
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -881,7 +883,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:44:46Z",
+        "support_packets_generated_at": "2026-04-05T04:10:46Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1289,7 +1291,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:44:46Z",
+        "support_packets_generated_at": "2026-04-05T04:10:46Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1401,7 +1403,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:44:46Z",
+        "support_packets_generated_at": "2026-04-05T04:10:46Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1581,6 +1583,7 @@
           "expected_artifact_id": "blazor-desktop-win-x64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
           "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+          "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
           "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
           "startup_smoke_receipt_contract": {
@@ -1699,7 +1702,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:44:46Z",
+        "support_packets_generated_at": "2026-04-05T04:10:46Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -1840,6 +1843,7 @@
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -1945,7 +1949,7 @@
       },
       "evidence": {
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-05T03:44:46Z",
+        "support_packets_generated_at": "2026-04-05T04:10:46Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",

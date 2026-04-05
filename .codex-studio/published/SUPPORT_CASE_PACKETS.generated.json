@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-05T03:44:46Z",
+  "generated_at": "2026-04-05T04:10:46Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -297,6 +297,7 @@
           "expected_artifact_id": "blazor-desktop-win-x64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
           "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+          "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
           "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
           "proof_capture_commands": [
@@ -499,6 +500,7 @@
         "expected_artifact_id": "blazor-desktop-win-x64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
         "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+        "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
         "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
         "proof_capture_commands": [
@@ -654,6 +656,7 @@
         "expected_artifact_id": "blazor-desktop-win-x64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
         "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+        "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
         "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
         "proof_capture_commands": [
@@ -696,14 +699,14 @@
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-04-06T03:34:07Z",
-    "generated_at": "2026-04-05T03:44:46Z",
+    "capture_deadline_utc": "2026-04-06T04:10:31Z",
+    "generated_at": "2026-04-05T04:10:46Z",
     "host_groups": {
       "macos": {
         "request_count": 2,
         "requests": [
           {
-            "capture_deadline_utc": "2026-04-06T03:34:07Z",
+            "capture_deadline_utc": "2026-04-06T04:10:31Z",
             "channel_id": "docker",
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
@@ -739,7 +742,7 @@
             "tuple_unique": true
           },
           {
-            "capture_deadline_utc": "2026-04-06T03:34:07Z",
+            "capture_deadline_utc": "2026-04-06T04:10:31Z",
             "channel_id": "docker",
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
@@ -784,7 +787,7 @@
         "request_count": 2,
         "requests": [
           {
-            "capture_deadline_utc": "2026-04-06T03:34:07Z",
+            "capture_deadline_utc": "2026-04-06T04:10:31Z",
             "channel_id": "docker",
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
@@ -820,11 +823,12 @@
             "tuple_unique": true
           },
           {
-            "capture_deadline_utc": "2026-04-06T03:34:07Z",
+            "capture_deadline_utc": "2026-04-06T04:10:31Z",
             "channel_id": "docker",
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
             "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
             "head_id": "blazor-desktop",
@@ -865,7 +869,7 @@
       "macos",
       "windows"
     ],
-    "release_channel_generated_at": "2026-04-05T03:34:07Z",
+    "release_channel_generated_at": "2026-04-05T04:10:31Z",
     "request_count": 4
   }
 }
