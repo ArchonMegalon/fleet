@@ -202,6 +202,14 @@ def main() -> int:
         field="support packets unresolved_external_proof_execution_plan.request_count",
         failures=failures,
     )
+    support_plan_capture_deadline_hours = _safe_int(
+        support_plan.get("capture_deadline_hours"),
+        field="support packets unresolved_external_proof_execution_plan.capture_deadline_hours",
+        failures=failures,
+    )
+    support_plan_capture_deadline_utc = str(
+        support_plan.get("capture_deadline_utc") or support_plan.get("captureDeadlineUtc") or ""
+    ).strip()
     support_host_count_map = _dict_field(
         support_summary.get("unresolved_external_proof_request_host_counts"),
         field="support packets summary.unresolved_external_proof_request_host_counts",
@@ -248,6 +256,26 @@ def main() -> int:
                 or any(str(item).strip() for item in (raw_group.get("tuples") or []))
                 or any(isinstance(item, dict) for item in (raw_group.get("requests") or []))
             )
+        }
+    )
+    support_plan_request_deadlines = sorted(
+        {
+            str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
+            for raw_group in support_plan_host_groups.values()
+            if isinstance(raw_group, dict)
+            for item in (raw_group.get("requests") or [])
+            if isinstance(item, dict)
+            and str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
+        }
+    )
+    support_plan_request_rows_missing_deadline = sorted(
+        {
+            str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>"
+            for raw_group in support_plan_host_groups.values()
+            if isinstance(raw_group, dict)
+            for item in (raw_group.get("requests") or [])
+            if isinstance(item, dict)
+            and not str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
         }
     )
     support_generated_at = str(
@@ -496,6 +524,16 @@ def main() -> int:
             "support packets unresolved_external_proof_execution_plan.host_groups still contain backlog: "
             + ", ".join(support_plan_hosts_with_backlog)
         )
+    if support_plan_request_deadlines and support_plan_capture_deadline_utc and support_plan_request_deadlines != [support_plan_capture_deadline_utc]:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request capture_deadline_utc values do not match plan capture_deadline_utc: "
+            + ", ".join(support_plan_request_deadlines)
+        )
+    if support_plan_request_rows_missing_deadline and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows are missing capture_deadline_utc for tuples: "
+            + ", ".join(support_plan_request_rows_missing_deadline)
+        )
     if missing_platforms:
         failures.append(
             "release channel missingRequiredPlatforms is not empty: "
@@ -635,6 +673,45 @@ def main() -> int:
             "support packets unresolved_external_proof_execution_plan.release_channel_generated_at "
             f"({support_plan_release_generated_at}) does not match release channel generatedAt ({release_generated_at})"
         )
+    has_open_backlog_signal = any(
+        (
+            unresolved_count > 0,
+            support_plan_request_count > 0,
+            blocked_external_only_count > 0,
+            bool(missing_platforms),
+            bool(missing_head_pairs),
+            bool(missing_tuples),
+            bool(external_request_tuples),
+            bool(unresolved_tuples),
+            bool(unresolved_hosts),
+            bool(unresolved_specs),
+            unresolved_backlog_count > 0,
+            bool(unresolved_backlog_hosts),
+            bool(unresolved_backlog_tuples),
+            bool(unresolved_backlog_host_counts),
+            bool(unresolved_backlog_tuple_counts),
+            bool(unresolved_backlog_specs),
+            bool(unresolved_entries),
+            bool(blocked_external_only_tuples),
+            bool(blocked_external_only_hosts),
+            bool(support_plan_hosts),
+            bool(support_plan_hosts_with_backlog),
+            bool(journey_rows_with_external_requests),
+        )
+    )
+    if has_open_backlog_signal and support_plan_capture_deadline_hours <= 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.capture_deadline_hours must be a positive integer while external-proof backlog is open"
+        )
+    if has_open_backlog_signal and not support_plan_capture_deadline_utc:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.capture_deadline_utc is missing while external-proof backlog is open"
+        )
+    if support_plan_capture_deadline_utc and not _parse_iso(support_plan_capture_deadline_utc):
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.capture_deadline_utc is not a valid ISO-8601 timestamp: "
+            + support_plan_capture_deadline_utc
+        )
     if journey_support_generated_ats and support_generated_at and journey_support_generated_ats != [support_generated_at]:
         failures.append(
             "journey gates evidence.support_packets_generated_at values do not match support packets generated_at: "
@@ -683,9 +760,19 @@ def main() -> int:
         )
     parsed_release_generated_at = _parse_iso(release_generated_at) if release_generated_at else None
     parsed_support_generated_at = _parse_iso(support_generated_at) if support_generated_at else None
+    parsed_capture_deadline_utc = _parse_iso(support_plan_capture_deadline_utc) if support_plan_capture_deadline_utc else None
     if parsed_release_generated_at and parsed_support_generated_at and parsed_support_generated_at < parsed_release_generated_at:
         failures.append(
             "support packets generated_at/generatedAt is older than release channel generatedAt/generated_at"
+        )
+    if (
+        has_open_backlog_signal
+        and parsed_capture_deadline_utc
+        and parsed_support_generated_at
+        and parsed_capture_deadline_utc < parsed_support_generated_at
+    ):
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.capture_deadline_utc is earlier than support packets generated_at/generatedAt"
         )
 
     if failures:
