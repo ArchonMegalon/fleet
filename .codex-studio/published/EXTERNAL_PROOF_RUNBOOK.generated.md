@@ -1,12 +1,12 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-05T02:03:33Z
+- generated_at: 2026-04-05T02:07:04Z
 - unresolved_request_count: 4
 - unresolved_hosts: macos, windows
-- plan_generated_at: 2026-04-05T02:03:32Z
-- release_channel_generated_at: 2026-04-05T02:03:30Z
+- plan_generated_at: 2026-04-05T02:07:03Z
+- release_channel_generated_at: 2026-04-05T02:06:47Z
 - capture_deadline_hours: 24
-- capture_deadline_utc: 2026-04-06T02:03:30Z
+- capture_deadline_utc: 2026-04-06T02:06:47Z
 
 ## Host: macos
 
@@ -22,7 +22,7 @@
   installer_relative_path: `files/chummer-avalonia-osx-arm64-installer.dmg`
   public_route: `/downloads/install/avalonia-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`
-  capture_deadline_utc: `2026-04-06T02:03:30Z`
+  capture_deadline_utc: `2026-04-06T02:06:47Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-osx-arm64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg; fi`
@@ -35,7 +35,7 @@
   installer_relative_path: `files/chummer-blazor-desktop-osx-arm64-installer.dmg`
   public_route: `/downloads/install/blazor-desktop-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json`
-  capture_deadline_utc: `2026-04-06T02:03:30Z`
+  capture_deadline_utc: `2026-04-06T02:06:47Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/blazor-desktop-osx-arm64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg; fi`
@@ -66,7 +66,7 @@ cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLA
   installer_relative_path: `files/chummer-avalonia-win-x64-installer.exe`
   public_route: `/downloads/install/avalonia-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
-  capture_deadline_utc: `2026-04-06T02:03:30Z`
+  capture_deadline_utc: `2026-04-06T02:06:47Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-win-x64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe; fi`
@@ -79,7 +79,7 @@ cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLA
   installer_relative_path: `files/chummer-blazor-desktop-win-x64-installer.exe`
   public_route: `/downloads/install/blazor-desktop-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json`
-  capture_deadline_utc: `2026-04-06T02:03:30Z`
+  capture_deadline_utc: `2026-04-06T02:06:47Z`
   capture_deadline_state: `pending`
   commands:
     - `cd /docker/chummercomplete/chummer6-ui && mkdir -p /docker/chummercomplete/chummer6-ui/Docker/Downloads/files && if [ ! -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe ]; then curl -fL --retry 3 --retry-delay 2 "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/blazor-desktop-win-x64-installer" -o /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe; fi`

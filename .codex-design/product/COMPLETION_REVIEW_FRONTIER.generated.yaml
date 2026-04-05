@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-05T02:03:41Z'
+generated_at: '2026-04-05T02:08:07Z'
 mode: completion_review
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -103,7 +103,7 @@ weekly_pulse_audit:
   status: fail
   reason: weekly product pulse still reports the active wave as active
   path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
-  generated_at: '2026-04-05T02:03:32Z'
+  generated_at: '2026-04-05T02:07:03Z'
 repo_backlog_audit:
   status: pass
   reason: no active repo-local queue items remain outside the design registry

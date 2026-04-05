@@ -10,12 +10,10 @@ from pathlib import Path
 
 REGISTRY_ROOT = Path("/docker/chummercomplete/chummer-hub-registry")
 UI_ROOT = Path("/docker/chummercomplete/chummer6-ui")
-HUB_ROOT = Path("/docker/chummercomplete/chummer.run-services")
 DEFAULT_OUTPUT = REGISTRY_ROOT / ".codex-studio" / "published" / "RELEASE_CHANNEL.generated.json"
 DEFAULT_COMPAT_OUTPUT = REGISTRY_ROOT / ".codex-studio" / "published" / "releases.json"
 DEFAULT_DOWNLOADS_DIR = UI_ROOT / "Docker" / "Downloads" / "files"
 DEFAULT_MANIFEST = UI_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
-DEFAULT_PROOF_PATH = HUB_ROOT / ".codex-studio" / "published" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
 DEFAULT_STARTUP_SMOKE_DIR = REGISTRY_ROOT / ".codex-studio" / "published" / "startup-smoke"
 STARTUP_SMOKE_FALLBACK_DIRS = (
     DEFAULT_STARTUP_SMOKE_DIR,
@@ -38,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--compat-output", type=Path, default=DEFAULT_COMPAT_OUTPUT)
     parser.add_argument("--runtime-bundles", type=Path)
-    parser.add_argument("--proof", type=Path, default=DEFAULT_PROOF_PATH)
+    parser.add_argument("--proof", type=Path)
     parser.add_argument("--startup-smoke-dir", type=Path, default=DEFAULT_STARTUP_SMOKE_DIR)
     parser.add_argument("--startup-smoke-max-age-seconds", type=int, default=STARTUP_SMOKE_MAX_AGE_SECONDS)
     parser.add_argument("--channel", default="preview")

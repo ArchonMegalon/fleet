@@ -3,8 +3,10 @@ from __future__ import annotations
 import datetime as dt
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -143,6 +145,84 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
                 fallback_dirs=(future, fresh),
             )
             self.assertEqual(resolved, fresh)
+
+    def test_main_skips_proof_argument_by_default(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            materializer = root / "materialize_public_release_channel.py"
+            manifest = root / "RELEASE_CHANNEL.generated.json"
+            out_path = root / "out.json"
+            compat_path = root / "releases.json"
+            materializer.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            manifest.write_text("{}", encoding="utf-8")
+            captured: dict[str, list[str]] = {}
+
+            def _fake_run(cmd: list[str], check: bool = False):
+                captured["cmd"] = list(cmd)
+                return type("Completed", (), {"returncode": 0})()
+
+            with mock.patch.object(module, "REGISTRY_MATERIALIZER", materializer):
+                with mock.patch.object(module, "resolve_startup_smoke_dir", return_value=None):
+                    with mock.patch.object(module.subprocess, "run", side_effect=_fake_run):
+                        with mock.patch.object(
+                            sys,
+                            "argv",
+                            [
+                                "materialize_chummer_release_registry_projection.py",
+                                "--manifest",
+                                str(manifest),
+                                "--output",
+                                str(out_path),
+                                "--compat-output",
+                                str(compat_path),
+                            ],
+                        ):
+                            rc = module.main()
+            self.assertEqual(rc, 0)
+            self.assertIn("cmd", captured)
+            self.assertNotIn("--proof", captured["cmd"])
+
+    def test_main_passes_explicit_proof_argument(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            materializer = root / "materialize_public_release_channel.py"
+            manifest = root / "RELEASE_CHANNEL.generated.json"
+            proof = root / "proof.json"
+            out_path = root / "out.json"
+            compat_path = root / "releases.json"
+            materializer.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            manifest.write_text("{}", encoding="utf-8")
+            proof.write_text("{}", encoding="utf-8")
+            captured: dict[str, list[str]] = {}
+
+            def _fake_run(cmd: list[str], check: bool = False):
+                captured["cmd"] = list(cmd)
+                return type("Completed", (), {"returncode": 0})()
+
+            with mock.patch.object(module, "REGISTRY_MATERIALIZER", materializer):
+                with mock.patch.object(module, "resolve_startup_smoke_dir", return_value=None):
+                    with mock.patch.object(module.subprocess, "run", side_effect=_fake_run):
+                        with mock.patch.object(
+                            sys,
+                            "argv",
+                            [
+                                "materialize_chummer_release_registry_projection.py",
+                                "--manifest",
+                                str(manifest),
+                                "--output",
+                                str(out_path),
+                                "--compat-output",
+                                str(compat_path),
+                                "--proof",
+                                str(proof),
+                            ],
+                        ):
+                            rc = module.main()
+            self.assertEqual(rc, 0)
+            self.assertIn("cmd", captured)
+            self.assertIn("--proof", captured["cmd"])
 
 
 if __name__ == "__main__":
