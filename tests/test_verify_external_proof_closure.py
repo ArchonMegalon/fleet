@@ -1073,3 +1073,171 @@ def test_verify_external_proof_closure_fail_closes_invalid_numeric_count_strings
     assert "summary.blocked_external_only_count has invalid numeric value" in result.stderr
     assert "unresolved_external_proof_execution_plan.request_count has invalid numeric value" in result.stderr
     assert "unresolved_external_proof.count has invalid numeric value" in result.stderr
+
+
+def test_verify_external_proof_closure_fail_closes_invalid_timestamp_formats(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "not-a-timestamp",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": {},
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "hosts": [],
+                "tuples": [],
+                "host_counts": {},
+                "tuple_counts": {},
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "not-a-timestamp",
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": "also-not-a-timestamp",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "not-a-timestamp",
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "also-not-a-timestamp",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "generatedAt/generated_at is not a valid ISO-8601 timestamp" in result.stderr
+    assert "execution_plan.generated_at/generatedAt is not a valid ISO-8601 timestamp" in result.stderr
+    assert "release_channel_generated_at is not a valid ISO-8601 timestamp" in result.stderr
+    assert "support_packets_generated_at includes invalid ISO-8601 timestamps: not-a-timestamp" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_journey_support_timestamp_is_missing_everywhere(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "hosts": [],
+                "tuples": [],
+                "host_counts": {},
+                "tuple_counts": {},
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "evidence": {},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "evidence.support_packets_generated_at is missing from all journey rows" in result.stderr

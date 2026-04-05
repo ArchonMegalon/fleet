@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -62,6 +63,18 @@ def _safe_int(value: Any, *, field: str, failures: list[str]) -> int:
     except ValueError:
         failures.append(f"{field} has invalid numeric value")
         return 0
+
+
+def _parse_iso(value: str) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 def main() -> int:
@@ -504,6 +517,48 @@ def main() -> int:
         failures.append(
             "journey gates evidence.support_packets_generated_at values do not match support packets generated_at: "
             + ", ".join(journey_support_generated_ats)
+        )
+    if not journey_support_generated_ats:
+        failures.append(
+            "journey gates evidence.support_packets_generated_at is missing from all journey rows"
+        )
+    if release_generated_at and not _parse_iso(release_generated_at):
+        failures.append(
+            "release channel generatedAt/generated_at is not a valid ISO-8601 timestamp: "
+            + release_generated_at
+        )
+    if support_generated_at and not _parse_iso(support_generated_at):
+        failures.append(
+            "support packets generated_at/generatedAt is not a valid ISO-8601 timestamp: "
+            + support_generated_at
+        )
+    if support_plan_generated_at and not _parse_iso(support_plan_generated_at):
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.generated_at/generatedAt is not a valid ISO-8601 timestamp: "
+            + support_plan_generated_at
+        )
+    if support_plan_release_generated_at and not _parse_iso(support_plan_release_generated_at):
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.release_channel_generated_at is not a valid ISO-8601 timestamp: "
+            + support_plan_release_generated_at
+        )
+    invalid_journey_support_ts = sorted(
+        {
+            value
+            for value in journey_support_generated_ats
+            if value and not _parse_iso(value)
+        }
+    )
+    if invalid_journey_support_ts:
+        failures.append(
+            "journey gates evidence.support_packets_generated_at includes invalid ISO-8601 timestamps: "
+            + ", ".join(invalid_journey_support_ts)
+        )
+    parsed_release_generated_at = _parse_iso(release_generated_at) if release_generated_at else None
+    parsed_support_generated_at = _parse_iso(support_generated_at) if support_generated_at else None
+    if parsed_release_generated_at and parsed_support_generated_at and parsed_support_generated_at < parsed_release_generated_at:
+        failures.append(
+            "support packets generated_at/generatedAt is older than release channel generatedAt/generated_at"
         )
 
     if failures:
