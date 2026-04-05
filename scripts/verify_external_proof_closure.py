@@ -1241,10 +1241,38 @@ def main() -> int:
                         ]
                         for request in host_request_rows:
                             tuple_id = _normalized_token(request.get("tuple_id") or request.get("tupleId")) or "<unknown>"
+                            installer_file_name = _normalized_token(
+                                request.get("expected_installer_file_name")
+                                or request.get("expectedInstallerFileName")
+                            )
+                            installer_sha256 = _normalized_token(
+                                request.get("expected_installer_sha256")
+                                or request.get("expectedInstallerSha256")
+                            ).lower()
                             receipt_path = _normalized_token(
                                 request.get("expected_startup_smoke_receipt_path")
                                 or request.get("expectedStartupSmokeReceiptPath")
                             )
+                            if installer_file_name:
+                                installer_path = (
+                                    f"/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/{installer_file_name}"
+                                )
+                                if installer_path not in validation_script_payload:
+                                    failures.append(
+                                        "external proof validation script does not reference expected installer path "
+                                        f"for tuple {tuple_id}: {installer_path}"
+                                    )
+                            if installer_sha256:
+                                if "installer-contract-mismatch" not in validation_script_payload:
+                                    failures.append(
+                                        "external proof validation script is missing installer digest contract checks "
+                                        f"for tuple {tuple_id}: expected marker 'installer-contract-mismatch'"
+                                    )
+                                if installer_sha256 not in validation_script_payload:
+                                    failures.append(
+                                        "external proof validation script is missing installer digest contract token "
+                                        f"for tuple {tuple_id}: sha256={installer_sha256}"
+                                    )
                             if receipt_path and receipt_path not in validation_script_payload:
                                 failures.append(
                                     "external proof validation script does not reference expected startup-smoke receipt path "

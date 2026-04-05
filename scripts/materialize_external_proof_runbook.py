@@ -21,7 +21,7 @@ UI_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
 def _post_capture_republish_commands() -> list[str]:
     return [
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
-        "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --proof /docker/chummercomplete/chummer6-ui/Docker/Downloads/release-evidence/public-promotion.json --ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json --channel docker --version unpublished --published-at \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" --output .codex-studio/published/RELEASE_CHANNEL.generated.json",
+        "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --channel docker --version unpublished --published-at \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" --output .codex-studio/published/RELEASE_CHANNEL.generated.json",
         "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
         "cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
         "cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml",
@@ -259,7 +259,7 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
                     f"expected={installer_sha256!r}; "
                     "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
                     "sys.exit(0) if digest==expected else sys.exit("
-                    "f'mismatch:{p}:{digest}:expected:{expected}')"
+                    "f'installer-contract-mismatch:{p}:digest={digest}:expected={expected}')"
                 )
             )
     if receipt_relative_path:
