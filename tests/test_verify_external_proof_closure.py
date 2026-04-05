@@ -29,7 +29,14 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
                 "unresolved_external_proof_request_host_counts": {},
                 "unresolved_external_proof_request_tuple_counts": {},
             },
-            "unresolved_external_proof": [],
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "tuple_counts": {},
+                "hosts": [],
+                "tuples": [],
+                "specs": {},
+            },
             "unresolved_external_proof_execution_plan": {
                 "generated_at": "2026-04-05T01:22:01Z",
                 "request_count": 0,
@@ -252,6 +259,96 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
     assert "unresolved_external_proof_request_host_counts is not empty: windows:1" in result.stderr
     assert "blocked_external_only_host_counts is not empty: windows:1" in result.stderr
     assert "external_proof_requests in journey rows" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_unresolved_backlog_dict_remains_with_zero_summaries(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": {},
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {
+                    "avalonia:win-x64:windows": {
+                        "required_host": "windows",
+                    }
+                },
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatformHeadRidTuples": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "unresolved_external_proof.count=1" in result.stderr
+    assert "unresolved_external_proof.hosts is not empty: windows" in result.stderr
+    assert "unresolved_external_proof.tuples is not empty: avalonia:win-x64:windows" in result.stderr
+    assert "unresolved_external_proof.host_counts is not empty: windows:1" in result.stderr
+    assert "unresolved_external_proof.tuple_counts is not empty: avalonia:win-x64:windows:1" in result.stderr
+    assert "unresolved_external_proof.specs is not empty: avalonia:win-x64:windows" in result.stderr
 
 
 def test_verify_external_proof_closure_fails_when_cross_plane_timestamps_drift(tmp_path: Path) -> None:

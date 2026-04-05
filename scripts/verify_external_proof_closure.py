@@ -117,16 +117,62 @@ def main() -> int:
         for item in (support_summary.get("unresolved_external_proof_request_hosts") or [])
         if str(item).strip()
     ]
-    unresolved_specs = [
-        str(item).strip()
-        for item in (support_summary.get("unresolved_external_proof_request_specs") or [])
-        if str(item).strip()
-    ]
-    unresolved_entries = [
-        dict(item)
-        for item in (support_packets.get("unresolved_external_proof") or [])
-        if isinstance(item, dict)
-    ]
+    unresolved_specs_raw = support_summary.get("unresolved_external_proof_request_specs")
+    unresolved_specs = sorted(
+        {
+            str(item).strip()
+            for item in (
+                unresolved_specs_raw.keys()
+                if isinstance(unresolved_specs_raw, dict)
+                else (unresolved_specs_raw or [])
+            )
+            if str(item).strip()
+        }
+    )
+    unresolved_backlog_raw = support_packets.get("unresolved_external_proof")
+    unresolved_entries: list[dict[str, Any]] = []
+    unresolved_backlog_count = 0
+    unresolved_backlog_hosts: list[str] = []
+    unresolved_backlog_tuples: list[str] = []
+    unresolved_backlog_host_counts: dict[str, Any] = {}
+    unresolved_backlog_tuple_counts: dict[str, Any] = {}
+    unresolved_backlog_specs: dict[str, Any] = {}
+    if isinstance(unresolved_backlog_raw, list):
+        unresolved_entries = [dict(item) for item in unresolved_backlog_raw if isinstance(item, dict)]
+        unresolved_backlog_count = len(unresolved_entries)
+        unresolved_backlog_hosts = sorted(
+            {
+                str(item.get("required_host") or item.get("host") or "").strip()
+                for item in unresolved_entries
+                if str(item.get("required_host") or item.get("host") or "").strip()
+            }
+        )
+        unresolved_backlog_tuples = sorted(
+            {
+                str(item.get("tuple_id") or item.get("tupleId") or "").strip()
+                for item in unresolved_entries
+                if str(item.get("tuple_id") or item.get("tupleId") or "").strip()
+            }
+        )
+    elif isinstance(unresolved_backlog_raw, dict):
+        unresolved_backlog_count = int(unresolved_backlog_raw.get("count") or 0)
+        unresolved_backlog_hosts = sorted(
+            {
+                str(item).strip()
+                for item in (unresolved_backlog_raw.get("hosts") or [])
+                if str(item).strip()
+            }
+        )
+        unresolved_backlog_tuples = sorted(
+            {
+                str(item).strip()
+                for item in (unresolved_backlog_raw.get("tuples") or [])
+                if str(item).strip()
+            }
+        )
+        unresolved_backlog_host_counts = dict(unresolved_backlog_raw.get("host_counts") or {})
+        unresolved_backlog_tuple_counts = dict(unresolved_backlog_raw.get("tuple_counts") or {})
+        unresolved_backlog_specs = dict(unresolved_backlog_raw.get("specs") or {})
     blocked_external_only_tuples = [
         str(item).strip()
         for item in (journey_summary.get("blocked_external_only_tuples") or [])
@@ -203,6 +249,36 @@ def main() -> int:
         failures.append(
             "support packets unresolved_external_proof_request_specs is not empty: "
             + ", ".join(unresolved_specs)
+        )
+    if unresolved_backlog_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof.count="
+            f"{unresolved_backlog_count} (expected 0)"
+        )
+    if unresolved_backlog_hosts:
+        failures.append(
+            "support packets unresolved_external_proof.hosts is not empty: "
+            + ", ".join(unresolved_backlog_hosts)
+        )
+    if unresolved_backlog_tuples:
+        failures.append(
+            "support packets unresolved_external_proof.tuples is not empty: "
+            + ", ".join(unresolved_backlog_tuples)
+        )
+    if unresolved_backlog_host_counts:
+        failures.append(
+            "support packets unresolved_external_proof.host_counts is not empty: "
+            + ", ".join(f"{host}:{count}" for host, count in sorted(unresolved_backlog_host_counts.items()))
+        )
+    if unresolved_backlog_tuple_counts:
+        failures.append(
+            "support packets unresolved_external_proof.tuple_counts is not empty: "
+            + ", ".join(f"{tuple_id}:{count}" for tuple_id, count in sorted(unresolved_backlog_tuple_counts.items()))
+        )
+    if unresolved_backlog_specs:
+        failures.append(
+            "support packets unresolved_external_proof.specs is not empty: "
+            + ", ".join(sorted(unresolved_backlog_specs.keys()))
         )
     if unresolved_entries:
         failures.append(
