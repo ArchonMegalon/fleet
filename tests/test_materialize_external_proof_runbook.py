@@ -311,3 +311,88 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
     assert f"commands_dir: `{commands_dir}`" in payload
     assert "No unresolved external-proof requests are currently queued." in payload
     assert (commands_dir / "republish-after-host-proof.sh").is_file()
+
+
+def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    support_packets.write_text(
+        json.dumps(
+            {
+                "unresolved_external_proof_execution_plan": {
+                    "requestCount": 1,
+                    "hosts": ["windows"],
+                    "generatedAt": "2026-04-05T00:00:00Z",
+                    "releaseChannelGeneratedAt": "2026-04-05T00:00:00Z",
+                    "captureDeadlineHours": 24,
+                    "captureDeadlineUtc": "2026-04-06T00:00:00Z",
+                    "hostGroups": {
+                        "windows": {
+                            "requestCount": 1,
+                            "tupleIds": ["avalonia:win-x64:windows"],
+                            "requests": [
+                                {
+                                    "tupleId": "avalonia:win-x64:windows",
+                                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expectedArtifactId": "avalonia-win-x64-installer",
+                                    "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                                    "expectedInstallerSha256": "a" * 64,
+                                    "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                    "startupSmokeReceiptContract": {
+                                        "readyCheckpoint": "pre_ui_event_loop",
+                                        "headId": "avalonia",
+                                        "platform": "windows",
+                                        "rid": "win-x64",
+                                        "hostClassContains": "windows",
+                                        "statusAnyOf": ["pass", "ready"],
+                                    },
+                                    "captureDeadlineUtc": "2026-04-06T00:00:00Z",
+                                    "proofCaptureCommands": [
+                                        "echo windows-proof",
+                                        "echo refresh-manifest",
+                                    ],
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = out.read_text(encoding="utf-8")
+    commands_dir = out.parent / "external-proof-commands"
+    windows_capture = commands_dir / "capture-windows-proof.sh"
+    windows_validate = commands_dir / "validate-windows-proof.sh"
+    windows_capture_ps1 = commands_dir / "capture-windows-proof.ps1"
+    windows_validate_ps1 = commands_dir / "validate-windows-proof.ps1"
+
+    assert "plan_generated_at: 2026-04-05T00:00:00Z" in payload
+    assert "release_channel_generated_at: 2026-04-05T00:00:00Z" in payload
+    assert "capture_deadline_hours: 24" in payload
+    assert "capture_deadline_utc: 2026-04-06T00:00:00Z" in payload
+    assert "`avalonia:win-x64:windows`" in payload
+    assert "echo windows-proof" in windows_capture.read_text(encoding="utf-8")
+    assert "installer-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
+    assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
+    assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
+    assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in windows_validate_ps1.read_text(encoding="utf-8")

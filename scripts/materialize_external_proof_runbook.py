@@ -131,6 +131,8 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
         }
 
     request_count_raw = value.get("request_count")
+    if request_count_raw is None:
+        request_count_raw = value.get("requestCount")
     request_count = request_count_raw if isinstance(request_count_raw, int) and not isinstance(request_count_raw, bool) else 0
 
     raw_hosts = value.get("hosts")
@@ -139,6 +141,8 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
         hosts = sorted({_normalize_text(item).lower() for item in raw_hosts if _normalize_text(item)})
 
     raw_host_groups = value.get("host_groups")
+    if raw_host_groups is None:
+        raw_host_groups = value.get("hostGroups")
     host_groups: dict[str, Any] = {}
     if isinstance(raw_host_groups, dict):
         for raw_host, raw_group in raw_host_groups.items():
@@ -152,49 +156,69 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                     if not isinstance(row, dict):
                         continue
                     commands_raw = row.get("proof_capture_commands")
+                    if commands_raw is None:
+                        commands_raw = row.get("proofCaptureCommands")
                     commands = [
                         _normalize_text(token)
                         for token in commands_raw
                         if _normalize_text(token)
                     ] if isinstance(commands_raw, list) else []
+                    required_proofs_raw = row.get("required_proofs")
+                    if required_proofs_raw is None:
+                        required_proofs_raw = row.get("requiredProofs")
                     requests.append(
                         {
-                            "tuple_id": _normalize_text(row.get("tuple_id")),
-                            "head_id": _normalize_text(row.get("head_id")).lower(),
+                            "tuple_id": _normalize_text(row.get("tuple_id") or row.get("tupleId")),
+                            "head_id": _normalize_text(row.get("head_id") or row.get("headId")).lower(),
                             "platform": _normalize_text(row.get("platform")).lower(),
                             "rid": _normalize_text(row.get("rid")).lower(),
-                            "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
-                            "expected_installer_file_name": _normalize_text(row.get("expected_installer_file_name")),
+                            "expected_artifact_id": _normalize_text(
+                                row.get("expected_artifact_id") or row.get("expectedArtifactId")
+                            ),
+                            "expected_installer_file_name": _normalize_text(
+                                row.get("expected_installer_file_name") or row.get("expectedInstallerFileName")
+                            ),
                             "expected_installer_relative_path": _normalize_text(
                                 row.get("expected_installer_relative_path")
+                                or row.get("expectedInstallerRelativePath")
                             ),
                             "expected_installer_sha256": _normalize_text(
-                                row.get("expected_installer_sha256")
+                                row.get("expected_installer_sha256") or row.get("expectedInstallerSha256")
                             ).lower(),
-                            "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
+                            "expected_public_install_route": _normalize_text(
+                                row.get("expected_public_install_route") or row.get("expectedPublicInstallRoute")
+                            ),
                             "expected_startup_smoke_receipt_path": _normalize_text(
                                 row.get("expected_startup_smoke_receipt_path")
+                                or row.get("expectedStartupSmokeReceiptPath")
                             ),
                             "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
                                 row.get("startup_smoke_receipt_contract")
+                                if row.get("startup_smoke_receipt_contract") is not None
+                                else row.get("startupSmokeReceiptContract")
                             ),
-                            "capture_deadline_utc": _normalize_text(row.get("capture_deadline_utc")),
+                            "capture_deadline_utc": _normalize_text(
+                                row.get("capture_deadline_utc") or row.get("captureDeadlineUtc")
+                            ),
                             "required_proofs": sorted(
                                 {
                                     _normalize_text(token).lower()
-                                    for token in (row.get("required_proofs") or [])
+                                    for token in (required_proofs_raw or [])
                                     if _normalize_text(token)
                                 }
                             ),
                             "proof_capture_commands": commands,
                         }
                     )
+            tuples_raw = raw_group.get("tuples")
+            if tuples_raw is None:
+                tuples_raw = raw_group.get("tuple_ids") or raw_group.get("tupleIds")
             host_groups[host] = {
-                "request_count": int(raw_group.get("request_count") or len(requests)),
+                "request_count": int(raw_group.get("request_count") or raw_group.get("requestCount") or len(requests)),
                 "tuples": sorted(
                     {
                         _normalize_text(token)
-                        for token in (raw_group.get("tuples") or [])
+                        for token in (tuples_raw or [])
                         if _normalize_text(token)
                     }
                 ),
@@ -210,10 +234,19 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
         ),
         "hosts": hosts,
         "host_groups": host_groups,
-        "generated_at": _normalize_text(value.get("generated_at")),
-        "release_channel_generated_at": _normalize_text(value.get("release_channel_generated_at")),
-        "capture_deadline_hours": _safe_int(value.get("capture_deadline_hours"), default=0),
-        "capture_deadline_utc": _normalize_text(value.get("capture_deadline_utc")),
+        "generated_at": _normalize_text(value.get("generated_at") or value.get("generatedAt")),
+        "release_channel_generated_at": _normalize_text(
+            value.get("release_channel_generated_at") or value.get("releaseChannelGeneratedAt")
+        ),
+        "capture_deadline_hours": _safe_int(
+            value.get("capture_deadline_hours")
+            if value.get("capture_deadline_hours") is not None
+            else value.get("captureDeadlineHours"),
+            default=0,
+        ),
+        "capture_deadline_utc": _normalize_text(
+            value.get("capture_deadline_utc") or value.get("captureDeadlineUtc")
+        ),
     }
 
 
