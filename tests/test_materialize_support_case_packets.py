@@ -480,6 +480,7 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
         "required_proofs": [],
         "expected_artifact_id": "",
         "expected_installer_file_name": "",
+        "expected_installer_relative_path": "",
         "expected_public_install_route": "",
         "expected_startup_smoke_receipt_path": "",
         "startup_smoke_receipt_contract": {},
@@ -606,6 +607,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+            "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "startup_smoke_receipt_contract": {
@@ -635,6 +637,7 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
         "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
         "expected_artifact_id": "avalonia-win-x64-installer",
         "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+        "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
         "startup_smoke_receipt_contract": {
@@ -830,6 +833,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "",
             "expected_installer_file_name": "",
+            "expected_installer_relative_path": "",
             "expected_public_install_route": "",
             "expected_startup_smoke_receipt_path": "",
             "startup_smoke_receipt_contract": {
@@ -853,6 +857,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "",
             "expected_installer_file_name": "",
+            "expected_installer_relative_path": "",
             "expected_public_install_route": "",
             "expected_startup_smoke_receipt_path": "",
             "startup_smoke_receipt_contract": {
@@ -887,6 +892,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                         "rid": "osx-arm64",
                         "expected_artifact_id": "",
                         "expected_installer_file_name": "",
+                        "expected_installer_relative_path": "",
                         "expected_public_install_route": "",
                         "expected_startup_smoke_receipt_path": "",
                         "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
@@ -919,6 +925,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
                         "rid": "win-x64",
                         "expected_artifact_id": "",
                         "expected_installer_file_name": "",
+                        "expected_installer_relative_path": "",
                         "expected_public_install_route": "",
                         "expected_startup_smoke_receipt_path": "",
                         "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
@@ -1012,6 +1019,7 @@ def test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuple
             "required_proofs": ["promoted_installer_artifact"],
             "expected_artifact_id": "",
             "expected_installer_file_name": "",
+            "expected_installer_relative_path": "",
             "expected_public_install_route": "",
             "expected_startup_smoke_receipt_path": "",
             "startup_smoke_receipt_contract": {
@@ -1099,6 +1107,7 @@ def test_materialize_support_case_packets_normalizes_external_proof_required_pro
             "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
             "expected_artifact_id": "",
             "expected_installer_file_name": "",
+            "expected_installer_relative_path": "",
             "expected_public_install_route": "",
             "expected_startup_smoke_receipt_path": "",
             "startup_smoke_receipt_contract": {

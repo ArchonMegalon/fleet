@@ -14,6 +14,19 @@ DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_P
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 
 
+def _post_capture_republish_commands() -> list[str]:
+    return [
+        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+        "cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+        "cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+        "cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+        "cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "cd /docker/fleet && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --html-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.html --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json --preview-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json",
+        "cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
+        "cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status >/dev/null",
+    ]
+
+
 def utc_now_iso() -> str:
     return dt.datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -73,6 +86,9 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                             "rid": _normalize_text(row.get("rid")).lower(),
                             "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
                             "expected_installer_file_name": _normalize_text(row.get("expected_installer_file_name")),
+                            "expected_installer_relative_path": _normalize_text(
+                                row.get("expected_installer_relative_path")
+                            ),
                             "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
                             "expected_startup_smoke_receipt_path": _normalize_text(
                                 row.get("expected_startup_smoke_receipt_path")
@@ -179,12 +195,14 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
             required_proofs = ", ".join(request.get("required_proofs") or []) or "(none)"
             artifact_id = _normalize_text(request.get("expected_artifact_id")) or "(missing)"
             installer = _normalize_text(request.get("expected_installer_file_name")) or "(missing)"
+            installer_relative_path = _normalize_text(request.get("expected_installer_relative_path")) or "(missing)"
             route = _normalize_text(request.get("expected_public_install_route")) or "(missing)"
             receipt_path = _normalize_text(request.get("expected_startup_smoke_receipt_path")) or "(missing)"
             lines.append(f"- `{tuple_id}`")
             lines.append(f"  required_proofs: `{required_proofs}`")
             lines.append(f"  artifact_id: `{artifact_id}`")
             lines.append(f"  installer_file: `{installer}`")
+            lines.append(f"  installer_relative_path: `{installer_relative_path}`")
             lines.append(f"  public_route: `{route}`")
             lines.append(f"  startup_smoke_receipt: `{receipt_path}`")
             tuple_commands = _commands_for_request(request)
@@ -206,6 +224,16 @@ def materialize_markdown(plan: dict[str, Any], *, generated_at: str) -> str:
                 lines.append(command)
             lines.append("```")
         lines.append("")
+
+    lines.append("## After Host Proof Capture")
+    lines.append("")
+    lines.append("Run these commands after macOS/Windows proofs land to ingest receipts and republish release truth.")
+    lines.append("")
+    lines.append("```bash")
+    for command in _post_capture_republish_commands():
+        lines.append(command)
+    lines.append("```")
+    lines.append("")
 
     return "\n".join(lines)
 

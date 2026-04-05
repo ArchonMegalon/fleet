@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-05T00:47:44Z",
+  "generated_at": "2026-04-05T00:57:46Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -29,6 +29,7 @@
           "channel_id": "docker",
           "expected_artifact_id": "avalonia-osx-arm64-installer",
           "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+          "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
           "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
           "proof_capture_commands": [
@@ -63,7 +64,7 @@
         "registry_channel_id": "docker",
         "registry_release_channel_status": "published",
         "registry_release_proof_status": "passed",
-        "registry_release_version": "local-docker",
+        "registry_release_version": "unpublished",
         "registry_rollout_state": "coverage_incomplete",
         "registry_supportability_state": "review_required",
         "tuple_present_on_promoted_shelf": false
@@ -116,6 +117,7 @@
           "channel_id": "docker",
           "expected_artifact_id": "avalonia-win-x64-installer",
           "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+          "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
           "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
           "proof_capture_commands": [
@@ -150,7 +152,7 @@
         "registry_channel_id": "docker",
         "registry_release_channel_status": "published",
         "registry_release_proof_status": "passed",
-        "registry_release_version": "local-docker",
+        "registry_release_version": "unpublished",
         "registry_rollout_state": "coverage_incomplete",
         "registry_supportability_state": "review_required",
         "tuple_present_on_promoted_shelf": false
@@ -203,6 +205,7 @@
           "channel_id": "docker",
           "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+          "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
           "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
           "proof_capture_commands": [
@@ -237,7 +240,7 @@
         "registry_channel_id": "docker",
         "registry_release_channel_status": "published",
         "registry_release_proof_status": "passed",
-        "registry_release_version": "local-docker",
+        "registry_release_version": "unpublished",
         "registry_rollout_state": "coverage_incomplete",
         "registry_supportability_state": "review_required",
         "tuple_present_on_promoted_shelf": false
@@ -290,6 +293,7 @@
           "channel_id": "docker",
           "expected_artifact_id": "blazor-desktop-win-x64-installer",
           "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+          "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
           "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
           "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
           "proof_capture_commands": [
@@ -324,7 +328,7 @@
         "registry_channel_id": "docker",
         "registry_release_channel_status": "published",
         "registry_release_proof_status": "passed",
-        "registry_release_version": "local-docker",
+        "registry_release_version": "unpublished",
         "registry_rollout_state": "coverage_incomplete",
         "registry_supportability_state": "review_required",
         "tuple_present_on_promoted_shelf": false
@@ -395,6 +399,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "avalonia-osx-arm64-installer",
         "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+        "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
         "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
         "proof_capture_commands": [
@@ -425,6 +430,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "avalonia-win-x64-installer",
         "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+        "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
         "proof_capture_commands": [
@@ -455,6 +461,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+        "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
         "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
         "proof_capture_commands": [
@@ -485,6 +492,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "blazor-desktop-win-x64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+        "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
         "proof_capture_commands": [
@@ -543,6 +551,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "avalonia-osx-arm64-installer",
         "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+        "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
         "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
         "proof_capture_commands": [
@@ -573,6 +582,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "avalonia-win-x64-installer",
         "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+        "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
         "proof_capture_commands": [
@@ -603,6 +613,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+        "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
         "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
         "proof_capture_commands": [
@@ -633,6 +644,7 @@
         "channel_id": "docker",
         "expected_artifact_id": "blazor-desktop-win-x64-installer",
         "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+        "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
         "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
         "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
         "proof_capture_commands": [
@@ -682,6 +694,7 @@
             "channel_id": "docker",
             "expected_artifact_id": "avalonia-osx-arm64-installer",
             "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+            "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
             "head_id": "avalonia",
@@ -715,6 +728,7 @@
             "channel_id": "docker",
             "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
+            "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
             "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
             "head_id": "blazor-desktop",
@@ -757,6 +771,7 @@
             "channel_id": "docker",
             "expected_artifact_id": "avalonia-win-x64-installer",
             "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+            "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
             "head_id": "avalonia",
@@ -790,6 +805,7 @@
             "channel_id": "docker",
             "expected_artifact_id": "blazor-desktop-win-x64-installer",
             "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
+            "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
             "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
             "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
             "head_id": "blazor-desktop",

@@ -490,6 +490,18 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                 "expected_installer_file_name": _normalize_text(
                     item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
                 ),
+                "expected_installer_relative_path": _normalize_text(
+                    item.get("expectedInstallerRelativePath")
+                    or item.get("expected_installer_relative_path")
+                    or (
+                        "files/"
+                        + _normalize_text(
+                            item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
+                        )
+                        if _normalize_text(item.get("expectedInstallerFileName") or item.get("expected_installer_file_name"))
+                        else ""
+                    )
+                ),
                 "expected_public_install_route": _normalize_text(
                     item.get("expectedPublicInstallRoute") or item.get("expected_public_install_route")
                 ),
@@ -833,6 +845,9 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
                 "expected_installer_file_name": _normalize_text(
                     external_proof_request.get("expected_installer_file_name")
                 ),
+                "expected_installer_relative_path": _normalize_text(
+                    external_proof_request.get("expected_installer_relative_path")
+                ),
                 "expected_public_install_route": _normalize_text(
                     external_proof_request.get("expected_public_install_route")
                 ),
@@ -899,6 +914,7 @@ def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
         "required_proofs": sorted(set(required_proofs)),
         "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
         "expected_installer_file_name": _normalize_text(row.get("expected_installer_file_name")),
+        "expected_installer_relative_path": _normalize_text(row.get("expected_installer_relative_path")),
         "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
         "expected_startup_smoke_receipt_path": _normalize_text(row.get("expected_startup_smoke_receipt_path")),
         "startup_smoke_receipt_contract": _normalized_smoke_contract_map(row.get("startup_smoke_receipt_contract")),
@@ -956,6 +972,7 @@ def _external_proof_execution_plan(release_channel_index: Dict[str, Any]) -> Dic
                     "rid": _normalize_text(row.get("rid")).lower(),
                     "expected_artifact_id": _normalize_text(row.get("expected_artifact_id")),
                     "expected_installer_file_name": _normalize_text(row.get("expected_installer_file_name")),
+                    "expected_installer_relative_path": _normalize_text(row.get("expected_installer_relative_path")),
                     "expected_public_install_route": _normalize_text(row.get("expected_public_install_route")),
                     "expected_startup_smoke_receipt_path": _normalize_text(row.get("expected_startup_smoke_receipt_path")),
                     "required_proofs": sorted(
@@ -1002,6 +1019,7 @@ def _external_proof_operator_packet(
     platform = tuple_parts[2] if len(tuple_parts) >= 3 else required_host
     expected_artifact_id = _normalize_text(row.get("expected_artifact_id"))
     expected_installer_file_name = _normalize_text(row.get("expected_installer_file_name"))
+    expected_installer_relative_path = _normalize_text(row.get("expected_installer_relative_path"))
     expected_public_install_route = _normalize_text(row.get("expected_public_install_route"))
     expected_startup_smoke_receipt_path = _normalize_text(row.get("expected_startup_smoke_receipt_path"))
     required_proofs = [
@@ -1075,6 +1093,7 @@ def _external_proof_operator_packet(
                 "required_proofs": required_proofs,
                 "expected_artifact_id": expected_artifact_id,
                 "expected_installer_file_name": expected_installer_file_name,
+                "expected_installer_relative_path": expected_installer_relative_path,
                 "expected_public_install_route": expected_public_install_route,
                 "expected_startup_smoke_receipt_path": expected_startup_smoke_receipt_path,
                 "startup_smoke_receipt_contract": _normalized_smoke_contract_map(

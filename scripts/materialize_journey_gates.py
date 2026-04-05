@@ -240,6 +240,11 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             if head and rid
             else ""
         )
+        canonical_expected_installer_relative_path = (
+            f"files/{canonical_expected_installer_file_name}"
+            if canonical_expected_installer_file_name
+            else ""
+        )
         canonical_expected_startup_smoke_receipt_path = (
             f"startup-smoke/startup-smoke-{head}-{rid}.receipt.json"
             if head and rid
@@ -260,6 +265,7 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         )
         provided_expected_artifact_id = str(item.get("expectedArtifactId") or "").strip()
         provided_expected_installer_file_name = str(item.get("expectedInstallerFileName") or "").strip()
+        provided_expected_installer_relative_path = str(item.get("expectedInstallerRelativePath") or "").strip()
         provided_expected_public_install_route = str(item.get("expectedPublicInstallRoute") or "").strip()
         provided_expected_startup_smoke_receipt_path = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
         row_channel_id_raw = str(item.get("channelId") or item.get("channel") or "").strip().lower()
@@ -319,16 +325,21 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "required_host_matches_tuple_platform": required_host_matches_tuple_platform,
                 "expected_artifact_id": provided_expected_artifact_id or canonical_expected_artifact_id,
                 "expected_installer_file_name": provided_expected_installer_file_name or canonical_expected_installer_file_name,
+                "expected_installer_relative_path": (
+                    provided_expected_installer_relative_path or canonical_expected_installer_relative_path
+                ),
                 "expected_public_install_route": provided_expected_public_install_route or canonical_expected_public_install_route,
                 "expected_startup_smoke_receipt_path": provided_expected_startup_smoke_receipt_path or canonical_expected_startup_smoke_receipt_path,
                 "expected_artifact_id_provided": bool(provided_expected_artifact_id),
                 "expected_installer_file_name_provided": bool(provided_expected_installer_file_name),
+                "expected_installer_relative_path_provided": bool(provided_expected_installer_relative_path),
                 "expected_public_install_route_provided": bool(provided_expected_public_install_route),
                 "expected_startup_smoke_receipt_path_provided": bool(provided_expected_startup_smoke_receipt_path),
                 "startup_smoke_receipt_contract_provided": isinstance(provided_smoke_contract, dict),
                 "proof_capture_commands_provided": isinstance(provided_commands, list),
                 "canonical_expected_artifact_id": canonical_expected_artifact_id,
                 "canonical_expected_installer_file_name": canonical_expected_installer_file_name,
+                "canonical_expected_installer_relative_path": canonical_expected_installer_relative_path,
                 "canonical_expected_public_install_route": canonical_expected_public_install_route,
                 "canonical_expected_startup_smoke_receipt_path": canonical_expected_startup_smoke_receipt_path,
                 "canonical_startup_smoke_receipt_contract": canonical_startup_smoke_receipt_contract,
@@ -372,6 +383,7 @@ EXTERNAL_PROOF_REQUEST_PUBLIC_KEYS: Tuple[str, ...] = (
     "required_host_matches_tuple_platform",
     "expected_artifact_id",
     "expected_installer_file_name",
+    "expected_installer_relative_path",
     "expected_public_install_route",
     "expected_startup_smoke_receipt_path",
     "startup_smoke_receipt_contract",
@@ -834,6 +846,7 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
             continue
         expected_artifact_id = str(item.get("expected_artifact_id") or "").strip()
         expected_installer = str(item.get("expected_installer_file_name") or "").strip()
+        expected_installer_relative_path = str(item.get("expected_installer_relative_path") or "").strip()
         expected_route = str(item.get("expected_public_install_route") or "").strip()
         expected_receipt = str(item.get("expected_startup_smoke_receipt_path") or "").strip()
         if not bool(item.get("expected_artifact_id_provided")):
@@ -1387,6 +1400,14 @@ def evaluate_journey(
                     "required_proofs": required_proofs,
                     "expected_artifact_id": str(raw_spec.get("expected_artifact_id") or "").strip(),
                     "expected_installer_file_name": str(raw_spec.get("expected_installer_file_name") or "").strip(),
+                    "expected_installer_relative_path": (
+                        str(raw_spec.get("expected_installer_relative_path") or "").strip()
+                        or (
+                            f"files/{str(raw_spec.get('expected_installer_file_name') or '').strip()}"
+                            if str(raw_spec.get("expected_installer_file_name") or "").strip()
+                            else ""
+                        )
+                    ),
                     "expected_public_install_route": str(raw_spec.get("expected_public_install_route") or "").strip(),
                     "expected_startup_smoke_receipt_path": str(
                         raw_spec.get("expected_startup_smoke_receipt_path") or ""
@@ -1465,6 +1486,14 @@ def evaluate_journey(
                             "expected_installer_file_name": str(
                                 raw_request.get("expected_installer_file_name") or ""
                             ).strip(),
+                            "expected_installer_relative_path": (
+                                str(raw_request.get("expected_installer_relative_path") or "").strip()
+                                or (
+                                    f"files/{str(raw_request.get('expected_installer_file_name') or '').strip()}"
+                                    if str(raw_request.get("expected_installer_file_name") or "").strip()
+                                    else ""
+                                )
+                            ),
                             "expected_public_install_route": str(
                                 raw_request.get("expected_public_install_route") or ""
                             ).strip(),
@@ -1726,11 +1755,25 @@ def evaluate_journey(
                                     "required_host",
                                     "expected_artifact_id",
                                     "expected_installer_file_name",
+                                    "expected_installer_relative_path",
                                     "expected_public_install_route",
                                     "expected_startup_smoke_receipt_path",
                                 ):
                                     actual_value = str(external_proof_request.get(required_key) or "").strip()
                                     expected_value = str(expected_request.get(required_key) or "").strip()
+                                    if required_key == "expected_installer_relative_path":
+                                        if not actual_value:
+                                            installer_file = str(
+                                                external_proof_request.get("expected_installer_file_name") or ""
+                                            ).strip()
+                                            actual_value = f"files/{installer_file}" if installer_file else ""
+                                        if not expected_value:
+                                            expected_installer_file = str(
+                                                expected_request.get("expected_installer_file_name") or ""
+                                            ).strip()
+                                            expected_value = (
+                                                f"files/{expected_installer_file}" if expected_installer_file else ""
+                                            )
                                     if required_key == "required_host":
                                         actual_value = actual_value.lower()
                                         expected_value = expected_value.lower()
@@ -2006,6 +2049,9 @@ def evaluate_journey(
                 ),
                 "expected_artifact_id": str(item.get("expected_artifact_id") or "").strip(),
                 "expected_installer_file_name": str(item.get("expected_installer_file_name") or "").strip(),
+                "expected_installer_relative_path": str(
+                    item.get("expected_installer_relative_path") or ""
+                ).strip(),
                 "expected_public_install_route": str(item.get("expected_public_install_route") or "").strip(),
                 "expected_startup_smoke_receipt_path": str(item.get("expected_startup_smoke_receipt_path") or "").strip(),
                 "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
@@ -2070,6 +2116,9 @@ def evaluate_journey(
                         "expected_artifact_id": str(request_row.get("expected_artifact_id") or "").strip(),
                         "expected_installer_file_name": str(
                             request_row.get("expected_installer_file_name") or ""
+                        ).strip(),
+                        "expected_installer_relative_path": str(
+                            request_row.get("expected_installer_relative_path") or ""
                         ).strip(),
                         "expected_public_install_route": str(
                             request_row.get("expected_public_install_route") or ""

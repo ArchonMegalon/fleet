@@ -1,6 +1,6 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-05T00:47:44Z
+- generated_at: 2026-04-05T00:57:46Z
 - unresolved_request_count: 4
 - unresolved_hosts: macos, windows
 
@@ -15,6 +15,7 @@
   required_proofs: `promoted_installer_artifact, startup_smoke_receipt`
   artifact_id: `avalonia-osx-arm64-installer`
   installer_file: `chummer-avalonia-osx-arm64-installer.dmg`
+  installer_relative_path: `files/chummer-avalonia-osx-arm64-installer.dmg`
   public_route: `/downloads/install/avalonia-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`
   commands:
@@ -24,6 +25,7 @@
   required_proofs: `promoted_installer_artifact, startup_smoke_receipt`
   artifact_id: `blazor-desktop-osx-arm64-installer`
   installer_file: `chummer-blazor-desktop-osx-arm64-installer.dmg`
+  installer_relative_path: `files/chummer-blazor-desktop-osx-arm64-installer.dmg`
   public_route: `/downloads/install/blazor-desktop-osx-arm64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json`
   commands:
@@ -49,6 +51,7 @@ cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLA
   required_proofs: `promoted_installer_artifact, startup_smoke_receipt`
   artifact_id: `avalonia-win-x64-installer`
   installer_file: `chummer-avalonia-win-x64-installer.exe`
+  installer_relative_path: `files/chummer-avalonia-win-x64-installer.exe`
   public_route: `/downloads/install/avalonia-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-avalonia-win-x64.receipt.json`
   commands:
@@ -58,6 +61,7 @@ cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLA
   required_proofs: `promoted_installer_artifact, startup_smoke_receipt`
   artifact_id: `blazor-desktop-win-x64-installer`
   installer_file: `chummer-blazor-desktop-win-x64-installer.exe`
+  installer_relative_path: `files/chummer-blazor-desktop-win-x64-installer.exe`
   public_route: `/downloads/install/blazor-desktop-win-x64-installer`
   startup_smoke_receipt: `startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json`
   commands:
