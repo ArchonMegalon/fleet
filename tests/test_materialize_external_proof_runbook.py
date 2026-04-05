@@ -95,6 +95,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "`avalonia:win-x64:windows`" in payload
     assert "`blazor-desktop:osx-arm64:macos`" in payload
     assert "capture_deadline_state: `pending`" in payload or "capture_deadline_state: `overdue`" in payload
+    assert "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-win-x64-installer" in payload
+    assert "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/blazor-desktop-osx-arm64-installer" in payload
     assert "echo windows-proof" in payload
     assert "echo macos-proof" in payload
     assert payload.count("`echo refresh-manifest`") == 2
@@ -104,6 +106,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
     assert "python3 scripts/materialize_journey_gates.py" in payload
+    assert "python3 scripts/verify_external_proof_closure.py" in payload
     assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
 
 
@@ -177,6 +180,7 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     payload = out.read_text(encoding="utf-8")
     assert payload.count("`echo refresh-manifest`") == 2
     assert payload.count("\necho refresh-manifest\n") == 1
+    assert payload.count("${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/") == 4
     assert "    - `echo tuple-1-proof`" in payload
     assert "    - `echo tuple-2-proof`" in payload
     assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh\n") == 1

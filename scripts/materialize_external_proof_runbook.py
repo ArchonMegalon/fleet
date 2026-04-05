@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ UTC = dt.timezone.utc
 ROOT = Path("/docker/fleet")
 DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR = "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}"
+UI_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
 
 
 def _post_capture_republish_commands() -> list[str]:
@@ -19,6 +22,7 @@ def _post_capture_republish_commands() -> list[str]:
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
         "cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
         "cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+        "cd /docker/fleet && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
         "cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
         "cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "cd /docker/fleet && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --html-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.html --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json --preview-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json",
@@ -182,7 +186,7 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
     for row in group.get("requests") or []:
         if not isinstance(row, dict):
             continue
-        for command in row.get("proof_capture_commands") or []:
+        for command in _commands_for_request(row):
             normalized = _normalize_text(command)
             if not normalized or normalized in seen:
                 continue
@@ -191,11 +195,33 @@ def _commands_for_group(group: dict[str, Any]) -> list[str]:
     return commands
 
 
+def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
+    expected_route = _normalize_text(request.get("expected_public_install_route"))
+    installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
+    if not expected_route or not installer_file_name:
+        return ""
+    if not expected_route.startswith("/"):
+        expected_route = "/" + expected_route
+    installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+    return (
+        f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+        f"mkdir -p {shlex.quote(str(installer_path.parent))} && "
+        f"if [ ! -s {shlex.quote(str(installer_path))} ]; then "
+        f"curl -fL --retry 3 --retry-delay 2 "
+        f"\"{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}{expected_route}\" "
+        f"-o {shlex.quote(str(installer_path))}; "
+        f"fi"
+    )
+
+
 def _commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
+    preflight = _installer_fetch_preflight_command(request)
+    if preflight:
+        commands.append(preflight)
     for command in request.get("proof_capture_commands") or []:
         normalized = _normalize_text(command)
-        if normalized:
+        if normalized and normalized not in commands:
             commands.append(normalized)
     return commands
 
