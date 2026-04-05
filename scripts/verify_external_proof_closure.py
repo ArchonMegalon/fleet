@@ -49,9 +49,31 @@ def main() -> int:
     support_summary = dict(support_packets.get("summary") or {})
     journey_summary = dict(journey_gates.get("summary") or {})
     tuple_coverage = dict(release_channel.get("desktopTupleCoverage") or {})
+    support_plan = dict(support_packets.get("unresolved_external_proof_execution_plan") or {})
+    journey_rows = [
+        dict(item)
+        for item in (journey_gates.get("journeys") or [])
+        if isinstance(item, dict)
+    ]
 
     unresolved_count = int(support_summary.get("unresolved_external_proof_request_count") or 0)
     blocked_external_only_count = int(journey_summary.get("blocked_external_only_count") or 0)
+    support_generated_at = str(
+        support_packets.get("generated_at") or support_packets.get("generatedAt") or ""
+    ).strip()
+    release_generated_at = str(
+        release_channel.get("generatedAt") or release_channel.get("generated_at") or ""
+    ).strip()
+    support_plan_release_generated_at = str(
+        support_plan.get("release_channel_generated_at") or support_plan.get("releaseChannelGeneratedAt") or ""
+    ).strip()
+    journey_support_generated_ats = sorted(
+        {
+            str((row.get("evidence") or {}).get("support_packets_generated_at") or "").strip()
+            for row in journey_rows
+            if str((row.get("evidence") or {}).get("support_packets_generated_at") or "").strip()
+        }
+    )
     missing_tuples = [
         str(item).strip()
         for item in (tuple_coverage.get("missingRequiredPlatformHeadRidTuples") or [])
@@ -71,6 +93,28 @@ def main() -> int:
         failures.append(
             "release channel missingRequiredPlatformHeadRidTuples is not empty: "
             + ", ".join(missing_tuples)
+        )
+    if not release_generated_at:
+        failures.append(
+            "release channel generatedAt/generated_at is missing (cannot prove closure freshness)"
+        )
+    if not support_generated_at:
+        failures.append(
+            "support packets generated_at/generatedAt is missing (cannot prove closure freshness)"
+        )
+    if not support_plan_release_generated_at:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.release_channel_generated_at is missing"
+        )
+    if support_plan_release_generated_at and release_generated_at and support_plan_release_generated_at != release_generated_at:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.release_channel_generated_at "
+            f"({support_plan_release_generated_at}) does not match release channel generatedAt ({release_generated_at})"
+        )
+    if journey_support_generated_ats and support_generated_at and journey_support_generated_ats != [support_generated_at]:
+        failures.append(
+            "journey gates evidence.support_packets_generated_at values do not match support packets generated_at: "
+            + ", ".join(journey_support_generated_ats)
         )
 
     if failures:

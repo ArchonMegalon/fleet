@@ -20,14 +20,25 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
     _write_json(
         support_packets,
         {
+            "generated_at": "2026-04-05T01:22:01Z",
             "summary": {
                 "unresolved_external_proof_request_count": 0,
-            }
+            },
+            "unresolved_external_proof_execution_plan": {
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
         },
     )
     _write_json(
         journey_gates,
         {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                    }
+                }
+            ],
             "summary": {
                 "blocked_external_only_count": 0,
             }
@@ -36,6 +47,7 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
     _write_json(
         release_channel,
         {
+            "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
                 "missingRequiredPlatformHeadRidTuples": [],
             }
@@ -69,6 +81,7 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
     _write_json(
         support_packets,
         {
+            "generated_at": "2026-04-05T01:22:01Z",
             "summary": {
                 "unresolved_external_proof_request_count": 2,
             }
@@ -77,6 +90,13 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
     _write_json(
         journey_gates,
         {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                    }
+                }
+            ],
             "summary": {
                 "blocked_external_only_count": 1,
             }
@@ -85,6 +105,7 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
     _write_json(
         release_channel,
         {
+            "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
                 "missingRequiredPlatformHeadRidTuples": [
                     "avalonia:osx-arm64:macos",
@@ -114,3 +135,68 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
     assert "unresolved_external_proof_request_count=2" in result.stderr
     assert "blocked_external_only_count=1" in result.stderr
     assert "avalonia:osx-arm64:macos" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_cross_plane_timestamps_drift(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+            },
+            "unresolved_external_proof_execution_plan": {
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:02Z",
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:50Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatformHeadRidTuples": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "release_channel_generated_at (2026-04-05T01:21:51Z) does not match release channel generatedAt (2026-04-05T01:21:50Z)"
+        in result.stderr
+    )
+    assert "journey gates evidence.support_packets_generated_at values do not match support packets generated_at" in result.stderr
