@@ -105,8 +105,17 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
+    assert "python3 scripts/materialize_status_plane.py" in payload
+    assert "python3 scripts/verify_status_plane_semantics.py" in payload
     assert "python3 scripts/materialize_public_release_channel.py" in payload
     assert "python3 scripts/verify_public_release_channel.py" in payload
+    assert "--release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json" in payload
+    assert payload.index("python3 scripts/materialize_status_plane.py") < payload.index(
+        "python3 scripts/materialize_journey_gates.py"
+    )
+    assert payload.index("python3 scripts/materialize_public_progress_report.py") < payload.index(
+        "python3 scripts/materialize_journey_gates.py"
+    )
     assert "python3 scripts/materialize_journey_gates.py" in payload
     assert "python3 scripts/verify_external_proof_closure.py" in payload
     assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
