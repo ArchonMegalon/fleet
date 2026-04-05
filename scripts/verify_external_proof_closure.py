@@ -64,7 +64,19 @@ def main() -> int:
     if not isinstance(support_packets.get("unresolved_external_proof_execution_plan"), dict):
         failures.append("support packets unresolved_external_proof_execution_plan is missing or not an object")
 
+    missing_platforms_raw = tuple_coverage.get("missingRequiredPlatforms")
+    missing_head_pairs_raw = tuple_coverage.get("missingRequiredPlatformHeadPairs")
     missing_tuples_raw = tuple_coverage.get("missingRequiredPlatformHeadRidTuples")
+    if "missingRequiredPlatforms" not in tuple_coverage:
+        failures.append("release channel desktopTupleCoverage.missingRequiredPlatforms is missing")
+    elif not isinstance(missing_platforms_raw, list):
+        failures.append("release channel desktopTupleCoverage.missingRequiredPlatforms is not an array")
+    if "missingRequiredPlatformHeadPairs" not in tuple_coverage:
+        failures.append("release channel desktopTupleCoverage.missingRequiredPlatformHeadPairs is missing")
+    elif not isinstance(missing_head_pairs_raw, list):
+        failures.append(
+            "release channel desktopTupleCoverage.missingRequiredPlatformHeadPairs is not an array"
+        )
     if "missingRequiredPlatformHeadRidTuples" not in tuple_coverage:
         failures.append(
             "release channel desktopTupleCoverage.missingRequiredPlatformHeadRidTuples is missing"
@@ -171,6 +183,16 @@ def main() -> int:
             if str((row.get("evidence") or {}).get("support_packets_generated_at") or "").strip()
         }
     )
+    missing_platforms = [
+        str(item).strip()
+        for item in (missing_platforms_raw or [])
+        if str(item).strip()
+    ]
+    missing_head_pairs = [
+        str(item).strip()
+        for item in (missing_head_pairs_raw or [])
+        if str(item).strip()
+    ]
     missing_tuples = [
         str(item).strip()
         for item in (missing_tuples_raw or [])
@@ -310,6 +332,16 @@ def main() -> int:
         failures.append(
             "support packets unresolved_external_proof_execution_plan.host_groups still contain backlog: "
             + ", ".join(support_plan_hosts_with_backlog)
+        )
+    if missing_platforms:
+        failures.append(
+            "release channel missingRequiredPlatforms is not empty: "
+            + ", ".join(missing_platforms)
+        )
+    if missing_head_pairs:
+        failures.append(
+            "release channel missingRequiredPlatformHeadPairs is not empty: "
+            + ", ".join(missing_head_pairs)
         )
     if missing_tuples:
         failures.append(

@@ -69,6 +69,8 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             }
         },
@@ -138,6 +140,8 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["macos"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:macos"],
                 "missingRequiredPlatformHeadRidTuples": [
                     "avalonia:osx-arm64:macos",
                 ],
@@ -166,6 +170,83 @@ def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: P
     assert "unresolved_external_proof_request_count=2" in result.stderr
     assert "blocked_external_only_count=1" in result.stderr
     assert "avalonia:osx-arm64:macos" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_release_platform_or_head_pair_backlog_remains(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": "2026-04-05T01:22:01Z",
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {"count": 0, "hosts": [], "tuples": [], "host_counts": {}, "tuple_counts": {}, "specs": {}},
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-05T01:22:01Z",
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": "2026-04-05T01:21:51Z",
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["blazor-desktop:windows"],
+                "missingRequiredPlatformHeadRidTuples": [],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "missingRequiredPlatforms is not empty: windows" in result.stderr
+    assert "missingRequiredPlatformHeadPairs is not empty: blazor-desktop:windows" in result.stderr
 
 
 def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_despite_zero_counts(tmp_path: Path) -> None:
@@ -229,6 +310,8 @@ def test_verify_external_proof_closure_fails_when_backlog_lists_are_non_empty_de
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             },
         },
@@ -321,6 +404,8 @@ def test_verify_external_proof_closure_fails_when_unresolved_backlog_dict_remain
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             },
         },
@@ -391,6 +476,8 @@ def test_verify_external_proof_closure_fails_when_cross_plane_timestamps_drift(t
         {
             "generatedAt": "2026-04-05T01:21:50Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             },
         },
@@ -475,6 +562,8 @@ def test_verify_external_proof_closure_fails_when_execution_plan_backlog_remains
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             }
         },
@@ -541,6 +630,8 @@ def test_verify_external_proof_closure_fails_when_execution_plan_generated_at_dr
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             }
         },
@@ -685,6 +776,8 @@ def test_verify_external_proof_closure_fails_when_journey_external_proof_request
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             },
         },
@@ -753,6 +846,8 @@ def test_verify_external_proof_closure_fails_when_unresolved_external_proof_shap
         {
             "generatedAt": "2026-04-05T01:21:51Z",
             "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
                 "missingRequiredPlatformHeadRidTuples": [],
             },
         },
