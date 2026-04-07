@@ -71,6 +71,24 @@ if str(ADMIN_HELPERS_DIR) not in sys.path:
     sys.path.insert(0, str(ADMIN_HELPERS_DIR))
 
 
+def _default_config_root() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONFIG_ROOT", "") or "").strip()
+    candidates: List[pathlib.Path] = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    candidates.extend(
+        [
+            FLEET_MOUNT_ROOT / "config",
+            CONTROLLER_DIR.parent / "config",
+            pathlib.Path("/app/config"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
 def resolve_participant_device_auth_helper() -> pathlib.Path:
     configured = str(os.environ.get("FLEET_PARTICIPANT_DEVICE_AUTH_HELPER", "") or "").strip()
     candidates: List[pathlib.Path] = []
@@ -120,6 +138,7 @@ STUDIO_PUBLISHED_FILES = [
     "runtime-instructions.generated.md",
 ]
 WORKPACKAGES_FILENAME = "WORKPACKAGES.generated.yaml"
+SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
 DESIGN_MIRROR_PRODUCT_FILES = [
     ".codex-design/product/README.md",
     ".codex-design/product/START_HERE.md",
@@ -161,8 +180,9 @@ WORKTREE_ROOT = pathlib.Path(os.environ.get("FLEET_WORKTREE_ROOT", str(DB_PATH.p
 CONTROLLER_HEARTBEAT_PATH = pathlib.Path(
     os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", str(DB_PATH.parent / "controller-heartbeat.json"))
 )
-CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
-ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+CONFIG_ROOT = _default_config_root()
+CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
+ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", str(CONFIG_ROOT / "accounts.yaml")))
 QUARTERMASTER_PATH = CONFIG_PATH.with_name("quartermaster.yaml")
 POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
 ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
@@ -175,6 +195,9 @@ _MAIL_OUTBOX_ROOT_ENV = str(os.environ.get("FLEET_MAIL_OUTBOX_ROOT", "") or "").
 _MAIL_STATE_PATH_ENV = str(os.environ.get("FLEET_MAIL_STATE_PATH", "") or "").strip()
 MAIL_OUTBOX_ROOT: Optional[pathlib.Path] = pathlib.Path(_MAIL_OUTBOX_ROOT_ENV) if _MAIL_OUTBOX_ROOT_ENV else None
 MAIL_STATE_PATH: Optional[pathlib.Path] = pathlib.Path(_MAIL_STATE_PATH_ENV) if _MAIL_STATE_PATH_ENV else None
+RUNTIME_FALLBACK_ROOT = pathlib.Path(
+    os.environ.get("FLEET_RUNTIME_FALLBACK_ROOT", "/tmp/codex-fleet-runtime")
+)
 GH_HOSTS_PATH = pathlib.Path(os.environ.get("FLEET_GH_HOSTS_PATH", "/run/gh/hosts.yml"))
 GITHUB_API_BASE = os.environ.get("FLEET_GITHUB_API_BASE", "https://api.github.com").rstrip("/")
 GITHUB_WEBHOOK_SECRET = os.environ.get("FLEET_GITHUB_WEBHOOK_SECRET", "")
@@ -758,13 +781,46 @@ def truncate_title(text: str, max_len: int = 72) -> str:
     return clean[: max_len - 1].rstrip() + "…"
 
 
+def _ensure_writable_dir(path: pathlib.Path, *, fallback_leaf: str) -> pathlib.Path:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        pass
+    if path.exists() and os.access(path, os.W_OK | os.X_OK):
+        return path
+    fallback = RUNTIME_FALLBACK_ROOT / fallback_leaf
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+def _ensure_writable_file_path(path: pathlib.Path, *, fallback_leaf: str) -> pathlib.Path:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        pass
+    if path.parent.exists() and os.access(path.parent, os.W_OK | os.X_OK):
+        return path
+    fallback = RUNTIME_FALLBACK_ROOT / fallback_leaf
+    fallback.parent.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
 def ensure_dirs() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    CODEX_HOME_ROOT.mkdir(parents=True, exist_ok=True)
-    GROUP_ROOT.mkdir(parents=True, exist_ok=True)
-    mail_outbox_root().mkdir(parents=True, exist_ok=True)
-    mail_state_path().parent.mkdir(parents=True, exist_ok=True)
+    global DB_PATH, LOG_DIR, WORKTREE_ROOT, CONTROLLER_HEARTBEAT_PATH, CODEX_HOME_ROOT, GROUP_ROOT, MAIL_OUTBOX_ROOT, MAIL_STATE_PATH
+
+    DB_PATH = _ensure_writable_file_path(DB_PATH, fallback_leaf="fleet.db")
+    LOG_DIR = _ensure_writable_dir(LOG_DIR, fallback_leaf="logs")
+    WORKTREE_ROOT = _ensure_writable_dir(WORKTREE_ROOT, fallback_leaf="worktrees")
+    CONTROLLER_HEARTBEAT_PATH = _ensure_writable_file_path(
+        CONTROLLER_HEARTBEAT_PATH,
+        fallback_leaf="controller-heartbeat.json",
+    )
+    CODEX_HOME_ROOT = _ensure_writable_dir(CODEX_HOME_ROOT, fallback_leaf="codex-homes")
+    GROUP_ROOT = _ensure_writable_dir(GROUP_ROOT, fallback_leaf="groups")
+
+    resolved_mail_outbox = _ensure_writable_dir(mail_outbox_root(), fallback_leaf="mail-outbox")
+    MAIL_OUTBOX_ROOT = resolved_mail_outbox
+    MAIL_STATE_PATH = _ensure_writable_file_path(mail_state_path(), fallback_leaf="mail-state.json")
 
 
 def write_controller_heartbeat(*, status: str, detail: str = "") -> None:
@@ -776,6 +832,7 @@ def write_controller_heartbeat(*, status: str, detail: str = "") -> None:
     }
     CONTROLLER_HEARTBEAT_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = CONTROLLER_HEARTBEAT_PATH.with_suffix(".tmp")
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
     tmp_path.replace(CONTROLLER_HEARTBEAT_PATH)
 
@@ -789,10 +846,11 @@ def controller_heartbeat_loop(stop_event: threading.Event, interval_seconds: flo
 
 def db() -> sqlite3.Connection:
     ensure_dirs()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -1502,7 +1560,9 @@ def migrate_db(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN reward_receipt_status TEXT NOT NULL DEFAULT ''")
     if participant_cols and "reward_receipt_error" not in participant_cols:
         conn.execute("ALTER TABLE participant_lanes ADD COLUMN reward_receipt_error TEXT")
-    conn.execute("UPDATE projects SET status=? WHERE status='ready'", (READY_STATUS,))
+    legacy_ready_row = conn.execute("SELECT 1 FROM projects WHERE status='ready' LIMIT 1").fetchone()
+    if legacy_ready_row:
+        conn.execute("UPDATE projects SET status=? WHERE status='ready'", (READY_STATUS,))
 
 
 def migrate_runtime_tasks_table(conn: sqlite3.Connection) -> None:
@@ -4915,10 +4975,18 @@ def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
             payload = json.loads(response.read().decode("utf-8"))
         return payload if isinstance(payload, dict) else {}
 
+    def _request_json_global_first(path: str) -> Dict[str, Any]:
+        try:
+            return _request_json(f"{path}?scope=global")
+        except urllib.error.HTTPError as exc:
+            if exc.code not in {403, 404, 422}:
+                raise
+        return _request_json(path)
+
     try:
         payload = {
-            "aggregate": _request_json("/v1/providers/onemin/aggregate"),
-            "runway": _request_json("/v1/providers/onemin/runway"),
+            "aggregate": _request_json_global_first("/v1/providers/onemin/aggregate"),
+            "runway": _request_json_global_first("/v1/providers/onemin/runway"),
         }
     except Exception:
         if persisted_payload:
@@ -7234,6 +7302,282 @@ def feedback_filename(prefix: str) -> str:
     return utc_now().strftime(f"%Y-%m-%d-%H%M%S-{safe}.md")
 
 
+def feedback_dir_path(project_cfg: Dict[str, Any]) -> pathlib.Path:
+    repo = pathlib.Path(project_cfg["path"])
+    raw_dir = pathlib.Path(str(project_cfg.get("feedback_dir") or "feedback"))
+    return raw_dir if raw_dir.is_absolute() else repo / raw_dir
+
+
+def feedback_path_rel(project_cfg: Dict[str, Any], path: pathlib.Path) -> str:
+    repo = pathlib.Path(project_cfg["path"])
+    try:
+        return path.relative_to(repo).as_posix()
+    except Exception:
+        return path.name or path.as_posix()
+
+
+def feedback_dir_label(project_cfg: Dict[str, Any]) -> str:
+    return feedback_path_rel(project_cfg, feedback_dir_path(project_cfg))
+
+
+def feedback_file_title(path: pathlib.Path) -> str:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for _ in range(24):
+                line = handle.readline()
+                if not line:
+                    break
+                clean = line.strip()
+                if not clean:
+                    continue
+                if clean.startswith("#"):
+                    title = clean.lstrip("#").strip()
+                    if title:
+                        return re.sub(r"\s+", " ", title)
+                if clean.lower().startswith("title:"):
+                    title = clean.split(":", 1)[1].strip()
+                    if title:
+                        return re.sub(r"\s+", " ", title)
+    except Exception:
+        pass
+    fallback = re.sub(r"[-_]+", " ", path.stem).strip()
+    return fallback or path.name
+
+
+def feedback_task_title(feedback_files: List[pathlib.Path]) -> str:
+    if not feedback_files:
+        return "Fix feedback backlog"
+    headline = feedback_file_title(feedback_files[0])
+    if not headline.lower().startswith(("fix ", "address ", "resolve ")):
+        headline = f"Fix feedback: {headline}"
+    if len(feedback_files) > 1:
+        headline = f"{headline} (+{len(feedback_files) - 1} more feedback note(s))"
+    return headline
+
+
+def feedback_backlog_task_item(
+    project_cfg: Dict[str, Any],
+    feedback_files: List[pathlib.Path],
+) -> Optional[Dict[str, Any]]:
+    if not feedback_files:
+        return None
+    includes_support_packet = any(path.name.startswith("support-packet-") for path in feedback_files)
+    return {
+        "title": feedback_task_title(feedback_files),
+        "difficulty": "medium" if len(feedback_files) > 1 or includes_support_packet else "auto",
+        "risk_level": "medium" if includes_support_packet else "auto",
+        "allow_credit_burn": True,
+        "allow_paid_fast_lane": False,
+        "source_items": [feedback_path_rel(project_cfg, path) for path in feedback_files],
+    }
+
+
+def support_case_packets_path() -> pathlib.Path:
+    return FLEET_MOUNT_ROOT / STUDIO_PUBLISHED_DIRNAME / SUPPORT_CASE_PACKETS_FILENAME
+
+
+def load_support_case_packets_payload() -> Dict[str, Any]:
+    path = support_case_packets_path()
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def support_packet_feedback_fingerprint(packet: Dict[str, Any]) -> str:
+    payload = json.dumps(packet or {}, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def support_packet_feedback_filename(packet_id: str, fingerprint: str) -> str:
+    safe_packet_id = review_slice_key(packet_id)
+    safe_fingerprint = review_slice_key(fingerprint)
+    return f"support-packet-{safe_packet_id}-{safe_fingerprint}.md"
+
+
+def support_packet_is_external_host_blocker(packet: Dict[str, Any]) -> bool:
+    packet_kind = str(packet.get("packet_kind") or packet.get("kind") or "").strip().lower()
+    install_diagnosis = dict(packet.get("install_diagnosis") or {})
+    external_request = dict(install_diagnosis.get("external_proof_request") or {})
+    required_host = str(external_request.get("required_host") or "").strip().lower()
+    if packet_kind == "external_proof_request":
+        return required_host in {"", "macos", "windows"}
+    return bool(install_diagnosis.get("external_proof_required")) and required_host in {"macos", "windows"}
+
+
+def support_packet_is_autofix_actionable(packet: Dict[str, Any]) -> bool:
+    status = str(packet.get("status") or "").strip().lower()
+    if status not in {"new", "clustered", "accepted"}:
+        return False
+    if support_packet_is_external_host_blocker(packet):
+        return False
+    if str(packet.get("primary_lane") or "").strip().lower() == "defer":
+        return False
+    return bool(str(packet.get("packet_id") or "").strip() and str(packet.get("target_repo") or "").strip())
+
+
+def target_project_cfg_for_support_packet(
+    config: Dict[str, Any],
+    packet: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    target_repo = str(packet.get("target_repo") or "").strip().lower()
+    if not target_repo:
+        return None
+    for project_cfg in config.get("projects", []):
+        aliases = {
+            str(project_cfg.get("id") or "").strip().lower(),
+            str(project_repo_slug(project_cfg) or "").strip().lower(),
+            pathlib.Path(str(project_cfg.get("path") or "")).name.strip().lower(),
+        }
+        if target_repo in aliases:
+            return project_cfg
+    return None
+
+
+def render_support_packet_feedback_note(packet: Dict[str, Any]) -> str:
+    packet_id = str(packet.get("packet_id") or "").strip()
+    title = str(packet.get("title") or packet.get("summary") or packet_id or "Support packet").strip()
+    install_diagnosis = dict(packet.get("install_diagnosis") or {})
+    fix_confirmation = dict(packet.get("fix_confirmation") or {})
+    recovery_path = dict(packet.get("recovery_path") or {})
+    affected_canon_files = [
+        str(item).strip()
+        for item in (packet.get("affected_canon_files") or [])
+        if str(item).strip()
+    ]
+    lines = [
+        f"# {title}",
+        "",
+        f"Packet ID: {packet_id}",
+        f"Packet Kind: {str(packet.get('packet_kind') or packet.get('kind') or '').strip()}",
+        f"Status: {str(packet.get('status') or '').strip()}",
+        f"Target Repo: {str(packet.get('target_repo') or '').strip()}",
+        "",
+        "## Action Request",
+        "- Treat this support packet as a bounded follow-up for the owning repo.",
+        "- Apply the repo-local product, docs, or policy change needed to close the issue described below.",
+        "- Update the smallest durable proof, regression check, or public-facing artifact that demonstrates the fix.",
+    ]
+    summary = str(packet.get("summary") or "").strip()
+    if summary:
+        lines.extend(["", "## Summary", summary])
+    lines.extend(
+        [
+            "",
+            "## Packet Context",
+            f"- Reason: {str(packet.get('reason') or '').strip()}",
+            f"- Exit condition: {str(packet.get('exit_condition') or '').strip()}",
+            f"- Primary lane: {str(packet.get('primary_lane') or '').strip()}",
+            f"- Change class: {str(packet.get('change_class') or '').strip()}",
+            f"- Release channel: {str(packet.get('release_channel') or '').strip()}",
+            f"- Head: {str(packet.get('head_id') or '').strip()}",
+            f"- Platform: {str(packet.get('platform') or '').strip()}",
+            f"- Arch: {str(packet.get('arch') or '').strip()}",
+            f"- Install truth state: {str(packet.get('install_truth_state') or '').strip()}",
+            f"- Fixed version: {str(packet.get('fixed_version') or '').strip()}",
+            f"- Fixed channel: {str(packet.get('fixed_channel') or '').strip()}",
+            f"- Fix confirmation: {str(fix_confirmation.get('state') or '').strip()}",
+        ]
+    )
+    if affected_canon_files:
+        lines.extend(["", "## Affected Canon Files"])
+        lines.extend(f"- {item}" for item in affected_canon_files)
+    if install_diagnosis:
+        lines.extend(
+            [
+                "",
+                "## Install Diagnosis",
+                f"- Registry channel: {str(install_diagnosis.get('registry_channel_id') or '').strip()}",
+                f"- Registry release version: {str(install_diagnosis.get('registry_release_version') or '').strip()}",
+                f"- Registry proof status: {str(install_diagnosis.get('registry_release_proof_status') or '').strip()}",
+                f"- Case tuple id: {str(install_diagnosis.get('case_tuple_id') or '').strip()}",
+                f"- Promoted tuple id: {str(install_diagnosis.get('promoted_tuple_id') or '').strip()}",
+                f"- Promoted artifact id: {str(install_diagnosis.get('promoted_artifact_id') or '').strip()}",
+            ]
+        )
+    if recovery_path:
+        lines.extend(
+            [
+                "",
+                "## Recovery Path",
+                f"- Action: {str(recovery_path.get('action_id') or '').strip()}",
+                f"- Href: {str(recovery_path.get('href') or '').strip()}",
+                f"- Reason: {str(recovery_path.get('reason') or '').strip()}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def publish_support_packets_to_feedback(config: Dict[str, Any]) -> int:
+    payload = load_support_case_packets_payload()
+    packets = [dict(item) for item in (payload.get("packets") or []) if isinstance(item, dict)]
+    if not packets:
+        return 0
+
+    published = 0
+    for packet in packets:
+        if not support_packet_is_autofix_actionable(packet):
+            continue
+        project_cfg = target_project_cfg_for_support_packet(config, packet)
+        if not project_cfg:
+            continue
+        packet_id = str(packet.get("packet_id") or "").strip()
+        if not packet_id:
+            continue
+        feedback_dir = feedback_dir_path(project_cfg)
+        feedback_dir.mkdir(parents=True, exist_ok=True)
+        note_path = feedback_dir / support_packet_feedback_filename(packet_id, support_packet_feedback_fingerprint(packet))
+        if note_path.exists():
+            continue
+        note_path.write_text(render_support_packet_feedback_note(packet), encoding="utf-8")
+        published += 1
+
+        project_id = str(project_cfg.get("id") or "").strip()
+        if project_id:
+            with db() as conn:
+                row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+            if row and not row["active_run_id"]:
+                update_project_status(
+                    project_id,
+                    status=READY_STATUS,
+                    current_slice=feedback_task_title([note_path]),
+                    active_run_id=None,
+                    cooldown_until=None,
+                    last_run_at=parse_iso(row["last_run_at"]),
+                    last_error=None,
+                    consecutive_failures=0,
+                    spider_tier=row["spider_tier"],
+                    spider_model=row["spider_model"],
+                    spider_reason=row["spider_reason"],
+                )
+            project_groups = project_group_defs(config, project_id)
+            if project_groups:
+                group_id = str(project_groups[0].get("id") or "").strip()
+                if group_id:
+                    upsert_group_runtime(group_id, signoff_state="open", mark_refill_requested=True)
+                    log_group_publish_event(
+                        group_id,
+                        source="support_packet",
+                        source_scope_type="project",
+                        source_scope_id=project_id,
+                        finding_key=packet_id,
+                        candidate_id=None,
+                        published_targets=[
+                            {
+                                "target_type": "project",
+                                "target_id": project_id,
+                                "feedback_note": str(note_path),
+                                "packet_id": packet_id,
+                                "packet_status": str(packet.get("status") or "").strip(),
+                            }
+                        ],
+                    )
+    return published
+
+
 def queue_overlay_path(project_cfg: Dict[str, Any]) -> pathlib.Path:
     return studio_published_root(project_cfg) / "QUEUE.generated.yaml"
 
@@ -8534,8 +8878,10 @@ def load_split_projects() -> List[Dict[str, Any]]:
         data = load_yaml(path)
         if isinstance(data.get("projects"), list):
             projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
-        elif data:
+        elif isinstance(data, dict) and str(data.get("id") or "").strip():
             projects.append(dict(data))
+        elif isinstance(data, dict):
+            continue
     return projects
 
 
@@ -13896,6 +14242,41 @@ def prepare_dispatch_candidate(config: Dict[str, Any], project_cfg: Dict[str, An
                     cooldown_until=cooldown_until,
                     dispatchable=dispatchable,
                 )
+        feedback_files = selected_feedback_files(config, project_cfg)
+        feedback_task = feedback_backlog_task_item(project_cfg, feedback_files)
+        if feedback_task:
+            feedback_slice = str(feedback_task.get("title") or feedback_task_title(feedback_files)).strip()
+            feedback_task_meta = normalize_task_queue_item(feedback_task, lanes=config.get("lanes"))
+            cooldown_until = parse_iso(row["cooldown_until"])
+            feedback_status = READY_STATUS if cooldown_until is None or cooldown_until <= now else WAITING_CAPACITY_STATUS
+            current_slice_name = str(row["current_slice"] or "").strip()
+            current_status = str(row["status"] or "").strip().lower()
+            if current_status != feedback_status or current_slice_name != feedback_slice:
+                update_project_status(
+                    project_id,
+                    status=feedback_status,
+                    current_slice=feedback_slice,
+                    active_run_id=None,
+                    cooldown_until=cooldown_until if feedback_status != READY_STATUS else None,
+                    last_run_at=parse_iso(row["last_run_at"]),
+                    last_error=row["last_error"] if feedback_status != READY_STATUS else None,
+                    consecutive_failures=row["consecutive_failures"] if feedback_status != READY_STATUS else 0,
+                    spider_tier=row["spider_tier"],
+                    spider_model=row["spider_model"],
+                    spider_reason=row["spider_reason"],
+                )
+            return DispatchCandidate(
+                row=row,
+                project_cfg=project_cfg,
+                queue=queue,
+                queue_index=queue_index,
+                slice_item=feedback_task,
+                slice_name=feedback_slice,
+                task_meta=feedback_task_meta,
+                runtime_status=feedback_status,
+                cooldown_until=cooldown_until if feedback_status != READY_STATUS else None,
+                dispatchable=feedback_status == READY_STATUS,
+            )
         exhausted_status = SOURCE_BACKLOG_OPEN_STATUS if has_queue_sources and bool(queue) else "complete"
         update_project_status(
             project_id,
@@ -16068,8 +16449,7 @@ def read_state_file(project_path: str, state_file: str) -> Dict[str, Any]:
 
 
 def unread_feedback_files(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
-    repo = pathlib.Path(project_cfg["path"])
-    feedback_dir = repo / project_cfg.get("feedback_dir", "feedback")
+    feedback_dir = feedback_dir_path(project_cfg)
     applied_log = feedback_dir / ".applied.log"
     feedback_dir.mkdir(parents=True, exist_ok=True)
     if not applied_log.exists():
@@ -16079,7 +16459,7 @@ def unread_feedback_files(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
     for child in feedback_dir.iterdir():
         if child.name in {"README.md", ".applied.log"} or not child.is_file():
             continue
-        rel = f"feedback/{child.name}"
+        rel = feedback_path_rel(project_cfg, child)
         if rel not in applied:
             files.append(child)
     files.sort(key=lambda path: (path.stat().st_mtime, path.name))
@@ -16092,6 +16472,10 @@ def selected_feedback_files(config: Dict[str, Any], project_cfg: Dict[str, Any])
     files = unread_feedback_files(project_cfg)
     if limit == 0:
         return []
+    support_packet_files = [path for path in files if path.name.startswith("support-packet-")]
+    if support_packet_files:
+        prioritized = support_packet_files + [path for path in files if not path.name.startswith("support-packet-")]
+        return prioritized[:limit]
     return files[:limit]
 
 
@@ -16237,13 +16621,12 @@ def render_feedback_blocks_for_prompt(feedback_files: List[pathlib.Path]) -> Lis
 def mark_feedback_applied(project_cfg: Dict[str, Any], run_id: int, files: List[pathlib.Path]) -> None:
     if not files:
         return
-    repo = pathlib.Path(project_cfg["path"])
-    feedback_dir = repo / project_cfg.get("feedback_dir", "feedback")
+    feedback_dir = feedback_dir_path(project_cfg)
     applied_log = feedback_dir / ".applied.log"
     existing = {line.strip() for line in applied_log.read_text(encoding="utf-8").splitlines() if line.strip()} if applied_log.exists() else set()
     new_lines = []
     for file_path in files:
-        rel = f"feedback/{file_path.name}"
+        rel = feedback_path_rel(project_cfg, file_path)
         if rel not in existing:
             new_lines.append(rel)
     if new_lines:
@@ -16284,7 +16667,12 @@ def prompt_instruction_items(project_cfg: Dict[str, Any]) -> List[str]:
     packages_overlay = work_packages_generated_path(project_cfg)
     if packages_overlay.exists():
         instructions.append(packages_overlay.relative_to(repo).as_posix())
-    instructions.extend(["AGENTS.md if present", "unread feedback files in feedback/, oldest first"])
+    instructions.extend(
+        [
+            "AGENTS.md if present",
+            f"unread feedback files in {feedback_dir_label(project_cfg)}/, oldest first",
+        ]
+    )
     return instructions
 
 
@@ -17684,17 +18072,31 @@ def auth_compatible_model_preferences(wanted_models: List[str], auth_kind: str) 
     return compatible
 
 
+def account_lane_can_serve_allowed_lanes(configured_lane: str, allowed_lanes: Sequence[str]) -> bool:
+    normalized = [str(item or "").strip().lower() for item in allowed_lanes if str(item or "").strip()]
+    if not normalized:
+        return True
+    clean_configured = str(configured_lane or "").strip().lower()
+    if clean_configured in normalized:
+        return True
+    if clean_configured == "core":
+        return any(lane in {"core_authority", "core_rescue"} for lane in normalized)
+    if clean_configured == "review_light":
+        return "review_shard" in normalized
+    if clean_configured == "jury":
+        return "audit_shard" in normalized
+    return False
+
+
 def auth_kind_can_serve_allowed_lanes(
     auth_kind: str,
     configured_lane: str,
     allowed_lanes: Sequence[str],
     policy: Dict[str, Any],
 ) -> bool:
+    if account_lane_can_serve_allowed_lanes(configured_lane, allowed_lanes):
+        return True
     allowed = [str(item or "").strip().lower() for item in allowed_lanes if str(item or "").strip()]
-    if not allowed or configured_lane in allowed:
-        return True
-    if configured_lane == "core" and any(lane in {"core_authority", "core_rescue"} for lane in allowed):
-        return True
     if auth_kind in CHATGPT_AUTH_KINDS and bool(policy.get("allow_chatgpt_accounts", True)):
         return configured_lane == "core" and any(lane in {"easy", "groundwork", "repair", "survival"} for lane in allowed)
     return False
@@ -17781,7 +18183,7 @@ def shared_lane_fallback_aliases(
         if not clean_alias.startswith("acct-ea-"):
             continue
         configured_lane = infer_account_lane(account_cfg, alias=clean_alias)
-        if desired_lanes and configured_lane not in desired_lanes:
+        if not account_lane_can_serve_allowed_lanes(configured_lane, desired_lanes):
             continue
         auth_kind = str(account_cfg.get("auth_kind") or "api_key").strip()
         if auth_kind in CHATGPT_AUTH_KINDS and not bool(policy.get("allow_chatgpt_accounts", True)):
@@ -21489,6 +21891,7 @@ async def scheduler_loop() -> None:
             write_controller_heartbeat(status="running", detail="scheduler_tick")
             if bool(get_policy(config, "auto_heal_enabled", True)):
                 auto_publish_approved_audit_candidates(config)
+            publish_support_packets_to_feedback(config)
             config = normalize_config()
             sync_config_to_db(config)
             normalize_usage_limit_account_backoffs(config)

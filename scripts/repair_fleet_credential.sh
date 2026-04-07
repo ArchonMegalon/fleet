@@ -191,6 +191,11 @@ maybe_repair_chatgpt_auth() {
     bash /docker/fleet/scripts/refresh_archon_codex_auth.sh
     return 0
   fi
+  if [[ "$auth_path" == "/run/secrets/acct-chatgpt-b.auth.json" || "$auth_path" == "/docker/fleet/secrets/acct-chatgpt-b.auth.json" ]]; then
+    log "Running default the.girscheles auth refresh helper"
+    bash /docker/fleet/scripts/refresh_girscheles_codex_auth.sh
+    return 0
+  fi
   return 1
 }
 

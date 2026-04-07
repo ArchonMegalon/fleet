@@ -22,7 +22,28 @@ from capacity_plane import build_capacity_plan_payload, load_capacity_plane_conf
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8094"))
 APP_TITLE = "Codex Fleet Quartermaster"
-CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
+
+
+def _default_config_root() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONFIG_ROOT", "") or "").strip()
+    candidates: List[pathlib.Path] = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    candidates.extend(
+        [
+            FLEET_MOUNT_ROOT / "config",
+            QUARTERMASTER_DIR.parent / "config",
+            pathlib.Path("/app/config"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+CONFIG_ROOT = _default_config_root()
+CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
 STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", "/var/lib/codex-fleet/state"))
 ADMIN_URL = str(os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092") or "http://fleet-admin:8092").rstrip("/")
 OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "").strip()

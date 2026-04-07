@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Sequence, Set
 
 
 SPARK_MODEL = "gpt-5.3-codex-spark"
@@ -119,8 +119,8 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "escalation_only": False,
         "worker_profile": "review_light",
         "codex_mode": "jury",
-        "runtime_model": "ea-review-light",
-        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+        "runtime_model": "ea-coder-hard-batch",
+        "provider_hint_order": ["onemin"],
         "reviewer_lane": "core_authority",
         "budget_bias": "cheap",
         "latency_class": "batch",
@@ -133,8 +133,8 @@ DEFAULT_LANES: Dict[str, Dict[str, Any]] = {
         "escalation_only": True,
         "worker_profile": "audit",
         "codex_mode": "jury",
-        "runtime_model": "ea-audit-jury",
-        "provider_hint_order": ["gemini_vortex", "chatplayground"],
+        "runtime_model": "ea-coder-hard-batch",
+        "provider_hint_order": ["onemin"],
         "reviewer_lane": "core_authority",
         "budget_bias": "premium",
         "latency_class": "batch",
@@ -310,6 +310,22 @@ def infer_account_lane(account_cfg: Dict[str, Any], *, alias: str = "") -> str:
     if alias.startswith("acct-ea-"):
         return "easy"
     return "core"
+
+
+def account_lane_can_serve_allowed_lanes(configured_lane: str, allowed_lanes: Sequence[str]) -> bool:
+    normalized = {str(item or "").strip().lower() for item in allowed_lanes if str(item or "").strip()}
+    if not normalized:
+        return True
+    clean_configured = str(configured_lane or "").strip().lower()
+    if clean_configured in normalized:
+        return True
+    if clean_configured == "core":
+        return bool(normalized & {"core_authority", "core_rescue"})
+    if clean_configured == "review_light":
+        return "review_shard" in normalized
+    if clean_configured == "jury":
+        return "audit_shard" in normalized
+    return False
 
 
 def normalize_lanes_config(raw_lanes: Any) -> Dict[str, Dict[str, Any]]:
@@ -720,7 +736,9 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 for alias in task_aliases
                 if alias in accounts
             }
-            if serviceable_lanes and account_lanes and not any(lane in account_lanes for lane in serviceable_lanes):
+            if serviceable_lanes and account_lanes and not any(
+                account_lane_can_serve_allowed_lanes(account_lane, serviceable_lanes) for account_lane in account_lanes
+            ):
                 warnings.append(
                     {
                         "kind": "unserved_task_lane",
@@ -771,7 +789,13 @@ def config_consistency_warnings(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 ):
                     if lane_name and lane_name not in reviewer_lanes:
                         reviewer_lanes.append(lane_name)
-            missing_reviewer_lanes = [lane_name for lane_name in reviewer_lanes if lane_name not in review_account_lanes]
+            missing_reviewer_lanes = [
+                lane_name
+                for lane_name in reviewer_lanes
+                if not any(
+                    account_lane_can_serve_allowed_lanes(account_lane, [lane_name]) for account_lane in review_account_lanes
+                )
+            ]
             if missing_reviewer_lanes:
                 warnings.append(
                     {

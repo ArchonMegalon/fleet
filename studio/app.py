@@ -28,11 +28,34 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 UTC = dt.timezone.utc
 APP_PORT = int(os.environ.get("APP_PORT", "8091"))
 APP_TITLE = "Codex Fleet Studio"
+FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
+STUDIO_DIR = pathlib.Path(__file__).resolve().parent
 
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/studio-logs"))
-CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
-ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+
+
+def _default_config_root() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONFIG_ROOT", "") or "").strip()
+    candidates: List[pathlib.Path] = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    candidates.extend(
+        [
+            FLEET_MOUNT_ROOT / "config",
+            STUDIO_DIR.parent / "config",
+            pathlib.Path("/app/config"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+CONFIG_ROOT = _default_config_root()
+CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
+ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", str(CONFIG_ROOT / "accounts.yaml")))
 POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
 ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
@@ -55,6 +78,8 @@ ALLOWED_STUDIO_FILES = {
     "JOURNEY_GATES.generated.json",
     "SUPPORT_CASE_PACKETS.generated.json",
     "PROGRESS_REPORT.generated.json",
+    "PROGRESS_REPORT.generated.html",
+    "PROGRESS_REPORT_POSTER.svg",
     "PROGRESS_HISTORY.generated.json",
     "GROUP_BLOCKERS.md",
     "CONTRACT_SETS.yaml",
@@ -461,10 +486,11 @@ def ensure_dirs() -> None:
 
 def db() -> sqlite3.Connection:
     ensure_dirs()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -780,8 +806,10 @@ def load_split_projects() -> List[Dict[str, Any]]:
         data = load_yaml(path)
         if isinstance(data.get("projects"), list):
             projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
-        elif data:
+        elif isinstance(data, dict) and str(data.get("id") or "").strip():
             projects.append(dict(data))
+        elif isinstance(data, dict):
+            continue
     return projects
 
 
@@ -2161,6 +2189,12 @@ def safe_relative_publish_path(raw: str) -> pathlib.Path:
         return pathlib.Path(rel_str)
     if rel.parts and rel.parts[0] == "ADR" and rel.suffix == ".md":
         return pathlib.Path(*rel.parts)
+    if len(rel.parts) == 1 and rel_str.startswith("external-host-proof-dispatch-") and rel_str.endswith(".tgz"):
+        return pathlib.Path(rel_str)
+    if len(rel.parts) == 1 and rel_str.startswith("external-proof-capture-pack-") and rel_str.endswith(".tar.gz"):
+        return pathlib.Path(rel_str)
+    if len(rel.parts) == 1 and rel_str.startswith("external-proof-kit-") and rel_str.endswith(".tar.gz"):
+        return pathlib.Path(rel_str)
     raise ValueError(f"unsupported published path: {raw}")
 
 

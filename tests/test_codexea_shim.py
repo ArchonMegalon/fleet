@@ -27,9 +27,17 @@ class CodexEaShimTests(unittest.TestCase):
             "\n".join(
                 [
                     "#!/usr/bin/env python3",
-                    "import json, os, sys",
+                    "import json, os, sys, time",
+                    "sleep_seconds = float(os.environ.get('CODEXEA_TEST_FAKE_CODEX_SLEEP', '0') or '0')",
+                    "if sleep_seconds > 0:",
+                    "    time.sleep(sleep_seconds)",
+                    "if len(sys.argv) > 1 and sys.argv[1] == '--help':",
+                    "    print('--skip-git-repo-check')",
+                    "    print('--no-alt-screen')",
+                    "    sys.exit(0)",
                     "payload = {",
                     "    'argv': sys.argv[1:],",
+                    "    'stdin': sys.stdin.read(),",
                     "    'env': {",
                     "        'CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT': os.environ.get('CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT'),",
                     "        'CODEXEA_LANE': os.environ.get('CODEXEA_LANE'),",
@@ -45,7 +53,12 @@ class CodexEaShimTests(unittest.TestCase):
         )
         self.fake_codex.chmod(self.fake_codex.stat().st_mode | stat.S_IXUSR)
 
-    def run_shim(self, *args: str, extra_env: dict[str, str] | None = None) -> dict[str, object]:
+    def run_shim(
+        self,
+        *args: str,
+        extra_env: dict[str, str] | None = None,
+        input_text: str | None = None,
+    ) -> dict[str, object]:
         env = os.environ.copy()
         env.update(
             {
@@ -61,7 +74,14 @@ class CodexEaShimTests(unittest.TestCase):
         )
         if extra_env:
             env.update(extra_env)
-        completed = subprocess.run(["bash", str(SHIM_PATH), *args], check=False, env=env, capture_output=True, text=True)
+        completed = subprocess.run(
+            ["bash", str(SHIM_PATH), *args],
+            check=False,
+            env=env,
+            capture_output=True,
+            text=True,
+            input=input_text,
+        )
         payload = None
         if self.capture_path.exists():
             payload = json.loads(self.capture_path.read_text(encoding="utf-8"))
@@ -92,11 +112,44 @@ class CodexEaShimTests(unittest.TestCase):
         route_helper.chmod(route_helper.stat().st_mode | stat.S_IXUSR)
         return route_helper
 
-    def test_easy_prompt_is_locked_to_ea_easy_and_emits_trace(self) -> None:
-        result = self.run_shim(
-            "continue the slice",
-            extra_env={"CODEXEA_BOOTSTRAP": "1", "CODEXEA_BOOTSTRAP_PROMPT_FILE": str(BOOTSTRAP_PATH)},
+    def write_fake_script(self, support_tty_wrapper: bool, capture_path: Path) -> Path:
+        script = self.root / "script"
+        help_lines = ["--command", "--return"] if support_tty_wrapper else ["--foo"]
+        script.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    "capture_file=\"${SCRIPT_HELP_CAPTURE}\"",
+                    "if [ \"${1-}\" = \"--help\" ]; then",
+                    "  " + "\n  ".join([f'  printf "%s\\n" "{line}"' for line in help_lines]),
+                    "  " + "\n  ".join([f'  printf "%s\\n" "{line}" >> "${{capture_file}}"' for line in help_lines]),
+                    "  exit 0",
+                    "fi",
+                    'if [ -n "${capture_file:-}" ]; then',
+                    '  printf "%s\\n" "$*" >> "${capture_file}"',
+                    "fi",
+                    "cmd=""",
+                    "while [ \"$#\" -gt 0 ]; do",
+                    "  if [ \"$1\" = \"--command\" ]; then",
+                    "    shift",
+                    "    cmd=\"${1-}\"",
+                    "    break",
+                    "  fi",
+                    "  shift",
+                    "done",
+                    "if [ -n \"${cmd}\" ]; then",
+                    "  eval \"${cmd}\"",
+                    "fi",
+                ]
+            ),
+            encoding="utf-8",
         )
+        script.chmod(script.stat().st_mode | stat.S_IXUSR)
+        return script
+
+    def test_easy_prompt_is_locked_to_ea_easy_without_wrapper_trace_by_default(self) -> None:
+        result = self.run_shim("continue the slice")
 
         completed = result["completed"]
         payload = result["payload"]
@@ -107,20 +160,171 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("exec", argv)
         self.assertIn("-c", argv)
         self.assertNotIn("", argv)
-        self.assertNotIn('model_provider="ea"', argv)
-        self.assertFalse(any(arg == 'model="gemini-2.5-flash"' for arg in argv))
+        self.assertIn('model_provider="ea"', argv)
+        self.assertIn('model="ea-coder-fast"', argv)
         self.assertIn('model_reasoning_effort="low"', argv)
         self.assertNotIn("--no-alt-screen", argv)
         self.assertEqual(payload["env"]["CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT"], "1")
         self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
-        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "mcp")
-        self.assertEqual(payload["env"]["EA_MCP_MODEL"], "gemini-2.5-flash")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        self.assertFalse(any("AGENTS.md" in arg for arg in argv))
         self.assertIn(
-            "Trace: lane=easy provider=mcp model=default-config mode=mcp mcp_model=gemini-2.5-flash next=start_exec_session",
+            "Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session",
             completed.stderr,
         )
-        self.assertIn("AGENTS.md", argv[-1])
-        self.assertIn("Trace:", argv[-1])
+
+    def test_prompt_session_does_not_inject_bootstrap_waiting_prompt(self) -> None:
+        prompt_file = self.root / "bootstrap.md"
+        prompt_file.write_text(
+            "SENTINEL_BOOTSTRAP_WAITING_PROMPT",
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "eta of the fleet? is it running? the shards?",
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "1",
+                "CODEXEA_BOOTSTRAP_PROMPT_FILE": str(prompt_file),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertFalse(any("SENTINEL_BOOTSTRAP_WAITING_PROMPT" in arg for arg in payload["argv"]))
+
+    def test_prompt_session_injects_exec_trace_prompt(self) -> None:
+        trace_file = self.root / "exec-trace.md"
+        trace_file.write_text(
+            "SENTINEL_EXEC_TRACE_PROMPT",
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "eta of the fleet? is it running? the shards?",
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "1",
+                "CODEXEA_EXEC_TRACE_PROMPT_FILE": str(trace_file),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn("SENTINEL_EXEC_TRACE_PROMPT", payload["argv"][-1])
+        self.assertIn("eta of the fleet? is it running? the shards?", payload["argv"][-1])
+
+    def test_prompt_session_emits_waiting_trace_while_provider_is_quiet(self) -> None:
+        result = self.run_shim(
+            "eta of the fleet? is it running? the shards?",
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_TRACE_HEARTBEAT_SECONDS": "0.1",
+                "CODEXEA_TEST_FAKE_CODEX_SLEEP": "0.25",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn("Trace: lane=easy waiting for model output", completed.stderr)
+
+    def test_noarg_non_tty_stdin_is_treated_as_prompt_session(self) -> None:
+        result = self.run_shim(
+            extra_env={"CODEXEA_BOOTSTRAP": "1"},
+            input_text="fleet stdin prompt",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn("fleet stdin prompt", payload["argv"][-1])
+        self.assertNotIn("--interactive", payload["argv"])
+        self.assertIn("--skip-git-repo-check", payload["argv"])
+
+    def test_interactive_flag_non_tty_without_prompt_falls_back_to_exec(self) -> None:
+        result = self.run_shim(
+            "--interactive",
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_TRACE_HEARTBEAT_SECONDS": "0.1",
+                "CODEXEA_TEST_FAKE_CODEX_SLEEP": "0.05",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn("exec", payload["argv"])
+        self.assertNotIn("--interactive", payload["argv"])
+        self.assertIn('model_provider="ea"', payload["argv"])
+        self.assertIn('model="ea-gemini-flash"', payload["argv"])
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
+    def test_noarg_non_tty_stdin_prompt_preserved_with_heartbeat_trace(self) -> None:
+        result = self.run_shim(
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_TRACE_HEARTBEAT_SECONDS": "0.1",
+                "CODEXEA_BOOTSTRAP": "0",
+            },
+            input_text="fleet stdin prompt",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn("Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session", completed.stderr)
+        self.assertEqual(payload["stdin"], "fleet stdin prompt")
+        self.assertIn("fleet stdin prompt", payload["argv"][-1])
+
+    def test_exec_session_waiting_trace_preserves_stdin_prompt(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "-",
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_TRACE_HEARTBEAT_SECONDS": "0.1",
+                "CODEXEA_TEST_FAKE_CODEX_SLEEP": "0.25",
+            },
+            input_text="fleet worker stdin prompt",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["stdin"], "fleet worker stdin prompt")
+        self.assertIn("Trace: lane=core waiting for model output", completed.stderr)
+
+    def test_prompt_session_bootstrap_zero_disables_exec_trace_injection(self) -> None:
+        trace_file = self.root / "exec-trace.md"
+        trace_file.write_text(
+            "SENTINEL_EXEC_TRACE_PROMPT",
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            "eta of the fleet? is it running? the shards?",
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "0",
+                "CODEXEA_EXEC_TRACE_PROMPT_FILE": str(trace_file),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertNotIn("SENTINEL_EXEC_TRACE_PROMPT", payload["argv"][-1])
 
     def test_easy_prefers_live_profile_model_when_available(self) -> None:
         payload = {
@@ -152,6 +356,7 @@ class CodexEaShimTests(unittest.TestCase):
         result = self.run_shim(
             "continue the slice",
             extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
                 "CODEXEA_USE_LIVE_PROFILE_MODELS": "1",
                 "CODEXEA_PROFILES_URL": f"http://127.0.0.1:{server.server_port}/v1/codex/profiles",
             },
@@ -164,11 +369,130 @@ class CodexEaShimTests(unittest.TestCase):
         argv = live_payload["argv"]
         self.assertIn("exec", argv)
         self.assertFalse(any(arg == 'model="gemini-2.5-flash"' for arg in argv))
-        self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "mcp")
+        self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
         self.assertIn(
-            "Trace: lane=easy provider=mcp model=default-config mode=mcp mcp_model=gemini-2.5-flash next=start_exec_session",
+            "Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session",
             completed.stderr,
         )
+
+    def test_easy_profile_model_is_fenced_to_one_minai(self) -> None:
+        payload = {
+            "profiles": [
+                {"profile": "easy", "model": "ea-gemini-flash"},
+                {"profile": "audit", "model": "ea-audit-jury"},
+            ]
+        }
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        result = self.run_shim(
+            "continue the slice",
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_USE_LIVE_PROFILE_MODELS": "1",
+                "CODEXEA_PROFILES_URL": f"http://127.0.0.1:{server.server_port}/v1/codex/profiles",
+            },
+        )
+
+        completed = result["completed"]
+        live_payload = result["payload"]
+        self.assertIsNotNone(live_payload)
+        self.assertEqual(completed.returncode, 0)
+        argv = live_payload["argv"]
+        self.assertIn("exec", argv)
+        self.assertIn('model="ea-coder-fast"', argv)
+        self.assertNotIn('model="ea-gemini-flash"', argv)
+        self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
+    def test_invalid_easy_model_env_var_is_fenced_to_default_one_minai(self) -> None:
+        result = self.run_shim(
+            "continue the slice",
+            extra_env={
+                "CODEXEA_EASY_MODEL": "non-1min-model",
+                "CODEXEA_TRACE_STARTUP": "1",
+            },
+        )
+
+        completed = result["completed"]
+        live_payload = result["payload"]
+        self.assertIsNotNone(live_payload)
+        self.assertEqual(completed.returncode, 0)
+        argv = live_payload["argv"]
+        self.assertIn("exec", argv)
+        self.assertIn('model="ea-coder-fast"', argv)
+        self.assertNotIn('model="non-1min-model"', argv)
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-coder-fast mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
+    def test_repair_prefers_live_repair_profile_model_when_available(self) -> None:
+        payload = {
+            "profiles": [
+                {"profile": "easy", "model": "ea-coder-fast"},
+                {"profile": "repair", "model": "ea-repair-gemini"},
+            ]
+        }
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        result = self.run_shim(
+            "repair",
+            "continue the slice",
+            extra_env={
+                "CODEXEA_TRACE_STARTUP": "1",
+                "CODEXEA_USE_LIVE_PROFILE_MODELS": "1",
+                "CODEXEA_PROFILES_URL": f"http://127.0.0.1:{server.server_port}/v1/codex/profiles",
+            },
+        )
+
+        completed = result["completed"]
+        live_payload = result["payload"]
+        self.assertIsNotNone(live_payload)
+        self.assertEqual(completed.returncode, 0)
+        argv = live_payload["argv"]
+        self.assertIn("exec", argv)
+        self.assertIn('model="ea-repair-gemini"', argv)
+        self.assertEqual(live_payload["env"]["CODEXEA_LANE"], "repair")
+        self.assertEqual(live_payload["env"]["CODEXEA_SUBMODE"], "responses_fast")
 
     def test_status_uses_runtime_env_file_for_live_auth(self) -> None:
         observed: dict[str, str] = {}
@@ -325,7 +649,7 @@ class CodexEaShimTests(unittest.TestCase):
 
         completed = result["completed"]
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("locked to MCP easy", completed.stderr)
+        self.assertIn("locked to EA responses easy", completed.stderr)
         self.assertIsNone(result["payload"])
 
     def test_easy_rejects_spaced_config_model_provider_override(self) -> None:
@@ -337,7 +661,7 @@ class CodexEaShimTests(unittest.TestCase):
 
         completed = result["completed"]
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("locked to MCP easy", completed.stderr)
+        self.assertIn("locked to EA responses easy", completed.stderr)
         self.assertIsNone(result["payload"])
 
     def test_easy_rejects_mode_override_without_debug_flag(self) -> None:
@@ -354,7 +678,7 @@ class CodexEaShimTests(unittest.TestCase):
     def test_explicit_jury_lane_uses_audit_profile(self) -> None:
         result = self.run_shim(
             "review the release packet",
-            extra_env={"CODEXEA_LANE": "jury"},
+            extra_env={"CODEXEA_LANE": "jury", "CODEXEA_TRACE_STARTUP": "1"},
         )
 
         completed = result["completed"]
@@ -373,7 +697,11 @@ class CodexEaShimTests(unittest.TestCase):
     def test_core_lane_defaults_to_batch_model_when_core_batch_profile_is_configured(self) -> None:
         result = self.run_shim(
             "fix the routing bug",
-            extra_env={"CODEXEA_LANE": "core", "CODEXEA_CORE_RESPONSES_PROFILE": "core_batch"},
+            extra_env={
+                "CODEXEA_LANE": "core",
+                "CODEXEA_CORE_RESPONSES_PROFILE": "core_batch",
+                "CODEXEA_TRACE_STARTUP": "1",
+            },
         )
 
         completed = result["completed"]
@@ -389,6 +717,28 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core_batch")
         self.assertIn(
             "Trace: lane=core provider=ea model=ea-coder-hard-batch mode=responses next=start_exec_session",
+            completed.stderr,
+        )
+
+    def test_core_rescue_lane_uses_rescue_profile_and_model(self) -> None:
+        result = self.run_shim(
+            "finish the long-running desktop slice",
+            extra_env={"CODEXEA_LANE": "core_rescue", "CODEXEA_TRACE_STARTUP": "1"},
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertIsNotNone(payload)
+        self.assertEqual(completed.returncode, 0)
+
+        argv = payload["argv"]
+        self.assertIn('model_provider="ea"', argv)
+        self.assertIn('model="ea-coder-hard-rescue"', argv)
+        self.assertTrue(any('X-EA-Codex-Profile"="core_rescue"' in arg for arg in argv))
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "core_rescue")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_core_rescue")
+        self.assertIn(
+            "Trace: lane=core_rescue provider=ea model=ea-coder-hard-rescue mode=responses next=start_exec_session",
             completed.stderr,
         )
 
@@ -411,7 +761,11 @@ class CodexEaShimTests(unittest.TestCase):
     def test_non_easy_mcp_override_emits_truthful_provider_trace(self) -> None:
         result = self.run_shim(
             "investigate architecture",
-            extra_env={"CODEXEA_LANE": "groundwork", "CODEXEA_MODE": "mcp"},
+            extra_env={
+                "CODEXEA_LANE": "groundwork",
+                "CODEXEA_MODE": "mcp",
+                "CODEXEA_TRACE_STARTUP": "1",
+            },
         )
 
         completed = result["completed"]
@@ -430,9 +784,92 @@ class CodexEaShimTests(unittest.TestCase):
         payload = result["payload"]
         self.assertIsNotNone(payload)
         self.assertEqual(completed.returncode, 0)
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_easy")
         self.assertNotIn("--interactive", payload["argv"])
+        self.assertIn('model_provider="ea"', payload["argv"])
+        self.assertIn('model="ea-gemini-flash"', payload["argv"])
         self.assertIn(
-            "Trace: lane=easy provider=mcp model=default-config mode=mcp mcp_model=gemini-2.5-flash next=start_interactive_session",
+            "Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_interactive_session",
+            completed.stderr,
+        )
+
+    def test_tmux_interactive_session_uses_script_tty_wrapper_when_supported(self) -> None:
+        script_capture = self.root / "script-capture.txt"
+        self.write_fake_script(True, script_capture)
+
+        result = self.run_shim(
+            "--interactive",
+            extra_env={
+                "TMUX": "/tmp/tmux-1000/test,19062,0",
+                "PATH": f"{self.root}:{os.environ.get('PATH', '')}",
+                "SCRIPT_HELP_CAPTURE": str(script_capture),
+                "CODEXEA_TRACE_STARTUP": "1",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn('model="ea-gemini-flash"', payload["argv"])
+        script_lines = script_capture.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(
+            any("--quiet" in entry for entry in script_lines),
+            "\n".join(script_lines),
+        )
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_interactive_session",
+            completed.stderr,
+        )
+
+    def test_tmux_interactive_session_skips_script_wrapper_without_support(self) -> None:
+        script_capture = self.root / "script-capture.txt"
+        self.write_fake_script(False, script_capture)
+
+        result = self.run_shim(
+            "--interactive",
+            extra_env={
+                "TMUX": "/tmp/tmux-1000/test,19062,0",
+                "PATH": f"{self.root}:{os.environ.get('PATH', '')}",
+                "SCRIPT_HELP_CAPTURE": str(script_capture),
+                "CODEXEA_TRACE_STARTUP": "1",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertIn('model="ea-gemini-flash"', payload["argv"])
+        self.assertFalse(
+            any(
+                "--command" in entry and "--return" in entry
+                for entry in script_capture.read_text(encoding="utf-8").splitlines()
+            ),
+            "wrapper should not be used when script --help lacks required options",
+        )
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_interactive_session",
+            completed.stderr,
+        )
+
+    def test_interactive_flag_with_prompt_stays_interactive(self) -> None:
+        result = self.run_shim("--interactive", "investigate architecture")
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertIsNotNone(payload)
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "easy")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_easy")
+        self.assertNotIn("--interactive", payload["argv"])
+        self.assertEqual(payload["argv"].count("exec"), 0)
+        self.assertIn('model_provider="ea"', payload["argv"])
+        self.assertIn('model="ea-gemini-flash"', payload["argv"])
+        self.assertEqual(payload["argv"][-1], "investigate architecture")
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=start_interactive_session",
             completed.stderr,
         )
 
@@ -460,6 +897,73 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertIsNotNone(payload)
         self.assertNotIn("--interactive", payload["argv"])
+
+    def test_bare_bootstrap_session_starts_empty_interactive_without_injecting_prompt_file(self) -> None:
+        prompt_file = self.root / "bootstrap.md"
+        prompt_file.write_text(
+            "Trace: lane easy ready and waiting.\nWait for the next user instruction.\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_shim(
+            extra_env={
+                "CODEXEA_BOOTSTRAP": "1",
+                "CODEXEA_BOOTSTRAP_PROMPT_FILE": str(prompt_file),
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertNotIn(prompt_file.read_text(encoding="utf-8").rstrip("\n"), payload["argv"])
+        self.assertNotIn("continue the next unfinished slice", " ".join(payload["argv"]).lower())
+        self.assertIn(
+            "Trace: lane=easy provider=ea model=ea-gemini-flash mode=responses next=",
+            completed.stderr,
+        )
+        self.assertTrue(
+            "start_exec_session" in completed.stderr
+            or "start_interactive_session" in completed.stderr
+        )
+
+    def test_interactive_flag_can_route_away_from_easy_when_opted_in(self) -> None:
+        route_helper = self.root / "route-helper.py"
+        route_helper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "print('lane=groundwork')",
+                    "print('submode=responses_groundwork')",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        route_helper.chmod(route_helper.stat().st_mode | stat.S_IXUSR)
+
+        result = self.run_shim(
+            "--interactive",
+            "investigate architecture",
+            extra_env={
+                "CODEXEA_INTERACTIVE_ALWAYS_EASY": "0",
+                "CODEXEA_ROUTE_HELPER": str(route_helper),
+                "CODEXEA_TRACE_STARTUP": "1",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["env"]["CODEXEA_LANE"], "groundwork")
+        self.assertEqual(payload["env"]["CODEXEA_SUBMODE"], "responses_groundwork")
+        self.assertNotIn("--interactive", payload["argv"])
+        self.assertEqual(payload["argv"].count("exec"), 0)
+        self.assertIn('model="ea-groundwork-gemini"', payload["argv"])
+        self.assertIn(
+            "Trace: lane=groundwork provider=ea model=ea-groundwork-gemini mode=responses next=start_interactive_session",
+            completed.stderr,
+        )
 
     def test_credits_keeps_standard_billing_route_flags(self) -> None:
         route_helper = self.write_route_helper()
@@ -555,6 +1059,37 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         self.assertIsNotNone(payload)
         self.assertEqual(payload["argv"].count("resume"), 1)
+        self.assertFalse(any("AGENTS.md" in arg for arg in payload["argv"]))
+
+    def test_resume_subcommand_with_session_id_stays_passthrough(self) -> None:
+        result = self.run_shim(
+            "resume",
+            "uid123",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["argv"].count("resume"), 1)
+        self.assertIn("uid123", payload["argv"])
+        self.assertIn("--no-alt-screen", payload["argv"])
+        self.assertIn("next=start_resume_session", completed.stderr)
+
+    def test_resume_subcommand_with_session_id_and_prompt_stays_passthrough(self) -> None:
+        result = self.run_shim(
+            "resume",
+            "uid123",
+            "continue fixing fleet",
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["argv"].count("resume"), 1)
+        self.assertIn("uid123", payload["argv"])
+        self.assertIn("continue fixing fleet", payload["argv"])
         self.assertFalse(any("AGENTS.md" in arg for arg in payload["argv"]))
 
     def test_interactive_bootstrap_requires_trace_lines(self) -> None:

@@ -12,8 +12,11 @@
     "QUEUE.generated.yaml",
     "STATUS_PLANE.generated.yaml",
     "SUPPORT_CASE_PACKETS.generated.json",
+    "SUPPORT_CASE_SOURCE_MIRROR.generated.json",
     "WEEKLY_PRODUCT_PULSE.generated.json",
-    "WORKPACKAGES.generated.yaml"
+    "WORKPACKAGES.generated.yaml",
+    "external-proof-capture-pack-20260405T224459Z.tar.gz",
+    "external-proof-kit-20260405T233846Z.tar.gz"
   ],
   "dispatchable_truth_contract": {
     "capacity_compile_required_separately": true,
@@ -25,7 +28,7 @@
   },
   "dispatchable_truth_ready": true,
   "lifecycle": "live",
-  "published_at": "2026-04-05T00:47:45Z",
+  "published_at": "2026-04-07T02:07:34Z",
   "schema_version": "2026-03-10.v1",
   "stages": {
     "capacity_compile": true,

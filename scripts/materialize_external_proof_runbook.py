@@ -5,37 +5,124 @@ import argparse
 import datetime as dt
 import json
 import os
+import sys
 import shlex
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts.external_proof_paths import (
+        CHUMMER_COMPLETE_ROOT,
+        DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR,
+        DEFAULT_EXTERNAL_PROOF_RUNBOOK,
+        DEFAULT_RELEASE_CHANNEL,
+        DEFAULT_SUPPORT_PACKETS,
+        FLEET_ROOT,
+        UI_DOCKER_DOWNLOADS_FILES_ROOT,
+        UI_DOCKER_DOWNLOADS_ROOT,
+        UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT,
+        UI_LOCALIZATION_RELEASE_GATE_PATH,
+        UI_LOCAL_RELEASE_PROOF_PATH,
+        UI_REPO_ROOT,
+        build_download_path,
+        normalize_external_proof_relative_path,
+        normalize_external_proof_tuple_id,
+    )
+except ModuleNotFoundError:
+    from external_proof_paths import (
+        CHUMMER_COMPLETE_ROOT,
+        DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR,
+        DEFAULT_EXTERNAL_PROOF_RUNBOOK,
+        DEFAULT_RELEASE_CHANNEL,
+        DEFAULT_SUPPORT_PACKETS,
+        FLEET_ROOT,
+        UI_DOCKER_DOWNLOADS_FILES_ROOT,
+        UI_DOCKER_DOWNLOADS_ROOT,
+        UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT,
+        UI_LOCALIZATION_RELEASE_GATE_PATH,
+        UI_LOCAL_RELEASE_PROOF_PATH,
+        UI_REPO_ROOT,
+        build_download_path,
+        normalize_external_proof_relative_path,
+        normalize_external_proof_tuple_id,
+    )
+
 
 UTC = dt.timezone.utc
-ROOT = Path("/docker/fleet")
-DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
-DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+DEFAULT_OUT = DEFAULT_EXTERNAL_PROOF_RUNBOOK
+DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH = UI_REPO_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
+FLEET_DESIGN_PRODUCT_ROOT = CHUMMER_COMPLETE_ROOT / "chummer-design"
 DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR = "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}"
-UI_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
-REGISTRY_RELEASE_CHANNEL_PATH = Path(
-    "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
-)
-
+DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR = "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
+DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR = "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}"
+DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR = "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
+DEFAULT_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD_EXPR = "${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}"
+ALLOWED_REQUIRED_HOSTS = frozenset({"windows", "macos", "linux"})
+ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smoke_receipt"})
 
 def _post_capture_republish_commands() -> list[str]:
+    chummer6_ui_html_report = (
+        FLEET_DESIGN_PRODUCT_ROOT / "products" / "chummer" / "PROGRESS_REPORT.generated.html"
+    )
+    chummer6_html_preview = (
+        FLEET_DESIGN_PRODUCT_ROOT / "products" / "chummer" / "PROGRESS_REPORT.generated.json"
+    )
     return [
-        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
-        "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/materialize_public_release_channel.py --manifest /docker/chummercomplete/chummer6-ui/Docker/Downloads/RELEASE_CHANNEL.generated.json --downloads-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/files --startup-smoke-dir /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke --channel docker --version unpublished --published-at \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" --output .codex-studio/published/RELEASE_CHANNEL.generated.json",
-        "cd /docker/chummercomplete/chummer-hub-registry && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
-        "cd /docker/fleet && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
-        "cd /docker/fleet && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml",
-        "cd /docker/fleet && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --html-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.html --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json --preview-out /docker/chummercomplete/chummer-design/products/chummer/PROGRESS_REPORT.generated.json",
-        "cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
-        "cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "cd /docker/fleet && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
-        "cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-        "cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status >/dev/null",
+        f"cd {shlex.quote(str(UI_REPO_ROOT))} && ./scripts/generate-releases-manifest.sh",
+        "cd "
+        + shlex.quote(str(DEFAULT_RELEASE_CHANNEL.parent.parent))
+        + " && python3 scripts/materialize_public_release_channel.py --manifest "
+        + shlex.quote(str(DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH))
+        + " --downloads-dir "
+        + shlex.quote(str(UI_DOCKER_DOWNLOADS_FILES_ROOT))
+        + " --startup-smoke-dir "
+        + shlex.quote(str(UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT))
+        + " --proof "
+        + shlex.quote(str(UI_LOCAL_RELEASE_PROOF_PATH))
+        + " --ui-localization-release-gate "
+        + shlex.quote(str(UI_LOCALIZATION_RELEASE_GATE_PATH))
+        + " --channel docker --version unpublished --published-at \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" --output .codex-studio/published/RELEASE_CHANNEL.generated.json",
+        f"cd {shlex.quote(str(DEFAULT_RELEASE_CHANNEL.parent.parent))} && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml",
+        "cd "
+        + shlex.quote(str(FLEET_ROOT))
+        + " && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --html-out "
+        + shlex.quote(str(chummer6_ui_html_report))
+        + " --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json --preview-out "
+        + shlex.quote(str(chummer6_html_preview)),
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --release-channel {shlex.quote(str(DEFAULT_RELEASE_CHANNEL))}",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel {shlex.quote(str(DEFAULT_RELEASE_CHANNEL))} --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "cd "
+        + shlex.quote(str(FLEET_DESIGN_PRODUCT_ROOT))
+        + " && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/chummer_design_supervisor.py status >/dev/null",
+    ]
+
+
+def _finalize_after_host_proof_commands(*, hosts: list[str], commands_dir: Path) -> list[str]:
+    commands = [
+        f"cd {shlex.quote(str(commands_dir))}",
+    ]
+    for host in hosts:
+        host_token = _normalize_host_token(host)
+        commands.append(f"./validate-{host_token}-proof.sh")
+        commands.append(f"./ingest-{host_token}-proof-bundle.sh")
+    commands.append("./republish-after-host-proof.sh")
+    return commands
+
+
+def _host_proof_lane_commands(*, host: str, commands_dir: Path) -> list[str]:
+    host_token = _normalize_host_token(host)
+    return [
+        f"cd {shlex.quote(str(commands_dir))}",
+        f"./preflight-{host_token}-proof.sh",
+        f"./capture-{host_token}-proof.sh",
+        f"./validate-{host_token}-proof.sh",
+        f"./bundle-{host_token}-proof.sh",
     ]
 
 
@@ -83,6 +170,57 @@ def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_proof_capture_command(value: Any) -> str:
+    raw = _normalize_text(value)
+    if not raw:
+        return ""
+    try:
+        tokens = shlex.split(raw)
+    except ValueError:
+        tokens = raw.split()
+    return " ".join(
+        token
+        for token in tokens
+        if not token.startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
+    )
+
+
+def _normalized_platform(value: Any) -> str:
+    return _normalize_text(value).lower()
+
+
+def _normalized_token(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalized_required_proofs(
+    value: Any, *, field: str, failures: list[str], required: set[str] = ALLOWED_REQUIRED_PROOFS
+) -> list[str]:
+    if not isinstance(value, list):
+        failures.append(f"{field} must be a string array")
+        return []
+    if not value:
+        return []
+    normalized: set[str] = set()
+    for token in value:
+        if not isinstance(token, str):
+            failures.append(
+                f"{field} contains a non-string required_proofs token: {_normalized_token(token)!r}"
+            )
+            continue
+        normalized_token = token.strip().lower()
+        if normalized_token:
+            normalized.add(normalized_token)
+    if not normalized:
+        return []
+    unknown_tokens = sorted(normalized - required)
+    if unknown_tokens:
+        failures.append(
+            f"{field} contains unsupported required proof token(s): " + ", ".join(unknown_tokens)
+        )
+    return sorted(normalized)
+
+
 def _safe_int(value: Any, default: int = 0) -> int:
     if isinstance(value, bool):
         return default
@@ -95,6 +233,20 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _ordered_unique_strings(values: Any) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        normalized = _normalize_text(value).lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return ordered
 
 
 def _normalized_smoke_contract_map(value: Any) -> dict[str, Any]:
@@ -141,7 +293,7 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
     raw_hosts = value.get("hosts")
     hosts: list[str] = []
     if isinstance(raw_hosts, list):
-        hosts = sorted({_normalize_text(item).lower() for item in raw_hosts if _normalize_text(item)})
+        hosts = _ordered_unique_strings(raw_hosts)
 
     raw_host_groups = value.get("host_groups")
     if raw_host_groups is None:
@@ -158,23 +310,35 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                 for row in raw_requests:
                     if not isinstance(row, dict):
                         continue
+                    raw_tuple_id = (
+                        row.get("tuple_id") if row.get("tuple_id") is not None else row.get("tupleId")
+                    )
+                    raw_required_host = (
+                        row.get("required_host")
+                        if row.get("required_host") is not None
+                        else row.get("requiredHost")
+                    )
                     commands_raw = row.get("proof_capture_commands")
                     if commands_raw is None:
                         commands_raw = row.get("proofCaptureCommands")
-                    commands = [
-                        _normalize_text(token)
-                        for token in commands_raw
-                        if _normalize_text(token)
-                    ] if isinstance(commands_raw, list) else []
+                    if isinstance(commands_raw, list):
+                        commands: list[str] = []
+                        for token in commands_raw:
+                            normalized = _normalize_proof_capture_command(token)
+                            if normalized:
+                                commands.append(normalized)
+                    else:
+                        commands = []
                     required_proofs_raw = row.get("required_proofs")
                     if required_proofs_raw is None:
                         required_proofs_raw = row.get("requiredProofs")
                     requests.append(
                         {
-                            "tuple_id": _normalize_text(row.get("tuple_id") or row.get("tupleId")),
+                            "tuple_id": _normalize_text(raw_tuple_id),
                             "head_id": _normalize_text(row.get("head_id") or row.get("headId")).lower(),
                             "platform": _normalize_text(row.get("platform")).lower(),
                             "rid": _normalize_text(row.get("rid")).lower(),
+                            "required_host": _normalize_text(raw_required_host),
                             "expected_artifact_id": _normalize_text(
                                 row.get("expected_artifact_id") or row.get("expectedArtifactId")
                             ),
@@ -203,32 +367,25 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                             "capture_deadline_utc": _normalize_text(
                                 row.get("capture_deadline_utc") or row.get("captureDeadlineUtc")
                             ),
-                            "required_proofs": sorted(
-                                {
-                                    _normalize_text(token).lower()
-                                    for token in (required_proofs_raw or [])
-                                    if _normalize_text(token)
-                                }
-                            ),
+                            "required_proofs": _ordered_unique_strings(required_proofs_raw or []),
                             "proof_capture_commands": commands,
                         }
                     )
             tuples_raw = raw_group.get("tuples")
             if tuples_raw is None:
                 tuples_raw = raw_group.get("tuple_ids") or raw_group.get("tupleIds")
+            tuples: list[str] = []
+            for raw_tuple_id in tuples_raw or []:
+                tuple_id = _normalize_text(raw_tuple_id)
+                if tuple_id:
+                    tuples.append(tuple_id)
             host_groups[host] = {
                 "request_count": int(raw_group.get("request_count") or raw_group.get("requestCount") or len(requests)),
-                "tuples": sorted(
-                    {
-                        _normalize_text(token)
-                        for token in (tuples_raw or [])
-                        if _normalize_text(token)
-                    }
-                ),
+                "tuples": tuples,
                 "requests": requests,
             }
     if not hosts:
-        hosts = sorted(host_groups.keys())
+        hosts = list(host_groups.keys())
     return {
         "request_count": request_count or sum(
             int(group.get("request_count") or 0)
@@ -260,6 +417,177 @@ def _load_support_packets(path: Path) -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _normalize_relative_path(value: Any, *, field: str) -> str:
+    return normalize_external_proof_relative_path(value, field=field)
+
+
+def _expected_installer_bundle_relative_path(row: dict[str, Any]) -> str:
+    installer_relative_path = _normalize_relative_path(
+        row.get("expected_installer_relative_path")
+        or row.get("expectedInstallerRelativePath"),
+        field="expected_installer_relative_path",
+    )
+    if installer_relative_path:
+        return installer_relative_path
+    installer_file_name = _normalize_text(
+        row.get("expected_installer_file_name") or row.get("expectedInstallerFileName")
+    )
+    return f"files/{installer_file_name}" if installer_file_name else ""
+
+
+def _request_startup_smoke_receipt_relative_path(row: dict[str, Any]) -> str:
+    return _normalize_relative_path(
+        row.get("expected_startup_smoke_receipt_path")
+        or row.get("expectedStartupSmokeReceiptPath"),
+        field="expected_startup_smoke_receipt_path",
+    )
+
+
+def _validate_plan_relative_paths(plan: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    host_groups = plan.get("host_groups")
+    if not isinstance(host_groups, dict):
+        failures.append("unresolved_external_proof_execution_plan.host_groups is missing or not an object")
+        return failures
+    for raw_host, raw_group in host_groups.items():
+        host = _normalize_text(raw_host).lower()
+        if not host:
+            failures.append(
+                "unresolved_external_proof_execution_plan.host_groups contains an empty host key"
+            )
+            continue
+        if host not in ALLOWED_REQUIRED_HOSTS:
+            failures.append(
+                f"unresolved_external_proof_execution_plan.host_groups.{host} has unsupported required_host value: {host}"
+            )
+        if not isinstance(raw_group, dict):
+            failures.append(
+                f"unresolved_external_proof_execution_plan.host_groups.{host} is not an object"
+            )
+            continue
+        raw_requests = raw_group.get("requests")
+        if raw_requests is None:
+            raw_requests = []
+        request_count_for_host = len(raw_requests) if isinstance(raw_requests, list) else 0
+        raw_tuples = raw_group.get("tuples")
+        if raw_tuples is None:
+            raw_tuples = raw_group.get("tuple_ids") or raw_group.get("tupleIds")
+        if raw_tuples is not None and not isinstance(raw_tuples, list):
+            failures.append(
+                f"unresolved_external_proof_execution_plan.host_groups.{host}.tuples is not an array"
+            )
+            raw_tuples = []
+        host_group_tuple_ids: set[str] = set()
+        for tuple_index, tuple_value in enumerate(raw_tuples or []):
+            tuple_id = _normalize_text(tuple_value)
+            if not tuple_id:
+                continue
+            try:
+                tuple_id = normalize_external_proof_tuple_id(
+                    tuple_id,
+                    field=f"unresolved_external_proof_execution_plan.host_groups.{host}.tuples[{tuple_index}]",
+                )
+                if tuple_id in host_group_tuple_ids:
+                    if request_count_for_host <= 1:
+                        failures.append(
+                            f"unresolved_external_proof_execution_plan.host_groups.{host}.tuples[{tuple_index}] duplicate tuple_id: {tuple_id}"
+                        )
+                host_group_tuple_ids.add(tuple_id)
+                tuple_parts = tuple_id.split(":")
+                tuple_host = tuple_parts[2].strip() if len(tuple_parts) == 3 else ""
+                if tuple_host and tuple_host != host:
+                    failures.append(
+                        f"unresolved_external_proof_execution_plan.host_groups.{host}.tuples[{tuple_index}] tuple host mismatch: "
+                        f"{tuple_id} (tuple host: {tuple_host})"
+                    )
+            except ValueError as exc:
+                failures.append(f"{tuple_id}: tuple_id is invalid: {exc}")
+        if not isinstance(raw_requests, list):
+            failures.append(
+                f"unresolved_external_proof_execution_plan.host_groups.{host}.requests is not an array"
+            )
+            continue
+        request_tuple_ids: set[str] = set()
+        for index, row in enumerate(raw_requests):
+            if not isinstance(row, dict):
+                failures.append(
+                    f"unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}] is not an object"
+                )
+                continue
+            tuple_id = "<unknown>"
+            raw_tuple_id = row.get("tuple_id") if row.get("tuple_id") is not None else row.get("tupleId")
+            if not _normalize_text(raw_tuple_id):
+                failures.append(
+                    "unresolved_external_proof_execution_plan."
+                    f"host_groups.{host}.requests[{index}].tuple_id is missing"
+                )
+            else:
+                tuple_id = _normalize_text(raw_tuple_id)
+                try:
+                    tuple_id = normalize_external_proof_tuple_id(
+                        tuple_id,
+                        field=(
+                            f"unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].tuple_id"
+                        ),
+                    )
+                    if tuple_id in request_tuple_ids:
+                        failures.append(
+                            f"unresolved_external_proof_execution_plan.host_groups.{host}.requests duplicate tuple_id: {tuple_id}"
+                        )
+                    request_tuple_ids.add(tuple_id)
+                    tuple_parts = tuple_id.split(":")
+                    tuple_host = tuple_parts[2].strip() if len(tuple_parts) == 3 else ""
+                    if tuple_host and tuple_host != host:
+                        failures.append(
+                            f"unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].tuple_id "
+                            f"has tuple host mismatch: {tuple_id} (tuple host: {tuple_host})"
+                        )
+                    required_host = _normalized_platform(
+                        row.get("required_host") or row.get("requiredHost") or row.get("platform")
+                    )
+                    if required_host:
+                        if required_host not in ALLOWED_REQUIRED_HOSTS:
+                            failures.append(f"{tuple_id}: requiredHost is invalid: {required_host}")
+                        elif required_host != host:
+                            failures.append(
+                                f"{tuple_id}: requiredHost ({required_host}) does not match group host ({host})"
+                            )
+                    required_proofs = _normalized_required_proofs(
+                        row.get("required_proofs") if row.get("required_proofs") is not None else row.get("requiredProofs"),
+                        field=f"unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].required_proofs",
+                        failures=failures,
+                    )
+                    if not {"promoted_installer_artifact", "startup_smoke_receipt"}.issubset(
+                        set(required_proofs)
+                    ):
+                        failures.append(
+                            f"{tuple_id}: required_proofs is missing required tokens: startup_smoke_receipt"
+                        )
+                except ValueError as exc:
+                    failures.append(f"{tuple_id}: tuple_id is invalid: {exc}")
+            if not raw_tuple_id:
+                tuple_id = "<unknown>"
+            installer_path = row.get("expected_installer_relative_path") or row.get("expectedInstallerRelativePath")
+            receipt_path = row.get("expected_startup_smoke_receipt_path") or row.get("expectedStartupSmokeReceiptPath")
+            try:
+                if str(installer_path or "").strip():
+                    _normalize_relative_path(
+                        installer_path,
+                        field=f"unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].expected_installer_relative_path",
+                    )
+            except ValueError as exc:
+                failures.append(f"{tuple_id}: expected_installer_relative_path is invalid: {exc}")
+            try:
+                if str(receipt_path or "").strip():
+                    _normalize_relative_path(
+                        receipt_path,
+                        field=f"unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].expected_startup_smoke_receipt_path",
+                    )
+            except ValueError as exc:
+                failures.append(f"{tuple_id}: expected_startup_smoke_receipt_path is invalid: {exc}")
+    return failures
+
+
 def _commands_for_group(group: dict[str, Any]) -> list[str]:
     commands: list[str] = []
     seen: set[str] = set()
@@ -281,12 +609,10 @@ def _bundle_relative_paths_for_group(group: dict[str, Any]) -> list[str]:
     for row in group.get("requests") or []:
         if not isinstance(row, dict):
             continue
-        installer_relative_path = _normalize_text(row.get("expected_installer_relative_path"))
-        installer_file_name = _normalize_text(row.get("expected_installer_file_name"))
-        receipt_relative_path = _normalize_text(row.get("expected_startup_smoke_receipt_path"))
-        installer_path = installer_relative_path or (f"files/{installer_file_name}" if installer_file_name else "")
+        installer_path = _expected_installer_bundle_relative_path(row)
+        receipt_relative_path = _request_startup_smoke_receipt_relative_path(row)
         for rel in (installer_path, receipt_relative_path):
-            normalized = _normalize_text(rel).lstrip("/")
+            normalized = _normalize_text(rel)
             if not normalized or normalized in seen:
                 continue
             seen.add(normalized)
@@ -294,23 +620,62 @@ def _bundle_relative_paths_for_group(group: dict[str, Any]) -> list[str]:
     return paths
 
 
-def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str) -> list[str]:
+def _bundle_manifest_payload_for_group(group: dict[str, Any], *, host: str) -> dict[str, Any]:
+    requests: list[dict[str, Any]] = []
+    for row in group.get("requests") or []:
+        if not isinstance(row, dict):
+            continue
+        tuple_id = _normalize_text(row.get("tuple_id"))
+        if not tuple_id:
+            continue
+        installer_bundle_relative_path = _expected_installer_bundle_relative_path(row)
+        requests.append(
+            {
+                "tuple_id": tuple_id,
+                "expected_installer_bundle_relative_path": installer_bundle_relative_path,
+                "expected_startup_smoke_receipt_path": _request_startup_smoke_receipt_relative_path(row),
+                "expected_installer_sha256": _normalize_text(
+                    row.get("expected_installer_sha256")
+                ).lower(),
+            }
+        )
+    requests.sort(key=lambda item: item.get("tuple_id", ""))
+    return {
+        "schema_version": 1,
+        "host": host.lower(),
+        "request_count": len(requests),
+        "requests": requests,
+    }
+
+
+def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: str) -> list[str]:
     bundle_paths = _bundle_relative_paths_for_group(group)
+    manifest_payload = _bundle_manifest_payload_for_group(group, host=host)
+    manifest_payload_json = json.dumps(manifest_payload, sort_keys=True)
     commands = [
         "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
         f"BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
+        "export BUNDLE_ROOT",
         "rm -rf \"$BUNDLE_ROOT\"",
         "mkdir -p \"$BUNDLE_ROOT\"",
+        "python3 -c "
+        + shlex.quote(
+            "import json, os, pathlib; "
+            "bundle_root=pathlib.Path(os.environ['BUNDLE_ROOT']); "
+            f"payload=json.loads({manifest_payload_json!r}); "
+            "manifest_path=bundle_root / 'external-proof-manifest.json'; "
+            "manifest_path.write_text(json.dumps(payload, sort_keys=True, indent=2) + '\\n', encoding='utf-8')"
+        ),
     ]
     if not bundle_paths:
         commands.append(f"echo {shlex.quote('No host proof files were queued for bundling.')}")
         return commands
     for rel in bundle_paths:
-        src = UI_REPO_ROOT / "Docker" / "Downloads" / rel
+        src = build_download_path(rel)
         dst = f"$BUNDLE_ROOT/{rel}"
         dst_dir = f"$BUNDLE_ROOT/{Path(rel).parent.as_posix()}"
-        commands.append(f"mkdir -p {shlex.quote(dst_dir)}")
-        commands.append(f"cp -f {shlex.quote(str(src))} {shlex.quote(dst)}")
+        commands.append(f"mkdir -p \"{dst_dir}\"")
+        commands.append(f"cp -f {shlex.quote(str(src))} \"{dst}\"")
     commands.extend(
         [
             f"tar -czf \"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" .",
@@ -320,20 +685,135 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str) -> lis
     return commands
 
 
+def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: str) -> list[str]:
+    bundle_paths = _bundle_relative_paths_for_group(group)
+    manifest_payload = _bundle_manifest_payload_for_group(group, host=host)
+    manifest_payload_json = json.dumps(manifest_payload, sort_keys=True)
+    target_root = UI_DOCKER_DOWNLOADS_ROOT
+    commands = [
+        "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
+        f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
+        "export BUNDLE_ARCHIVE",
+        f"TARGET_ROOT={shlex.quote(str(target_root))}",
+        "export TARGET_ROOT",
+        "if [ ! -s \"$BUNDLE_ARCHIVE\" ]; then",
+        "  echo \"Missing host proof bundle: $BUNDLE_ARCHIVE\"",
+        "  exit 1",
+        "fi",
+        "python3 -c "
+        + shlex.quote(
+            "import os, pathlib, tarfile; "
+            "bundle=pathlib.Path(os.environ['BUNDLE_ARCHIVE']); "
+            "members=tarfile.open(bundle, 'r:gz').getmembers(); "
+            "bad=[member.name for member in members if member.name.startswith('/') or '..' in pathlib.PurePosixPath(member.name).parts]; "
+            "assert not any('..' in parts for parts in [pathlib.PurePosixPath(member.name).parts for member in members]), "
+            "'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad)))"
+        ),
+        "mkdir -p \"$TARGET_ROOT\"",
+        "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"",
+        "python3 -c "
+        + shlex.quote(
+            "import os, json, pathlib; "
+            "manifest_path=pathlib.Path(os.environ['TARGET_ROOT']) / 'external-proof-manifest.json'; "
+            f"expected=json.loads({manifest_payload_json!r}); "
+            "assert manifest_path.is_file(), 'external-proof-bundle-manifest-missing:' + str(manifest_path); "
+            "payload=json.loads(manifest_path.read_text(encoding='utf-8')); "
+            "assert payload == expected, "
+            "'external-proof-bundle-manifest-mismatch:' + str(manifest_path) + ':expected=' + "
+            "json.dumps(expected, sort_keys=True) + ':actual=' + json.dumps(payload, sort_keys=True)"
+        ),
+    ]
+    if not bundle_paths:
+        commands.append(f"echo {shlex.quote('No expected host proof files were queued for ingest.')}")
+        return commands
+    for rel in bundle_paths:
+        extracted = f"$TARGET_ROOT/{rel}"
+        commands.append(f"test -s \"{extracted}\"")
+    for row in group.get("requests") or []:
+        if not isinstance(row, dict):
+            continue
+        tuple_id = _normalize_text(row.get("tuple_id")) or "<unknown>"
+        installer_relative_path = _expected_installer_bundle_relative_path(row)
+        installer_sha256 = _normalize_text(row.get("expected_installer_sha256")).lower()
+        installer_bundle_relative_path = installer_relative_path
+        if installer_bundle_relative_path and installer_sha256:
+            commands.append(
+                "python3 -c "
+                + shlex.quote(
+                "import hashlib, os, pathlib; "
+                "target_root=pathlib.Path(os.environ['TARGET_ROOT']); "
+                f"tuple_id={tuple_id!r}; "
+                f"relative={installer_bundle_relative_path!r}; "
+                f"expected={installer_sha256!r}; "
+                "path=target_root / relative; "
+                "assert path.is_file(), f'external-proof-bundle-installer-missing:{tuple_id}:{path}'; "
+                "digest=hashlib.sha256(path.read_bytes()).hexdigest().lower(); "
+                "assert digest==expected, f'installer-contract-mismatch:{tuple_id}:{path}:digest={digest}:expected={expected}'"
+                )
+            )
+        receipt_relative_path = _normalize_text(row.get("expected_startup_smoke_receipt_path"))
+        receipt_contract = _normalized_smoke_contract_map(row.get("startup_smoke_receipt_contract"))
+        if receipt_relative_path and (
+            receipt_contract.get("status_any_of")
+            or receipt_contract.get("ready_checkpoint")
+            or receipt_contract.get("head_id")
+            or receipt_contract.get("platform")
+            or receipt_contract.get("rid")
+            or receipt_contract.get("host_class_contains")
+        ):
+            contract_payload = json.dumps(receipt_contract, sort_keys=True)
+            commands.append(
+                "python3 -c "
+                + shlex.quote(
+                    "import json, os, pathlib; "
+                    "target_root=pathlib.Path(os.environ['TARGET_ROOT']); "
+                    f"tuple_id={tuple_id!r}; "
+                    f"relative={receipt_relative_path!r}; "
+                    f"contract=json.loads({contract_payload!r}); "
+                    "path=target_root / relative; "
+                    "assert path.is_file(), f'external-proof-bundle-receipt-missing:{tuple_id}:{path}'; "
+                    "payload=json.loads(path.read_text(encoding='utf-8')); "
+                    "payload=payload if isinstance(payload, dict) else {}; "
+                    "status=str(payload.get('status') or '').strip().lower(); "
+                    "expected_statuses=[str(token).strip().lower() for token in (contract.get('status_any_of') or []) if str(token).strip()]; "
+                    "head_id=str(payload.get('headId') or '').strip().lower(); "
+                    "platform=str(payload.get('platform') or '').strip().lower(); "
+                    "rid=str(payload.get('rid') or '').strip().lower(); "
+                    "ready_checkpoint=str(payload.get('readyCheckpoint') or '').strip().lower(); "
+                    "host_class=str(payload.get('hostClass') or '').strip().lower(); "
+                    "expected_head=str(contract.get('head_id') or '').strip().lower(); "
+                    "expected_platform=str(contract.get('platform') or '').strip().lower(); "
+                    "expected_rid=str(contract.get('rid') or '').strip().lower(); "
+                    "expected_ready=str(contract.get('ready_checkpoint') or '').strip().lower(); "
+                    "expected_host_contains=str(contract.get('host_class_contains') or '').strip().lower(); "
+                    "assert ("
+                    "(not expected_statuses or status in expected_statuses) and "
+                    "(not expected_head or head_id == expected_head) and "
+                    "(not expected_platform or platform == expected_platform) and "
+                    "(not expected_rid or rid == expected_rid) and "
+                    "(not expected_ready or ready_checkpoint == expected_ready) and "
+                    "(not expected_host_contains or expected_host_contains in host_class), "
+                    "f'receipt-contract-mismatch:{tuple_id}:{path}:status={status}:head={head_id}:platform={platform}:rid={rid}:ready={ready_checkpoint}:host_class={host_class}:contract={contract}')"
+                )
+            )
+    commands.append("echo \"Host proof bundle ingest complete: $BUNDLE_ARCHIVE\"")
+    return commands
+
+
 def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
     tuple_id = _normalize_text(request.get("tuple_id"))
     expected_artifact_id = _normalize_text(request.get("expected_artifact_id"))
     expected_public_install_route = _normalize_text(request.get("expected_public_install_route"))
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
-    installer_relative_path = _normalize_text(request.get("expected_installer_relative_path"))
+    installer_relative_path = _expected_installer_bundle_relative_path(request)
     installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
-    receipt_relative_path = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
+    receipt_relative_path = _request_startup_smoke_receipt_relative_path(request)
     installer_path: Path | None = None
     if installer_relative_path:
-        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / installer_relative_path.lstrip("/")
+        installer_path = build_download_path(installer_relative_path)
     elif installer_file_name:
-        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+        installer_path = UI_DOCKER_DOWNLOADS_FILES_ROOT / installer_file_name
     if installer_path is not None:
         commands.append(
             f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(installer_path))}"
@@ -352,7 +832,7 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
                 )
             )
     if receipt_relative_path:
-        receipt_path = UI_REPO_ROOT / "Docker" / "Downloads" / receipt_relative_path
+        receipt_path = build_download_path(receipt_relative_path)
         commands.append(
             f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(receipt_path))}"
         )
@@ -396,7 +876,7 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
             "python3 -c "
             + shlex.quote(
                 "import json, pathlib, sys; "
-                f"p=pathlib.Path({str(REGISTRY_RELEASE_CHANNEL_PATH)!r}); "
+                f"p=pathlib.Path({str(DEFAULT_RELEASE_CHANNEL)!r}); "
                 f"tuple_id={tuple_id!r}; "
                 f"expected_artifact={expected_artifact_id!r}; "
                 f"expected_route={expected_public_install_route!r}; "
@@ -454,6 +934,49 @@ def _powershell_wrappers(commands: list[str]) -> list[str]:
     return wrapped
 
 
+def _preflight_commands_for_group(group: dict[str, Any], *, host: str) -> list[str]:
+    commands: list[str] = [
+        "if ! command -v python3 >/dev/null 2>&1; then echo 'external-proof-python3-missing' >&2; exit 1; fi",
+        "if ! command -v curl >/dev/null 2>&1; then echo 'external-proof-curl-missing' >&2; exit 1; fi",
+    ]
+    normalized_host = _normalize_text(host).lower()
+    if normalized_host == "macos":
+        commands.append(
+            "if ! command -v hdiutil >/dev/null 2>&1; then "
+            "echo 'external-proof-macos-host-missing-hdiutil' >&2; "
+            "echo 'Hint: run this lane on a macOS host (install xcode tools if needed) rather than Linux.' >&2; "
+            "exit 1; fi"
+        )
+    elif normalized_host == "windows":
+        commands.append(
+            "if ! command -v powershell.exe >/dev/null 2>&1 && ! command -v pwsh >/dev/null 2>&1; then "
+            "echo 'external-proof-powershell-missing' >&2; "
+            "echo 'Hint: run this lane on a Windows host (Git Bash wrapper is supported for bash commands). ' >&2; "
+            "exit 1; fi"
+        )
+
+    requires_signed_in_download = False
+    for row in group.get("requests") or []:
+        if not isinstance(row, dict):
+            continue
+        if _normalize_text(row.get("expected_public_install_route")):
+            requires_signed_in_download = True
+            break
+    if requires_signed_in_download:
+        commands.append(
+            "if [ -z \""
+            + DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR
+            + "\" ] && [ -z \""
+            + DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR
+            + "\" ] && [ -z \""
+            + DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR
+            + "\" ] && [ \""
+            + DEFAULT_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD_EXPR
+            + "\" != \"1\" ]; then echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; exit 1; fi"
+        )
+    return commands
+
+
 def _render_powershell_script(commands: list[str], *, no_op_message: str) -> str:
     wrapped = _powershell_wrappers(commands)
     lines = [
@@ -475,7 +998,7 @@ def _render_powershell_script(commands: list[str], *, no_op_message: str) -> str
 
 def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
     expected_route = _normalize_text(request.get("expected_public_install_route"))
-    installer_relative_path = _normalize_text(request.get("expected_installer_relative_path"))
+    installer_relative_path = _expected_installer_bundle_relative_path(request)
     installer_file_name = _normalize_text(request.get("expected_installer_file_name"))
     installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
     if not expected_route:
@@ -483,12 +1006,43 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
     if not expected_route.startswith("/"):
         expected_route = "/" + expected_route
     if installer_relative_path:
-        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / installer_relative_path.lstrip("/")
+        installer_path = build_download_path(installer_relative_path)
     elif installer_file_name:
-        installer_path = UI_REPO_ROOT / "Docker" / "Downloads" / "files" / installer_file_name
+        installer_path = UI_DOCKER_DOWNLOADS_FILES_ROOT / installer_file_name
     else:
         return ""
     digest_preflight = ""
+    post_download_contract_check = ""
+    digest_post_download = ""
+    installer_suffix = installer_path.name.lower()
+    expected_magic = ""
+    if installer_suffix.endswith(".exe"):
+        expected_magic = "MZ"
+    elif installer_suffix.endswith(".deb"):
+        expected_magic = "!<arch>\\n"
+    post_download_contract_check = (
+        "; "
+        + "python3 -c "
+        + shlex.quote(
+            "import os, pathlib, sys; "
+            f"p=pathlib.Path({str(installer_path)!r}); "
+            f"expected_magic={expected_magic!r}; "
+            "sys.exit(f'installer-download-missing:{p}') if (not p.is_file()) else None; "
+            "probe=p.read_bytes()[:8192]; "
+            "probe_text=probe.decode('latin-1', errors='ignore').lower(); "
+            "auth_header_set=bool(str(os.environ.get('CHUMMER_EXTERNAL_PROOF_AUTH_HEADER','')).strip()); "
+            "cookie_header_set=bool(str(os.environ.get('CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER','')).strip()); "
+            "cookie_jar_set=bool(str(os.environ.get('CHUMMER_EXTERNAL_PROOF_COOKIE_JAR','')).strip()); "
+            "html_like=('<!doctype html' in probe_text) or ('<html' in probe_text) or ('<head' in probe_text); "
+            "sys.exit("
+            "f'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:"
+            "hint=signed-in-download-route-required-or-missing-auth') if html_like else None; "
+            "sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('latin-1'))) else sys.exit("
+            "f'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:"
+            "auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:"
+            "hint=unexpected-binary-format-or-route-response')"
+        )
+    )
     if installer_sha256:
         digest_preflight = (
             "python3 -c "
@@ -504,15 +1058,55 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
             )
             + " && "
         )
+        digest_post_download = (
+            "; "
+            + "python3 -c "
+            + shlex.quote(
+                "import hashlib, os, pathlib, sys; "
+                f"p=pathlib.Path({str(installer_path)!r}); "
+                f"expected={installer_sha256!r}; "
+                "sys.exit(f'installer-download-missing:{p}') if (not p.is_file()) else None; "
+                "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
+                "auth_header_set=bool(str(os.environ.get('CHUMMER_EXTERNAL_PROOF_AUTH_HEADER','')).strip()); "
+                "cookie_header_set=bool(str(os.environ.get('CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER','')).strip()); "
+                "cookie_jar_set=bool(str(os.environ.get('CHUMMER_EXTERNAL_PROOF_COOKIE_JAR','')).strip()); "
+                "sys.exit(0) if digest==expected else sys.exit("
+                "f'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:"
+                "auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:"
+                "hint=signed-in-download-route-required-or-bytes-drift')"
+            )
+        )
     return (
         f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
         f"mkdir -p {shlex.quote(str(installer_path.parent))} && "
         f"{digest_preflight}"
         f"if [ ! -s {shlex.quote(str(installer_path))} ]; then "
+        f"if [ -z \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\" ] && "
+        f"[ -z \"{DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\" ] && "
+        f"[ -z \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ] && "
+        f"[ \"{DEFAULT_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD_EXPR}\" != \"1\" ]; then "
+        "echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, "
+        "CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR "
+        "(or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; "
+        "exit 1; "
+        "fi; "
+        "curl_auth_args=(); "
+        f"if [ -n \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\" ]; then "
+        f"curl_auth_args+=( -H \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\" ); "
+        "fi; "
+        f"if [ -n \"{DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\" ]; then "
+        f"curl_auth_args+=( -H \"Cookie: {DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\" ); "
+        "fi; "
+        f"if [ -n \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ]; then "
+        f"curl_auth_args+=( --cookie \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ); "
+        "fi; "
         f"curl -fL --retry 3 --retry-delay 2 "
+        "${curl_auth_args[@]} "
         f"\"{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}{expected_route}\" "
         f"-o {shlex.quote(str(installer_path))}; "
         f"fi"
+        f"{post_download_contract_check}"
+        f"{digest_post_download}"
     )
 
 
@@ -522,7 +1116,7 @@ def _commands_for_request(request: dict[str, Any]) -> list[str]:
     if preflight:
         commands.append(preflight)
     for command in request.get("proof_capture_commands") or []:
-        normalized = _normalize_text(command)
+        normalized = _normalize_proof_capture_command(command)
         if normalized and normalized not in commands:
             commands.append(normalized)
     return commands
@@ -562,12 +1156,25 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
         if not isinstance(group, dict):
             continue
         host_token = _normalize_host_token(host)
+        preflight_commands = _preflight_commands_for_group(group, host=host)
         capture_commands = _commands_for_group(group)
         validation_commands = _validation_commands_for_group(group)
-        bundle_commands = _bundle_commands_for_group(group, host_token=host_token)
+        bundle_commands = _bundle_commands_for_group(group, host_token=host_token, host=host)
+        ingest_commands = _ingest_commands_for_group(group, host_token=host_token, host=host)
+        preflight_script = commands_dir / f"preflight-{host_token}-proof.sh"
         capture_script = commands_dir / f"capture-{host_token}-proof.sh"
         validation_script = commands_dir / f"validate-{host_token}-proof.sh"
         bundle_script = commands_dir / f"bundle-{host_token}-proof.sh"
+        ingest_script = commands_dir / f"ingest-{host_token}-proof-bundle.sh"
+        host_lane_script = commands_dir / f"run-{host_token}-proof-lane.sh"
+        _write_file(
+            preflight_script,
+            _render_bash_script(
+                preflight_commands,
+                no_op_message=f"No external-proof preflight commands were generated for host '{host}'.",
+            ),
+            executable=True,
+        )
         _write_file(
             capture_script,
             _render_bash_script(
@@ -592,19 +1199,50 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
             ),
             executable=True,
         )
+        _write_file(
+            ingest_script,
+            _render_bash_script(
+                ingest_commands,
+                no_op_message=f"No external-proof ingest commands were generated for host '{host}'.",
+            ),
+            executable=True,
+        )
+        _write_file(
+            host_lane_script,
+            _render_bash_script(
+                _host_proof_lane_commands(host=host, commands_dir=commands_dir),
+                no_op_message=f"No host proof lane commands were generated for host '{host}'.",
+            ),
+            executable=True,
+        )
         host_file_row: dict[str, str] = {
             "host": host,
+            "preflight_script": str(preflight_script),
             "capture_script": str(capture_script),
             "validation_script": str(validation_script),
             "bundle_script": str(bundle_script),
+            "ingest_script": str(ingest_script),
+            "host_lane_script": str(host_lane_script),
         }
         if host.lower() == "windows":
             capture_wrappers = _powershell_wrappers(capture_commands)
             validation_wrappers = _powershell_wrappers(validation_commands)
             bundle_wrappers = _powershell_wrappers(bundle_commands)
+            ingest_wrappers = _powershell_wrappers(ingest_commands)
             capture_ps1 = commands_dir / f"capture-{host_token}-proof.ps1"
             validation_ps1 = commands_dir / f"validate-{host_token}-proof.ps1"
             bundle_ps1 = commands_dir / f"bundle-{host_token}-proof.ps1"
+            ingest_ps1 = commands_dir / f"ingest-{host_token}-proof-bundle.ps1"
+            preflight_ps1 = commands_dir / f"preflight-{host_token}-proof.ps1"
+            host_lane_ps1 = commands_dir / f"run-{host_token}-proof-lane.ps1"
+            _write_file(
+                preflight_ps1,
+                _render_powershell_script(
+                    preflight_commands,
+                    no_op_message=f"No external-proof preflight commands were generated for host '{host}'.",
+                ),
+                executable=False,
+            )
             _write_file(
                 capture_ps1,
                 _render_powershell_script(
@@ -629,9 +1267,28 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
                 ),
                 executable=False,
             )
+            _write_file(
+                ingest_ps1,
+                _render_powershell_script(
+                    ingest_commands,
+                    no_op_message=f"No external-proof ingest commands were generated for host '{host}'.",
+                ),
+                executable=False,
+            )
+            _write_file(
+                host_lane_ps1,
+                _render_powershell_script(
+                    _host_proof_lane_commands(host=host, commands_dir=commands_dir),
+                    no_op_message=f"No host proof lane commands were generated for host '{host}'.",
+                ),
+                executable=False,
+            )
+            host_file_row["preflight_powershell"] = str(preflight_ps1)
             host_file_row["capture_powershell"] = str(capture_ps1)
             host_file_row["validation_powershell"] = str(validation_ps1)
             host_file_row["bundle_powershell"] = str(bundle_ps1)
+            host_file_row["ingest_powershell"] = str(ingest_ps1)
+            host_file_row["host_lane_powershell"] = str(host_lane_ps1)
         host_files.append(host_file_row)
 
     post_capture_script = commands_dir / "republish-after-host-proof.sh"
@@ -643,10 +1300,20 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
         ),
         executable=True,
     )
+    finalize_script = commands_dir / "finalize-external-host-proof.sh"
+    _write_file(
+        finalize_script,
+        _render_bash_script(
+            _finalize_after_host_proof_commands(hosts=hosts, commands_dir=commands_dir),
+            no_op_message="No finalize commands were generated.",
+        ),
+        executable=True,
+    )
     return {
         "commands_dir": str(commands_dir),
         "hosts": host_files,
         "post_capture_script": str(post_capture_script),
+        "finalize_script": str(finalize_script),
     }
 
 
@@ -657,6 +1324,9 @@ def materialize_markdown(
     request_count = int(plan.get("request_count") or 0)
     hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
     host_groups = plan.get("host_groups") or {}
+    rendered_commands_dir = Path(".")
+    if isinstance(command_files, dict) and _normalize_text(command_files.get("commands_dir")):
+        rendered_commands_dir = Path(_normalize_text(command_files.get("commands_dir")))
 
     lines.append("# External Proof Runbook")
     lines.append("")
@@ -670,6 +1340,22 @@ def materialize_markdown(
     lines.append(f"- capture_deadline_hours: {_safe_int(plan.get('capture_deadline_hours'), default=0)}")
     lines.append(f"- capture_deadline_utc: {_normalize_text(plan.get('capture_deadline_utc')) or '(missing)'}")
     lines.append("")
+    lines.append("## Prerequisites")
+    lines.append("")
+    lines.append("- Run each host section on the matching native host (`macos` on macOS, `windows` on Windows).")
+    lines.append(
+        "- Provide signed-in download credentials before capture when public routes are account-gated."
+    )
+    lines.append(
+        f"- Supported auth inputs: `CHUMMER_EXTERNAL_PROOF_AUTH_HEADER`, `CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER`, `CHUMMER_EXTERNAL_PROOF_COOKIE_JAR`."
+    )
+    lines.append(
+        "- Set `CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1` only when install routes are intentionally guest-readable."
+    )
+    lines.append(
+        f"- Optional base URL override: `CHUMMER_EXTERNAL_PROOF_BASE_URL` (default `{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}`)."
+    )
+    lines.append("")
     if isinstance(command_files, dict) and _normalize_text(command_files.get("commands_dir")):
         lines.append("## Generated Command Files")
         lines.append("")
@@ -680,26 +1366,47 @@ def materialize_markdown(
             host = _normalize_text(host_row.get("host")) or "unknown"
             capture_script = _normalize_text(host_row.get("capture_script"))
             validation_script = _normalize_text(host_row.get("validation_script"))
+            preflight_script = _normalize_text(host_row.get("preflight_script"))
             capture_powershell = _normalize_text(host_row.get("capture_powershell"))
             validation_powershell = _normalize_text(host_row.get("validation_powershell"))
+            preflight_powershell = _normalize_text(host_row.get("preflight_powershell"))
             bundle_script = _normalize_text(host_row.get("bundle_script"))
             bundle_powershell = _normalize_text(host_row.get("bundle_powershell"))
+            ingest_script = _normalize_text(host_row.get("ingest_script"))
+            ingest_powershell = _normalize_text(host_row.get("ingest_powershell"))
+            host_lane_script = _normalize_text(host_row.get("host_lane_script"))
+            host_lane_powershell = _normalize_text(host_row.get("host_lane_powershell"))
             lines.append(f"- host `{host}`")
+            if preflight_script:
+                lines.append(f"  preflight_script: `{preflight_script}`")
             if capture_script:
                 lines.append(f"  capture_script: `{capture_script}`")
             if validation_script:
                 lines.append(f"  validation_script: `{validation_script}`")
             if bundle_script:
                 lines.append(f"  bundle_script: `{bundle_script}`")
+            if ingest_script:
+                lines.append(f"  ingest_script: `{ingest_script}`")
+            if host_lane_script:
+                lines.append(f"  host_lane_script: `{host_lane_script}`")
+            if preflight_powershell:
+                lines.append(f"  preflight_powershell: `{preflight_powershell}`")
             if capture_powershell:
                 lines.append(f"  capture_powershell: `{capture_powershell}`")
             if validation_powershell:
                 lines.append(f"  validation_powershell: `{validation_powershell}`")
             if bundle_powershell:
                 lines.append(f"  bundle_powershell: `{bundle_powershell}`")
+            if ingest_powershell:
+                lines.append(f"  ingest_powershell: `{ingest_powershell}`")
+            if host_lane_powershell:
+                lines.append(f"  host_lane_powershell: `{host_lane_powershell}`")
         post_capture_script = _normalize_text(command_files.get("post_capture_script"))
         if post_capture_script:
             lines.append(f"- post_capture_script: `{post_capture_script}`")
+        finalize_script = _normalize_text(command_files.get("finalize_script"))
+        if finalize_script:
+            lines.append(f"- finalize_script: `{finalize_script}`")
         lines.append("")
 
     if request_count <= 0 or not host_groups:
@@ -714,6 +1421,10 @@ def materialize_markdown(
         lines.append(f"## Host: {host}")
         lines.append("")
         lines.append(f"- shell_hint: {_shell_hint_for_host(host)}")
+        if _normalize_text(host).lower() == "macos":
+            lines.append("- platform_hint: macOS proofs require `hdiutil` on the proof host.")
+        if _normalize_text(host).lower() == "windows":
+            lines.append("- platform_hint: Windows proofs require `powershell.exe` or `pwsh` on the proof host.")
         lines.append(f"- request_count: {int(group.get('request_count') or 0)}")
         tuples = [str(item) for item in (group.get("tuples") or []) if str(item)]
         lines.append(f"- tuples: {', '.join(tuples) if tuples else '(none)'}")
@@ -765,7 +1476,27 @@ def materialize_markdown(
                 lines.append(command)
             lines.append("```")
         validation_commands = _validation_commands_for_group(group)
-        bundle_commands = _bundle_commands_for_group(group, host_token=_normalize_host_token(host))
+        preflight_commands = _preflight_commands_for_group(group, host=host)
+        bundle_commands = _bundle_commands_for_group(
+            group,
+            host_token=_normalize_host_token(host),
+            host=host,
+        )
+        ingest_commands = _ingest_commands_for_group(
+            group,
+            host_token=_normalize_host_token(host),
+            host=host,
+        )
+        lines.append("")
+        lines.append("### Commands (Host Preflight)")
+        lines.append("")
+        if not preflight_commands:
+            lines.append("No host preflight commands were generated for this host.")
+        else:
+            lines.append("```bash")
+            for command in preflight_commands:
+                lines.append(command)
+            lines.append("```")
         lines.append("")
         lines.append("### Commands (Host Validation)")
         lines.append("")
@@ -786,10 +1517,47 @@ def materialize_markdown(
             for command in bundle_commands:
                 lines.append(command)
             lines.append("```")
+        lines.append("")
+        lines.append("### Commands (Host Ingest)")
+        lines.append("")
+        if not ingest_commands:
+            lines.append("No host ingest commands were generated for this host.")
+        else:
+            lines.append("```bash")
+            for command in ingest_commands:
+                lines.append(command)
+            lines.append("```")
+        lines.append("")
+        lines.append("### Commands (Host Lane)")
+        lines.append("")
+        host_lane_commands = _host_proof_lane_commands(
+            host=host,
+            commands_dir=rendered_commands_dir,
+        )
+        if not host_lane_commands:
+            lines.append("No host lane commands were generated for this host.")
+        else:
+            lines.append("```bash")
+            for command in host_lane_commands:
+                lines.append(command)
+            lines.append("```")
         if host.lower() == "windows":
             wrappers = _powershell_wrappers(commands)
             validation_wrappers = _powershell_wrappers(validation_commands)
+            preflight_wrappers = _powershell_wrappers(preflight_commands)
             bundle_wrappers = _powershell_wrappers(bundle_commands)
+            ingest_wrappers = _powershell_wrappers(ingest_commands)
+            host_lane_wrappers = _powershell_wrappers(host_lane_commands)
+            lines.append("")
+            lines.append("### Commands (PowerShell Preflight Wrappers)")
+            lines.append("")
+            if not preflight_wrappers:
+                lines.append("No PowerShell preflight wrappers were generated for this host.")
+            else:
+                lines.append("```powershell")
+                for command in preflight_wrappers:
+                    lines.append(command)
+                lines.append("```")
             lines.append("")
             lines.append("### Commands (PowerShell Wrappers)")
             lines.append("")
@@ -820,12 +1588,41 @@ def materialize_markdown(
                 for command in bundle_wrappers:
                     lines.append(command)
                 lines.append("```")
+            lines.append("")
+            lines.append("### Commands (PowerShell Ingest Wrappers)")
+            lines.append("")
+            if not ingest_wrappers:
+                lines.append("No PowerShell ingest wrappers were generated for this host.")
+            else:
+                lines.append("```powershell")
+                for command in ingest_wrappers:
+                    lines.append(command)
+                lines.append("```")
+            lines.append("")
+            lines.append("### Commands (PowerShell Host Lane Wrappers)")
+            lines.append("")
+            if not host_lane_wrappers:
+                lines.append("No PowerShell host lane wrappers were generated for this host.")
+            else:
+                lines.append("```powershell")
+                for command in host_lane_wrappers:
+                    lines.append(command)
+                lines.append("```")
         lines.append("")
 
     lines.append("## After Host Proof Capture")
     lines.append("")
-    lines.append("Run these commands after macOS/Windows proofs land to ingest receipts and republish release truth.")
+    lines.append(
+        "Run these commands after macOS/Windows proofs land to validate receipts, ingest bundles, and republish release truth."
+    )
     lines.append("")
+    if isinstance(command_files, dict):
+        finalize_script = _normalize_text(command_files.get("finalize_script"))
+        if finalize_script:
+            lines.append("```bash")
+            lines.append(finalize_script)
+            lines.append("```")
+            lines.append("")
     lines.append("```bash")
     for command in _post_capture_republish_commands():
         lines.append(command)
@@ -839,6 +1636,12 @@ def main() -> int:
     args = parse_args()
     support_packets = _load_support_packets(args.support_packets)
     plan = _normalize_plan(support_packets.get("unresolved_external_proof_execution_plan"))
+    failures = _validate_plan_relative_paths(plan)
+    if failures:
+        print("external-proof materialize failed: malformed relative paths", file=sys.stderr)
+        for failure in failures:
+            print(f"- {failure}", file=sys.stderr)
+        return 1
     commands_dir = (
         Path(args.commands_dir).resolve()
         if args.commands_dir is not None

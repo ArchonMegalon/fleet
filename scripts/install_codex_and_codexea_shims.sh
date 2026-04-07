@@ -48,6 +48,7 @@ install_if_writable() {
 
 install_if_writable 0755 "${SOURCE_DIR}/codex" "${USER_BIN_DIR}/codex"
 install_if_writable 0755 "${SOURCE_DIR}/codexea" "${USER_LOCAL_BIN_DIR}/codexea"
+install_if_writable 0755 "${SOURCE_DIR}/codexea2" "${USER_LOCAL_BIN_DIR}/codexea2"
 install_if_writable 0755 "${SOURCE_DIR}/codexaudit" "${USER_LOCAL_BIN_DIR}/codexaudit"
 install_if_writable 0755 "${SOURCE_DIR}/codexea-watchdog" "${USER_LOCAL_BIN_DIR}/codexea-watchdog"
 install_if_writable 0755 "${SOURCE_DIR}/codexsurvival" "${USER_LOCAL_BIN_DIR}/codexsurvival"
@@ -87,7 +88,7 @@ export HOME='${TARGET_HOME}'
   --env EA_MCP_API_TOKEN= \
   --env EA_MCP_PRINCIPAL_ID=${principal_id} \
   --env EA_MCP_TIMEOUT_SECONDS=120 \
-  --env EA_MCP_MODEL=gemini-2.5-flash \
+  --env EA_MCP_MODEL=onemin:gpt-5.4 \
   -- python3 '${bridge_script}'
 EOF
 )"

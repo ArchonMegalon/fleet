@@ -108,8 +108,29 @@ APP_PORT = int(os.environ.get("APP_PORT", "8092"))
 APP_TITLE = "Codex Fleet Admin"
 FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
 _SECRET_ENV_PATHS_OVERRIDE = str(os.environ.get("FLEET_SECRET_ENV_PATHS", "") or "").strip()
-CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
-ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", "/app/config/accounts.yaml"))
+
+
+def _default_config_root() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONFIG_ROOT", "") or "").strip()
+    candidates: List[pathlib.Path] = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    candidates.extend(
+        [
+            FLEET_MOUNT_ROOT / "config",
+            ADMIN_DIR.parent / "config",
+            pathlib.Path("/app/config"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+CONFIG_ROOT = _default_config_root()
+CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
+ACCOUNTS_PATH = pathlib.Path(os.environ.get("FLEET_ACCOUNTS_PATH", str(CONFIG_ROOT / "accounts.yaml")))
 POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
 ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
@@ -118,6 +139,8 @@ PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", str(DB_PATH.parent / "state")))
 DESIGN_MIRROR_STATUS_PATH = STATE_ROOT / "design_mirror_status.json"
+RUNTIME_CACHE_WRITE_ATTEMPTS = int(os.environ.get("FLEET_RUNTIME_CACHE_WRITE_ATTEMPTS", "4"))
+RUNTIME_CACHE_WRITE_RETRY_SECONDS = float(os.environ.get("FLEET_RUNTIME_CACHE_WRITE_RETRY_SECONDS", "0.15"))
 REBUILDER_STATE_DIR = pathlib.Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(FLEET_MOUNT_ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
@@ -539,8 +562,10 @@ def load_split_projects() -> List[Dict[str, Any]]:
         data = load_yaml(path)
         if isinstance(data.get("projects"), list):
             projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
-        elif data:
+        elif isinstance(data, dict) and str(data.get("id") or "").strip():
             projects.append(dict(data))
+        elif isinstance(data, dict):
+            continue
     return projects
 
 
@@ -669,8 +694,11 @@ def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -4649,18 +4677,26 @@ def save_runtime_cache(cache_key: str, payload: Dict[str, Any], *, fetched_at: O
         return
     fetched_value = iso(fetched_at or utc_now())
     updated_at = iso(utc_now())
-    with db() as conn:
-        conn.execute(
-            """
-            INSERT INTO runtime_caches(cache_key, payload_json, fetched_at, updated_at)
-            VALUES(?, ?, ?, ?)
-            ON CONFLICT(cache_key) DO UPDATE SET
-                payload_json=excluded.payload_json,
-                fetched_at=excluded.fetched_at,
-                updated_at=excluded.updated_at
-            """,
-            (cache_key, json.dumps(dict(payload or {}), sort_keys=True), fetched_value, updated_at),
-        )
+    payload_json = json.dumps(dict(payload or {}), sort_keys=True)
+    for attempt in range(1, max(RUNTIME_CACHE_WRITE_ATTEMPTS, 1) + 1):
+        try:
+            with db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO runtime_caches(cache_key, payload_json, fetched_at, updated_at)
+                    VALUES(?, ?, ?, ?)
+                    ON CONFLICT(cache_key) DO UPDATE SET
+                        payload_json=excluded.payload_json,
+                        fetched_at=excluded.fetched_at,
+                        updated_at=excluded.updated_at
+                    """,
+                    (cache_key, payload_json, fetched_value, updated_at),
+                )
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).lower() or attempt >= max(RUNTIME_CACHE_WRITE_ATTEMPTS, 1):
+                break
+            time.sleep(RUNTIME_CACHE_WRITE_RETRY_SECONDS * attempt)
 
 
 def provider_slot_state(provider_payload: Dict[str, Any]) -> str:
@@ -4894,10 +4930,18 @@ def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
             payload = json.loads(response.read().decode("utf-8"))
         return payload if isinstance(payload, dict) else {}
 
+    def _request_json_global_first(path: str) -> Dict[str, Any]:
+        try:
+            return _request_json(f"{path}?scope=global")
+        except urllib.error.HTTPError as exc:
+            if exc.code not in {403, 404, 422}:
+                raise
+        return _request_json(path)
+
     try:
         payload = {
-            "aggregate": _request_json("/v1/providers/onemin/aggregate"),
-            "runway": _request_json("/v1/providers/onemin/runway"),
+            "aggregate": _request_json_global_first("/v1/providers/onemin/aggregate"),
+            "runway": _request_json_global_first("/v1/providers/onemin/runway"),
         }
     except Exception:
         if persisted_payload:
@@ -9766,19 +9810,23 @@ def release_channel_surface_payload() -> Dict[str, Any]:
             truth_source = "missing"
     artifacts = [dict(item) for item in (payload.get("artifacts") or []) if isinstance(item, dict)]
     release_proof = dict(payload.get("releaseProof") or {})
+    candidate_timestamps = [
+        str(payload.get("publishedAt") or "").strip(),
+        str(payload.get("publishedAtUtc") or "").strip(),
+        str(release_proof.get("generatedAt") or "").strip(),
+        str(release_proof.get("generatedAtUtc") or "").strip(),
+    ]
+    release_published_at = max(
+        (ts for ts in candidate_timestamps if ts),
+        default="",
+    )
     freshness = artifact_freshness_payload(
-        at=str(
-            payload.get("publishedAt")
-            or payload.get("publishedAtUtc")
-            or release_proof.get("generatedAt")
-            or release_proof.get("generatedAtUtc")
-            or ""
-        ).strip(),
-        stale_after_hours=24 * 7,
+        at=release_published_at,
+        stale_after_hours=24 * 8,
     )
     proof_freshness = artifact_freshness_payload(
         at=str(release_proof.get("generatedAt") or release_proof.get("generatedAtUtc") or "").strip(),
-        stale_after_hours=24 * 7,
+        stale_after_hours=24 * 8,
     )
     return {
         **payload,
@@ -10037,21 +10085,6 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
     status_snapshot_path: Optional[pathlib.Path] = None
     try:
         if force or any(key in refreshable for key in {"compile_manifest", "status_plane"}):
-            package_overlay_result = _run_repo_python_script(
-                "materialize_package_compile_overlay.py",
-                "--repo-root",
-                str(FLEET_MOUNT_ROOT),
-                "--project-id",
-                "fleet",
-            )
-            results.append(
-                {
-                    "artifact": "package_compile_overlay",
-                    "ok": bool(package_overlay_result.get("ok")),
-                    "state": "refreshed" if package_overlay_result.get("ok") else "error",
-                    "detail": package_overlay_result.get("stdout") or package_overlay_result.get("stderr") or "",
-                }
-            )
             status_snapshot_path = _write_status_snapshot(status_payload or admin_status_payload())
             result = _run_repo_python_script(
                 "materialize_status_plane.py",
@@ -10063,8 +10096,8 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
             results.append(
                 {
                     "artifact": "status_plane",
-                    "ok": bool(package_overlay_result.get("ok")) and bool(result.get("ok")),
-                    "state": "refreshed" if package_overlay_result.get("ok") and result.get("ok") else "error",
+                    "ok": bool(result.get("ok")),
+                    "state": "refreshed" if result.get("ok") else "error",
                     "detail": result.get("stdout") or result.get("stderr") or "",
                 }
             )

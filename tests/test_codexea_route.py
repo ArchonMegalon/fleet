@@ -5,8 +5,11 @@ import importlib.util
 import json
 import os
 import sqlite3
+import datetime as dt
 import tempfile
 import threading
+import sys
+import subprocess
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -80,6 +83,19 @@ class CodexEaRouteTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def _run_route_cli(self, args: list[str], extra_env: dict[str, str] | None = None) -> tuple[int, str, str]:
+        env = os.environ.copy()
+        env.update(extra_env or {})
+        process = subprocess.run(
+            [sys.executable, str(MODULE_PATH), *args],
+            env=env,
+            cwd="/docker/fleet",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return process.returncode, process.stdout, process.stderr
+
     def mock_http_401(self, *args, **kwargs):
         self.route_module._LAST_EA_HTTP_ERROR = "http_401"
         return None
@@ -137,8 +153,8 @@ class CodexEaRouteTests(unittest.TestCase):
         routed = self.route_module._route([])
 
         self.assertEqual(routed["lane"], "easy")
-        self.assertEqual(routed["submode"], "mcp")
-        self.assertEqual(routed["reason"], "interactive_mcp_easy_locked")
+        self.assertEqual(routed["submode"], "responses_easy")
+        self.assertEqual(routed["reason"], "interactive_easy_locked")
         self.assertEqual(routed["runtime_model"], "ea-gemini-flash")
 
     def test_telemetry_question_stays_easy_and_marks_live_status_reason(self) -> None:
@@ -158,6 +174,14 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(routed["lane"], "easy")
         self.assertEqual(routed["task_class"], "telemetry")
         self.assertEqual(routed["reason"], "telemetry_live_status")
+
+    def test_fleet_eta_and_shards_question_does_not_short_circuit_to_telemetry(self) -> None:
+        self.write_config({})
+
+        routed = self.route_module._route(["eta", "of", "the", "fleet?", "is", "it", "running?", "the", "shards?"])
+
+        self.assertNotEqual(routed["task_class"], "telemetry")
+        self.assertNotEqual(routed["reason"], "telemetry_live_status")
 
     def test_telemetry_response_refreshes_live_status_and_formats_percent(self) -> None:
         self.write_config({})
@@ -187,6 +211,137 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("680,000 free credits", response["message"])
         self.assertIn("ETA 17.2h", response["message"])
         self.assertEqual(mocked_status.call_args.kwargs["refresh"], True)
+
+    def test_telemetry_response_reports_live_fleet_runtime_status(self) -> None:
+        self.write_config({})
+
+        runtime_payload = {
+            "mode": "active",
+            "shards": [
+                {
+                    "name": "shard-alpha",
+                    "active_run_id": "run-1",
+                    "frontier_ids": [100, 101],
+                },
+                {
+                    "name": "shard-zeta",
+                    "active_run_id": "run-3",
+                    "frontier_ids": [105],
+                },
+                {"name": "shard-beta", "active_run_id": ""},
+            ],
+            "active_run": {"run_id": "run-1"},
+            "open_milestone_ids": [1001, 1002],
+            "updated_at": "2026-04-06T10:00:00Z",
+        }
+
+        with mock.patch.object(self.route_module, "_fleet_runtime_status_payload", return_value=runtime_payload):
+            response = self.route_module._telemetry_response("How many active shards are running?")
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["exit_code"], 0)
+        self.assertIn("Live fleet status", response["message"])
+        self.assertIn("2 active shards out of 3 total shards", response["message"])
+        shard_phrase_index = response["message"].find("active shards")
+        first_active_index = response["message"].find("shard-alpha", shard_phrase_index)
+        second_active_index = response["message"].find("shard-zeta", shard_phrase_index)
+        self.assertTrue(first_active_index != -1 and second_active_index != -1)
+        self.assertLess(first_active_index, second_active_index)
+        self.assertIn("aggregate active run run-1", response["message"])
+        self.assertIn("2 open milestones", response["message"])
+
+    def test_telemetry_response_reports_live_fleet_runtime_status_update_age(self) -> None:
+        self.write_config({})
+
+        runtime_payload = {
+            "mode": "active",
+            "shards": [
+                {
+                    "name": "shard-alpha",
+                    "active_run_id": "run-1",
+                    "frontier_ids": [100, 101],
+                },
+            ],
+            "active_run": {"run_id": "run-1"},
+            "open_milestone_ids": [1001],
+            "updated_at": "2026-04-06T10:00:00Z",
+        }
+
+        with mock.patch.object(self.route_module, "_fleet_runtime_status_payload", return_value=runtime_payload):
+            with mock.patch.object(self.route_module, "_utc_now", return_value=dt.datetime(2026, 4, 6, 10, 15, tzinfo=dt.timezone.utc)):
+                response = self.route_module._telemetry_response("How many active shards are running?")
+
+        self.assertTrue(response["matched"])
+        self.assertTrue(response["ok"])
+        self.assertIn("updated 15m ago", response["message"])
+        self.assertIn("at 2026-04-06T10:00:00Z", response["message"])
+        self.assertIn("stale", response["message"])
+        self.assertIn("run `chummer_design_supervisor status` to refresh this snapshot.", response["message"])
+
+    def test_telemetry_answer_json_mode_includes_metadata(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                payload = {
+                    "providers_summary": [
+                        {
+                            "provider_name": "1min",
+                            "account_name": "acct-core",
+                            "used_percent": 25.0,
+                            "free_credits": 750_000,
+                            "state": "ready",
+                            "basis": "measured",
+                        }
+                    ]
+                }
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        rc, stdout, stderr = self._run_route_cli(
+            ["--telemetry-answer", "--json", "1min", "credits"],
+            extra_env={
+                "EA_MCP_BASE_URL": f"http://127.0.0.1:{server.server_port}",
+                "EA_MCP_API_TOKEN": "telemetry-json-token",
+            },
+        )
+
+        self.assertEqual(rc, 0)
+        payload = json.loads(stdout)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["exit_code"], 0)
+        self.assertIn("Live 1min status", payload["message"])
+        self.assertIn("payload_source", payload)
+        self.assertEqual(payload["payload_source"], "status")
+        self.assertIn("payload_fetched_at", payload)
+
+    def test_telemetry_answer_json_mode_rejects_non_telemetry_query(self) -> None:
+        rc, stdout, stderr = self._run_route_cli(
+            ["--telemetry-answer", "--json", "what is the next big wins registry update?"]
+        )
+        output = stdout + stderr
+
+        self.assertEqual(rc, 10)
+        payload = json.loads(output)
+        self.assertFalse(payload["matched"])
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["exit_code"], 10)
+        self.assertEqual(payload["error"], "no_telemetry_match")
+        self.assertEqual(payload["message"], "Query did not match a live telemetry question.")
 
     def test_telemetry_response_reports_unknown_percent_exactly(self) -> None:
         self.write_config({})
@@ -293,7 +448,7 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(data["basis_summary"], "actual_ui_probe x2")
         self.assertIn("ready", data["state_summary"])
         self.assertIn("degraded", data["state_summary"])
-        self.assertIn("Top-ups excluded: yes", response["message"])
+        self.assertIn("Top-ups: excluded", response["message"])
 
     def test_onemin_aggregate_response_uses_precomputed_block_when_present(self) -> None:
         self.write_config({})
@@ -1081,6 +1236,13 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(data["sum_free_credits"], 25)
         self.assertAlmostEqual(data["days_left_at_7d_avg_burn"], 5.0, places=3)
         self.assertEqual(data["slots"][0]["account_name"], "acct-a")
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["exit_code"], 0)
+        self.assertIn("matched", data)
+        self.assertTrue(data["matched"])
+        self.assertIn("payload_source", data)
+        self.assertIn("payload_fetched_at", data)
+
 
     def test_onemin_aggregate_slots_flag_renders_slot_rows(self) -> None:
         self.write_config({})
@@ -1106,6 +1268,158 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("Slot details:", rendered)
         self.assertIn("- acct-a: ready | measured | 25 free / 100 max", rendered)
+
+    def test_onemin_aggregate_slots_flag_compact_mode(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "acct-a",
+                    "max_credits": 100,
+                    "free_credits": 25,
+                    "basis": "measured",
+                    "state": "ready",
+                    "slot_role": "owner",
+                    "owner_email": "owner@example.com",
+                    "last_probe_result": "ok",
+                    "last_probe_detail": "probed quickly",
+                }
+            ]
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            with io.StringIO() as stream, mock.patch("sys.stdout", stream):
+                rc = self.route_module.main(["--onemin-aggregate", "--slots", "--slots-detail", "compact"])
+                rendered = stream.getvalue()
+
+        self.assertEqual(rc, 0)
+        self.assertIn("Slot details:", rendered)
+        self.assertIn("- owner@example.com [acct-a]: ready | measured | 25 free / 100 max | owner owner@example.com", rendered)
+        self.assertNotIn("probe ok", rendered)
+        self.assertNotIn("probed quickly", rendered)
+
+    def test_onemin_aggregate_help_shows_slots_detail_option_and_examples(self) -> None:
+        self.write_config({})
+
+        with io.StringIO() as stdout, io.StringIO() as stderr, mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+            with self.assertRaises(SystemExit) as ctx:
+                self.route_module.main(["--help"])
+            help_text = stdout.getvalue() + stderr.getvalue()
+
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("--slots-detail", help_text)
+        self.assertIn("controls how much detail appears per 1min slot row", help_text)
+        self.assertIn("codexea --onemin-aggregate --slots --slots-detail compact", help_text)
+
+    def test_onemin_aggregate_rejects_invalid_slots_detail(self) -> None:
+        self.write_config({})
+
+        with io.StringIO() as stdout, io.StringIO() as stderr, mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+            with self.assertRaises(SystemExit) as ctx:
+                self.route_module.main(["--onemin-aggregate", "--slots-detail", "compactish"])
+            error_text = stdout.getvalue() + stderr.getvalue()
+
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("invalid choice", error_text)
+
+    def test_cli_subprocess_shows_compact_slot_output(self) -> None:
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                payload = {
+                    "providers_summary": [
+                        {
+                            "provider_name": "1min",
+                            "account_name": "acct-a",
+                            "max_credits": 100,
+                            "free_credits": 25,
+                            "basis": "measured",
+                            "state": "ready",
+                            "owner_email": "owner@example.com",
+                            "slot_role": "owner",
+                            "last_probe_result": "ok",
+                        }
+                    ]
+                }
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):  # noqa: N802
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(thread.join, 1.0)
+
+        rc, stdout, stderr = self._run_route_cli(
+            ["--onemin-aggregate", "--slots", "--slots-detail", "compact"],
+            extra_env={
+                "EA_MCP_BASE_URL": f"http://127.0.0.1:{server.server_port}",
+                "EA_MCP_API_TOKEN": "cli-token",
+            },
+        )
+
+        self.assertEqual(rc, 0)
+        message = stdout + stderr
+        self.assertIn("Slot details:", message)
+        self.assertIn("ready | measured | 25 free / 100 max", message)
+        self.assertNotIn("probed", message)
+
+    def test_cli_subprocess_help_contains_slots_detail(self) -> None:
+        rc, stdout, stderr = self._run_route_cli(["--help"])
+        output = stdout + stderr
+
+        self.assertEqual(rc, 0)
+        self.assertIn("--slots-detail", output)
+        self.assertIn("codexea --onemin-aggregate --slots --slots-detail compact", output)
+
+    def test_cli_subprocess_help_contains_json_telemetry_example(self) -> None:
+        rc, stdout, stderr = self._run_route_cli(["--help"])
+        output = stdout + stderr
+
+        self.assertEqual(rc, 0)
+        self.assertIn("--telemetry-answer --json", output)
+        self.assertIn("codexea --telemetry-answer --json", output)
+
+    def test_cli_subprocess_json_routing_output(self) -> None:
+        rc, stdout, stderr = self._run_route_cli(
+            ["--json", "what", "is", "the", "safest", "lane", "for", "a", "migration", "fix?"]
+        )
+        output = stdout + stderr
+
+        self.assertEqual(rc, 0)
+        payload = json.loads(output)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["matched"])
+        self.assertIn("lane", payload["data"])
+        self.assertIn("submode", payload["data"])
+        self.assertIn(payload["data"]["lane"], {"easy", "repair", "groundwork", "review_light", "core", "jury", "survival"})
+
+    def test_cli_subprocess_shell_takes_precedence_over_json(self) -> None:
+        rc, stdout, stderr = self._run_route_cli(
+            ["--shell", "--json", "what", "is", "the", "safest", "lane", "for", "a", "migration", "fix?"]
+        )
+        output = stdout + stderr
+
+        self.assertEqual(rc, 0)
+        self.assertIn("CODEXEA_ROUTE_LANE=", output)
+        self.assertNotIn("\"ok\"", output)
+        self.assertNotIn("\"exit_code\"", output)
 
     def test_onemin_aggregate_slots_flag_renders_owner_labels(self) -> None:
         self.write_config({})
@@ -1135,6 +1449,41 @@ class CodexEaRouteTests(unittest.TestCase):
 
         self.assertTrue(response["ok"])
         self.assertIn("owner owner@example.com", response["message"])
+
+    def test_onemin_aggregate_slots_flag_sorts_slots_by_label(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "providers_summary": [
+                {
+                    "provider_name": "1min",
+                    "account_name": "Z-ACCOUNT",
+                    "owner_label": "zeta-owner",
+                    "max_credits": 100,
+                    "free_credits": 10,
+                    "basis": "measured",
+                    "state": "ready",
+                },
+                {
+                    "provider_name": "1min",
+                    "account_name": "A-ACCOUNT",
+                    "owner_label": "alpha-owner",
+                    "max_credits": 100,
+                    "free_credits": 20,
+                    "basis": "measured",
+                    "state": "ready",
+                },
+            ]
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response(include_slots=True)
+
+        self.assertTrue(response["ok"])
+        first_alpha = response["message"].find("alpha-owner")
+        first_zeta = response["message"].find("zeta-owner")
+        self.assertTrue(first_alpha != -1 and first_zeta != -1)
+        self.assertLess(first_alpha, first_zeta)
 
     def test_groundwork_keywords_route_to_groundwork_lane(self) -> None:
         self.write_config(

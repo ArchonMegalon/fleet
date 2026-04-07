@@ -1,0 +1,250 @@
+{
+  "generated_at": "2026-04-04T00:00:00Z",
+  "groups": [
+    {
+      "deployment": {
+        "access_posture": "public",
+        "promotion_stage": "promoted_preview",
+        "status": "public"
+      },
+      "deployment_readiness": {
+        "blocking_owner_projects": [],
+        "publicly_promoted": true
+      },
+      "id": "chummer-vnext",
+      "lifecycle": "live",
+      "phase": "active"
+    },
+    {
+      "deployment": {
+        "access_posture": "internal",
+        "promotion_stage": "",
+        "status": "internal"
+      },
+      "deployment_readiness": {
+        "blocking_owner_projects": [],
+        "publicly_promoted": false
+      },
+      "id": "control-plane",
+      "lifecycle": "live",
+      "phase": "active"
+    }
+  ],
+  "projects": [
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "core",
+      "lifecycle": "live",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "boundary_pure",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "design",
+      "lifecycle": "dispatchable",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "repo_local_complete",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "ea",
+      "lifecycle": "live",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "repo_local_complete",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "fleet",
+      "lifecycle": "live",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "boundary_pure",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "guide",
+      "lifecycle": "signoff_only",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "pre_repo_local_complete",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "hub-registry",
+      "lifecycle": "dispatchable",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "boundary_pure",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "public",
+        "promotion_stage": "promoted_preview",
+        "status": "public"
+      },
+      "id": "hub",
+      "lifecycle": "live",
+      "readiness": {
+        "final_claim_allowed": true,
+        "stage": "publicly_promoted",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "media-factory",
+      "lifecycle": "dispatchable",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "boundary_pure",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "public",
+        "promotion_stage": "promoted_preview",
+        "status": "public"
+      },
+      "id": "mobile",
+      "lifecycle": "dispatchable",
+      "readiness": {
+        "final_claim_allowed": true,
+        "stage": "publicly_promoted",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "",
+        "promotion_stage": "",
+        "status": ""
+      },
+      "id": "ui-kit",
+      "lifecycle": "scaffold",
+      "readiness": {
+        "final_claim_allowed": false,
+        "stage": "boundary_pure",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    },
+    {
+      "deployment": {
+        "access_posture": "public",
+        "promotion_stage": "promoted_preview",
+        "status": "public"
+      },
+      "id": "ui",
+      "lifecycle": "live",
+      "readiness": {
+        "final_claim_allowed": true,
+        "stage": "publicly_promoted",
+        "terminal_stage": "publicly_promoted",
+        "warning_count": 0
+      },
+      "runtime_status": "dispatch_pending"
+    }
+  ],
+  "public_status": {
+    "deployment_posture": {
+      "access_posture": "protected_preview",
+      "promotion_stage": "protected_preview"
+    },
+    "generated_at": "2026-04-04T00:00:00Z",
+    "readiness_summary": {
+      "counts": {
+        "boundary_pure": 5,
+        "package_canonical": 0,
+        "pre_repo_local_complete": 1,
+        "publicly_promoted": 3,
+        "repo_local_complete": 2
+      },
+      "final_claim_ready": 3,
+      "final_claim_ready_project_ids": [
+        "hub",
+        "mobile",
+        "ui"
+      ],
+      "warning_count": 0,
+      "whole_product_final_claim_ready": 0,
+      "whole_product_final_claim_status": "fail",
+      "whole_product_final_claim_warning_keys": [
+        "desktop_client",
+        "hub_and_registry",
+        "horizons_and_public_surface",
+        "fleet_and_operator_loop"
+      ]
+    },
+    "runtime_healing": {
+      "enabled": true,
+      "generated_at": "2026-04-04T00:00:00Z",
+      "services": [],
+      "summary": {
+        "alert_state": "healthy"
+      }
+    }
+  }
+}

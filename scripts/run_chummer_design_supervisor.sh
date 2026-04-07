@@ -3,37 +3,70 @@ set -euo pipefail
 
 cd /docker/fleet
 
-worker_bin_effective="${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-}"
-worker_lane_effective="${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}"
-if [[ -n "$worker_lane_effective" ]] && [[ "${worker_bin_effective##*/}" == "codexea" ]]; then
-  case "$worker_lane_effective" in
-    core|jury|survival)
-      : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS:-900000}}"
-      : "${CODEXEA_STREAM_MAX_RETRIES:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES:-8}}"
-      export CODEXEA_STREAM_IDLE_TIMEOUT_MS CODEXEA_STREAM_MAX_RETRIES
-      ;;
-  esac
-  case "$worker_lane_effective" in
-    core)
-      : "${CODEXEA_CORE_RESPONSES_PROFILE:=${CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE:-core_batch}}"
-      export CODEXEA_CORE_RESPONSES_PROFILE
-      ;;
-  esac
+if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS:-}" ]]; then
+  : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS}}"
+  export CODEXEA_STREAM_IDLE_TIMEOUT_MS
 fi
+if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES:-}" ]]; then
+  : "${CODEXEA_STREAM_MAX_RETRIES:=${CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES}}"
+  export CODEXEA_STREAM_MAX_RETRIES
+fi
+if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE:-}" ]]; then
+  : "${CODEXEA_CORE_RESPONSES_PROFILE:=${CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE}}"
+  export CODEXEA_CORE_RESPONSES_PROFILE
+fi
+
+if [[ -z "${CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS:-}" ]]; then
+  CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS=1
+fi
+export CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS
 
 common_args=()
 state_root_base="${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT:-}"
 parallel_shards_raw="${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-1}"
+background_mode="$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_BACKGROUND_MODE:-0}" | tr '[:upper:]' '[:lower:]')"
 shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-}"
+shard_account_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS:-}"
+shard_focus_text_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS:-}"
+shard_frontier_id_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS:-}"
+shard_worker_bin_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_BINS:-}"
+shard_worker_lane_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES:-}"
+shard_worker_model_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_MODELS:-}"
 clear_lock_on_boot="${CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT:-0}"
+shard_start_stagger_seconds="${CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SECONDS:-3}"
+
+case "$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS:-0}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    common_args+=(--ignore-nonlinux-desktop-host-proof-blockers)
+    ;;
+esac
 
 if [[ ! "$parallel_shards_raw" =~ ^[0-9]+$ ]]; then
   parallel_shards_raw=1
 fi
 parallel_shards=$(( parallel_shards_raw < 1 ? 1 : parallel_shards_raw ))
+if (( parallel_shards > 1 )) && [[ -z "$state_root_base" ]]; then
+  printf 'run_chummer_design_supervisor: parallel shards requires CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT; collapsing to 1.\n' >&2
+  parallel_shards=1
+fi
+if [[ ! "$shard_start_stagger_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  shard_start_stagger_seconds=3
+fi
 
 shard_owner_groups_raw="${shard_owner_groups_raw//$'\n'/;}"
 IFS=';' read -r -a shard_owner_groups <<<"$shard_owner_groups_raw"
+shard_account_groups_raw="${shard_account_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_account_groups <<<"$shard_account_groups_raw"
+shard_focus_text_groups_raw="${shard_focus_text_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_focus_text_groups <<<"$shard_focus_text_groups_raw"
+shard_frontier_id_groups_raw="${shard_frontier_id_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_frontier_id_groups <<<"$shard_frontier_id_groups_raw"
+shard_worker_bin_groups_raw="${shard_worker_bin_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_worker_bins <<<"$shard_worker_bin_groups_raw"
+shard_worker_lane_groups_raw="${shard_worker_lane_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_worker_lanes <<<"$shard_worker_lane_groups_raw"
+shard_worker_model_groups_raw="${shard_worker_model_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_worker_models <<<"$shard_worker_model_groups_raw"
 
 append_split_flags() {
   local -n dest="$1"
@@ -52,11 +85,87 @@ append_split_flags() {
   done
 }
 
+shard_manifest_path() {
+  if [[ -z "$state_root_base" ]]; then
+    return 1
+  fi
+  printf '%s/active_shards.json\n' "$state_root_base"
+}
+
+write_active_shard_manifest() {
+  local manifest_path=""
+  manifest_path="$(shard_manifest_path)" || return 0
+  mkdir -p "$state_root_base"
+  python3 - "$manifest_path" "$@" <<'PY'
+import json
+import hashlib
+from datetime import datetime, timezone
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+def split_list(raw: str) -> list[str]:
+    compact = str(raw or "").replace("\n", ",").replace(";", ",")
+    return [item.strip() for item in compact.split(",") if item.strip()]
+
+rows = []
+for raw_item in sys.argv[2:]:
+    item = str(raw_item).strip()
+    if not item:
+        continue
+    if "\t" not in item:
+        rows.append(item)
+        continue
+    parts = item.split("\t")
+    while len(parts) < 9:
+        parts.append("")
+    name, index, frontier_ids, focus_owner, account_alias, focus_text, worker_bin, worker_lane, worker_model = parts[:9]
+    entry = {"name": name.strip()}
+    if str(index).strip().isdigit():
+        entry["index"] = int(str(index).strip())
+    frontier = [int(value) for value in split_list(frontier_ids) if value.isdigit()]
+    if frontier:
+        entry["frontier_ids"] = frontier
+    for key, raw_value in (
+        ("focus_owner", focus_owner),
+        ("account_alias", account_alias),
+        ("focus_text", focus_text),
+    ):
+        values = split_list(raw_value)
+        if values:
+            entry[key] = values
+    if str(worker_bin).strip():
+        entry["worker_bin"] = str(worker_bin).strip()
+    if str(worker_lane).strip():
+        entry["worker_lane"] = str(worker_lane).strip()
+    if str(worker_model).strip():
+        entry["worker_model"] = str(worker_model).strip()
+    rows.append(entry)
+
+topology_fingerprint = hashlib.sha256(
+    json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+).hexdigest()
+payload = {
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "topology_fingerprint": topology_fingerprint,
+    "active_shards": rows,
+}
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
 build_loop_args() {
   local -n dest="$1"
   local shard_index="$2"
   local shard_group="${3:-}"
+  local shard_accounts="${4:-}"
+  local shard_focus_text="${5:-}"
+  local shard_frontier_ids="${6:-}"
+  local shard_worker_bin="${7:-}"
+  local shard_worker_lane="${8:-}"
+  local shard_worker_model="${9:-}"
   local shard_state_root=""
+  shard_worker_model="$(normalize_shard_worker_model "$shard_worker_lane" "$shard_worker_model")"
   dest=("${common_args[@]}")
   if [[ -n "$state_root_base" ]]; then
     shard_state_root="$state_root_base"
@@ -72,6 +181,139 @@ build_loop_args() {
   if [[ -n "$shard_group" ]]; then
     append_split_flags "$1" --focus-owner "$shard_group"
   fi
+  if [[ -n "$shard_accounts" ]]; then
+    append_split_flags "$1" --account-alias "$shard_accounts"
+  fi
+  if [[ -n "$shard_focus_text" ]]; then
+    append_split_flags "$1" --focus-text "$shard_focus_text"
+  fi
+  if [[ -n "$shard_frontier_ids" ]]; then
+    append_split_flags "$1" --frontier-id "$shard_frontier_ids"
+  fi
+  if [[ -n "$shard_worker_bin" ]]; then
+    dest+=(--worker-bin "$shard_worker_bin")
+  fi
+  if [[ -n "$shard_worker_lane" ]]; then
+    dest+=(--worker-lane "$shard_worker_lane")
+  fi
+  if [[ -n "$shard_worker_model" ]]; then
+    dest+=(--worker-model "$shard_worker_model")
+  fi
+}
+
+detached_log_path() {
+  local shard_index="$1"
+  if [[ -n "$state_root_base" ]]; then
+    local shard_state_root="$state_root_base"
+    if (( parallel_shards > 1 )); then
+      shard_state_root="${state_root_base}/shard-${shard_index}"
+    fi
+    mkdir -p "$shard_state_root"
+    printf '%s/supervisor.log\n' "$shard_state_root"
+    return 0
+  fi
+  printf '/tmp/chummer_design_supervisor_shard_%s.log\n' "$shard_index"
+}
+
+launch_detached_loop() {
+  local shard_index="$1"
+  shift
+  local log_path=""
+  log_path="$(detached_log_path "$shard_index")"
+  setsid -f python3 scripts/chummer_design_supervisor.py loop "$@" \
+    >>"$log_path" \
+    2>&1 \
+    < /dev/null
+}
+
+normalize_shard_worker_model() {
+  local shard_worker_lane="${1:-}"
+  local shard_worker_model="${2:-}"
+  case "$shard_worker_lane:$shard_worker_model" in
+    core:ea-coder-hard-batch|core:ea-coder-hard|\
+    core_authority:ea-coder-hard-batch|core_authority:ea-coder-hard|\
+    core_booster:ea-coder-hard-batch|core_booster:ea-coder-hard|\
+    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard|\
+    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard|\
+    audit_shard:ea-coder-hard-batch|audit_shard:ea-coder-hard)
+      printf '%s' 'ea-coder-hard'
+      ;;
+    *)
+      printf '%s' "$shard_worker_model"
+      ;;
+  esac
+}
+
+derive_frontier_fingerprint() {
+  local -a derive_args=("$@")
+  local payload=""
+  if ! payload="$(python3 scripts/chummer_design_supervisor.py status --json "${derive_args[@]}")"; then
+    printf 'run_chummer_design_supervisor: failed to derive frontier via status --json\n' >&2
+    return 1
+  fi
+  PAYLOAD_JSON="$payload" python3 - <<'PY'
+import json
+import os
+import sys
+
+try:
+    payload = json.loads(os.environ.get("PAYLOAD_JSON", ""))
+except Exception:
+    print("run_chummer_design_supervisor: status --json returned invalid JSON", file=sys.stderr)
+    raise SystemExit(1)
+frontier = payload.get("frontier_ids") or []
+fingerprint = ",".join(str(item) for item in frontier if str(item).strip())
+print(fingerprint)
+PY
+}
+
+normalize_frontier_fingerprint() {
+  python3 - "$1" <<'PY'
+import sys
+
+raw = str(sys.argv[1] if len(sys.argv) > 1 else "")
+tokens = []
+for part in raw.replace("\n", ",").replace(";", ",").split(","):
+    token = part.strip()
+    if not token:
+        continue
+    try:
+        number = int(token)
+    except ValueError:
+        continue
+    if number > 0:
+        tokens.append(str(number))
+print(",".join(tokens))
+PY
+}
+
+normalize_shard_focus_fingerprint() {
+  python3 - "$@" <<'PY'
+import sys
+
+parts = []
+for raw in sys.argv[1:]:
+    compact = str(raw or "").replace("\n", ",").replace(";", ",")
+    values = [item.strip().lower() for item in compact.split(",") if item.strip()]
+    if values:
+        parts.append(",".join(values))
+print("|".join(parts))
+PY
+}
+
+reset_shard_runtime_state() {
+  local shard_index="$1"
+  if [[ -z "$state_root_base" ]]; then
+    return 0
+  fi
+  local shard_state_root="$state_root_base"
+  if (( parallel_shards > 1 )); then
+    shard_state_root="${state_root_base}/shard-${shard_index}"
+  fi
+  rm -f \
+    "$shard_state_root/state.json" \
+    "$shard_state_root/active_run.json" \
+    "$shard_state_root/loop.lock"
 }
 
 append_split_flags common_args --account-owner-id "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS:-}"
@@ -82,11 +324,27 @@ append_split_flags common_args --focus-text "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_T
 
 if (( parallel_shards <= 1 )); then
   args=()
-  build_loop_args args 1 "${shard_owner_groups[0]:-}"
+  write_active_shard_manifest "shard-1"
+  build_loop_args args 1 "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
+  if [[ "$background_mode" == "1" || "$background_mode" == "true" || "$background_mode" == "yes" ]]; then
+    launch_detached_loop 1 "${args[@]}" "$@"
+    sleep 1
+    exit 0
+  fi
   exec python3 scripts/chummer_design_supervisor.py loop "${args[@]}" "$@"
 fi
 
 pids=()
+declare -A frontier_fingerprints=()
+active_shard_names=()
+active_shard_indexes=()
+active_manifest_rows=()
+if [[ -n "$state_root_base" ]]; then
+  rm -f \
+    "$state_root_base/active_shards.json" \
+    "$state_root_base/state.json" \
+    "$state_root_base/active_run.json"
+fi
 cleanup() {
   trap - EXIT TERM INT
   local pid
@@ -97,12 +355,93 @@ cleanup() {
 }
 trap cleanup EXIT TERM INT
 
+preseed_manifest_rows=()
+if [[ -n "$state_root_base" ]] && (( parallel_shards > 1 )); then
+  for ((shard_index = 1; shard_index <= parallel_shards; shard_index++)); do
+    shard_frontier_ids_raw="${shard_frontier_id_groups[$((shard_index - 1))]:-}"
+    normalized_frontier_ids=""
+    if [[ -n "${shard_frontier_ids_raw//[[:space:]]/}" ]]; then
+      normalized_frontier_ids="$(normalize_frontier_fingerprint "$shard_frontier_ids_raw")"
+    fi
+    preseed_manifest_rows+=(
+      "shard-${shard_index}"$'\t'"${shard_index}"$'\t'"${normalized_frontier_ids}"$'\t'"${shard_owner_groups[$((shard_index - 1))]:-}"$'\t'"${shard_account_groups[$((shard_index - 1))]:-}"$'\t'"${shard_focus_text_groups[$((shard_index - 1))]:-}"$'\t'"${shard_worker_bins[$((shard_index - 1))]:-}"$'\t'"${shard_worker_lanes[$((shard_index - 1))]:-}"$'\t'"$(normalize_shard_worker_model "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}")"
+    )
+  done
+  if (( ${#preseed_manifest_rows[@]} > 0 )); then
+    write_active_shard_manifest "${preseed_manifest_rows[@]}"
+  fi
+fi
+
 for ((shard_index = 1; shard_index <= parallel_shards; shard_index++)); do
   shard_args=()
-  build_loop_args shard_args "$shard_index" "${shard_owner_groups[$((shard_index - 1))]:-}"
+  shard_frontier_ids_raw="${shard_frontier_id_groups[$((shard_index - 1))]:-}"
+  shard_focus_fingerprint="$(normalize_shard_focus_fingerprint "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE:-}" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}")"
+  shard_account_fingerprint="$(normalize_shard_focus_fingerprint "${shard_account_groups[$((shard_index - 1))]:-}")"
+  reset_shard_runtime_state "$shard_index"
+  build_loop_args shard_args "$shard_index" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_account_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}" "$shard_frontier_ids_raw" "${shard_worker_bins[$((shard_index - 1))]:-}" "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}"
+  frontier_fingerprint=""
+  if [[ -n "${shard_frontier_ids_raw//[[:space:]]/}" ]]; then
+    frontier_fingerprint="$(normalize_frontier_fingerprint "$shard_frontier_ids_raw")"
+  else
+    if ! frontier_fingerprint="$(derive_frontier_fingerprint "${shard_args[@]}" "$@")"; then
+      exit 1
+    fi
+  fi
+  if [[ -z "$frontier_fingerprint" ]]; then
+    printf 'run_chummer_design_supervisor: skipping shard-%s because its derived frontier is empty\n' "$shard_index" >&2
+    continue
+  fi
+  shard_identity_key="${frontier_fingerprint}|${shard_focus_fingerprint}"
+  if [[ -n "$shard_account_fingerprint" ]]; then
+    shard_identity_key+="|account:${shard_account_fingerprint}"
+  fi
+  if [[ -n "${shard_worker_lanes[$((shard_index - 1))]:-}" ]]; then
+    shard_identity_key+="|lane:${shard_worker_lanes[$((shard_index - 1))]:-}"
+  fi
+  if [[ -n "${shard_worker_bins[$((shard_index - 1))]:-}" ]]; then
+    shard_identity_key+="|bin:${shard_worker_bins[$((shard_index - 1))]:-}"
+  fi
+  normalized_shard_worker_model="$(normalize_shard_worker_model "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}")"
+  if [[ -n "$normalized_shard_worker_model" ]]; then
+    shard_identity_key+="|model:${normalized_shard_worker_model}"
+  fi
+  if [[ -n "${frontier_fingerprints[$shard_identity_key]:-}" ]]; then
+    printf 'run_chummer_design_supervisor: skipping shard-%s because its derived shard identity duplicates shard-%s (%s)\n' "$shard_index" "${frontier_fingerprints[$shard_identity_key]}" "$shard_identity_key" >&2
+    continue
+  fi
+  frontier_fingerprints[$shard_identity_key]="$shard_index"
+  active_shard_names+=("shard-${shard_index}")
+  active_shard_indexes+=("$shard_index")
+  active_manifest_rows+=("shard-${shard_index}"$'\t'"${shard_index}"$'\t'"${frontier_fingerprint}"$'\t'"${shard_owner_groups[$((shard_index - 1))]:-}"$'\t'"${shard_account_groups[$((shard_index - 1))]:-}"$'\t'"${shard_focus_text_groups[$((shard_index - 1))]:-}"$'\t'"${shard_worker_bins[$((shard_index - 1))]:-}"$'\t'"${shard_worker_lanes[$((shard_index - 1))]:-}"$'\t'"${normalized_shard_worker_model}")
+done
+
+if (( ${#active_shard_indexes[@]} == 0 )); then
+  args=()
+  write_active_shard_manifest "shard-1"
+  build_loop_args args 1 "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
+  exec python3 scripts/chummer_design_supervisor.py loop "${args[@]}" "$@"
+fi
+
+write_active_shard_manifest "${active_manifest_rows[@]}"
+
+for shard_index in "${active_shard_indexes[@]}"; do
+  if (( ${#pids[@]} > 0 )) && [[ "$shard_start_stagger_seconds" != "0" ]]; then
+    sleep "$shard_start_stagger_seconds"
+  fi
+  shard_args=()
+  build_loop_args shard_args "$shard_index" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_account_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}" "${shard_frontier_id_groups[$((shard_index - 1))]:-}" "${shard_worker_bins[$((shard_index - 1))]:-}" "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}"
+  if [[ "$background_mode" == "1" || "$background_mode" == "true" || "$background_mode" == "yes" ]]; then
+    launch_detached_loop "$shard_index" "${shard_args[@]}" "$@"
+    continue
+  fi
   python3 scripts/chummer_design_supervisor.py loop "${shard_args[@]}" "$@" &
   pids+=("$!")
 done
+
+if [[ "$background_mode" == "1" || "$background_mode" == "true" || "$background_mode" == "yes" ]]; then
+  sleep 1
+  exit 0
+fi
 
 wait -n "${pids[@]}"
 status=$?

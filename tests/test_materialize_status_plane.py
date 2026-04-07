@@ -348,10 +348,13 @@ def test_materialize_status_plane_hydrates_projects_from_config_when_status_snap
 
 def test_ensure_project_inventory_upgrades_snapshot_stage_from_local_compile_evidence(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
+    group_config = tmp_path / "config" / "groups.yaml"
     project_root = tmp_path / "fleet-project"
     published_dir = project_root / ".codex-studio" / "published"
     config_dir.mkdir(parents=True, exist_ok=True)
     published_dir.mkdir(parents=True, exist_ok=True)
+    group_config.parent.mkdir(parents=True, exist_ok=True)
+    group_config.write_text("project_groups: []\n", encoding="utf-8")
     (config_dir / "fleet.yaml").write_text(
         f"""
 id: fleet
@@ -388,6 +391,7 @@ design_doc: {project_root / "README.md"}
         encoding="utf-8",
     )
     monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(materialize_status_plane_module, "GROUP_CONFIG_PATH", group_config)
 
     admin_status = {
         "generated_at": "2026-04-04T00:00:00Z",
@@ -425,6 +429,55 @@ design_doc: {project_root / "README.md"}
     counts = hydrated["public_status"]["readiness_summary"]["counts"]
     assert counts["repo_local_complete"] == 0
     assert counts["package_canonical"] == 1
+
+
+def test_ensure_project_inventory_hydrates_groups_from_group_config(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    group_config = tmp_path / "config" / "groups.yaml"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    group_config.parent.mkdir(parents=True, exist_ok=True)
+    group_config.write_text(
+        """
+project_groups:
+  - id: chummer-vnext
+    lifecycle: live
+    deployment:
+      public_surface:
+        status: public
+        promotion_stage: promoted_preview
+        access_posture: public
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(materialize_status_plane_module, "GROUP_CONFIG_PATH", group_config)
+
+    admin_status = {
+        "generated_at": "2026-04-04T00:00:00Z",
+        "public_status": {
+            "generated_at": "2026-04-04T00:00:00Z",
+            "readiness_summary": {
+                "counts": {
+                    "pre_repo_local_complete": 0,
+                    "repo_local_complete": 0,
+                    "package_canonical": 0,
+                    "boundary_pure": 0,
+                    "publicly_promoted": 0,
+                },
+                "warning_count": 0,
+                "final_claim_ready": 0,
+            },
+        },
+        "projects": [],
+        "groups": [],
+    }
+
+    hydrated = materialize_status_plane_module._ensure_project_inventory(admin_status)
+    assert len(hydrated["groups"]) == 1
+    assert hydrated["groups"][0]["id"] == "chummer-vnext"
+    assert hydrated["groups"][0]["deployment"]["status"] == "public"
+    assert hydrated["groups"][0]["deployment_readiness"]["publicly_promoted"] is True
 
 
 def test_hub_registry_fallback_stage_uses_release_channel_evidence(monkeypatch, tmp_path: Path) -> None:

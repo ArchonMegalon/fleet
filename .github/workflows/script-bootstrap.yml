@@ -1,0 +1,32 @@
+name: Fleet Script Bootstrap
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/test_fleet_script_bootstrap_without_pythonpath.py"
+      - "tests/test_verify_external_proof_closure.py"
+      - ".github/workflows/script-bootstrap.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+      - "tests/test_fleet_script_bootstrap_without_pythonpath.py"
+      - "tests/test_verify_external_proof_closure.py"
+      - ".github/workflows/script-bootstrap.yml"
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify script bootstrap without PYTHONPATH
+        run: |
+          PYTHONPATH=
+          python3 scripts/verify_script_bootstrap_no_pythonpath.py

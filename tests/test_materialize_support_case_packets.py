@@ -659,6 +659,66 @@ def test_materialize_support_case_packets_projects_external_proof_requests_for_m
     assert packet["recovery_path"]["action_id"] == "open_downloads"
 
 
+def test_materialize_support_case_packets_normalizes_legacy_capture_operating_system_token(tmp_path: Path) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(json.dumps({"items": []}, indent=2) + "\n", encoding="utf-8")
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "desktopTupleCoverage": {
+                    "externalProofRequests": [
+                        {
+                            "tupleId": "avalonia:win-x64:windows",
+                            "head": "avalonia",
+                            "platform": "windows",
+                            "rid": "win-x64",
+                            "requiredHost": "windows",
+                            "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                            "proofCaptureCommands": [
+                                "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                            ],
+                        }
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            str(source),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["unresolved_external_proof_request_count"] == 1
+    spec = payload["summary"]["unresolved_external_proof_request_specs"]["avalonia:win-x64:windows"]
+    assert spec["proof_capture_commands"] == [
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+    ]
+    assert "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows" not in json.dumps(spec["proof_capture_commands"])
+
+
 def test_materialize_support_case_packets_matches_external_proof_request_when_case_uses_legacy_tuple_order(
     tmp_path: Path,
 ) -> None:

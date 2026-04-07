@@ -222,8 +222,8 @@ lanes:
     async_only: true
     worker_profile: review_light
     codex_mode: jury
-    runtime_model: ea-review-light
-    provider_hint_order: [gemini_vortex, chatplayground]
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
     reviewer_lane: core_authority
     budget_bias: cheap
     latency_class: batch
@@ -235,8 +235,8 @@ lanes:
     async_only: true
     worker_profile: audit
     codex_mode: jury
-    runtime_model: ea-audit-jury
-    provider_hint_order: [gemini_vortex, chatplayground]
+    runtime_model: ea-coder-hard-batch
+    provider_hint_order: [onemin]
     reviewer_lane: core_authority
     budget_bias: premium
     latency_class: batch

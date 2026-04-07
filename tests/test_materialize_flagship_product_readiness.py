@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -10,6 +11,14 @@ import yaml
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_flagship_product_readiness.py")
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("materialize_flagship_product_readiness", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -108,6 +117,22 @@ def _base_ooda_state() -> dict:
         "aggregate_stale": False,
         "aggregate_timestamp_stale": False,
     }
+
+
+def test_format_external_only_completion_reason_dedupes_prefixed_detail() -> None:
+    module = _load_module()
+    reason = module._format_external_only_completion_reason(
+        "Only external host-proof gaps remain: run the missing macos, windows proof lane for 4 desktop tuple(s), ingest receipts, and then republish release truth."
+    )
+    assert reason == (
+        "Only external host-proof gaps remain: run the missing macos, windows proof lane for 4 desktop tuple(s), ingest receipts, and then republish release truth."
+    )
+
+
+def test_format_external_only_completion_reason_handles_empty_detail() -> None:
+    module = _load_module()
+    reason = module._format_external_only_completion_reason("")
+    assert reason == "Only external host-proof gaps remain."
 
 
 def test_materialize_flagship_product_readiness_marks_real_missing_lanes(tmp_path: Path) -> None:
@@ -284,6 +309,26 @@ def test_materialize_flagship_product_readiness_marks_real_missing_lanes(tmp_pat
     assert desktop_evidence["install_claim_restore_continue_external_proof_request_count"] == 2
     assert desktop_evidence["install_claim_restore_continue_external_proof_request_hosts"] == ["macos", "windows"]
     assert desktop_evidence["install_claim_restore_continue_external_proof_request_tuples"] == [
+        "avalonia:win-x64:windows",
+        "blazor-desktop:osx-arm64:macos",
+    ]
+    assert payload["completion_audit"]["status"] == "fail"
+    assert isinstance(payload["completion_audit"]["external_only"], bool)
+    assert payload["completion_audit"]["unresolved_external_proof_request_count"] == 2
+    assert payload["completion_audit"]["unresolved_external_proof_request_hosts"] == ["macos", "windows"]
+    assert payload["completion_audit"]["unresolved_external_proof_request_tuples"] == [
+        "avalonia:win-x64:windows",
+        "blazor-desktop:osx-arm64:macos",
+    ]
+    assert payload["flagship_readiness_audit"]["status"] == "fail"
+    assert payload["flagship_readiness_audit"]["coverage_gap_keys"]
+    assert set(payload["flagship_readiness_audit"]["coverage_gap_keys"]) == set(payload["warning_keys"] + payload["missing_keys"])
+    assert payload["flagship_readiness_audit"]["warning_coverage_keys"] == payload["warning_keys"]
+    assert payload["flagship_readiness_audit"]["missing_coverage_keys"] == payload["missing_keys"]
+    assert payload["external_host_proof"]["status"] == "fail"
+    assert payload["external_host_proof"]["unresolved_request_count"] == 2
+    assert payload["external_host_proof"]["unresolved_hosts"] == ["macos", "windows"]
+    assert payload["external_host_proof"]["unresolved_tuples"] == [
         "avalonia:win-x64:windows",
         "blazor-desktop:osx-arm64:macos",
     ]
@@ -4845,6 +4890,36 @@ def test_materialize_flagship_product_readiness_prefers_best_shard_supervisor_st
     assert payload["evidence_sources"]["supervisor_state"].endswith("/state.json")
 
 
+def test_select_best_supervisor_state_keeps_aggregate_preferred_path(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    _write_json(
+        aggregate_state_path,
+        {
+            "updated_at": "2026-04-01T09:00:00Z",
+            "mode": "flagship_product",
+            "completion_audit": {"status": "fail"},
+        },
+    )
+
+    foreign_root = tmp_path / "foreign-shards"
+    _write_json(
+        foreign_root / "shard-9" / "state.json",
+        {
+            "updated_at": "2026-04-01T10:00:00Z",
+            "mode": "complete",
+            "completion_audit": {"status": "pass"},
+        },
+    )
+    module.DEFAULT_SHARD_SUPERVISOR_ROOT = foreign_root
+
+    selected_path, selected_payload = module._select_best_supervisor_state(aggregate_state_path)
+
+    assert selected_path == aggregate_state_path
+    assert selected_payload.get("mode") == "flagship_product"
+    assert (selected_payload.get("completion_audit") or {}).get("status") == "fail"
+
+
 def test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_pass_proxy(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -6544,3 +6619,185 @@ def test_materialize_flagship_product_readiness_accepts_split_magic_and_matrix_v
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_visual_familiarity_missing_required_milestone2_test_inventory_count"] == 0
     assert evidence["ui_visual_familiarity_reported_missing_required_milestone2_test_count"] == 0
+
+
+def test_materialize_flagship_product_readiness_flags_external_runbook_timestamp_drift(tmp_path: Path) -> None:
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    runbook_path = tmp_path / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_windows_exit_gate_path = tmp_path / "ui" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    journey_gates = _base_journey_gates()
+    install_journey = next(
+        row for row in (journey_gates.get("journeys") or []) if isinstance(row, dict) and row.get("id") == "install_claim_restore_continue"
+    )
+    install_journey["state"] = "blocked"
+    install_journey["blocked_by_external_constraints_only"] = True
+    install_journey["external_blocking_reasons"] = ["external-host proof lane"]
+    install_journey["external_proof_requests"] = [
+        {
+            "tuple_id": "avalonia:win-x64:windows",
+            "required_host": "windows",
+            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+        }
+    ]
+    _write_json(journey_gates_path, journey_gates)
+    _write_json(
+        support_packets_path,
+        {
+            "generated_at": "2026-04-01T08:00:00Z",
+            "summary": {
+                "open_packet_count": 1,
+                "unresolved_external_proof_request_count": 1,
+            },
+        },
+    )
+    runbook_path.parent.mkdir(parents=True, exist_ok=True)
+    runbook_path.write_text(
+        "\n".join(
+            [
+                "# External proof runbook",
+                "- generated_at: `2026-04-01T08:00:00Z`",
+                "- plan_generated_at: `2026-03-31T08:00:00Z`",
+                "- release_channel_generated_at: `2026-04-01T08:00:00Z`",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    _write_json(supervisor_state_path, _base_supervisor_state())
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    _write_json(ui_executable_exit_gate_path, {"contract_name": "chummer6-ui.desktop_executable_exit_gate", "status": "pass"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_windows_exit_gate_path,
+        {
+            "contract_name": "chummer6-ui.windows_desktop_exit_gate",
+            "status": "passed",
+            "checks": {
+                "embedded_payload_marker_present": True,
+                "embedded_sample_marker_present": True,
+            },
+        },
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
+    )
+    _write_json(
+        ui_visual_familiarity_exit_gate_path,
+        {"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"},
+    )
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+    _write_json(
+        release_channel_path,
+        {
+            "generatedAt": "2026-04-01T08:00:00Z",
+            "status": "published",
+            "releaseProof": {"status": "passed"},
+            "artifacts": [
+                {"head": "avalonia", "platform": "linux", "kind": "installer"},
+                {"head": "avalonia", "platform": "windows", "kind": "installer"},
+                {"head": "avalonia", "platform": "macos", "kind": "dmg"},
+            ],
+        },
+    )
+    _write_json(releases_json_path, {"status": "published"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            "",
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--external-proof-runbook",
+            str(runbook_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-windows-exit-gate",
+            str(ui_windows_exit_gate_path),
+            "--ui-workflow-parity-proof",
+            str(ui_workflow_parity_path),
+            "--ui-executable-exit-gate",
+            str(ui_executable_exit_gate_path),
+            "--ui-workflow-execution-gate",
+            str(ui_workflow_execution_gate_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_visual_familiarity_exit_gate_path),
+            "--sr4-workflow-parity-proof",
+            str(sr4_workflow_parity_path),
+            "--sr6-workflow-parity-proof",
+            str(sr6_workflow_parity_path),
+            "--sr4-sr6-frontier-receipt",
+            str(sr4_sr6_frontier_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    fleet_details = payload["coverage_details"]["fleet_and_operator_loop"]
+    assert any("plan_generated_at does not match support packets generated_at" in reason for reason in fleet_details["reasons"])
+    assert fleet_details["evidence"]["external_proof_runbook_synced"] is False

@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
 import shlex
 import socket
 import sqlite3
+import subprocess
 import sys
 import time
 import urllib.error
@@ -176,6 +178,54 @@ TELEMETRY_SIGNAL_TERMS: tuple[str, ...] = (
     "percent",
     "%",
 )
+TELEMETRY_SHORTCUT_TERMS: tuple[str, ...] = (
+    "credit",
+    "credits",
+    "balance",
+    "capacity",
+    "quota",
+    "burn",
+    "remaining percent",
+    "remaining %",
+    "percent remaining",
+    "percent left",
+    "free credits",
+)
+FLEET_RUNTIME_QUERY_PREFIXES: tuple[str, ...] = (
+    "how many",
+    "what",
+    "is",
+    "are",
+    "show",
+    "list",
+    "count",
+    "status",
+    "check",
+    "tell me",
+)
+FLEET_RUNTIME_TARGET_TERMS: tuple[str, ...] = (
+    "fleet",
+    "fleet loop",
+    "shard",
+    "shards",
+    "worker",
+    "workers",
+    "loop",
+    "runtime",
+    "supervisor",
+)
+FLEET_RUNTIME_SIGNAL_TERMS: tuple[str, ...] = (
+    "running",
+    "active",
+    "alive",
+    "busy",
+    "idle",
+    "status",
+    "count",
+    "currently",
+    "right now",
+    "now",
+)
 LANE_NAMES: tuple[str, ...] = ("easy", "repair", "groundwork", "review_light", "core", "jury", "survival")
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "browseract": "BrowserAct",
@@ -209,6 +259,7 @@ _LAST_EA_PROFILES_FETCHED_AT = ""
 
 RUNTIME_CACHE_KEY_EA_CODEX_STATUS = "ea_codex_status"
 RUNTIME_CACHE_KEY_EA_CODEX_PROFILES = "ea_codex_profiles"
+FLEET_RUNTIME_STATUS_STALE_SECONDS = 600
 
 
 def _runtime_env_candidates() -> tuple[Path, ...]:
@@ -291,6 +342,68 @@ def _env_float(name: str, default: float) -> float:
         return float(_env_value(name) or default)
     except Exception:
         return float(default)
+
+
+def _utc_now() -> dt.datetime:
+    return dt.datetime.now(tz=dt.timezone.utc)
+
+
+def _parse_utc_datetime(value: Any) -> dt.datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return dt.datetime.fromtimestamp(float(value), tz=dt.timezone.utc)
+        except Exception:
+            return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    normalized = raw.replace("Z", "+00:00", 1) if raw.endswith("Z") else raw
+    try:
+        parsed = dt.datetime.fromisoformat(normalized)
+    except Exception:
+        try:
+            parsed = dt.datetime.fromtimestamp(float(raw), tz=dt.timezone.utc)
+        except Exception:
+            return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def _humanize_age(timestamp: dt.datetime, *, now: dt.datetime) -> str:
+    delta = now - timestamp
+    if delta.total_seconds() <= 0:
+        return "just now"
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
+
+def _prefer_runtime_auth_values() -> bool:
+    raw = str(os.environ.get("CODEXEA_PREFER_RUNTIME_AUTH", "1") or "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
+def _auth_env_value(name: str, default: str = "") -> str:
+    direct = str(os.environ.get(name) or "").strip()
+    runtime = str(_runtime_env_values().get(name) or "").strip()
+    if _prefer_runtime_auth_values() and runtime:
+        return runtime
+    return direct or default
+
+
+def _ea_api_token() -> str:
+    return _auth_env_value("EA_MCP_API_TOKEN") or _auth_env_value("EA_API_TOKEN")
 
 
 def _ea_http_error_detail(value: str) -> str:
@@ -388,9 +501,10 @@ def _ea_http_payload(
         or "codexea-route"
     )
     headers = {"X-EA-Principal-ID": principal_id}
-    api_token = _env_value("EA_MCP_API_TOKEN") or _env_value("EA_API_TOKEN")
+    api_token = _ea_api_token()
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
+        headers["X-API-Token"] = api_token
     data = None
     request_method = str(method or "GET").upper()
     if payload is not None:
@@ -463,8 +577,20 @@ def _load_local_runtime_cache_payload(cache_key: str) -> tuple[dict[str, Any] | 
     return None, ""
 
 
-def _ea_status_payload(*, refresh: bool = False, window: str = "1h", timeout_seconds: float = 2.0) -> dict[str, Any] | None:
+def _ea_status_payload(
+    *,
+    refresh: bool = False,
+    window: str = "1h",
+    timeout_seconds: float = 2.0,
+    prefer_cache: bool = False,
+) -> dict[str, Any] | None:
     global _LAST_EA_STATUS_SOURCE, _LAST_EA_STATUS_FETCHED_AT
+    if prefer_cache:
+        cached_payload, fetched_at = _load_local_runtime_cache_payload(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
+        if isinstance(cached_payload, dict):
+            _LAST_EA_STATUS_SOURCE = "local_runtime_cache"
+            _LAST_EA_STATUS_FETCHED_AT = fetched_at
+            return cached_payload
     url = f"{_ea_status_url()}?window={window}&refresh={1 if refresh else 0}"
     payload = _ea_http_payload(url, timeout_seconds=max(float(timeout_seconds or 0.0), 0.1))
     if isinstance(payload, dict):
@@ -481,8 +607,14 @@ def _ea_status_payload(*, refresh: bool = False, window: str = "1h", timeout_sec
     return None
 
 
-def _ea_profiles_payload(*, timeout_seconds: float = 2.0) -> dict[str, Any] | None:
+def _ea_profiles_payload(*, timeout_seconds: float = 2.0, prefer_cache: bool = False) -> dict[str, Any] | None:
     global _LAST_EA_PROFILES_SOURCE, _LAST_EA_PROFILES_FETCHED_AT
+    if prefer_cache:
+        cached_payload, fetched_at = _load_local_runtime_cache_payload(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
+        if isinstance(cached_payload, dict):
+            _LAST_EA_PROFILES_SOURCE = "local_runtime_cache"
+            _LAST_EA_PROFILES_FETCHED_AT = fetched_at
+            return cached_payload
     payload = _ea_http_payload(_ea_profiles_url(), timeout_seconds=max(float(timeout_seconds or 0.0), 0.1))
     if isinstance(payload, dict):
         _LAST_EA_PROFILES_SOURCE = "live"
@@ -623,6 +755,24 @@ def _contains_any(haystack: str, terms: tuple[str, ...]) -> bool:
     return any(term in haystack for term in terms)
 
 
+def _looks_like_query_text(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    if lowered.endswith("?"):
+        return True
+    return any(lowered == prefix or lowered.startswith(f"{prefix} ") for prefix in FLEET_RUNTIME_QUERY_PREFIXES)
+
+
+def _looks_like_direct_fleet_runtime_query(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not _looks_like_query_text(lowered):
+        return False
+    if "eta" in lowered:
+        return False
+    return _contains_any(lowered, FLEET_RUNTIME_TARGET_TERMS) and _contains_any(lowered, FLEET_RUNTIME_SIGNAL_TERMS)
+
+
 def _load_config() -> dict[str, Any]:
     loaded = yaml.safe_load(ROUTING_CONFIG_PATH.read_text(encoding="utf-8")) or {}
     return loaded if isinstance(loaded, dict) else {}
@@ -672,10 +822,11 @@ def _lane_from_text(text: str) -> str:
 
 def _looks_like_live_telemetry_query(config: dict[str, Any], text: str) -> bool:
     lowered = text.lower()
-    if _contains_any(lowered, _keyword_set(config, "telemetry_keywords")):
-        return True
     has_target = bool(_provider_from_text(lowered) or _lane_from_text(lowered))
-    return has_target and _contains_any(lowered, TELEMETRY_SIGNAL_TERMS)
+    has_signal = _contains_any(lowered, TELEMETRY_SIGNAL_TERMS)
+    if has_target and has_signal:
+        return True
+    return _contains_any(lowered, TELEMETRY_SHORTCUT_TERMS)
 
 
 def _telemetry_target(config: dict[str, Any], text: str) -> dict[str, str]:
@@ -804,18 +955,10 @@ def _format_int(value: int | None) -> str:
 def _format_timestamp(value: Any) -> str:
     if value in (None, ""):
         return ""
-    if isinstance(value, (int, float)):
-        try:
-            return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(value)))
-        except Exception:
-            return str(value)
-    text = str(value).strip()
-    if not text:
-        return ""
-    try:
-        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(float(text)))
-    except Exception:
-        return text
+    parsed = _parse_utc_datetime(value)
+    if parsed is None:
+        return str(value).strip()
+    return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _format_count_summary(values: list[str]) -> str:
@@ -898,6 +1041,35 @@ def _onemin_slot_label(slot: dict[str, Any], index: int) -> str:
     if owner and slot_env_name and owner != slot_env_name:
         return f"{owner} [{slot_env_name}]"
     return owner or slot_env_name or f"slot-{index}"
+
+
+def _render_active_fleet_shard_label(item: dict[str, Any]) -> str:
+    label = str(item.get("name") or item.get("_shard") or "").strip() or "unnamed shard"
+    active_run_id = str(item.get("active_run_id") or "").strip()
+    frontier_count = len(item.get("frontier_ids") or [])
+    details: list[str] = []
+    if active_run_id:
+        details.append(f"run {active_run_id}")
+    if frontier_count:
+        details.append(f"{frontier_count} milestone{'s' if frontier_count != 1 else ''}")
+    if not details:
+        return label
+    return f"{label} ({', '.join(details)})"
+
+
+def _fleet_runtime_updated_fragment(updated_at: str) -> str:
+    parsed = _parse_utc_datetime(updated_at)
+    if parsed is None:
+        return f"updated {updated_at}"
+    now = _utc_now()
+    age = _humanize_age(parsed, now=now)
+    stale = " (stale)" if (now - parsed).total_seconds() > FLEET_RUNTIME_STATUS_STALE_SECONDS else ""
+    if stale:
+        return (
+            f"updated {age} at {_format_timestamp(parsed)}{stale}; "
+            "run `chummer_design_supervisor status` to refresh this snapshot."
+        )
+    return f"updated {age} at {_format_timestamp(parsed)}"
 
 
 def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -1175,25 +1347,42 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     return aggregate
 
 
-def _render_onemin_slots(slots: list[dict[str, Any]]) -> list[str]:
+def _render_onemin_slots(
+    slots: list[dict[str, Any]],
+    *,
+    slot_detail: str = "verbose",
+) -> list[str]:
     lines = ["Slot details:"]
-    for index, slot in enumerate(slots, start=1):
-        label = _onemin_slot_label(slot, index)
+    labeled_slots = [
+        (index, _onemin_slot_label(slot, index), slot)
+        for index, slot in enumerate(slots, start=1)
+    ]
+    for _display_index, label, slot in sorted(labeled_slots, key=lambda item: (str(item[1]).strip().lower(), int(item[0]))):
         slot_role = str(slot.get("slot_role") or "").strip()
+        state = str(slot.get("state") or "unknown").strip() or "unknown"
+        basis = str(slot.get("basis") or "unknown").strip() or "unknown"
         owner = (
             str(slot.get("owner_email") or "").strip()
             or str(slot.get("owner_label") or "").strip()
             or str(slot.get("owner_name") or "").strip()
         )
+        free_credits = _coerce_int(slot.get("free_credits"))
+        max_credits = _coerce_int(slot.get("max_credits"))
+        if slot_detail == "compact":
+            compact_bits = [state, basis]
+            if free_credits is not None or max_credits is not None:
+                compact_bits.append(f"{_format_int(free_credits)} free / {_format_int(max_credits)} max")
+            if owner:
+                compact_bits.append(f"owner {owner}")
+            lines.append(f"- {label}: " + " | ".join(bit for bit in compact_bits if bit))
+            continue
         bits = [
             slot_role,
-            str(slot.get("state") or "unknown").strip() or "unknown",
-            str(slot.get("basis") or "unknown").strip() or "unknown",
+            state,
+            basis,
         ]
         if owner:
             bits.append(f"owner {owner}")
-        free_credits = _coerce_int(slot.get("free_credits"))
-        max_credits = _coerce_int(slot.get("max_credits"))
         if free_credits is not None or max_credits is not None:
             bits.append(f"{_format_int(free_credits)} free / {_format_int(max_credits)} max")
         probe_result = str(slot.get("last_probe_result") or "").strip()
@@ -1211,7 +1400,12 @@ def _render_onemin_slots(slots: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool = False) -> str:
+def _render_onemin_aggregate(
+    aggregate: dict[str, Any],
+    *,
+    include_slots: bool = False,
+    slots_detail: str = "verbose",
+) -> str:
     slot_count = _coerce_int(aggregate.get("slot_count")) or 0
     known_balance = _coerce_int(aggregate.get("slot_count_with_known_balance"))
     billing_snapshot_count = _coerce_int(aggregate.get("slot_count_with_billing_snapshot"))
@@ -1317,14 +1511,24 @@ def _render_onemin_aggregate(aggregate: dict[str, Any], *, include_slots: bool =
         lines.append("Runway:")
         lines.extend(f"- {item}" for item in runway_bits)
     incoming_topups_excluded = _bool_or_none(aggregate.get("incoming_topups_excluded"))
-    lines.append(f"Top-ups excluded: {'yes' if incoming_topups_excluded is not False else 'no'}")
+    topups_included = incoming_topups_excluded is False
+    lines.append(f"Top-ups: {'included' if topups_included else 'excluded'}")
+    if not topups_included:
+        lines.append(
+            "To include top-up-aware runway in this view, rerun with --billing (or set CODEXEA_CREDITS_INCLUDE_BILLING=1)."
+        )
     probe_note = str(aggregate.get("probe_note") or "").strip()
     if probe_note:
         lines.append(f"Probe note: {probe_note}")
     if include_slots:
         slots = aggregate.get("slots")
         if isinstance(slots, list) and slots:
-            lines.extend(_render_onemin_slots([slot for slot in slots if isinstance(slot, dict)]))
+            lines.extend(
+                _render_onemin_slots(
+                    [slot for slot in slots if isinstance(slot, dict)],
+                    slot_detail=slots_detail,
+                )
+            )
     return "\n".join(lines)
 
 
@@ -1442,11 +1646,39 @@ def _render_onemin_billing_refresh_cached_note(
     return f"Note: Live 1min billing refresh produced no new snapshots; showing cached billing state.{suffix}"
 
 
+def _route_json_payload(response: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "matched": bool(response.get("matched")),
+        "ok": bool(response.get("ok")),
+        "exit_code": int(response.get("exit_code") or 0),
+    }
+    message = str(response.get("message") or "").strip()
+    if message:
+        payload["message"] = message
+    data = response.get("data")
+    if isinstance(data, dict):
+        payload["data"] = data
+        for key, value in data.items():
+            if key not in payload:
+                payload[key] = value
+    else:
+        error = str(response.get("error") or "").strip()
+        if error:
+            payload["error"] = error
+    for key, value in response.items():
+        if key in {"matched", "ok", "exit_code", "message", "data"}:
+            continue
+        if key not in payload:
+            payload[key] = value
+    return payload
+
+
 def _onemin_aggregate_response(
     *,
     refresh: bool = True,
     window: str = "7d",
     include_slots: bool = False,
+    slots_detail: str = "verbose",
     probe_all: bool = False,
     billing: bool = False,
     billing_full_refresh: bool = False,
@@ -1499,7 +1731,12 @@ def _onemin_aggregate_response(
         )
         billing_error = str(_LAST_EA_HTTP_ERROR or "").strip()
     live_status_timeout_seconds = _onemin_live_status_timeout_seconds()
-    payload = _ea_status_payload(refresh=refresh, window=window, timeout_seconds=live_status_timeout_seconds)
+    payload = _ea_status_payload(
+        refresh=refresh,
+        window=window,
+        timeout_seconds=live_status_timeout_seconds,
+        prefer_cache=not refresh,
+    )
     payload_source = "status"
     payload_fetched_at = _LAST_EA_STATUS_FETCHED_AT
     status_error = str(_LAST_EA_HTTP_ERROR or "").strip()
@@ -1507,7 +1744,7 @@ def _onemin_aggregate_response(
     if _LAST_EA_STATUS_SOURCE == "local_runtime_cache":
         payload_source = "status_local_runtime_cache"
     if not isinstance(payload, dict):
-        payload = _ea_profiles_payload(timeout_seconds=live_status_timeout_seconds)
+        payload = _ea_profiles_payload(timeout_seconds=live_status_timeout_seconds, prefer_cache=not refresh)
         profiles_error = str(_LAST_EA_HTTP_ERROR or "").strip()
         payload_fetched_at = _LAST_EA_PROFILES_FETCHED_AT
         payload_source = "profiles_fallback"
@@ -1537,31 +1774,51 @@ def _onemin_aggregate_response(
             if isinstance(billing_refresh_payload, dict):
                 data["billing_lookup"] = billing_refresh_payload
             return {
+                "matched": True,
                 "ok": True,
                 "exit_code": 0,
                 "message": "\n\n".join(fragments),
                 "data": data,
+                "payload_source": payload_source,
+                "payload_fetched_at": payload_fetched_at,
+                "status_error": status_error,
+                "profiles_error": profiles_error,
             }
         if probe_warning:
             return {
+                "matched": True,
                 "ok": False,
                 "exit_code": 1,
-                "message": probe_warning + "\n\nLive CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`.",
+                "message": (
+                    probe_warning
+                    + "\n\nLive CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`."
+                ),
+                "payload_source": payload_source,
+                "payload_fetched_at": payload_fetched_at,
+                "status_error": status_error,
+                "profiles_error": profiles_error,
             }
         return {
+            "matched": True,
             "ok": False,
             "exit_code": 1,
             "message": "Live CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`.",
+            "payload_source": payload_source,
+            "payload_fetched_at": payload_fetched_at,
+            "status_error": status_error,
+            "profiles_error": profiles_error,
         }
     aggregate = _onemin_aggregate_payload(payload)
     local_aggregate = None
-    local_payload = _ensure_local_onemin_payload(run_probe=False)
-    if isinstance(local_payload, dict):
-        local_aggregate = _onemin_aggregate_payload(
-            {
-                "provider_health": dict(local_payload.get("provider_health") or {}),
-            }
-        )
+    current_slot_count = int((aggregate or {}).get("slot_count") or 0) if isinstance(aggregate, dict) else 0
+    if not isinstance(aggregate, dict) or current_slot_count <= 0:
+        local_payload = _ensure_local_onemin_payload(run_probe=False)
+        if isinstance(local_payload, dict):
+            local_aggregate = _onemin_aggregate_payload(
+                {
+                    "provider_health": dict(local_payload.get("provider_health") or {}),
+                }
+            )
     if isinstance(local_aggregate, dict):
         current_slot_count = int((aggregate or {}).get("slot_count") or 0) if isinstance(aggregate, dict) else 0
         local_slot_count = int(local_aggregate.get("slot_count") or 0)
@@ -1581,15 +1838,25 @@ def _onemin_aggregate_response(
             if isinstance(billing_refresh_payload, dict):
                 data["billing_lookup"] = billing_refresh_payload
             return {
+                "matched": True,
                 "ok": True,
                 "exit_code": 0,
                 "message": "\n\n".join(fragments),
                 "data": data,
+                "payload_source": payload_source,
+                "payload_fetched_at": payload_fetched_at,
+                "status_error": status_error,
+                "profiles_error": profiles_error,
             }
         return {
+            "matched": True,
             "ok": False,
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
+            "payload_source": payload_source,
+            "payload_fetched_at": payload_fetched_at,
+            "status_error": status_error,
+            "profiles_error": profiles_error,
         }
     if (
         probe_all
@@ -1602,12 +1869,17 @@ def _onemin_aggregate_response(
         }
     ):
         return {
+            "matched": True,
             "ok": False,
             "exit_code": 1,
             "message": (
                 "Live 1min probe-all failed; "
                 f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}."
             ),
+            "payload_source": payload_source,
+            "payload_fetched_at": payload_fetched_at,
+            "status_error": status_error,
+            "profiles_error": profiles_error,
         }
     if probe_error == "missing_api_token" or status_error == "missing_api_token" or profiles_error == "missing_api_token":
         aggregate = {
@@ -1617,7 +1889,7 @@ def _onemin_aggregate_response(
                 "and a live `codexea onemin --probe-all` run."
             ),
         }
-    rendered = _render_onemin_aggregate(aggregate, include_slots=include_slots)
+    rendered = _render_onemin_aggregate(aggregate, include_slots=include_slots, slots_detail=slots_detail)
     fragments: list[str] = []
     source_notice = _source_notice(
         payload_source=payload_source,
@@ -1658,10 +1930,16 @@ def _onemin_aggregate_response(
     fragments.append(rendered)
     rendered = "\n\n".join(fragment.strip() for fragment in fragments if str(fragment).strip())
     return {
+        "matched": True,
         "ok": True,
         "exit_code": 0,
         "message": rendered,
         "data": aggregate,
+        "payload_source": payload_source,
+        "payload_fetched_at": payload_fetched_at,
+        "status_error": status_error,
+        "profiles_error": profiles_error,
+        "source_notice": source_notice,
     }
 
 
@@ -1690,10 +1968,112 @@ def _format_telemetry_row(row: dict[str, Any], *, strict_unknown: bool) -> str:
     return f"{label}: " + ", ".join(bits)
 
 
+def _fleet_runtime_status_payload() -> dict[str, Any] | None:
+    raw_state_root = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT") or "").strip()
+    state_path = Path(raw_state_root) if raw_state_root else (ROOT / "state" / "chummer_design_supervisor")
+    if state_path.name != "state.json":
+        state_path = state_path / "state.json"
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        command = [
+            sys.executable,
+            str(ROOT / "scripts" / "chummer_design_supervisor.py"),
+            "status",
+            "--json",
+            "--ignore-nonlinux-desktop-host-proof-blockers",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except Exception:
+            return None
+        if completed.returncode != 0:
+            return None
+        try:
+            payload = json.loads(completed.stdout)
+        except Exception:
+            return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _render_fleet_runtime_status(payload: dict[str, Any]) -> str:
+    def _shard_sort_key(item: dict[str, Any]) -> tuple[str, str, str]:
+        return (
+            str(item.get("name") or item.get("_shard") or "").strip().lower(),
+            str(item.get("_shard") or "").strip().lower(),
+            str(item.get("active_run_id") or "").strip().lower(),
+        )
+
+    shards = sorted(
+        [item for item in (payload.get("shards") or []) if isinstance(item, dict)],
+        key=_shard_sort_key,
+    )
+    active_shards = [item for item in shards if str(item.get("active_run_id") or "").strip()]
+    shard_count = len(shards)
+    active_count = len(active_shards)
+    mode = str(payload.get("mode") or "unknown").strip() or "unknown"
+    updated_at = str(payload.get("updated_at") or "").strip()
+    idle_count = max(0, shard_count - active_count)
+    open_milestones = list(payload.get("open_milestone_ids") or [])
+    active_run = payload.get("active_run") if isinstance(payload.get("active_run"), dict) else {}
+    active_run_id = str(active_run.get("run_id") or "").strip()
+    active_labels = [_render_active_fleet_shard_label(item) for item in active_shards]
+    active_names = ", ".join(label for label in active_labels if label)
+    active_label = "active shard" if active_count == 1 else "active shards"
+    total_label = "shard" if shard_count == 1 else "shards"
+    idle_label = "idle shard" if idle_count == 1 else "idle shards"
+    fragments = [f"Live fleet status: {active_count} {active_label} out of {shard_count} total {total_label}, mode {mode}"]
+    if idle_count:
+        fragments.append(f"{idle_count} {idle_label}")
+    if active_names:
+        fragments.append(f"active shards {active_names}")
+    if active_run_id:
+        fragments.append(f"aggregate active run {active_run_id}")
+    if open_milestones:
+        fragments.append(f"{len(open_milestones)} open milestones")
+    if updated_at:
+        fragments.append(_fleet_runtime_updated_fragment(updated_at))
+    return "; ".join(fragments) + "."
+
+
+def _fleet_runtime_status_response() -> dict[str, Any]:
+    payload = _fleet_runtime_status_payload()
+    if not isinstance(payload, dict):
+        return {
+            "matched": True,
+            "ok": False,
+            "exit_code": 1,
+            "message": (
+                "Live fleet runtime status is unavailable right now; `chummer_design_supervisor status --json` could not be read "
+                "or executed."
+            ),
+        }
+    return {
+        "matched": True,
+        "ok": True,
+        "exit_code": 0,
+        "message": _render_fleet_runtime_status(payload),
+    }
+
+
 def _telemetry_response(text: str) -> dict[str, Any]:
     config = _load_config()
+    if _looks_like_direct_fleet_runtime_query(text):
+        return _fleet_runtime_status_response()
     if not _looks_like_live_telemetry_query(config, text):
-        return {"matched": False, "ok": False, "exit_code": TELEMETRY_EXIT_NOT_MATCHED, "message": ""}
+        return {
+            "matched": False,
+            "ok": False,
+            "exit_code": TELEMETRY_EXIT_NOT_MATCHED,
+            "message": "Query did not match a live telemetry question.",
+            "error": "no_telemetry_match",
+        }
 
     target = _telemetry_target(config, text)
     payload = _ea_status_payload(refresh=True)
@@ -1716,6 +2096,10 @@ def _telemetry_response(text: str) -> dict[str, Any]:
             "ok": False,
             "exit_code": 1,
             "message": "Live CodexEA status is unavailable right now; `/v1/codex/status?refresh=1` did not return data.",
+            "payload_source": payload_source,
+            "payload_fetched_at": payload_fetched_at,
+            "status_error": status_error,
+            "profiles_error": profiles_error,
         }
 
     row_source, rows = _provider_rows_from_payload(payload)
@@ -1725,19 +2109,27 @@ def _telemetry_response(text: str) -> dict[str, Any]:
             "ok": False,
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no provider telemetry rows were returned.",
+            "payload_source": payload_source,
+            "payload_fetched_at": payload_fetched_at,
+            "status_error": status_error,
+            "profiles_error": profiles_error,
         }
 
     selected_rows = rows
     if target.get("provider"):
         selected_rows = [row for row in rows if str(row.get("provider") or "").strip().lower() == target["provider"]]
-        if not selected_rows:
-            target_label = _scope_label(target)
-            return {
-                "matched": True,
-                "ok": True,
-                "exit_code": 0,
-                "message": f"Live {target_label} status refreshed, but no matching provider row was returned.",
-            }
+    if not selected_rows:
+        target_label = _scope_label(target)
+        return {
+            "matched": True,
+            "ok": True,
+            "exit_code": 0,
+            "message": f"Live {target_label} status refreshed, but no matching provider row was returned.",
+            "payload_source": payload_source,
+            "payload_fetched_at": payload_fetched_at,
+            "status_error": status_error,
+            "profiles_error": profiles_error,
+        }
 
     strict_unknown = row_source == "status"
     scope_label = _scope_label(target)
@@ -1761,6 +2153,11 @@ def _telemetry_response(text: str) -> dict[str, Any]:
         "ok": True,
         "exit_code": 0,
         "message": message,
+        "payload_source": payload_source,
+        "payload_fetched_at": payload_fetched_at,
+        "status_error": status_error,
+        "profiles_error": profiles_error,
+        "source_notice": source_notice,
     }
 
 
@@ -1822,9 +2219,9 @@ def infer_interactive_default(lanes: dict[str, Any] | None = None) -> dict[str, 
     lane_cfg = (lanes or {}).get("easy") if isinstance(lanes, dict) else {}
     return {
         "lane": "easy",
-        "submode": "mcp",
+        "submode": "responses_easy",
         "reasoning_effort": "low",
-        "reason": "interactive_mcp_easy_locked",
+        "reason": "interactive_easy_locked",
         "task_class": "inspect",
         "runtime_model": str((lane_cfg or {}).get("runtime_model") or ""),
         "provider_hint_order": ",".join((lane_cfg or {}).get("provider_hint_order") or []),
@@ -1952,38 +2349,68 @@ def main(argv: list[str]) -> int:
             "\n"
             "  # disable the top-up lookup pass\n"
             "  $ CODEXEA_CREDITS_INCLUDE_BILLING=0 codexea onemin\n"
+            "\n"
+            "  # explicit top-up CLI control\n"
+            "  $ codexea --onemin-aggregate --include-topups\n"
+            "  $ codexea --onemin-aggregate --no-topups\n"
+            "\n"
+            "  # machine-readable telemetry output\n"
+            "  $ codexea --telemetry-answer --json 1min credits\n"
+            "\n"
+            "  # machine-readable routing output\n"
+            "  $ codexea --json what is the safest lane for a migration fix?\n"
+            "\n"
+            "  # slot details\n"
+            "  $ codexea --onemin-aggregate --slots --slots-detail compact\n"
+            "  $ codexea --onemin-aggregate --slots --slots-detail verbose\n"
         ),
     )
     parser.add_argument("--shell", action="store_true")
     parser.add_argument("--telemetry-answer", action="store_true")
     parser.add_argument("--onemin-aggregate", action="store_true")
-    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--json", action="store_true", help="emit machine-readable output when supported")
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--slots", action="store_true")
+    parser.add_argument(
+        "--slots-detail",
+        default="verbose",
+        choices=("compact", "verbose"),
+        help="controls how much detail appears per 1min slot row when --slots is used.",
+    )
     parser.add_argument("--probe-all", action="store_true")
     parser.add_argument("--billing", action="store_true")
+    parser.add_argument("--include-topups", action="store_true")
+    parser.add_argument("--no-topups", action="store_true")
     parser.add_argument("--billing-full-refresh", action="store_true")
     parser.add_argument("--window", default="7d")
     parser.add_argument("args", nargs=argparse.REMAINDER)
     ns = parser.parse_args(argv)
     if ns.telemetry_answer:
         response = _telemetry_response(" ".join(ns.args).strip())
-        message = str(response.get("message") or "").strip()
-        if message:
-            stream = sys.stdout if int(response.get("exit_code") or 0) == 0 else sys.stderr
-            print(message, file=stream)
+        if ns.json:
+            print(json.dumps(_route_json_payload(response), indent=2, sort_keys=True))
+        else:
+            message = str(response.get("message") or "").strip()
+            if message:
+                stream = sys.stdout if int(response.get("exit_code") or 0) == 0 else sys.stderr
+                print(message, file=stream)
         return int(response.get("exit_code") or 0)
     if ns.onemin_aggregate:
+        refresh = ns.refresh or ns.onemin_aggregate
+        billing = ns.billing or ns.include_topups
+        if ns.no_topups:
+            billing = False
         response = _onemin_aggregate_response(
-            refresh=True if ns.refresh or ns.onemin_aggregate else ns.refresh,
+            refresh=refresh,
             window=ns.window,
             include_slots=ns.slots,
+            slots_detail=ns.slots_detail,
             probe_all=ns.probe_all,
-            billing=ns.billing,
+            billing=billing,
             billing_full_refresh=ns.billing_full_refresh,
         )
         if ns.json:
-            payload = {"ok": True, **dict(response.get("data") or {})} if response.get("ok") else {"ok": False, "error": str(response.get("message") or "").strip()}
+            payload = _route_json_payload(response)
             print(json.dumps(payload, indent=2, sort_keys=True))
         else:
             message = str(response.get("message") or "").strip()
@@ -1991,13 +2418,30 @@ def main(argv: list[str]) -> int:
                 stream = sys.stdout if int(response.get("exit_code") or 0) == 0 else sys.stderr
                 print(message, file=stream)
         return int(response.get("exit_code") or 0)
+
     routed = _route(ns.args)
     if ns.shell:
         for key, value in routed.items():
-            print(f"CODEXEA_ROUTE_{key.upper()}={shlex.quote(value)}")
+            text = "" if value is None else str(value)
+            print(f"CODEXEA_ROUTE_{key.upper()}={shlex.quote(text)}")
+        return 0
+    if ns.json:
+        payload = _route_json_payload(
+            {
+                "matched": True,
+                "ok": True,
+                "exit_code": 0,
+                "message": (
+                    f'Routing decision: {routed.get("lane")} lane / {routed.get("submode")} via {routed.get("runtime_model") or "default"}'
+                ),
+                "data": routed,
+            }
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
     for key, value in routed.items():
-        print(f"{key}={value}")
+        value_text = "" if value is None else str(value)
+        print(f"{key}={value_text}")
     return 0
 
 

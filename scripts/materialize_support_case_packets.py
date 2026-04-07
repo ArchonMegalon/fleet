@@ -21,6 +21,7 @@ from materialize_compile_manifest import repo_root_for_published_path, write_com
 
 ROOT = Path("/docker/fleet")
 DEFAULT_OUT_PATH = Path("/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json")
+DEFAULT_SOURCE_MIRROR_NAME = "SUPPORT_CASE_SOURCE_MIRROR.generated.json"
 DEFAULT_RELEASE_CHANNEL_PATH = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
 DEFAULT_RUNTIME_ENV_CANDIDATES = (
     ROOT / "runtime.env",
@@ -53,6 +54,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         "--release-channel",
         default=str(DEFAULT_RELEASE_CHANNEL_PATH),
         help="optional RELEASE_CHANNEL.generated.json path for install-specific diagnosis enrichment",
+    )
+    parser.add_argument(
+        "--source-mirror",
+        default=None,
+        help="optional local mirror path for normalized support-case source payloads",
     )
     return parser.parse_args(argv or sys.argv[1:])
 
@@ -115,13 +121,13 @@ def _load_runtime_env_defaults() -> Dict[str, str]:
 def _source_value(explicit: str | None) -> str:
     if explicit is not None and str(explicit).strip():
         return str(explicit).strip()
-    for key in ("FLEET_SUPPORT_CASE_SOURCE", "CHUMMER6_HUB_SUPPORT_CASE_SOURCE", "SUPPORT_CASE_SOURCE"):
-        value = str(os.environ.get(key, "") or "").strip()
-        if value:
-            return value
     runtime_defaults = _load_runtime_env_defaults()
     for key in ("FLEET_SUPPORT_CASE_SOURCE", "CHUMMER6_HUB_SUPPORT_CASE_SOURCE", "SUPPORT_CASE_SOURCE"):
         value = str(runtime_defaults.get(key, "") or "").strip()
+        if value:
+            return value
+    for key in ("FLEET_SUPPORT_CASE_SOURCE", "CHUMMER6_HUB_SUPPORT_CASE_SOURCE", "SUPPORT_CASE_SOURCE"):
+        value = str(os.environ.get(key, "") or "").strip()
         if value:
             return value
     return ""
@@ -130,16 +136,28 @@ def _source_value(explicit: str | None) -> str:
 def _source_bearer_token(explicit: str | None) -> str:
     if explicit is not None and str(explicit).strip():
         return str(explicit).strip()
-    for key in ("SUPPORT_CASE_SOURCE_BEARER_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
-        value = str(os.environ.get(key, "") or "").strip()
-        if value:
-            return value
     runtime_defaults = _load_runtime_env_defaults()
     for key in ("SUPPORT_CASE_SOURCE_BEARER_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
         value = str(runtime_defaults.get(key, "") or "").strip()
         if value:
             return value
+    for key in ("SUPPORT_CASE_SOURCE_BEARER_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
+        value = str(os.environ.get(key, "") or "").strip()
+        if value:
+            return value
     return ""
+
+
+def _support_source_request_headers(source: str, *, bearer_token: str = "") -> Dict[str, str]:
+    headers: Dict[str, str] = {}
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    parsed = urllib.parse.urlparse(str(source or "").strip())
+    hostname = _normalize_text(parsed.hostname).lower()
+    if hostname == "127.0.0.1" and _normalize_text(parsed.path) == "/api/v1/support/cases/triage":
+        headers.setdefault("Host", "chummer.run")
+        headers.setdefault("X-Forwarded-Proto", "https")
+    return headers
 
 
 def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str, Any], str]:
@@ -147,9 +165,7 @@ def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str,
     if not raw:
         raise SystemExit("support-case source is required")
     if raw.startswith(("http://", "https://")):
-        headers = {}
-        if bearer_token:
-            headers["Authorization"] = f"Bearer {bearer_token}"
+        headers = _support_source_request_headers(raw, bearer_token=bearer_token)
 
         parsed = urllib.parse.urlparse(raw)
         candidate_urls = [(raw, dict(headers))]
@@ -186,8 +202,8 @@ def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str,
 
 def _load_json_source_via_curl(source: str, *, bearer_token: str = "") -> Any | None:
     cmd = ["curl", "-fsSL", "--max-time", "20"]
-    if bearer_token:
-        cmd.extend(["-H", f"Authorization: Bearer {bearer_token}"])
+    for key, value in _support_source_request_headers(source, bearer_token=bearer_token).items():
+        cmd.extend(["-H", f"{key}: {value}"])
     cmd.append(source)
     result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode != 0:
@@ -203,6 +219,27 @@ def _source_kind(source_label: str) -> str:
     if raw.startswith(("http://", "https://")):
         return "remote_url"
     return "local_file"
+
+
+def _default_source_mirror_path(out_path: Path) -> Path:
+    return out_path.with_name(DEFAULT_SOURCE_MIRROR_NAME)
+
+
+def _candidate_authoritative_fallback_sources(source_label: str) -> List[str]:
+    raw = _normalize_text(source_label)
+    if not raw:
+        return []
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        return []
+    if _normalize_text(parsed.path) != "/api/v1/support/cases/triage":
+        return []
+    hostname = _normalize_text(parsed.hostname).lower()
+    if hostname not in {"chummer.run", "www.chummer.run"}:
+        return []
+    port = int(_normalize_text(os.environ.get("CHUMMER_PUBLIC_EDGE_PORT"), "8091") or "8091")
+    base_path = parsed._replace(scheme="http", netloc=f"127.0.0.1:{port}").geturl()
+    return [base_path]
 
 
 def _normalize_source_payload(payload: Any) -> Dict[str, Any]:
@@ -223,6 +260,64 @@ def _normalize_source_payload(payload: Any) -> Dict[str, Any]:
     return normalized
 
 
+def _source_items_from_cached_packets(existing_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for packet in (existing_payload.get("packets") or []):
+        if not isinstance(packet, dict) or not bool(packet.get("support_case_backed")):
+            continue
+        fix_confirmation = dict(packet.get("fix_confirmation") or {})
+        item: Dict[str, Any] = {
+            "caseId": _normalize_text(packet.get("case_id") or packet.get("packet_id")),
+            "clusterKey": _normalize_text(packet.get("cluster_key") or packet.get("packet_id")),
+            "kind": _normalize_text(packet.get("kind")),
+            "status": _normalize_text(packet.get("status")),
+            "title": _normalize_text(packet.get("title")),
+            "summary": _normalize_text(packet.get("summary")),
+            "candidateOwnerRepo": _normalize_text(packet.get("target_repo")),
+            "designImpactSuspected": bool(packet.get("design_impact_suspected")),
+            "installationId": _normalize_text(packet.get("installation_id")),
+            "releaseChannel": _normalize_text(packet.get("release_channel")),
+            "headId": _normalize_text(packet.get("head_id")),
+            "platform": _normalize_text(packet.get("platform")),
+            "arch": _normalize_text(packet.get("arch")),
+            "fixedVersion": _normalize_text(packet.get("fixed_version") or fix_confirmation.get("fixed_version")),
+            "fixedChannel": _normalize_text(packet.get("fixed_channel") or fix_confirmation.get("fixed_channel")),
+            "installedVersion": _normalize_text(packet.get("installed_version") or fix_confirmation.get("installed_version")),
+        }
+        items.append({key: value for key, value in item.items() if value not in {"", None}})
+    return items
+
+
+def _build_source_mirror_payload(source_payload: Dict[str, Any], *, source_label: str) -> Dict[str, Any]:
+    items = [dict(item) for item in (source_payload.get("items") or []) if isinstance(item, dict)]
+    return {
+        "items": items,
+        "count": int(source_payload.get("count") or len(items)),
+        "mirrored_at": _utc_now_iso(),
+        "origin_source_label": _normalize_text(source_label),
+        "origin_source_kind": _source_kind(source_label),
+    }
+
+
+def _write_source_mirror(path: Path, source_payload: Dict[str, Any], *, source_label: str) -> None:
+    mirror_payload = _build_source_mirror_payload(source_payload, source_label=source_label)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _load_cached_source_mirror(path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    try:
+        return _normalize_source_payload(payload)
+    except SystemExit:
+        return {}
+
+
 def _normalize_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -235,6 +330,56 @@ def _normalize_text(value: Any, fallback: str = "") -> str:
     if value is None:
         return fallback
     return str(value).strip() or fallback
+
+
+def _normalize_proof_capture_command(value: Any) -> str:
+    raw = _normalize_text(value)
+    if not raw:
+        return ""
+    try:
+        tokens = shlex.split(raw, posix=True)
+    except ValueError:
+        tokens = raw.split()
+    return " ".join(
+        token
+        for token in tokens
+        if not token.startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
+    )
+
+
+def _normalize_proof_capture_commands_with_metadata(value: Any) -> tuple[list[str], int]:
+    if not isinstance(value, list):
+        return [], 0
+    normalized: list[str] = []
+    stripped_count = 0
+    for token in value:
+        raw = _normalize_text(token)
+        if not raw:
+            continue
+        normalized_command = _normalize_proof_capture_command(raw)
+        if not normalized_command:
+            continue
+        normalized.append(normalized_command)
+        try:
+            parsed = shlex.split(raw, posix=True)
+        except ValueError:
+            parsed = raw.split()
+        if any(
+            str(item).startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
+            for item in parsed
+        ):
+            stripped_count += 1
+    return normalized, stripped_count
+
+
+def _normalize_proof_capture_commands(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [
+        normalized
+        for token in value
+        if (normalized := _normalize_proof_capture_command(token))
+    ]
 
 
 def _normalize_platform(value: Any) -> str:
@@ -452,6 +597,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         tuple_rows = coverage.get("promotedInstallerTuples") or []
         external_proof_rows = coverage.get("externalProofRequests") or []
     rows: List[Dict[str, str]] = []
+    proof_capture_command_normalization_counts: Dict[str, int] = {}
     for item in tuple_rows:
         if not isinstance(item, dict):
             continue
@@ -504,6 +650,21 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         if not tuple_id:
             continue
         external_request_tuple_counts[tuple_id] = external_request_tuple_counts.get(tuple_id, 0) + 1
+        normalized_proof_capture_commands, normalization_count = _normalize_proof_capture_commands_with_metadata(
+            item.get("proofCaptureCommands")
+            or item.get("proof_capture_commands")
+            or _derive_proof_capture_commands(
+                head=head,
+                rid=rid,
+                platform=platform,
+                installer_file_name=_normalize_text(
+                    item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
+                ),
+                required_host=_normalize_platform(item.get("requiredHost") or item.get("required_host")),
+            )
+        )
+        if normalization_count:
+            proof_capture_command_normalization_counts[tuple_id] = normalization_count
         external_requests.append(
             {
                 "tuple_id": tuple_id,
@@ -544,23 +705,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
                     or {},
                     default_contract=default_smoke_contract,
                 ),
-                "proof_capture_commands": [
-                    _normalize_text(token)
-                    for token in (
-                        item.get("proofCaptureCommands")
-                        or item.get("proof_capture_commands")
-                        or _derive_proof_capture_commands(
-                            head=head,
-                            rid=rid,
-                            platform=platform,
-                            installer_file_name=_normalize_text(
-                                item.get("expectedInstallerFileName") or item.get("expected_installer_file_name")
-                            ),
-                            required_host=_normalize_platform(item.get("requiredHost") or item.get("required_host")),
-                        )
-                    )
-                    if _normalize_text(token)
-                ],
+                "proof_capture_commands": normalized_proof_capture_commands,
             }
         )
     deduped_external_requests_by_tuple: Dict[str, Dict[str, Any]] = {}
@@ -592,6 +737,7 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
             else release_channel.get("releaseProofStatus")
         ).lower(),
         "fix_availability_summary": _normalize_text(release_channel.get("fixAvailabilitySummary") or release_channel.get("fix_availability_summary")),
+        "proof_capture_command_normalization_counts": proof_capture_command_normalization_counts,
         "promoted_tuples": rows,
         "external_proof_requests": deduped_external_requests,
     }
@@ -901,9 +1047,8 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
                     external_proof_request.get("startup_smoke_receipt_contract") or {}
                 ),
                 "proof_capture_commands": [
-                    _normalize_text(token)
+                    _normalize_proof_capture_command(token)
                     for token in (external_proof_request.get("proof_capture_commands") or [])
-                    if _normalize_text(token)
                 ],
                 }
             ),
@@ -946,9 +1091,8 @@ def _external_proof_request_spec(row: Dict[str, Any]) -> Dict[str, Any]:
         if _normalize_text(token)
     ]
     proof_capture_commands = [
-        _normalize_text(token)
+        _normalize_proof_capture_command(token)
         for token in (row.get("proof_capture_commands") or [])
-        if _normalize_text(token)
     ]
     payload: Dict[str, Any] = {
         "channel_id": _normalize_text(row.get("channel_id")).lower(),
@@ -1046,9 +1190,8 @@ def _external_proof_execution_plan(
                         row.get("startup_smoke_receipt_contract")
                     ),
                     "proof_capture_commands": [
-                        _normalize_text(token)
+                        _normalize_proof_capture_command(token)
                         for token in (row.get("proof_capture_commands") or [])
-                        if _normalize_text(token)
                     ],
                 }
             expected_installer_sha256 = _normalize_text(row.get("expected_installer_sha256")).lower()
@@ -1096,9 +1239,8 @@ def _external_proof_operator_packet(
         if _normalize_text(token)
     ]
     proof_capture_commands = [
-        _normalize_text(token)
+        _normalize_proof_capture_command(token)
         for token in (row.get("proof_capture_commands") or [])
-        if _normalize_text(token)
     ]
     packet_seed = f"external-proof|{channel_id}|{tuple_id}"
     packet_id = f"support_packet_{hashlib.sha1(packet_seed.encode('utf-8')).hexdigest()[:12]}"
@@ -1325,14 +1467,233 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
     }
 
 
+def _is_auth_refresh_error(message: str) -> bool:
+    raw = str(message or "").strip().lower()
+    if not raw:
+        return False
+    markers = (
+        "http error 401",
+        "http error 403",
+        "unauthorized",
+        "forbidden",
+        "auth_required",
+        "authorization is required",
+    )
+    return any(marker in raw for marker in markers)
+
+
+def _load_cached_packets_payload(path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    packets = payload.get("packets")
+    if not isinstance(packets, list):
+        return {}
+    return payload
+
+
+def _seed_source_mirror_from_cached_packets(path: Path, existing_payload: Dict[str, Any], *, source_label: str) -> Dict[str, Any]:
+    mirror_payload = {
+        "items": _source_items_from_cached_packets(existing_payload),
+        "count": len(_source_items_from_cached_packets(existing_payload)),
+        "mirrored_at": _utc_now_iso(),
+        "origin_source_label": _normalize_text(source_label),
+        "origin_source_kind": _source_kind(source_label),
+        "seeded_from_cached_packets_generated_at": _normalize_text(existing_payload.get("generated_at")),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return _normalize_source_payload(mirror_payload)
+
+
+def _cached_packets_fallback_payload(
+    existing_payload: Dict[str, Any],
+    *,
+    source_label: str,
+    release_channel_index: Dict[str, Any],
+    refresh_error: str,
+) -> Dict[str, Any]:
+    generated_at = _utc_now_iso()
+    packets = [dict(item) for item in (existing_payload.get("packets") or []) if isinstance(item, dict)]
+    case_packets = [dict(item) for item in packets if bool(item.get("support_case_backed"))]
+    operator_packets = [dict(item) for item in packets if not bool(item.get("support_case_backed"))]
+    unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
+    unresolved_external_proof_execution_plan = _external_proof_execution_plan(
+        release_channel_index,
+        generated_at=generated_at,
+    )
+    source = dict(existing_payload.get("source") or {})
+    previous_generated_at = _normalize_text(existing_payload.get("generated_at"))
+    source["source_kind"] = _source_kind(source_label) if _normalize_text(source_label) else _normalize_text(source.get("source_kind"))
+    source["reported_count"] = int(source.get("reported_count") or len(case_packets))
+    source["materialized_count"] = len(packets)
+    source["case_materialized_count"] = len(case_packets)
+    source["operator_packet_count"] = len(operator_packets)
+    source["refresh_mode"] = "cached_packets_fallback"
+    source["refresh_error"] = _normalize_text(refresh_error)
+    if previous_generated_at:
+        source["cached_snapshot_generated_at"] = previous_generated_at
+    return {
+        "contract_name": _normalize_text(existing_payload.get("contract_name"), "fleet.support_case_packets"),
+        "schema_version": int(existing_payload.get("schema_version") or 1),
+        "generated_at": generated_at,
+        "source": source,
+        "summary": {
+            "open_case_count": len(case_packets),
+            "open_packet_count": len(packets),
+            "operator_packet_count": len(operator_packets),
+            "design_impact_count": sum(1 for item in case_packets if item.get("design_impact_suspected")),
+            "owner_repo_counts": _counter_map(
+                _normalize_text(item.get("target_repo") or item.get("candidateOwnerRepo") or item.get("candidate_owner_repo"), "chummer6-hub")
+                for item in packets
+            ),
+            "lane_counts": _counter_map(_normalize_text(item.get("primary_lane")) for item in packets),
+            "status_counts": _counter_map(_normalize_text(item.get("status")) for item in packets),
+            "closure_waiting_on_release_truth": sum(1 for item in packets if _closure_waiting_on_release_truth(item)),
+            "needs_human_response": sum(1 for item in packets if _needs_human_response(item)),
+            "install_truth_state_counts": _counter_map(_normalize_text(item.get("install_truth_state")) for item in packets),
+            "update_required_case_count": sum(
+                1 for item in packets if bool((item.get("fix_confirmation") or {}).get("update_required"))
+            ),
+            "update_required_routed_to_downloads_count": sum(
+                1
+                for item in packets
+                if bool((item.get("fix_confirmation") or {}).get("update_required"))
+                and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() == "open_downloads"
+            ),
+            "update_required_misrouted_case_count": sum(
+                1
+                for item in packets
+                if bool((item.get("fix_confirmation") or {}).get("update_required"))
+                and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
+            ),
+            "external_proof_required_case_count": sum(
+                1 for item in case_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ),
+            "external_proof_required_host_counts": _counter_map(
+                _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("required_host"))
+                for item in case_packets
+                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ),
+            "external_proof_required_tuple_counts": _counter_map(
+                _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
+                for item in case_packets
+                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
+            ),
+            "unresolved_external_proof_request_count": int(unresolved_external_proof["count"]),
+            "unresolved_external_proof_request_host_counts": dict(unresolved_external_proof["host_counts"]),
+            "unresolved_external_proof_request_tuple_counts": dict(unresolved_external_proof["tuple_counts"]),
+            "unresolved_external_proof_request_hosts": list(unresolved_external_proof["hosts"]),
+            "unresolved_external_proof_request_tuples": list(unresolved_external_proof["tuples"]),
+            "unresolved_external_proof_request_specs": dict(unresolved_external_proof["specs"]),
+        },
+        "unresolved_external_proof": dict(unresolved_external_proof),
+        "unresolved_external_proof_execution_plan": dict(unresolved_external_proof_execution_plan),
+        "packets": packets,
+    }
+
+
+def _source_mirror_fallback_payload(
+    mirror_payload: Dict[str, Any],
+    *,
+    source_label: str,
+    source_mirror_path: Path,
+    release_channel_index: Dict[str, Any],
+    refresh_error: str,
+) -> Dict[str, Any]:
+    payload = build_packets_payload(mirror_payload, str(source_mirror_path), release_channel_index=release_channel_index)
+    source = dict(payload.get("source") or {})
+    source["refresh_mode"] = "source_mirror_fallback"
+    source["refresh_error"] = _normalize_text(refresh_error)
+    origin_source_label = _normalize_text(mirror_payload.get("origin_source_label") or source_label)
+    if origin_source_label:
+        source["origin_source_label"] = origin_source_label
+        source["origin_source_kind"] = _source_kind(origin_source_label)
+    mirrored_at = _normalize_text(mirror_payload.get("mirrored_at"))
+    if mirrored_at:
+        source["source_mirror_generated_at"] = mirrored_at
+    seeded_from_cached_packets_generated_at = _normalize_text(mirror_payload.get("seeded_from_cached_packets_generated_at"))
+    if seeded_from_cached_packets_generated_at:
+        source["seeded_from_cached_packets_generated_at"] = seeded_from_cached_packets_generated_at
+    payload["source"] = source
+    return payload
+
+
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
-    source_payload, source_label = _load_json_source(_source_value(args.source), bearer_token=_source_bearer_token(args.bearer_token))
+    out_path = Path(args.out).resolve()
+    source_mirror_path = (
+        Path(args.source_mirror).resolve()
+        if args.source_mirror is not None and str(args.source_mirror).strip()
+        else _default_source_mirror_path(out_path)
+    )
+    source_label = _source_value(args.source)
+    bearer_token = _source_bearer_token(args.bearer_token)
     release_channel_payload = _load_release_channel(str(args.release_channel))
     release_channel_index = _release_channel_index(release_channel_payload)
-    payload = build_packets_payload(source_payload, source_label, release_channel_index=release_channel_index)
+    try:
+        source_payload, source_label = _load_json_source(source_label, bearer_token=bearer_token)
+        payload = build_packets_payload(source_payload, source_label, release_channel_index=release_channel_index)
+        _write_source_mirror(source_mirror_path, source_payload, source_label=source_label)
+    except SystemExit as exc:
+        cached_payload = _load_cached_packets_payload(out_path)
+        if not _is_auth_refresh_error(str(exc)):
+            raise
+        authoritative_fallback_errors: List[str] = []
+        for candidate_source in _candidate_authoritative_fallback_sources(source_label):
+            try:
+                source_payload, resolved_label = _load_json_source(candidate_source, bearer_token=bearer_token)
+                payload = build_packets_payload(source_payload, resolved_label, release_channel_index=release_channel_index)
+                source = dict(payload.get("source") or {})
+                source["refresh_mode"] = "local_authoritative_fallback"
+                source["origin_source_label"] = _normalize_text(source_label)
+                source["origin_source_kind"] = _source_kind(source_label)
+                payload["source"] = source
+                _write_source_mirror(source_mirror_path, source_payload, source_label=source_label)
+                break
+            except SystemExit as fallback_exc:
+                authoritative_fallback_errors.append(str(fallback_exc))
+        else:
+            payload = {}
+        if payload:
+            print(f"support-case source refresh fell back to local authoritative source after auth failure: {exc}", file=sys.stderr)
+        else:
+            if authoritative_fallback_errors:
+                print(
+                    "support-case authoritative local fallback failed: "
+                    + " | ".join(authoritative_fallback_errors[-2:]),
+                    file=sys.stderr,
+                )
+        mirror_payload = _load_cached_source_mirror(source_mirror_path)
+        if not payload and not mirror_payload and cached_payload:
+            mirror_payload = _seed_source_mirror_from_cached_packets(
+                source_mirror_path,
+                cached_payload,
+                source_label=source_label,
+            )
+        if not payload and mirror_payload:
+            print(f"support-case source refresh fell back to local source mirror: {exc}", file=sys.stderr)
+            payload = _source_mirror_fallback_payload(
+                mirror_payload,
+                source_label=source_label,
+                source_mirror_path=source_mirror_path,
+                release_channel_index=release_channel_index,
+                refresh_error=str(exc),
+            )
+        elif not payload and cached_payload:
+            print(f"support-case source refresh fell back to cached packets: {exc}", file=sys.stderr)
+            payload = _cached_packets_fallback_payload(
+                cached_payload,
+                source_label=source_label,
+                release_channel_index=release_channel_index,
+                refresh_error=str(exc),
+            )
+        elif not payload:
+            raise
 
-    out_path = Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

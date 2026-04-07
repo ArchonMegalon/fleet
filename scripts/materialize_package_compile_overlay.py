@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, List
 
 import yaml
-from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+try:
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+except ModuleNotFoundError:
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]

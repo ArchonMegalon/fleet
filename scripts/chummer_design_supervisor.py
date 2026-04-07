@@ -138,7 +138,26 @@ DEFAULT_RUNS_DIR = DEFAULT_STATE_ROOT / "runs"
 DEFAULT_LOCK_PATH = DEFAULT_STATE_ROOT / "loop.lock"
 DEFAULT_WORKER_BIN = "codex"
 DEFAULT_MODEL = ""
-DEFAULT_FALLBACK_MODELS = ("gpt-5.4",)
+DEFAULT_FALLBACK_MODELS = ("ea-coder-hard",)
+LOW_CAPACITY_RESERVE_PERCENT = 0.10
+CORE_BATCH_WORKER_LANES = frozenset(
+    {
+        "core",
+        "core_authority",
+        "core_booster",
+        "core_rescue",
+        "review_shard",
+        "audit_shard",
+    }
+)
+CORE_BATCH_RUNTIME_MODELS = frozenset(
+    {
+        "ea-coder-hard",
+        "ea-coder-hard-batch",
+        "ea-coder-best",
+    }
+)
+ACCOUNT_DIRECT_FALLBACK_RESCUE_MODELS = ("ea-coder-hard",)
 DEFAULT_FALLBACK_WORKER_LANES = {
     "core": ("core_rescue", "survival", "repair"),
     "jury": ("core", "core_rescue", "survival", "repair"),
@@ -155,7 +174,7 @@ DEFAULT_SPARK_BACKOFF_SECONDS = 900
 DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS = 21600
 DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS = 43200
 DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS = 300
-DEFAULT_OPENAI_ESCAPE_HATCH_MODELS = ("gpt-5.3-codex", "gpt-5.3-codex-spark")
+DEFAULT_OPENAI_ESCAPE_HATCH_MODELS = ("ea-coder-hard",)
 DEFAULT_EA_PROVIDER_HEALTH_URL = os.environ.get(
     "CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL",
     "http://127.0.0.1:8090/v1/responses/_provider_health",
@@ -209,6 +228,8 @@ RETRYABLE_WORKER_ERROR_SIGNALS = (
     "insufficient credits",
     "exhausted_for_request",
     "upstream_timeout",
+    "background_timeout",
+    "background timeout",
     "worker_timeout",
     "switch to another model",
     "not supported",
@@ -237,6 +258,8 @@ ETA_EXTERNAL_BLOCKER_SIGNALS = (
 )
 OPENAI_ESCAPE_HATCH_TRIGGER_SIGNALS = (
     "upstream_timeout",
+    "background_timeout",
+    "background timeout",
     "worker_timeout",
     "upstream_unavailable",
     "backend unavailable",
@@ -358,6 +381,16 @@ FOCUS_PROFILES: Dict[str, Dict[str, Any]] = {
             "rigger",
         ],
     },
+    "top_flagship_grade": {
+        "description": "Apply the hard flagship bar: whole-product frontier, no lowered standards, and durable feedback/autofix readiness.",
+        "owners": [],
+        "texts": [],
+    },
+    "whole_project_frontier": {
+        "description": "Treat the whole product as the active frontier instead of collapsing the bar to one head or one proof family.",
+        "owners": [],
+        "texts": [],
+    },
 }
 SYNTHETIC_COMPLETION_REVIEW_ID_BASE = 900_000_000
 SYNTHETIC_FULL_PRODUCT_ID_BASE = 950_000_000
@@ -473,8 +506,8 @@ FULL_PRODUCT_FRONTIER_SPECS: Sequence[Dict[str, Any]] = (
         "title": "Fleet and operator loop flagship finish",
         "owners": ["fleet", "executive-assistant", "chummer6-design", "chummer6-hub"],
         "exit_criteria": [
-            "Keep the product-governor, support, signal, and operator loop durable enough to steer the full multi-repo product, not just the current milestone wave, with trustworthy proofs, traces, ETAs, and handoffs.",
-            "Ensure the loop can keep decomposing full-product work across shards until flagship readiness proof is current and trusted.",
+            "Keep the product-governor, support, signal, and operator loop durable enough to steer the full multi-repo product, not just the current milestone wave, with trustworthy proofs, traces, ETAs, handoffs, and fail-closed anti-false-complete posture.",
+            "Ensure the loop can keep decomposing full-product work across shards until flagship readiness proof is current and trusted, and that actionable feedback, crash, and support signals can auto-materialize into routed bugfix work without operator babysitting.",
         ],
     },
 )
@@ -741,6 +774,7 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--ignore-nonlinux-desktop-host-proof-blockers",
             action="store_true",
+            default=_ignore_nonlinux_desktop_host_proof_blockers_enabled(),
             help=(
                 "Ignore desktop proof blockers tied to Windows and macOS external-host or tuple expectations; still require Linux proof."
             ),
@@ -1242,6 +1276,22 @@ def _assess_direct_worker_lane_health(
         advisory_parts.append(f"estimated_remaining_credits_total={estimated_remaining_credits_total:.0f}")
     if advisory_parts:
         reason = "; ".join([part for part in [reason, ", ".join(advisory_parts)] if part])
+    if (
+        routable
+        and lane in CORE_BATCH_WORKER_LANES
+        and configured_slots > 0
+        and ready_slots <= 0
+        and degraded_slots >= max(1, configured_slots - unavailable_slots)
+        and remaining_percent is not None
+        and remaining_percent <= LOW_CAPACITY_RESERVE_PERCENT
+    ):
+        routable = False
+        state = "degraded"
+        reserve_reason = (
+            f"{lane} has no ready slots and only degraded capacity while remaining_percent_of_max="
+            f"{remaining_percent:.2f}; prefer lighter rescue lanes/models"
+        )
+        reason = "; ".join(part for part in [reason, reserve_reason] if part)
     return {
         "worker_lane": lane,
         "profile": profile,
@@ -1603,21 +1653,64 @@ def _configured_focus_texts(args: argparse.Namespace) -> List[str]:
     return _text_list(texts)
 
 
-def _milestone_focus_flags(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> tuple[bool, bool]:
+GENERIC_SHARD_FOCUS_TEXTS: Set[str] = {
+    "top flagship grade",
+    "whole project frontier",
+    "no lowered standards",
+    "feedback",
+    "feedback loop",
+    "automatic bugfixing",
+    "crash",
+    "crash reporting",
+    "support",
+    "support routing",
+    "journey smoothness",
+    "restore confidence",
+    "accessibility",
+    "localization",
+    "performance",
+    "proof shelf",
+    "fit and finish",
+    "desktop client",
+    "hub and registry",
+    "horizons and public surface",
+    "fleet and operator loop",
+}
+
+
+def _normalized_focus_text(value: Any) -> str:
+    return re.sub(r"[-_]+", " ", str(value).strip().lower())
+
+
+def _milestone_owner_match_count(item: Milestone, focus_owners: Sequence[str]) -> int:
     normalized_focus_owners = {str(value).strip().lower() for value in focus_owners if str(value).strip()}
-    normalized_focus_texts = [str(value).strip().lower() for value in focus_texts if str(value).strip()]
-    owner_match = bool(normalized_focus_owners) and any(owner.lower() in normalized_focus_owners for owner in item.owners)
-    if normalized_focus_texts:
-        haystack = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
-        text_match = any(term in haystack for term in normalized_focus_texts)
-    else:
-        text_match = False
+    if not normalized_focus_owners:
+        return 0
+    return sum(1 for owner in item.owners if owner.lower() in normalized_focus_owners)
+
+
+def _milestone_text_match_count(item: Milestone, focus_texts: Sequence[str]) -> int:
+    normalized_focus_texts = [
+        clean
+        for clean in (_normalized_focus_text(value) for value in focus_texts)
+        if clean and clean not in GENERIC_SHARD_FOCUS_TEXTS
+    ]
+    if not normalized_focus_texts:
+        return 0
+    haystack = _normalized_focus_text(" ".join([item.title, item.wave, item.status, *item.exit_criteria]))
+    return sum(1 for term in normalized_focus_texts if term in haystack)
+
+
+def _milestone_focus_flags(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> tuple[bool, bool]:
+    owner_match = _milestone_owner_match_count(item, focus_owners) > 0
+    text_match = _milestone_text_match_count(item, focus_texts) > 0
     return owner_match, text_match
 
 
 def _milestone_focus_score(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> int:
-    owner_match, text_match = _milestone_focus_flags(item, focus_owners, focus_texts)
-    return (2 if owner_match else 0) + (1 if text_match else 0)
+    owner_hits = _milestone_owner_match_count(item, focus_owners)
+    text_hits = _milestone_text_match_count(item, focus_texts)
+    return owner_hits + (text_hits * 3)
 
 
 def _milestone_matches_focus(item: Milestone, focus_owners: Sequence[str], focus_texts: Sequence[str]) -> bool:
@@ -1644,8 +1737,8 @@ def _strict_focus_matches(
     focus_owners: Sequence[str],
     focus_texts: Sequence[str],
 ) -> List[Milestone]:
-    matched: List[Milestone] = []
-    for item in items:
+    matched: List[tuple[int, int, Milestone]] = []
+    for index, item in enumerate(items):
         owner_match, text_match = _milestone_focus_flags(item, focus_owners, focus_texts)
         if focus_owners and focus_texts:
             if not owner_match or not text_match:
@@ -1654,8 +1747,9 @@ def _strict_focus_matches(
             continue
         elif focus_texts and not text_match:
             continue
-        matched.append(item)
-    return matched
+        matched.append((_milestone_focus_score(item, focus_owners, focus_texts), index, item))
+    matched.sort(key=lambda row: (-row[0], row[1]))
+    return [item for _score, _index, item in matched]
 
 
 def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone], frontier: List[Milestone]) -> List[Milestone]:
@@ -1927,6 +2021,17 @@ def _manifest_text_list(value: Any) -> List[str]:
     return []
 
 
+def _normalize_manifest_account_aliases(value: Any) -> List[str]:
+    aliases = _manifest_text_list(value)
+    aliases = [alias.strip() for alias in aliases if str(alias).strip()]
+    if not aliases:
+        return []
+    onemin_aliases = [alias for alias in aliases if alias.startswith("acct-ea-")]
+    if not onemin_aliases:
+        return []
+    return onemin_aliases
+
+
 def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]:
     manifest_path = _active_shard_manifest_path(aggregate_root)
     if not manifest_path.exists():
@@ -1959,7 +2064,10 @@ def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]
         for field in ("focus_owner", "account_alias", "focus_text"):
             values = _manifest_text_list(row.get(field))
             if values:
-                entry[field] = values
+                if field == "account_alias":
+                    values = _normalize_manifest_account_aliases(values)
+                if values:
+                    entry[field] = values
         for field in ("worker_bin", "worker_lane", "worker_model", "generated_at", "topology_fingerprint"):
             text = str(row.get(field) or "").strip()
             if text:
@@ -1998,20 +2106,24 @@ def _configured_shard_roots(aggregate_root: Path) -> List[Path]:
     if not aggregate_root.exists() or not aggregate_root.is_dir():
         return []
     entries = _active_shard_manifest_entries(aggregate_root)
+    configured_roots: List[Path] = []
+    seen: set[Path] = set()
     if entries:
-        configured_roots: List[Path] = []
         for entry in entries:
             token = str(entry.get("name") or "").strip()
             candidate = aggregate_root / token
             if candidate.exists() and candidate.is_dir():
                 configured_roots.append(candidate)
-        if configured_roots:
-            return configured_roots
-    return [
-        candidate
-        for candidate in sorted(aggregate_root.iterdir())
-        if candidate.is_dir() and candidate.name.startswith("shard-")
-    ]
+                seen.add(candidate.resolve())
+    for candidate in sorted(aggregate_root.iterdir()):
+        if not candidate.is_dir() or not candidate.name.startswith("shard-"):
+            continue
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate in seen:
+            continue
+        configured_roots.append(candidate)
+        seen.add(resolved_candidate)
+    return configured_roots
 
 
 def _completion_review_shard_frontier_limit(
@@ -2314,6 +2426,57 @@ def _completion_review_focus_bundle(
     return profiles, owners, texts
 
 
+FLAGSHIP_HARDLINE_TEXTS: Sequence[str] = (
+    "top flagship grade",
+    "whole-project frontier",
+    "no lowered standards",
+    "feedback loop",
+    "automatic bugfixing",
+    "crash reporting",
+    "support routing",
+    "journey smoothness",
+    "restore confidence",
+    "accessibility",
+    "localization",
+    "performance",
+    "proof shelf",
+    "fit and finish",
+)
+
+
+def _hard_flagship_requested(args: argparse.Namespace, focus_profiles: Optional[Sequence[str]] = None) -> bool:
+    profiles = _text_list(focus_profiles if focus_profiles is not None else _configured_focus_profiles(args))
+    return "top_flagship_grade" in profiles
+
+
+def _flagship_product_focus_bundle(
+    args: argparse.Namespace,
+    frontier: Sequence[Milestone],
+    *,
+    base_profiles: Sequence[str],
+    base_owners: Sequence[str],
+    base_texts: Sequence[str],
+    full_product_audit: Dict[str, Any],
+) -> tuple[List[str], List[str], List[str]]:
+    profiles = _text_list([*base_profiles, "top_flagship_grade", "whole_project_frontier"])
+    owners = _text_list([*base_owners, *(owner for item in frontier for owner in item.owners)])
+    texts: List[str] = [str(item).strip() for item in base_texts if str(item).strip()]
+    texts.extend(FLAGSHIP_HARDLINE_TEXTS)
+    texts.extend(
+        str(item).replace("_", " ").strip()
+        for item in (full_product_audit.get("missing_coverage_keys") or [])
+        if str(item).strip()
+    )
+    for row in (full_product_audit.get("unresolved_parity_families") or []):
+        if not isinstance(row, dict):
+            continue
+        for key in ("id", "title", "summary"):
+            value = str(row.get(key) or "").strip()
+            if value:
+                texts.append(value)
+    return profiles, owners, _text_list(texts)
+
+
 def _completion_review_guidance_paths(frontier: Sequence[Milestone]) -> List[Path]:
     paths: List[Path] = []
     if _completion_review_requires_visual_familiarity_focus(frontier):
@@ -2595,6 +2758,7 @@ def _synthetic_full_product_milestone(
     title: str,
     owners: Sequence[str],
     exit_criteria: Sequence[str],
+    status: str = "not_started",
 ) -> Milestone:
     criteria = [str(item).strip() for item in exit_criteria if str(item).strip()]
     if not criteria:
@@ -2603,7 +2767,7 @@ def _synthetic_full_product_milestone(
         id=_synthetic_full_product_id(key),
         title=title,
         wave="flagship_product",
-        status="not_started",
+        status=str(status or "not_started").strip() or "not_started",
         owners=[str(item).strip() for item in owners if str(item).strip()],
         exit_criteria=criteria[:4],
         dependencies=[],
@@ -2684,6 +2848,7 @@ def _flagship_design_source_paths(product_root: Path) -> List[Path]:
 def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
     audit = _full_product_readiness_audit(args)
     frontier: List[Milestone] = []
+    frontier_status = _full_product_frontier_status(audit)
     missing_coverage_keys = [
         str(item).strip()
         for item in (audit.get("missing_coverage_keys") or [])
@@ -2694,16 +2859,22 @@ def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
         for item in missing_coverage_keys
         if FULL_PRODUCT_FRONTIER_KEY_BY_COVERAGE.get(item)
     }
-    if selected_spec_keys:
+    all_rows = [row for row in FULL_PRODUCT_FRONTIER_SPECS if isinstance(row, dict)]
+    if _hard_flagship_requested(args):
+        prioritized_keys = list(selected_spec_keys)
+        prioritized_rows = [row for row in all_rows if str(row.get("key") or "").strip() in selected_spec_keys]
+        trailing_rows = [row for row in all_rows if str(row.get("key") or "").strip() not in selected_spec_keys]
+        rows = prioritized_rows + trailing_rows
+    elif selected_spec_keys:
         rows = [
             row
-            for row in FULL_PRODUCT_FRONTIER_SPECS
+            for row in all_rows
             if str(row.get("key") or "").strip() in selected_spec_keys
         ]
     elif audit.get("unresolved_parity_families"):
         rows = []
     else:
-        rows = list(FULL_PRODUCT_FRONTIER_SPECS)
+        rows = list(all_rows)
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -2713,6 +2884,7 @@ def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
                 title=str(row.get("title") or "Flagship full-product slice").strip(),
                 owners=[str(item).strip() for item in (row.get("owners") or []) if str(item).strip()],
                 exit_criteria=[str(item).strip() for item in (row.get("exit_criteria") or []) if str(item).strip()],
+                status=frontier_status,
             )
         )
     frontier.extend(
@@ -2722,6 +2894,54 @@ def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
         )
     )
     return frontier
+
+
+def _full_product_frontier_status(audit: Dict[str, Any]) -> str:
+    if _full_product_external_host_only_blocker(audit):
+        return "blocked_external_host_proof"
+    return "not_started"
+
+
+def _full_product_external_host_only_blocker(audit: Dict[str, Any]) -> bool:
+    if _ignore_nonlinux_desktop_host_proof_blockers_enabled():
+        return False
+    if str(audit.get("status") or "").strip().lower() == "pass":
+        return False
+    if audit.get("unresolved_parity_families"):
+        return False
+    completion_external_only = audit.get("completion_external_only")
+    if isinstance(completion_external_only, bool):
+        if completion_external_only:
+            return True
+    else:
+        token = str(completion_external_only or "").strip().lower()
+        if token in {"1", "true", "yes", "on"}:
+            return True
+    unresolved_external_request_count = _coerce_int(audit.get("unresolved_external_proof_request_count"), 0)
+    if unresolved_external_request_count > 0:
+        return True
+    coverage_details = dict(audit.get("coverage_details") or {})
+    fleet_details = dict(coverage_details.get("fleet_and_operator_loop") or {})
+    evidence = dict(fleet_details.get("evidence") or {})
+    external_only = evidence.get("supervisor_completion_external_only")
+    if isinstance(external_only, bool):
+        if external_only:
+            return True
+    try:
+        if bool(external_only):
+            return True
+    except (TypeError, ValueError):
+        pass
+    external_backlog = _coerce_int(evidence.get("external_proof_backlog_request_count"), 0)
+    open_non_external_packets = _coerce_int(evidence.get("support_open_non_external_packet_count"), -1)
+    journey_blocked_with_local = _coerce_int(evidence.get("journey_blocked_with_local_count"), -1)
+    if external_backlog <= 0:
+        return False
+    if open_non_external_packets > 0:
+        return False
+    if journey_blocked_with_local > 0:
+        return False
+    return True
 
 
 def _full_product_frontier_paths(
@@ -2759,6 +2979,8 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
         "missing_coverage_keys": list(FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS),
         "parity_excluded_scope": [],
         "unresolved_parity_families": [],
+        "completion_external_only": False,
+        "unresolved_external_proof_request_count": 0,
     }
     if not path.is_file():
         audit["reason"] = f"flagship product readiness proof is missing: {path}"
@@ -2781,21 +3003,42 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
     if audit["age_seconds"] > FLAGSHIP_PRODUCT_READINESS_MAX_AGE_SECONDS:
         audit["reason"] = f"flagship product readiness proof is stale ({audit['age_seconds']}s old)"
         return audit
-    audit["proof_status"] = str(payload.get("status") or "").strip()
+    audit["raw_proof_status"] = str(payload.get("status") or "").strip()
+    audit["proof_status"] = str(payload.get("scoped_status") or payload.get("status") or "").strip()
     coverage = dict(payload.get("coverage") or {})
     coverage_details = dict(payload.get("coverage_details") or {})
     parity_registry = dict(payload.get("parity_registry") or {})
+    completion_audit = dict(payload.get("completion_audit") or {})
+    external_host_proof = dict(payload.get("external_host_proof") or {})
     audit["coverage"] = coverage
     audit["coverage_details"] = coverage_details
     audit["parity_excluded_scope"] = [str(item).strip() for item in (parity_registry.get("excluded_scope") or []) if str(item).strip()]
     audit["unresolved_parity_families"] = [
         dict(item) for item in (parity_registry.get("unresolved_families") or []) if isinstance(item, dict)
     ]
+    completion_external_only = completion_audit.get("external_only")
+    if isinstance(completion_external_only, bool):
+        audit["completion_external_only"] = completion_external_only
+    else:
+        token = str(completion_external_only or "").strip().lower()
+        audit["completion_external_only"] = token in {"1", "true", "yes", "on"}
+    audit["unresolved_external_proof_request_count"] = _coerce_int(
+        completion_audit.get("unresolved_external_proof_request_count")
+        if "unresolved_external_proof_request_count" in completion_audit
+        else external_host_proof.get("unresolved_request_count"),
+        0,
+    )
     missing_keys = [
-        key
-        for key in FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS
-        if str(coverage.get(key) or "").strip().lower() != "ready"
+        str(item).strip()
+        for item in (payload.get("scoped_missing_keys") or [])
+        if str(item).strip()
     ]
+    if not missing_keys:
+        missing_keys = [
+            key
+            for key in FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS
+            if str(coverage.get(key) or "").strip().lower() != "ready"
+        ]
     audit["missing_coverage_keys"] = missing_keys
     if audit["proof_status"] != "pass":
         audit["reason"] = f"flagship product readiness proof is not green: {audit['proof_status'] or 'missing'}"
@@ -2807,7 +3050,12 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
         audit["reason"] = "flagship product readiness proof is missing ready coverage for: " + ", ".join(missing_keys)
         return audit
     audit["status"] = "pass"
-    audit["reason"] = "flagship product readiness proof is current across desktop, rules, hub, mobile, horizons, and operator lanes"
+    if str(audit.get("raw_proof_status") or "").strip().lower() == "pass":
+        audit["reason"] = "flagship product readiness proof is current across desktop, rules, hub, mobile, horizons, and operator lanes"
+    else:
+        audit["reason"] = (
+            "flagship product readiness proof is current for the Linux-hosted scope, with deferred non-Linux desktop host-proof warnings"
+        )
     return audit
 
 
@@ -2825,6 +3073,68 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
                 acceptance_mirror_path.parent.mkdir(parents=True, exist_ok=True)
                 acceptance_mirror_path.write_text(canonical_text, encoding="utf-8")
         progress_report_path = Path(args.progress_report_path).resolve()
+        progress_history_path = Path(args.progress_history_path).resolve()
+        support_packets_path = Path(args.support_packets_path).resolve()
+        journey_gates_path = progress_report_path.with_name("JOURNEY_GATES.generated.json")
+        external_proof_runbook_path = progress_report_path.with_name("EXTERNAL_PROOF_RUNBOOK.generated.md")
+        refresh_commands = [
+            (
+                "support-case packets",
+                [
+                    "python3",
+                    "scripts/materialize_support_case_packets.py",
+                    "--out",
+                    str(support_packets_path),
+                    "--release-channel",
+                    "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
+                ],
+            ),
+            (
+                "journey gates",
+                [
+                    "python3",
+                    "scripts/materialize_journey_gates.py",
+                    "--out",
+                    str(journey_gates_path),
+                    "--status-plane",
+                    str(Path(args.status_plane_path).resolve()),
+                    "--progress-report",
+                    str(progress_report_path),
+                    "--progress-history",
+                    str(progress_history_path),
+                    "--support-packets",
+                    str(support_packets_path),
+                ],
+            ),
+            (
+                "external proof runbook",
+                [
+                    "python3",
+                    "scripts/materialize_external_proof_runbook.py",
+                    "--support-packets",
+                    str(support_packets_path),
+                    "--out",
+                    str(external_proof_runbook_path),
+                ],
+            ),
+        ]
+        for label, command in refresh_commands:
+            completed = subprocess.run(
+                command,
+                cwd=str(workspace_root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                stdout_tail = str(completed.stdout or "").strip()[-800:]
+                stderr_tail = str(completed.stderr or "").strip()[-800:]
+                print(
+                    f"[fleet-supervisor] {label} refresh failed: "
+                    f"exit={completed.returncode} stdout={stdout_tail!r} stderr={stderr_tail!r}",
+                    file=sys.stderr,
+                    flush=True,
+                )
         aggregate_state_root = workspace_root / "state" / "chummer_design_supervisor"
         supervisor_state_path = _state_payload_path(aggregate_state_root)
         candidate_state_root_raw = str(getattr(args, "state_root", "") or "").strip()
@@ -2851,9 +3161,10 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             parity_registry_path=workspace_root / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
             status_plane_path=Path(args.status_plane_path).resolve(),
             progress_report_path=progress_report_path,
-            progress_history_path=Path(args.progress_history_path).resolve(),
-            journey_gates_path=progress_report_path.with_name("JOURNEY_GATES.generated.json"),
-            support_packets_path=Path(args.support_packets_path).resolve(),
+            progress_history_path=progress_history_path,
+            journey_gates_path=journey_gates_path,
+            support_packets_path=support_packets_path,
+            external_proof_runbook_path=external_proof_runbook_path,
             supervisor_state_path=supervisor_state_path,
             ooda_state_path=workspace_root / "state" / "design_supervisor_ooda" / "current_8h" / "state.json",
             ui_local_release_proof_path=Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"),
@@ -2887,7 +3198,9 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
             release_channel_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"),
             releases_json_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"),
-            ignore_nonlinux_desktop_host_proof_blockers=bool(args.ignore_nonlinux_desktop_host_proof_blockers),
+            ignore_nonlinux_desktop_host_proof_blockers=bool(
+                getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)
+            ),
         )
     except Exception as exc:
         print(f"[fleet-supervisor] flagship readiness materialization failed: {exc}", file=sys.stderr, flush=True)
@@ -2908,6 +3221,7 @@ def _full_product_frontier_payload(
     eta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     product_root = Path(args.program_milestones_path).resolve().parent
+    profile_set = {str(item).strip() for item in focus_profiles if str(item).strip()}
     frontier_rows = [
         {
             "id": item.id,
@@ -2935,6 +3249,13 @@ def _full_product_frontier_payload(
             "profiles": list(focus_profiles),
             "owners": list(focus_owners),
             "texts": list(focus_texts),
+        },
+        "quality_policy": {
+            "bar": "top_flagship_grade" if "top_flagship_grade" in profile_set else "flagship_product",
+            "whole_project_frontier": True,
+            "desktop_is_only_one_head": True,
+            "accept_lowered_standards": False,
+            "feedback_autofix_loop_required": True,
         },
         "completion_audit": {
             "status": str(completion_audit.get("status") or "").strip(),
@@ -3230,6 +3551,7 @@ def build_flagship_product_prompt(
         return (
             "Run the flagship full-product delivery pass for Chummer.\n\n"
             "Current release-proof gates are green, so the supervisor must continue into full product completion instead of stopping.\n\n"
+            "This is the hard flagship bar: build the kind of product future work is measured against. Do not trade that bar down for schedule, local green receipts, or desktop-only wins.\n\n"
             f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n"
             f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
             "Read these files directly first:\n"
@@ -3247,9 +3569,10 @@ def build_flagship_product_prompt(
             f"Latest suspicious receipts:\n{suspicious_runs}\n\n"
             "Required order:\n"
             "1. Verify the flagship frontier against canonical design and repo-local evidence.\n"
-            "2. Land the highest-impact unfinished slice across core, ui, ui-kit, hub, registry, mobile, media, horizons, and fleet.\n"
-            "3. Refresh handoff, mirrors, and readiness proof only when the repos actually justify it.\n"
-            "4. Do not accept completion until FLAGSHIP_PRODUCT_READINESS.generated.json is current and covers every required flagship lane.\n\n"
+            "2. Treat the whole product frontier as the frontier: desktop, rules, hub, registry, mobile, ui-kit, media, horizons, and fleet/operator loop.\n"
+            "3. Keep feedback, crash, support, and automatic bugfix routing live enough that the fleet can continue improving the product without manual babysitting.\n"
+            "4. Refresh handoff, mirrors, and readiness proof only when the repos actually justify it.\n"
+            "5. Do not accept completion until FLAGSHIP_PRODUCT_READINESS.generated.json is current and covers every required flagship lane with no lowered-standard shortcuts.\n\n"
             "If you stop, report only:\n"
             "What shipped: ...\n"
             "What remains: ...\n"
@@ -3259,6 +3582,7 @@ def build_flagship_product_prompt(
         "Run the flagship full-product delivery pass for Chummer.\n\n"
         "The current release-proof gates are green, but that only proves the loop cleared the present closeout gates. "
         "It does not prove the whole Chummer product is finished. Continue across the full design canon until the flagship product readiness proof is current and trusted.\n\n"
+        "Use the hard flagship bar: the product should feel like the standard future products are measured against. Reject lowered standards, false-complete claims, narrow desktop-only closure, and proof-only wins that do not survive real product scrutiny.\n\n"
         f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n\n"
         f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
         "Start by reading these files directly:\n"
@@ -3278,9 +3602,10 @@ def build_flagship_product_prompt(
         "Your required order of work:\n"
         "1. Verify the flagship frontier against canonical design plus repo-local evidence.\n"
         "2. Land the highest-impact unfinished slice across the whole product: desktop client, rules/import parity, hub and registry, mobile play shell, shared design system, media/artifacts, horizons/public surfaces, and the operator loop.\n"
-        "3. Refresh mirrors, handoff, or readiness proof only when the code and generated artifacts justify them.\n"
-        "4. Only accept completion once the flagship readiness proof is current, trusted, and covers desktop, rules, hub, mobile, ui-kit polish, media, horizons/public surfaces, and fleet/operator governance.\n\n"
-        "Do not collapse back to the closed wave. Use the design canon to widen the loop into full flagship delivery.\n\n"
+        "3. Keep feedback, crash, support, and automatic bugfix routing real enough that the fleet can keep healing the product while the product is still being built.\n"
+        "4. Refresh mirrors, handoff, or readiness proof only when the code and generated artifacts justify them.\n"
+        "5. Only accept completion once the flagship readiness proof is current, trusted, and covers desktop, rules, hub, mobile, ui-kit polish, media, horizons/public surfaces, and fleet/operator governance.\n\n"
+        "Do not collapse back to the closed wave or treat one head as the frontier. The whole project frontier is the frontier.\n\n"
         "If you stop, report only:\n"
         "What shipped: ...\n"
         "What remains: ...\n"
@@ -3437,10 +3762,23 @@ def _account_restore_probe_due(
 
 def _account_direct_fallback_args(args: argparse.Namespace) -> argparse.Namespace:
     clone = argparse.Namespace(**vars(args))
+    configured_lane = _account_direct_fallback_worker_lane() or str(args.worker_lane or "").strip()
+    configured_fallback_lanes = _account_direct_fallback_lane_candidates()
+    if configured_fallback_lanes:
+        fallback_lanes = configured_fallback_lanes
+    elif configured_lane:
+        fallback_lanes = list(DEFAULT_FALLBACK_WORKER_LANES.get(configured_lane, ()))
+    else:
+        fallback_lanes = [str(item or "").strip() for item in (args.fallback_worker_lane or []) if str(item or "").strip()]
     fallback_models = _account_direct_fallback_model_candidates()
+    lowered_models = {str(item or "").strip().lower() for item in fallback_models if str(item or "").strip()}
+    if fallback_models and lowered_models and lowered_models.issubset(CORE_BATCH_RUNTIME_MODELS):
+        fallback_models = [*ACCOUNT_DIRECT_FALLBACK_RESCUE_MODELS, *fallback_models]
+    elif not fallback_models:
+        fallback_models = list(ACCOUNT_DIRECT_FALLBACK_RESCUE_MODELS)
     clone.worker_bin = _account_direct_fallback_worker_bin() or str(args.worker_bin or "").strip()
-    clone.worker_lane = _account_direct_fallback_worker_lane()
-    clone.fallback_worker_lane = _account_direct_fallback_lane_candidates()
+    clone.worker_lane = configured_lane
+    clone.fallback_worker_lane = fallback_lanes
     clone.account_alias = []
     clone.account_owner_id = []
     clone.worker_model = fallback_models[0] if fallback_models else ""
@@ -4260,6 +4598,28 @@ def _run_updated_at(run: Dict[str, Any]) -> Optional[dt.datetime]:
     return _run_finished_at(run) or _parse_iso(str(run.get("started_at") or ""))
 
 
+def _state_field_has_meaningful_content(value: Any) -> bool:
+    if value in (None, ""):
+        return False
+    if isinstance(value, dict):
+        return any(_state_field_has_meaningful_content(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_state_field_has_meaningful_content(item) for item in value)
+    return True
+
+
+def _eta_snapshot_has_progress_fields(snapshot: Any) -> bool:
+    if not isinstance(snapshot, dict):
+        return False
+    if not _state_field_has_meaningful_content(snapshot.get("summary")):
+        return False
+    return all(snapshot.get(key) is not None for key in (
+        "remaining_open_milestones",
+        "remaining_in_progress_milestones",
+        "remaining_not_started_milestones",
+    ))
+
+
 def _shard_state_roots(state_root: Path) -> List[Path]:
     if not state_root.exists() or not state_root.is_dir():
         return []
@@ -4282,7 +4642,7 @@ def _latest_nonempty_state_field(state_items: Sequence[Dict[str, Any]], field: s
     for item in rows:
         state = dict(item.get("state") or {})
         value = state.get(field)
-        if value not in (None, "", [], {}):
+        if _state_field_has_meaningful_content(value):
             return value
     return {}
 
@@ -4336,6 +4696,40 @@ def _rewrite_eta_progress_summary(summary: str, *, open_count: int, in_progress_
     return text
 
 
+def _ignore_nonlinux_desktop_host_proof_blockers_enabled() -> bool:
+    return _runtime_env_default(
+        "CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS",
+        "",
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _reason_targets_ignored_nonlinux_desktop_host_platform(text: str) -> bool:
+    normalized = _normalize_blocker(text).lower()
+    if not normalized:
+        return False
+    if (
+        "macos" not in normalized
+        and "windows" not in normalized
+        and "external-proof-macos-host-missing" not in normalized
+        and "external-proof-powershell-missing" not in normalized
+    ):
+        return False
+    if any(token in normalized for token in (":linux", " linux startup-smoke", " linux installer", " linux desktop")):
+        return False
+    return any(
+        token in normalized
+        for token in (
+            "external-proof-macos-host-missing",
+            "external-proof-powershell-missing",
+            "external host lanes",
+            "startup-smoke + promoted-installer",
+            "startup-smoke receipt",
+            "promoted installer",
+            "external host-proof gaps remain",
+        )
+    )
+
+
 def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
     updated = dict(state or {})
     shard_rows = [dict(item or {}) for item in (updated.get("shards") or []) if isinstance(item, dict)]
@@ -4344,12 +4738,29 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
         return updated
     in_progress_ids: Set[int] = set()
     shard_blockers: List[Dict[str, str]] = []
+    shard_eta_open_sum = 0
+    shard_eta_in_progress_sum = 0
+    shard_eta_not_started_sum = 0
+    has_shard_eta_counts = False
     for shard in shard_rows:
         for value in (shard.get("active_frontier_ids") or shard.get("frontier_ids") or []):
             normalized = _coerce_int(value, 0)
             if normalized > 0:
                 in_progress_ids.add(normalized)
+        shard_eta_open = max(0, _coerce_int(shard.get("eta_remaining_open_milestones"), 0))
+        shard_eta_in_progress = max(0, _coerce_int(shard.get("eta_remaining_in_progress_milestones"), 0))
+        shard_eta_not_started = max(0, _coerce_int(shard.get("eta_remaining_not_started_milestones"), 0))
+        if shard_eta_open or shard_eta_in_progress or shard_eta_not_started:
+            has_shard_eta_counts = True
+            shard_eta_open = max(shard_eta_open, shard_eta_in_progress + shard_eta_not_started)
+            shard_eta_open_sum += shard_eta_open
+            shard_eta_in_progress_sum += shard_eta_in_progress
+            shard_eta_not_started_sum += shard_eta_not_started
         blocker_text = _normalized_blocker_text(shard.get("last_run_blocker"))
+        if _ignore_nonlinux_desktop_host_proof_blockers_enabled() and _reason_targets_ignored_nonlinux_desktop_host_platform(
+            blocker_text
+        ):
+            blocker_text = ""
         last_run_finished_at = _parse_iso(str(shard.get("last_run_finished_at") or "").strip())
         active_run_started_at = _parse_iso(str(shard.get("active_run_started_at") or "").strip())
         is_stale = (
@@ -4388,7 +4799,18 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
         active_open_ids = in_progress_ids & open_ids if open_ids else set(in_progress_ids)
         open_count = len(open_ids)
         in_progress_count = len(active_open_ids)
-        not_started_count = max(0, open_count - in_progress_count)
+        used_shard_eta_totals = open_count == 0 and has_shard_eta_counts
+        if used_shard_eta_totals:
+            open_count = shard_eta_open_sum
+            in_progress_count = shard_eta_in_progress_sum
+        if not in_progress_count and in_progress_ids:
+            normalized_mode = str(updated.get("mode") or "").strip().lower()
+            if normalized_mode in {"flagship_product", "sharded"}:
+                in_progress_count = min(open_count or len(in_progress_ids), len(in_progress_ids))
+        if used_shard_eta_totals:
+            not_started_count = shard_eta_not_started_sum
+        else:
+            not_started_count = max(0, open_count - in_progress_count)
         eta["remaining_open_milestones"] = open_count
         eta["remaining_in_progress_milestones"] = in_progress_count
         eta["remaining_not_started_milestones"] = not_started_count
@@ -4460,6 +4882,46 @@ def _ids_as_text(values: Iterable[Any]) -> List[str]:
 
 
 def _active_run_matches_live_frontier(
+    active_run: Any,
+    *,
+    frontier_ids: Sequence[Any],
+    open_milestone_ids: Sequence[Any],
+) -> bool:
+    if not isinstance(active_run, dict) or not active_run:
+        return False
+    last_message_path = str(active_run.get("last_message_path") or "").strip()
+    if last_message_path:
+        proc_root = Path("/proc")
+        try:
+            proc_entries = list(proc_root.iterdir())
+        except OSError:
+            proc_entries = []
+        for entry in proc_entries:
+            if not entry.name.isdigit():
+                continue
+            try:
+                cmdline = (entry / "cmdline").read_bytes().decode("utf-8", errors="ignore").replace("\x00", " ").strip()
+            except OSError:
+                continue
+            if cmdline and last_message_path in cmdline:
+                return True
+        return False
+    active_frontier_ids = set(_ids_as_text(active_run.get("frontier_ids") or []))
+    active_open_milestone_ids = set(_ids_as_text(active_run.get("open_milestone_ids") or []))
+    current_frontier_ids = set(_ids_as_text(frontier_ids))
+    current_open_milestone_ids = set(_ids_as_text(open_milestone_ids))
+    if current_open_milestone_ids:
+        if not active_frontier_ids or not active_frontier_ids.issubset(current_frontier_ids):
+            return False
+        if active_open_milestone_ids and not active_open_milestone_ids.issubset(current_open_milestone_ids):
+            return False
+        return True
+    if current_frontier_ids:
+        return bool(active_frontier_ids) and active_frontier_ids.issubset(current_frontier_ids)
+    return False
+
+
+def _active_run_matches_frontier_shape(
     active_run: Any,
     *,
     frontier_ids: Sequence[Any],
@@ -4586,6 +5048,7 @@ def _effective_supervisor_state(
     else:
         aggregate.pop("active_run", None)
         aggregate.pop("active_runs", None)
+    aggregate["active_runs_count"] = len(active_runs)
     completion_audit = _latest_nonempty_state_field(populated_states, "completion_audit")
     if completion_audit:
         aggregate["completion_audit"] = completion_audit
@@ -4623,6 +5086,9 @@ def _effective_supervisor_state(
                 "active_frontier_ids": list(active_run_payload.get("frontier_ids") or []),
                 "open_milestone_ids": _state_open_milestone_ids(shard_state),
                 "eta_status": str((shard_state.get("eta") or {}).get("status") or "").strip(),
+                "eta_remaining_open_milestones": (shard_state.get("eta") or {}).get("remaining_open_milestones"),
+                "eta_remaining_in_progress_milestones": (shard_state.get("eta") or {}).get("remaining_in_progress_milestones"),
+                "eta_remaining_not_started_milestones": (shard_state.get("eta") or {}).get("remaining_not_started_milestones"),
                 "last_run_id": str(last_run_payload.get("run_id") or "").strip(),
                 "last_run_finished_at": str(last_run_payload.get("finished_at") or last_run_payload.get("started_at") or "").strip(),
                 "last_run_blocker": blocker_text,
@@ -4686,9 +5152,12 @@ def _prior_active_shard_frontier_ids(state_root: Path) -> List[int]:
             break
         state = _read_state(_state_payload_path(shard_root))
         active_run = state.get("active_run") or {}
-        if not isinstance(active_run, dict):
-            continue
-        _append_unique_ids(claimed, active_run.get("frontier_ids") or [], limit=100)
+        claimed_frontier_ids: Sequence[Any] = []
+        if isinstance(active_run, dict):
+            claimed_frontier_ids = active_run.get("frontier_ids") or []
+        if not claimed_frontier_ids:
+            claimed_frontier_ids = _state_frontier_ids(state)
+        _append_unique_ids(claimed, claimed_frontier_ids or [], limit=100)
     return claimed
 
 
@@ -4819,6 +5288,10 @@ def _eta_external_blocker_reason(
         if not text:
             continue
         normalized = text.lower()
+        if _ignore_nonlinux_desktop_host_proof_blockers_enabled() and _reason_targets_ignored_nonlinux_desktop_host_platform(
+            text
+        ):
+            continue
         if any(signal in normalized for signal in ETA_EXTERNAL_BLOCKER_SIGNALS):
             return text
     return ""
@@ -5326,15 +5799,47 @@ def _render_eta(eta: Dict[str, Any]) -> str:
 
 def derive_eta(args: argparse.Namespace) -> Dict[str, Any]:
     state_root = Path(args.state_root).resolve()
-    _, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
+    state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
     _refresh_flagship_product_readiness_artifact(args)
+    live_state, history = _live_state_with_current_completion_audit(
+        args,
+        state_root,
+        state,
+        history,
+        include_shards=True,
+        refresh_flagship_readiness=False,
+    )
+    live_eta = dict(live_state.get("eta") or {})
+    if live_eta:
+        return live_eta
     context = derive_context(args)
+    forced_flagship_context = _hard_flagship_context_if_needed(args, state_root, context)
+    if forced_flagship_context is not None:
+        context = forced_flagship_context
+        history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
     audit: Optional[Dict[str, Any]] = None
     full_product_audit: Optional[Dict[str, Any]] = None
     mode = "live"
     if not context["open_milestones"]:
         audit = _design_completion_audit(args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
-        if audit.get("status") != "pass":
+        hard_flagship = _hard_flagship_requested(args, context.get("focus_profiles") or [])
+        if hard_flagship:
+            full_product_audit = _full_product_readiness_audit(args)
+            if full_product_audit.get("status") != "pass":
+                context = derive_flagship_product_context(
+                    args,
+                    state_root,
+                    base_context=context,
+                    completion_audit=audit,
+                    full_product_audit=full_product_audit,
+                )
+                full_product_audit = dict(context.get("full_product_audit") or full_product_audit)
+                mode = "flagship_product"
+            else:
+                context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+                audit = dict(context.get("completion_audit") or audit)
+                mode = "completion_review"
+        elif audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
             audit = dict(context.get("completion_audit") or audit)
             mode = "completion_review"
@@ -5489,7 +5994,7 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
         focus_owners=focus_owners,
         focus_texts=focus_texts,
     )
-    return {
+    context = {
         "registry_path": registry_path,
         "program_milestones_path": program_milestones_path,
         "roadmap_path": roadmap_path,
@@ -5506,6 +6011,41 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
         "focus_texts": focus_texts,
         "prompt": prompt,
     }
+    if _hard_flagship_requested(args, focus_profiles):
+        full_product_audit = _full_product_readiness_audit(args)
+        if open_milestones or str(full_product_audit.get("status") or "").strip().lower() not in {"pass", "passed", "ready"}:
+            return derive_flagship_product_context(
+                args,
+                resolved_state_root,
+                base_context=context,
+                full_product_audit=full_product_audit,
+            )
+    return context
+
+
+def _hard_flagship_context_if_needed(
+    args: argparse.Namespace,
+    state_root: Path,
+    base_context: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if not _hard_flagship_requested(args, base_context.get("focus_profiles") or []):
+        return None
+    full_product_audit = _full_product_readiness_audit(args)
+    force_whole_project_frontier = bool(base_context.get("open_milestones"))
+    if (
+        not force_whole_project_frontier
+        and str(full_product_audit.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+    ):
+        return None
+    completion_history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+    completion_audit = _design_completion_audit(args, completion_history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
+    return derive_flagship_product_context(
+        args,
+        state_root,
+        base_context=base_context,
+        completion_audit=completion_audit,
+        full_product_audit=full_product_audit,
+    )
 
 
 def derive_completion_review_context(
@@ -5612,10 +6152,29 @@ def derive_flagship_product_context(
     if available_frontier:
         frontier = _focused_frontier(args, available_frontier, available_frontier)
         frontier = _bounded_frontier(frontier, limit=frontier_limit)
+    elif prior_claimed_ids and full_frontier:
+        rotated_frontier = list(full_frontier)
+        if len(rotated_frontier) > 1:
+            offset = _shard_index(state_root) % len(rotated_frontier)
+            rotated_frontier = rotated_frontier[offset:] + rotated_frontier[:offset]
+        frontier = _focused_frontier(args, rotated_frontier, rotated_frontier)
+        frontier = _bounded_frontier(frontier, limit=1)
     elif prior_claimed_ids:
         frontier = []
     else:
         frontier = _bounded_frontier(_focused_frontier(args, full_frontier, full_frontier), limit=frontier_limit)
+    pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
+    if pinned_frontier_ids:
+        by_id = {item.id: item for item in full_frontier}
+        frontier = [by_id[value] for value in pinned_frontier_ids if value in by_id]
+    focus_profiles, focus_owners, focus_texts = _flagship_product_focus_bundle(
+        args,
+        frontier,
+        base_profiles=context.get("focus_profiles") or [],
+        base_owners=context.get("focus_owners") or [],
+        base_texts=context.get("focus_texts") or [],
+        full_product_audit=current_full_product_audit,
+    )
     frontier_paths = _full_product_frontier_paths(Path(args.workspace_root).resolve(), state_root=state_root)
     prompt = build_flagship_product_prompt(
         registry_path=context["registry_path"],
@@ -5626,9 +6185,9 @@ def derive_flagship_product_context(
         frontier_artifact_path=Path(frontier_paths[0]),
         frontier=frontier,
         scope_roots=context["scope_roots"],
-        focus_profiles=context["focus_profiles"],
-        focus_owners=context["focus_owners"],
-        focus_texts=context["focus_texts"],
+        focus_profiles=focus_profiles,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
         completion_audit=current_completion_audit,
         full_product_audit=current_full_product_audit,
         history=history,
@@ -5639,9 +6198,9 @@ def derive_flagship_product_context(
         state_root=state_root,
         mode="flagship_product",
         frontier=frontier,
-        focus_profiles=context["focus_profiles"],
-        focus_owners=context["focus_owners"],
-        focus_texts=context["focus_texts"],
+        focus_profiles=focus_profiles,
+        focus_owners=focus_owners,
+        focus_texts=focus_texts,
         completion_audit=current_completion_audit,
         full_product_audit=current_full_product_audit,
     )
@@ -5651,6 +6210,9 @@ def derive_flagship_product_context(
             "frontier": frontier,
             "frontier_ids": [item.id for item in frontier],
             "prompt": prompt,
+            "focus_profiles": focus_profiles,
+            "focus_owners": focus_owners,
+            "focus_texts": focus_texts,
             "completion_audit": current_completion_audit,
             "full_product_audit": current_full_product_audit,
             "flagship_product_full_frontier_ids": [item.id for item in full_frontier],
@@ -5749,7 +6311,18 @@ def _live_state_with_current_completion_audit(
             )
             if shard_open_milestone_ids:
                 updated["open_milestone_ids"] = shard_open_milestone_ids
-            if any(str((item or {}).get("active_run_id") or "").strip() for item in (updated.get("shards") or [])):
+            for key in ("focus_profiles", "focus_owners", "focus_texts"):
+                shard_values = sorted(
+                    {
+                        str(value).strip()
+                        for item in (updated.get("shards") or [])
+                        for value in (item.get(key) or [])
+                        if str(value).strip()
+                    }
+                )
+                if shard_values:
+                    updated[key] = shard_values
+            if len(updated.get("shards") or []) > 1:
                 updated["mode"] = "sharded"
             else:
                 updated["mode"] = mode
@@ -5911,6 +6484,63 @@ def _live_state_with_current_completion_audit(
             updated["shard_count"] = len(updated.get("shards") or [])
         return updated, review_history
 
+    hard_flagship = _hard_flagship_requested(effective_args, context.get("focus_profiles") or [])
+    if hard_flagship:
+        full_product_audit = _full_product_readiness_audit(effective_args)
+        if full_product_audit.get("status") != "pass":
+            flagship_context = derive_flagship_product_context(
+                effective_args,
+                state_root,
+                base_context=context,
+                completion_audit=audit,
+                full_product_audit=full_product_audit,
+            )
+            eta = _build_eta_snapshot(
+                mode="flagship_product",
+                open_milestones=[],
+                frontier=flagship_context["frontier"],
+                history=review_history,
+                completion_audit=flagship_context["completion_audit"],
+                full_product_audit=flagship_context["full_product_audit"],
+                worker_lane_health=worker_lane_health,
+            )
+            frontier_paths = _materialize_full_product_frontier(
+                args=effective_args,
+                state_root=state_root,
+                mode="flagship_product",
+                frontier=flagship_context["frontier"],
+                focus_profiles=flagship_context["focus_profiles"],
+                focus_owners=flagship_context["focus_owners"],
+                focus_texts=flagship_context["focus_texts"],
+                completion_audit=flagship_context["completion_audit"],
+                full_product_audit=flagship_context["full_product_audit"],
+                eta=eta,
+            )
+            updated.update(
+                {
+                    "mode": "flagship_product",
+                    "open_milestone_ids": [],
+                    "frontier_ids": [item.id for item in flagship_context["frontier"]],
+                    "focus_profiles": list(flagship_context["focus_profiles"]),
+                    "focus_owners": list(flagship_context["focus_owners"]),
+                    "focus_texts": list(flagship_context["focus_texts"]),
+                    "completion_audit": dict(flagship_context["completion_audit"]),
+                    "full_product_audit": dict(flagship_context["full_product_audit"]),
+                    "eta": eta,
+                    "worker_lane_health": worker_lane_health,
+                    "completion_review_frontier_path": "",
+                    "completion_review_frontier_mirror_path": "",
+                    "full_product_frontier_path": frontier_paths["published_path"],
+                    "full_product_frontier_mirror_path": frontier_paths["mirror_path"],
+                }
+            )
+            finalize_live_state(
+                mode="flagship_product",
+                open_milestone_ids=[],
+                frontier_ids=[item.id for item in flagship_context["frontier"]],
+            )
+            return updated, review_history
+
     review_context = derive_completion_review_context(effective_args, state_root, base_context=context, audit=audit)
     if not review_context["frontier"]:
         flagship_context = _parallel_flagship_context_if_available(
@@ -6036,6 +6666,9 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             shard_args.account_alias = _env_split_list(
                 _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", workspace_root, "")
             )
+            shard_args.focus_profile = _env_split_list(
+                _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE", workspace_root, "")
+            )
             shard_args.focus_owner = _env_split_list(
                 _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER", workspace_root, "")
             )
@@ -6109,6 +6742,9 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             if shard_worker_model:
                 shard_args.worker_model = shard_worker_model
         if manifest_entry:
+            shard_focus_profiles = _manifest_text_list(manifest_entry.get("focus_profile"))
+            if shard_focus_profiles:
+                shard_args.focus_profile = shard_focus_profiles
             shard_account_aliases = _manifest_text_list(manifest_entry.get("account_alias"))
             if shard_account_aliases:
                 shard_args.account_alias = shard_account_aliases
@@ -6153,6 +6789,9 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
                 "frontier_ids": current_frontier_ids,
                 "active_frontier_ids": active_frontier_ids,
                 "open_milestone_ids": _state_open_milestone_ids(updated_shard),
+                "focus_profiles": list(updated_shard.get("focus_profiles") or []),
+                "focus_owners": list(updated_shard.get("focus_owners") or []),
+                "focus_texts": list(updated_shard.get("focus_texts") or []),
                 "eta_status": str((updated_shard.get("eta") or {}).get("status") or "").strip(),
                 "last_run_id": str((updated_shard.get("last_run") or {}).get("run_id") or "").strip(),
                 "last_run_finished_at": str(
@@ -7518,9 +8157,49 @@ def _write_state(
         payload["full_product_frontier_path"] = str(full_product_frontier_path)
     if full_product_frontier_mirror_path:
         payload["full_product_frontier_mirror_path"] = str(full_product_frontier_mirror_path)
+    _merge_matching_live_active_run(state_root, payload)
     _write_json(_state_payload_path(state_root), payload)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
+
+
+def _merge_matching_live_active_run(state_root: Path, payload: Dict[str, Any]) -> None:
+    frontier_ids = list(payload.get("frontier_ids") or [])
+    open_milestone_ids = list(payload.get("open_milestone_ids") or [])
+    active_run = payload.get("active_run")
+    if _active_run_matches_live_frontier(
+        active_run,
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+    ):
+        return
+    if isinstance(payload.get("active_runs"), list) and payload.get("active_runs"):
+        payload.pop("active_run", None)
+        return
+    persisted_state = _read_state(_state_payload_path(state_root))
+    persisted_active_run = persisted_state.get("active_run")
+    if _active_run_matches_live_frontier(
+        persisted_active_run,
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+    ):
+        payload["active_run"] = dict(persisted_active_run)
+        return
+    persisted_last_run = persisted_state.get("last_run")
+    persisted_run_id = str((persisted_active_run or {}).get("run_id") or "").strip()
+    persisted_last_run_id = str((persisted_last_run or {}).get("run_id") or "").strip()
+    if (
+        persisted_run_id
+        and persisted_run_id != persisted_last_run_id
+        and _active_run_matches_frontier_shape(
+            persisted_active_run,
+            frontier_ids=frontier_ids,
+            open_milestone_ids=open_milestone_ids,
+        )
+    ):
+        payload["active_run"] = dict(persisted_active_run)
+        return
+    payload.pop("active_run", None)
 
 
 def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> None:
@@ -7528,6 +8207,7 @@ def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> Non
     payload.pop("state_root", None)
     payload.pop("shard_count", None)
     payload.pop("shards", None)
+    _merge_matching_live_active_run(state_root, payload)
     _write_json(_state_payload_path(state_root), payload)
 
 
@@ -9653,6 +10333,9 @@ def run_once(args: argparse.Namespace) -> int:
     _ensure_dir(state_root)
     _refresh_flagship_product_readiness_artifact(args)
     context = derive_context(args)
+    forced_flagship_context = _hard_flagship_context_if_needed(args, state_root, context)
+    if forced_flagship_context is not None:
+        context = forced_flagship_context
     worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
     audit: Optional[Dict[str, Any]] = None
     full_product_audit: Optional[Dict[str, Any]] = None
@@ -9660,7 +10343,20 @@ def run_once(args: argparse.Namespace) -> int:
     if not context["open_milestones"]:
         completion_history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
         audit = _design_completion_audit(args, completion_history[-COMPLETION_AUDIT_HISTORY_LIMIT:])
-        if audit.get("status") != "pass":
+        hard_flagship = _hard_flagship_requested(args, context.get("focus_profiles") or [])
+        if hard_flagship:
+            full_product_audit = _full_product_readiness_audit(args)
+            if full_product_audit.get("status") != "pass":
+                context = derive_flagship_product_context(
+                    args,
+                    state_root,
+                    base_context=context,
+                    completion_audit=audit,
+                    full_product_audit=full_product_audit,
+                )
+            else:
+                context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+        elif audit.get("status") != "pass":
             context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
             if not context["frontier"]:
                 flagship_context = _parallel_flagship_context_if_available(
@@ -9940,6 +10636,9 @@ def run_loop(args: argparse.Namespace) -> int:
         while True:
             context = derive_context(args)
             worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
+            forced_flagship_context = _hard_flagship_context_if_needed(args, state_root, context)
+            if forced_flagship_context is not None:
+                context = forced_flagship_context
             open_milestones: List[Milestone] = context["open_milestones"]
             frontier: List[Milestone] = context["frontier"]
             history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
@@ -9948,7 +10647,20 @@ def run_loop(args: argparse.Namespace) -> int:
                 audit = _design_completion_audit(
                     args, history[-COMPLETION_AUDIT_HISTORY_LIMIT:]
                 )
-                if audit.get("status") == "pass":
+                hard_flagship = _hard_flagship_requested(args, context.get("focus_profiles") or [])
+                if hard_flagship:
+                    full_product_audit = _full_product_readiness_audit(args)
+                    if full_product_audit.get("status") != "pass":
+                        context = derive_flagship_product_context(
+                            args,
+                            state_root,
+                            base_context=context,
+                            completion_audit=audit,
+                            full_product_audit=full_product_audit,
+                        )
+                    else:
+                        context = derive_completion_review_context(args, state_root, base_context=context, audit=audit)
+                elif audit.get("status") == "pass":
                     full_product_audit = _full_product_readiness_audit(args)
                     if full_product_audit.get("status") == "pass":
                         eta = _build_eta_snapshot(
@@ -10285,6 +10997,8 @@ def run_loop(args: argparse.Namespace) -> int:
 
 def main() -> None:
     args = parse_args()
+    if bool(getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)):
+        os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = "1"
     if args.command == "status":
         state_root = Path(args.state_root).resolve()
         state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
@@ -10296,6 +11010,12 @@ def main() -> None:
             history,
             include_shards=include_shards,
         )
+        if not _eta_snapshot_has_progress_fields(state.get("eta")):
+            eta_args = argparse.Namespace(**vars(args))
+            eta_args.command = "eta"
+            fallback_eta = derive_eta(eta_args)
+            if _eta_snapshot_has_progress_fields(fallback_eta):
+                state["eta"] = dict(fallback_eta)
         _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps(state, indent=2, sort_keys=True))
@@ -10320,6 +11040,12 @@ def main() -> None:
             history,
             include_shards=include_shards,
         )
+        if not _eta_snapshot_has_progress_fields(state.get("eta")):
+            eta_args = argparse.Namespace(**vars(args))
+            eta_args.command = "eta"
+            fallback_eta = derive_eta(eta_args)
+            if _eta_snapshot_has_progress_fields(fallback_eta):
+                state["eta"] = dict(fallback_eta)
         _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps({"state": state, "history": history}, indent=2, sort_keys=True))

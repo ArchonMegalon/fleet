@@ -1,0 +1,19 @@
+{
+  "host": "macos",
+  "request_count": 2,
+  "requests": [
+    {
+      "expected_installer_bundle_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+      "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
+      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+      "tuple_id": "avalonia:osx-arm64:macos"
+    },
+    {
+      "expected_installer_bundle_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
+      "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
+      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
+      "tuple_id": "blazor-desktop:osx-arm64:macos"
+    }
+  ],
+  "schema_version": 1
+}

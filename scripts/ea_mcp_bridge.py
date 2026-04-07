@@ -104,7 +104,7 @@ def load_ea_config() -> EAConfig:
         _runtime_env_value("EA_MCP_PRINCIPAL_ID", "EA_PRINCIPAL_ID") or "codex-fleet",
     )
     timeout_raw = _env("EA_MCP_TIMEOUT_SECONDS", "120")
-    default_model = _env("EA_MCP_MODEL", "gemini-2.5-flash")
+    default_model = _env("EA_MCP_MODEL", "onemin:gpt-5.4")
     try:
         timeout_seconds = max(1.0, float(timeout_raw))
     except Exception:

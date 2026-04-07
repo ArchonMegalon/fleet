@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REAL_CODEX="${CODEX_REAL_BIN:-/usr/bin/codex}"
+REAL_CODEX="${CODEX_REAL_BIN:-}"
+if [ -z "${REAL_CODEX}" ]; then
+  if [ -x /usr/local/bin/codex ]; then
+    REAL_CODEX="/usr/local/bin/codex"
+  else
+    REAL_CODEX="/usr/bin/codex"
+  fi
+fi
 BOOTSTRAP_PROMPT_FILE="${CODEX_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 PREFER_EA_MCP="${CODEX_PREFER_EA_MCP:-1}"
 DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-0}"
 FORCE_DEFAULT_PROVIDER="${CODEX_FORCE_DEFAULT_PROVIDER:-1}"
 SKIP_DEFAULT_PROVIDER="${CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT:-0}"
 DEFAULT_MODEL_PROVIDER="${CODEX_DEFAULT_MODEL_PROVIDER:-openai}"
-DEFAULT_EA_MCP_MODEL="${CODEX_DEFAULT_EA_MCP_MODEL:-gemini-2.5-flash}"
+DEFAULT_EA_MCP_MODEL="${CODEX_DEFAULT_EA_MCP_MODEL:-onemin:gpt-5.4}"
 
 DEFAULT_FLAGS=(-a never -s danger-full-access)
 

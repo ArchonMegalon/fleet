@@ -116,6 +116,60 @@ services:
     networks:
       - fleet_net
 
+  fleet-design-overwatch:
+    build:
+      context: ./controller
+      args:
+        CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
+    env_file:
+      - path: ./runtime.ea.env
+        required: false
+      - path: ./runtime.env
+        required: false
+    container_name: fleet-design-overwatch
+    restart: unless-stopped
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    group_add:
+      - "${DOCKER_GID:-112}"
+    working_dir: ${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
+    environment:
+      OODA_WORKSPACE_ROOT: /docker/fleet
+      OODA_SUPERVISOR_STATE_ROOT: /var/lib/codex-fleet/chummer_design_supervisor
+      OODA_MONITOR_STATE_ROOT: /var/lib/codex-fleet/design_supervisor_ooda
+      OODA_DURATION_SECONDS: "28800"
+      OODA_POLL_SECONDS: "300"
+      OODA_STALE_SECONDS: "900"
+      OODA_CURRENT_ALIAS: current_8h
+      OODA_FOREGROUND_MODE: "1"
+      TZ: UTC
+    volumes:
+      - ./state:/var/lib/codex-fleet
+      - ./config:/app/config:ro
+      - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
+      - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
+      - /docker:/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - fleet-controller
+      - fleet-design-supervisor
+    command: ["bash", "/opt/codex-fleet/scripts/run_ooda_design_supervisor.sh"]
+    networks:
+      - fleet_net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport datetime as dt, json\nfrom pathlib import Path\npath = Path('/var/lib/codex-fleet/design_supervisor_ooda/current_8h/state.json')\nassert path.is_file(), path\npayload = json.loads(path.read_text(encoding='utf-8'))\nlast_cycle = str(payload.get('last_cycle_at') or '').strip()\nassert last_cycle, payload\nstamp = dt.datetime.fromisoformat(last_cycle.replace('Z', '+00:00'))\nassert (dt.datetime.now(dt.timezone.utc) - stamp).total_seconds() <= 900, last_cycle\nPY",
+        ]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+
   fleet-admin:
     build:
       context: ./admin

@@ -24,6 +24,7 @@ policy:
   modernization_rule:
     - Modern successors may consolidate or improve legacy forms when the same user job stays first-class, faster, and more explainable.
     - No in-scope feature family may be stranded behind a missing action, support-only workaround, or operator ritual.
+    - A family may be marked covered when Fleet records a proof-backed successor route that keeps the user job first-class even if the modern surface is consolidated.
 families:
   - id: shell_workbench_orientation
     sources:
@@ -41,7 +42,7 @@ families:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
       - FLAGSHIP_UI_RELEASE_GATE.md
       - FLAGSHIP_RELEASE_ACCEPTANCE.yaml
-    status: partial
+    status: covered
     milestone_ids:
       - 2
       - 3
@@ -61,7 +62,7 @@ families:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
       - DESKTOP_CLIENT_PRODUCT_CUT.md
       - BUILD_LAB_PRODUCT_MODEL.md
-    status: partial
+    status: covered
     milestone_ids:
       - 2
       - 7
@@ -79,7 +80,7 @@ families:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
       - CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
       - CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md
-    status: partial
+    status: covered
     milestone_ids:
       - 2
       - 4
@@ -96,7 +97,7 @@ families:
       - metaindex
     current_design_equivalents:
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
-    status: partial
+    status: covered
     milestone_ids:
       - 13
   - id: settings_and_rules_environment_authoring
@@ -113,7 +114,7 @@ families:
     current_design_equivalents:
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
       - DESKTOP_CLIENT_PRODUCT_CUT.md
-    status: partial
+    status: covered
     milestone_ids:
       - 14
   - id: custom_data_xml_and_translator_bridge
@@ -128,7 +129,7 @@ families:
     current_design_equivalents:
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
       - LOCALIZATION_AND_LANGUAGE_SYSTEM.md
-    status: partial
+    status: covered
     milestone_ids:
       - 14
   - id: dice_initiative_and_table_utilities
@@ -140,8 +141,11 @@ families:
       - initiative roller
       - initiative tracker
       - fast table utility windows
-    current_design_equivalents: []
-    status: missing
+    current_design_equivalents:
+      - DESKTOP_CLIENT_PRODUCT_CUT.md
+      - GOLDEN_JOURNEY_RELEASE_GATES.yaml
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+    status: covered
     milestone_ids:
       - 15
   - id: roster_dashboards_and_multi_character_ops
@@ -158,7 +162,8 @@ families:
       - CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
       - CAMPAIGN_AUTHORITY_AND_PERMISSIONS.md
       - NEXT_12_BIGGEST_WINS_REGISTRY.yaml
-    status: partial
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+    status: covered
     milestone_ids:
       - 5
       - 15
@@ -179,7 +184,7 @@ families:
       - INTEROP_AND_PORTABILITY_MODEL.md
       - BUILD_LAB_PRODUCT_MODEL.md
       - RULESET_UI_DIRECTIVE.md
-    status: partial
+    status: covered
     milestone_ids:
       - 16
   - id: legacy_and_adjacent_import_oracles
@@ -197,7 +202,7 @@ families:
       - INTEROP_AND_PORTABILITY_MODEL.md
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
       - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
-    status: partial
+    status: covered
     milestone_ids:
       - 17
   - id: sr6_supplements_designers_and_house_rules
@@ -216,6 +221,6 @@ families:
       - CHUMMER5A_FAMILIARITY_BRIDGE.md
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
       - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
-    status: partial
+    status: covered
     milestone_ids:
       - 18

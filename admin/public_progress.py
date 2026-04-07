@@ -41,6 +41,7 @@ DEFAULT_PROGRESS_REPORT_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PRO
 DEFAULT_PROGRESS_HISTORY_PATH = FLEET_ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_POSTER_PATH = (MOUNTED_ADMIN_DIR if MOUNTED_ADMIN_DIR.exists() else ADMIN_DIR) / "assets" / "progress_poster.svg"
 DEFAULT_DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", str(FLEET_ROOT / "state" / "fleet.db")))
+DEFAULT_DESIGN_SUPERVISOR_STATE_PATH = FLEET_ROOT / "state" / "chummer_design_supervisor" / "state.json"
 DEFAULT_HUB_PARTICIPATE_URL = "https://chummer.run/participate"
 CANON_PROGRESS_CONFIG_PATH = CHUMMER_PRODUCT_CANON_DIR / "PUBLIC_PROGRESS_PARTS.yaml"
 CANON_PROGRESS_REPORT_PATH = CHUMMER_PRODUCT_CANON_DIR / "PROGRESS_REPORT.generated.json"
@@ -135,6 +136,50 @@ def _parse_date(value: Any) -> Optional[dt.date]:
         return dt.date.fromisoformat(raw)
     except ValueError:
         return None
+
+
+def _parse_eta_human_weeks(value: Any) -> tuple[int | None, int | None]:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return (None, None)
+    pieces = [piece.strip() for piece in raw.split("-", 1)]
+    if not pieces:
+        return (None, None)
+
+    def _parse_piece(piece: str) -> float | None:
+        match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([dhmw])?", piece.strip())
+        if not match:
+            return None
+        value_number = float(match.group(1))
+        unit = (match.group(2) or "w").strip().lower()
+        if unit == "h":
+            return value_number / (24.0 * 7.0)
+        if unit == "d":
+            return value_number / 7.0
+        if unit in {"w", ""}:
+            return value_number
+        return None
+
+    first = _parse_piece(pieces[0])
+    second = _parse_piece(pieces[1]) if len(pieces) > 1 else first
+    if first is None:
+        return (None, None)
+    if second is None:
+        second = first
+    low = min(first, second)
+    high = max(first, second)
+    return (int(math.ceil(max(0.0, low))), int(math.ceil(max(0.0, high))))
+
+
+def _load_chummer_design_supervisor_state(*, state_path: pathlib.Path | None = None) -> Dict[str, Any]:
+    if state_path is None:
+        raw_root = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT") or "").strip()
+        if raw_root:
+            candidate = pathlib.Path(raw_root)
+            state_path = candidate if candidate.name == "state.json" else (candidate / "state.json")
+        else:
+            state_path = DEFAULT_DESIGN_SUPERVISOR_STATE_PATH
+    return _load_json(state_path)
 
 
 def _load_yaml(path: pathlib.Path) -> Dict[str, Any]:
@@ -561,6 +606,139 @@ def _part_compile_rollup(project_rows: Sequence[Dict[str, Any]]) -> Dict[str, An
     }
 
 
+def _overall_momentum(parts: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    active_parts = [row for row in parts if int(row.get("remaining_open_milestones") or 0) > 0]
+    ranked_parts = active_parts or list(parts)
+    if not ranked_parts:
+        return {
+            "label": "Complete",
+            "summary": "All mapped public parts are currently at zero open milestones.",
+        }
+    lead = max(
+        ranked_parts,
+        key=lambda row: (
+            int(row.get("remaining_open_weight") or 0),
+            int(row.get("eta_weeks_high") or 0),
+            -int(row.get("progress_percent") or 0),
+        ),
+    )
+    lead_label = str(lead.get("momentum_label") or "").strip() or "Steady"
+    lead_name = str(lead.get("short_public_name") or lead.get("public_name") or lead.get("id") or "Current long pole").strip()
+    return {
+        "label": lead_label,
+        "summary": f"{lead_name} is currently setting the delivery pace.",
+    }
+
+
+def _release_readiness_summary(parts: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    active_parts = [row for row in parts if int(row.get("remaining_open_milestones") or 0) > 0]
+    if not active_parts:
+        return {
+            "status": "ready",
+            "summary": "All mapped public parts are at zero open milestone weight.",
+            "blocking_parts": [],
+        }
+    not_dispatchable = [
+        str(row.get("short_public_name") or row.get("public_name") or row.get("id") or "").strip()
+        for row in active_parts
+        if not bool(dict(row.get("source_status") or {}).get("dispatchable_truth_ready"))
+    ]
+    no_package_compile = [
+        str(row.get("short_public_name") or row.get("public_name") or row.get("id") or "").strip()
+        for row in active_parts
+        if not bool(dict(row.get("source_status") or {}).get("package_compile"))
+    ]
+    no_artifacts = [
+        str(row.get("short_public_name") or row.get("public_name") or row.get("id") or "").strip()
+        for row in active_parts
+        if not bool(dict(row.get("source_status") or {}).get("published_artifacts_present"))
+    ]
+    blocking_parts = sorted({label for label in (not_dispatchable + no_package_compile + no_artifacts) if label})
+    if blocking_parts:
+        return {
+            "status": "warning",
+            "summary": "Some active public parts are still missing dispatchable/package/published proof.",
+            "blocking_parts": blocking_parts,
+        }
+    return {
+        "status": "tracked",
+        "summary": "Active public parts are dispatchable and publishing artifacts; remaining work is milestone closure and acceptance proof.",
+        "blocking_parts": [],
+    }
+
+
+def _parity_summary(parts: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    uncovered_parts = [
+        {
+            "part_id": str(row.get("id") or "").strip(),
+            "label": str(row.get("short_public_name") or row.get("public_name") or row.get("id") or "").strip(),
+            "uncovered_scope_count": int(row.get("uncovered_scope_count") or 0),
+        }
+        for row in parts
+        if int(row.get("uncovered_scope_count") or 0) > 0
+    ]
+    if uncovered_parts:
+        return {
+            "status": "warning",
+            "summary": "Some public parts still carry uncovered-scope markers and should not be treated as parity-complete.",
+            "uncovered_parts": uncovered_parts,
+        }
+    return {
+        "status": "tracked",
+        "summary": "No uncovered-scope markers are currently attached to the mapped public parts. Release-blocking parity still closes through the flagship gate.",
+        "uncovered_parts": [],
+    }
+
+
+def _top_risks_summary(parts: Sequence[Dict[str, Any]], *, history_snapshot_count: int) -> List[Dict[str, Any]]:
+    risks: List[Dict[str, Any]] = []
+    for row in sorted(
+        parts,
+        key=lambda item: (
+            -int(item.get("uncovered_scope_count") or 0),
+            -int(item.get("remaining_open_milestones") or 0),
+            -int(item.get("eta_weeks_high") or 0),
+            str(item.get("public_name") or item.get("id") or ""),
+        ),
+    ):
+        label = str(row.get("short_public_name") or row.get("public_name") or row.get("id") or "").strip()
+        if not label:
+            continue
+        uncovered_scope_count = int(row.get("uncovered_scope_count") or 0)
+        source_status = dict(row.get("source_status") or {})
+        if uncovered_scope_count > 0:
+            risks.append(
+                {
+                    "key": f"{row.get('id')}:uncovered_scope",
+                    "summary": f"{label} still carries {uncovered_scope_count} uncovered-scope marker(s).",
+                }
+            )
+        elif int(row.get("remaining_open_milestones") or 0) > 0 and not bool(source_status.get("dispatchable_truth_ready")):
+            risks.append(
+                {
+                    "key": f"{row.get('id')}:dispatchable_truth",
+                    "summary": f"{label} still lacks dispatchable-truth readiness while milestone work remains open.",
+                }
+            )
+        elif int(row.get("remaining_open_milestones") or 0) > 0 and not bool(source_status.get("package_compile")):
+            risks.append(
+                {
+                    "key": f"{row.get('id')}:package_compile",
+                    "summary": f"{label} still lacks package-compile proof while milestone work remains open.",
+                }
+            )
+        if len(risks) >= 4:
+            break
+    if history_snapshot_count < 4:
+        risks.append(
+            {
+                "key": "history_depth",
+                "summary": f"Public progress history only has {history_snapshot_count} snapshot(s), so velocity confidence is still shallow.",
+            }
+        )
+    return risks[:5]
+
+
 def load_progress_history_payload(*, repo_root: pathlib.Path = FLEET_ROOT) -> Dict[str, Any]:
     for artifact_path in progress_history_artifact_candidates(repo_root):
         payload = _load_json(artifact_path)
@@ -625,6 +803,8 @@ def _method_limitations(
     history_snapshot_count: int,
     history_backed_eta: bool,
     eta_sources: Sequence[str],
+    eta_scope: str,
+    queue_open_milestones: int,
 ) -> List[str]:
     history_absence_markers = (
         "no long-term public history yet",
@@ -669,6 +849,13 @@ def _method_limitations(
             )
         if history_note not in limitations:
             limitations.append(history_note)
+    if eta_scope == "full_product_queue" and queue_open_milestones > 0:
+        queue_note = (
+            f"Mapped public milestones are complete, but the full-product frontier remains open with {queue_open_milestones} milestone(s). "
+            "Full completion requires full frontier closure."
+        )
+        if queue_note not in limitations:
+            limitations.append(queue_note)
     return limitations
 
 
@@ -697,6 +884,21 @@ def build_progress_report_payload(
     parts: List[Dict[str, Any]] = []
     total_design_weight = 0
     total_open_weight = 0
+    mapped_open_milestones = 0
+    supervisor_state = _load_chummer_design_supervisor_state()
+    supervisor_eta = dict(supervisor_state.get("eta") or {})
+    supervisor_open_frontier_milestones = int(supervisor_eta.get("remaining_open_milestones") or 0)
+    supervisor_frontier_ids = list(supervisor_state.get("frontier_ids") or [])
+    supervisor_open_milestone_ids = list(supervisor_state.get("open_milestone_ids") or [])
+    supervisor_active_runs = [
+        item
+        for item in (supervisor_state.get("active_runs") or [])
+        if isinstance(item, dict) and str(item.get("run_id") or "").strip()
+    ]
+    supervisor_active_runs_count = int(supervisor_state.get("active_runs_count") or len(supervisor_active_runs))
+    supervisor_mode = str(supervisor_state.get("mode") or "").strip() or "unknown"
+    supervisor_eta_human = str(supervisor_eta.get("eta_human") or "").strip()
+    supervisor_full_product_eta_weeks_low, supervisor_full_product_eta_weeks_high = _parse_eta_human_weeks(supervisor_eta_human)
 
     for part_cfg in parts_cfg:
         project_ids = [str(item).strip() for item in (part_cfg.get("mapped_projects") or []) if str(item).strip()]
@@ -787,6 +989,7 @@ def build_progress_report_payload(
             "source_projects": project_rows,
         }
         parts.append(part_payload)
+        mapped_open_milestones += remaining_count
 
     overall_progress_percent = 0
     if total_design_weight > 0:
@@ -795,6 +998,13 @@ def build_progress_report_payload(
     active_parts = [row for row in parts if int(row.get("remaining_open_milestones") or 0) > 0]
     next_checkpoint_eta_weeks_low = min((int(row.get("eta_weeks_low") or 0) for row in active_parts), default=0)
     next_checkpoint_eta_weeks_high = min((int(row.get("eta_weeks_high") or 0) for row in active_parts), default=0)
+    eta_scope = "mapped_frontier"
+    if not active_parts and mapped_open_milestones <= 0 and supervisor_open_frontier_milestones > 0:
+        eta_scope = "full_product_queue"
+        if supervisor_full_product_eta_weeks_low is not None:
+            next_checkpoint_eta_weeks_low = supervisor_full_product_eta_weeks_low
+        if supervisor_full_product_eta_weeks_high is not None:
+            next_checkpoint_eta_weeks_high = supervisor_full_product_eta_weeks_high
     longest_pole = max(
         parts,
         key=lambda row: (
@@ -823,6 +1033,43 @@ def build_progress_report_payload(
     active_wave = _current_recommended_wave()
     active_wave_status = _active_wave_status(active_wave)
     eta_summary = _eta_label(next_checkpoint_eta_weeks_low, next_checkpoint_eta_weeks_high)
+    momentum = _overall_momentum(parts)
+    release_readiness = _release_readiness_summary(parts)
+    parity = _parity_summary(parts)
+    top_risks = _top_risks_summary(parts, history_snapshot_count=history_snapshot_count)
+    if release_readiness.get("status") == "ready" and active_wave_status not in {"ready", "complete", "completed", "closed", "shipped"}:
+        release_readiness = {
+            "status": "tracked",
+            "summary": (
+                f"Mapped public parts are at zero open milestone weight, but the active wave is still {active_wave_status}; "
+                "flagship and release claims remain open until that wave closes."
+            ),
+            "blocking_parts": list(release_readiness.get("blocking_parts") or []),
+        }
+    if not active_parts and eta_scope == "full_product_queue":
+        release_readiness = {
+            "status": "tracked",
+            "summary": (
+                f"Mapped public parts are at zero open milestone weight, but there are still {supervisor_open_frontier_milestones} open milestones in the full-product frontier."
+            ),
+            "blocking_parts": list(release_readiness.get("blocking_parts") or []),
+        }
+    if not top_risks and active_wave_status not in {"ready", "complete", "completed", "closed", "shipped", "unknown", ""}:
+        top_risks = [
+            {
+                "key": "active_wave",
+                "summary": f"The active wave is still {active_wave_status}, so public progress is ahead of final release closure.",
+            }
+        ]
+    if not top_risks and not active_parts and eta_scope == "full_product_queue":
+        top_risks = [
+            {
+                "key": "full_product_queue",
+                "summary": f"{supervisor_open_frontier_milestones} open milestones remain in the full-product frontier.",
+            }
+        ]
+    headline = str(((config.get("hero") or {}).get("headline")) or "").strip()
+    overall_status = str(active_wave_status or release_readiness.get("status") or phase_label or "tracked").strip()
 
     return {
         "contract_name": PUBLIC_PROGRESS_CONTRACT_NAME,
@@ -835,8 +1082,15 @@ def build_progress_report_payload(
         # flat fields directly instead of the richer nested/public-guide shapes.
         "active_wave": active_wave,
         "active_wave_status": active_wave_status,
+        "headline": headline,
+        "overall_status": overall_status,
+        "progress_percent": overall_progress_percent,
+        "momentum": momentum,
+        "top_risks": top_risks,
+        "release_readiness": release_readiness,
+        "parity": parity,
         "hero": {
-            "headline": str(((config.get("hero") or {}).get("headline")) or "").strip(),
+            "headline": headline,
             "support": str(((config.get("hero") or {}).get("support")) or "").strip(),
             "ctas": [dict(item or {}) for item in (((config.get("hero") or {}).get("ctas")) or []) if isinstance(item, dict)],
         },
@@ -877,8 +1131,46 @@ def build_progress_report_payload(
                 history_snapshot_count=history_snapshot_count,
                 history_backed_eta=history_backed_eta,
                 eta_sources=eta_sources,
+                eta_scope=eta_scope,
+                queue_open_milestones=supervisor_open_frontier_milestones,
             ),
             "history_snapshot_count": history_snapshot_count,
+        },
+        "eta_scope": eta_scope,
+        "full_product_queue": {
+            "mode": supervisor_mode,
+            "active_runs_count": supervisor_active_runs_count,
+            "active_frontier_ids": [int(item) for item in supervisor_frontier_ids if isinstance(item, int)],
+            "open_frontier_milestones": supervisor_open_frontier_milestones,
+            "open_milestone_ids_count": len([item for item in supervisor_open_milestone_ids if str(item).strip()]),
+            "eta": {
+                "eta_human": supervisor_eta_human,
+                "eta_status": str(supervisor_eta.get("status") or "unknown").strip(),
+                "eta_weeks_low": supervisor_full_product_eta_weeks_low,
+                "eta_weeks_high": supervisor_full_product_eta_weeks_high,
+                "remaining_open_milestones": int(supervisor_open_frontier_milestones),
+                "remaining_in_progress_milestones": int(supervisor_eta.get("remaining_in_progress_milestones") or 0),
+                "remaining_not_started_milestones": int(supervisor_eta.get("remaining_not_started_milestones") or 0),
+            },
+            "active_runs": [
+                {
+                    "run_id": str((item or {}).get("run_id") or "").strip(),
+                    "shard": str((item or {}).get("_shard") or "").strip(),
+                    "frontier_count": len((item or {}).get("frontier_ids") or []),
+                    "frontier_ids": sorted(
+                        int(frontier_id)
+                        for frontier_id in (item or {}).get("frontier_ids") or []
+                        if isinstance(frontier_id, int)
+                    ),
+                }
+                for item in sorted(
+                    supervisor_active_runs,
+                    key=lambda item: (
+                        str((item or {}).get("_shard") or "").strip(),
+                        str((item or {}).get("run_id") or "").strip(),
+                    ),
+                )
+            ],
         },
         "closing": {
             "headline": str(((config.get("closing") or {}).get("headline")) or "").strip(),

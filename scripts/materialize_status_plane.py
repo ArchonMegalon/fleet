@@ -10,18 +10,31 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml
-from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+try:
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+except ModuleNotFoundError:
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
-from verify_status_plane_semantics import (
-    DEFAULT_STATUS_PLANE_PATH,
-    StatusPlaneDriftError,
-    build_expected_status_plane,
-    load_admin_status,
-)
+try:
+    from scripts.verify_status_plane_semantics import (
+        DEFAULT_STATUS_PLANE_PATH,
+        StatusPlaneDriftError,
+        build_expected_status_plane,
+        load_admin_status,
+    )
+except ModuleNotFoundError:
+    from verify_status_plane_semantics import (
+        DEFAULT_STATUS_PLANE_PATH,
+        StatusPlaneDriftError,
+        build_expected_status_plane,
+        load_admin_status,
+    )
 
 UTC = dt.timezone.utc
 ROOT = Path("/docker/fleet")
 PROJECT_CONFIG_DIR = ROOT / "config" / "projects"
+GROUP_CONFIG_PATH = ROOT / "config" / "groups.yaml"
+FLAGSHIP_READINESS_PATH = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 STAGE_ORDER = (
     "pre_repo_local_complete",
     "repo_local_complete",
@@ -34,6 +47,42 @@ STAGE_RANK = {name: index for index, name in enumerate(STAGE_ORDER)}
 
 def iso_now() -> str:
     return dt.datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _flagship_claim_status() -> Dict[str, Any]:
+    if not FLAGSHIP_READINESS_PATH.is_file():
+        return {}
+    try:
+        payload = json.loads(FLAGSHIP_READINESS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    flagship_readiness_audit = dict(payload.get("flagship_readiness_audit") or {})
+    coverage = dict(payload.get("coverage") or {})
+    warning_keys = [
+        str(item).strip()
+        for item in (payload.get("warning_keys") or [])
+        if str(item).strip()
+    ]
+    if not warning_keys:
+        warning_keys = [
+            str(item).strip()
+            for item in (flagship_readiness_audit.get("warning_coverage_keys") or [])
+            if str(item).strip()
+        ]
+    if not warning_keys and coverage:
+        warning_keys = sorted(
+            key for key, value in coverage.items() if str(key).strip() and str(value).strip().lower() == "warning"
+        )
+    return {
+        "status": str(payload.get("status") or "").strip().lower() or "unknown",
+        "warning_keys": warning_keys,
+        "bar": str(dict(payload.get("quality_policy") or {}).get("bar") or "").strip() or "unknown",
+        "whole_project_frontier_required": bool(dict(payload.get("quality_policy") or {}).get("whole_project_frontier_required")),
+        "feedback_autofix_loop_required": bool(dict(payload.get("quality_policy") or {}).get("feedback_autofix_loop_required")),
+        "accept_lowered_standards": bool(dict(payload.get("quality_policy") or {}).get("accept_lowered_standards")),
+    }
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -104,6 +153,43 @@ def _fleet_boundary_proof_passed(published_dir: Path) -> bool:
     return isinstance(support_packets.get("summary") or {}, dict)
 
 
+def _fleet_package_manifest_ready(published_dir: Path) -> bool:
+    compile_manifest = _load_json_file(published_dir / "compile.manifest.json")
+    if not compile_manifest:
+        return False
+    stages = dict(compile_manifest.get("stages") or {})
+    required_stages = (
+        "design_compile",
+        "policy_compile",
+        "execution_compile",
+        "package_compile",
+        "capacity_compile",
+    )
+    if any(stages.get(stage) is not True for stage in required_stages):
+        return False
+    artifact_inventory = {str(item or "").strip() for item in (compile_manifest.get("artifacts") or [])}
+    required_artifacts = {
+        "STATUS_PLANE.generated.yaml",
+        "PROGRESS_REPORT.generated.json",
+        "PROGRESS_HISTORY.generated.json",
+        "SUPPORT_CASE_PACKETS.generated.json",
+        "JOURNEY_GATES.generated.json",
+    }
+    if not required_artifacts.issubset(artifact_inventory):
+        compact_artifacts = {
+            "STATUS_PLANE.generated.yaml",
+            "WORKPACKAGES.generated.yaml",
+        }
+        if not (
+            bool(compile_manifest.get("dispatchable_truth_ready"))
+            and required_stages
+            and compact_artifacts.issubset(artifact_inventory)
+            and (published_dir / "WORKPACKAGES.generated.yaml").is_file()
+        ):
+            return False
+    return True
+
+
 def _infer_fallback_readiness_stage(
     project_id: str,
     project_root: Path,
@@ -170,6 +256,8 @@ def _infer_fallback_readiness_stage(
     elif project_id == "fleet":
         if _fleet_boundary_proof_passed(published_dir):
             return "boundary_pure"
+        if _fleet_package_manifest_ready(published_dir):
+            return "package_canonical"
     try:
         from admin import readiness as readiness_module
     except Exception:
@@ -224,6 +312,7 @@ def _load_project_config_rows() -> List[Dict[str, Any]]:
             if project_root
             else "pre_repo_local_complete"
         )
+        terminal_stage = "publicly_promoted"
         rows.append(
             {
                 "id": project_id,
@@ -231,14 +320,58 @@ def _load_project_config_rows() -> List[Dict[str, Any]]:
                 "runtime_status": "dispatch_pending",
                 "readiness": {
                     "stage": fallback_stage,
-                    "terminal_stage": "publicly_promoted",
-                    "final_claim_allowed": False,
+                    "terminal_stage": terminal_stage,
+                    "final_claim_allowed": fallback_stage == terminal_stage,
                     "warning_count": 0,
                 },
                 "deployment": {
                     "status": str(deployment.get("status") or ""),
                     "promotion_stage": str(deployment.get("promotion_stage") or ""),
                     "access_posture": str(deployment.get("access_posture") or deployment.get("visibility") or ""),
+                },
+            }
+        )
+    return rows
+
+
+def _load_group_config_rows() -> List[Dict[str, Any]]:
+    if not GROUP_CONFIG_PATH.is_file():
+        return []
+    payload = yaml.safe_load(GROUP_CONFIG_PATH.read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, dict):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for item in sorted(payload.get("project_groups") or [], key=lambda row: str(dict(row or {}).get("id") or "")):
+        row = dict(item or {})
+        group_id = str(row.get("id") or "").strip()
+        if not group_id:
+            continue
+        deployment = dict(row.get("deployment") or {})
+        public_surface = dict(deployment.get("public_surface") or {})
+        status = str(public_surface.get("status") or "").strip()
+        promotion_stage = str(public_surface.get("promotion_stage") or "").strip()
+        access_posture = str(public_surface.get("access_posture") or "").strip() or status
+        values = {
+            status.lower(),
+            promotion_stage.lower(),
+            access_posture.lower(),
+        }
+        publicly_promoted = any(
+            value in {"public", "public_preview", "promoted_preview", "publicly_promoted"} for value in values if value
+        )
+        rows.append(
+            {
+                "id": group_id,
+                "lifecycle": str(row.get("lifecycle") or "").strip(),
+                "phase": str(row.get("phase") or "active").strip() or "active",
+                "deployment": {
+                    "status": status,
+                    "promotion_stage": promotion_stage,
+                    "access_posture": access_posture,
+                },
+                "deployment_readiness": {
+                    "publicly_promoted": publicly_promoted,
+                    "blocking_owner_projects": [],
                 },
             }
         )
@@ -259,12 +392,15 @@ def _recompute_readiness_counts(projects: List[Dict[str, Any]]) -> Dict[str, int
 def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
     normalized = dict(admin_status or {})
     projects = list(normalized.get("projects") or [])
+    groups = list(normalized.get("groups") or [])
     fallback_projects = _load_project_config_rows()
+    fallback_groups = _load_group_config_rows()
     fallback_by_id = {
         str(item.get("id") or "").strip(): dict(item.get("readiness") or {})
         for item in fallback_projects
         if str(item.get("id") or "").strip()
     }
+    inventory_changed = False
 
     if projects:
         upgraded_projects: List[Dict[str, Any]] = []
@@ -273,34 +409,73 @@ def _ensure_project_inventory(admin_status: Dict[str, Any]) -> Dict[str, Any]:
             project_row = dict(row or {})
             project_id = str(project_row.get("id") or "").strip()
             readiness = dict(project_row.get("readiness") or {})
+            fallback_readiness = dict(fallback_by_id.get(project_id) or {})
             current_stage = str(readiness.get("stage") or "pre_repo_local_complete").strip() or "pre_repo_local_complete"
-            fallback_stage = str((fallback_by_id.get(project_id) or {}).get("stage") or "").strip()
+            fallback_stage = str(fallback_readiness.get("stage") or "").strip()
+            fallback_terminal_stage = str(fallback_readiness.get("terminal_stage") or "").strip()
+            fallback_final_claim_allowed = bool(fallback_readiness.get("final_claim_allowed"))
+            readiness_changed = False
             if fallback_stage and STAGE_RANK.get(fallback_stage, -1) > STAGE_RANK.get(current_stage, -1):
                 readiness["stage"] = fallback_stage
+                readiness_changed = True
+            if fallback_terminal_stage and not str(readiness.get("terminal_stage") or "").strip():
+                readiness["terminal_stage"] = fallback_terminal_stage
+                readiness_changed = True
+            if fallback_final_claim_allowed and not bool(readiness.get("final_claim_allowed")):
+                readiness["final_claim_allowed"] = True
+                readiness_changed = True
+            if readiness_changed:
                 project_row["readiness"] = readiness
                 stage_upgraded = True
             upgraded_projects.append(project_row)
-        if not stage_upgraded:
-            return normalized
-        normalized["projects"] = upgraded_projects
+        if stage_upgraded:
+            normalized["projects"] = upgraded_projects
+            inventory_changed = True
     elif fallback_projects:
         normalized["projects"] = fallback_projects
-    else:
-        return normalized
+        inventory_changed = True
+
+    if not groups and fallback_groups:
+        normalized["groups"] = fallback_groups
+        inventory_changed = True
 
     public_status = dict(normalized.get("public_status") or {})
     readiness_summary = dict(public_status.get("readiness_summary") or {})
     counts = _recompute_readiness_counts(list(normalized.get("projects") or []))
     readiness_summary["counts"] = counts
-    readiness_summary["warning_count"] = int(readiness_summary.get("warning_count") or 0)
-    readiness_summary["final_claim_ready"] = int(
-        readiness_summary.get("final_claim_ready")
-        or sum(
-            1
-            for project in (normalized.get("projects") or [])
-            if bool(dict(project.get("readiness") or {}).get("final_claim_allowed"))
-        )
+    final_claim_ready_project_ids = sorted(
+        str(project.get("id") or "").strip()
+        for project in (normalized.get("projects") or [])
+        if str(project.get("id") or "").strip()
+        and bool(dict(project.get("readiness") or {}).get("final_claim_allowed"))
     )
+    readiness_summary["final_claim_ready"] = len(final_claim_ready_project_ids)
+    readiness_summary["final_claim_ready_project_ids"] = final_claim_ready_project_ids
+    flagship_claim = _flagship_claim_status()
+    readiness_summary["whole_product_final_claim_status"] = str(flagship_claim.get("status") or "unknown")
+    readiness_summary["whole_product_final_claim_bar"] = str(flagship_claim.get("bar") or "unknown")
+    readiness_summary["whole_product_final_claim_whole_project_frontier_required"] = bool(
+        flagship_claim.get("whole_project_frontier_required")
+    )
+    readiness_summary["whole_product_final_claim_feedback_autofix_loop_required"] = bool(
+        flagship_claim.get("feedback_autofix_loop_required")
+    )
+    readiness_summary["whole_product_final_claim_accept_lowered_standards"] = bool(
+        flagship_claim.get("accept_lowered_standards")
+    )
+    readiness_summary["whole_product_final_claim_ready"] = int(
+        str(flagship_claim.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        and str(flagship_claim.get("bar") or "").strip().lower() == "top_flagship_grade"
+        and bool(flagship_claim.get("whole_project_frontier_required"))
+        and bool(flagship_claim.get("feedback_autofix_loop_required"))
+        and not bool(flagship_claim.get("accept_lowered_standards"))
+    )
+    readiness_summary["whole_product_final_claim_warning_keys"] = [
+        str(item).strip()
+        for item in (flagship_claim.get("warning_keys") or [])
+        if str(item).strip()
+    ]
+    readiness_summary["warning_count"] = len(readiness_summary["whole_product_final_claim_warning_keys"])
     public_status["readiness_summary"] = readiness_summary
     normalized["public_status"] = public_status
     return normalized
@@ -313,7 +488,7 @@ def main(argv: List[str] | None = None) -> int:
     status_json_out_path = Path(args.status_json_out).resolve() if args.status_json_out else None
 
     try:
-        admin_status = load_admin_status(status_json_path, use_default_snapshot=False)
+        admin_status = load_admin_status(status_json_path, use_default_snapshot=True)
     except StatusPlaneDriftError as exc:
         if status_json_path is not None:
             print(f"status-plane materialization failed: {exc}", file=sys.stderr)

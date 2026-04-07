@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import urllib.error
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -1889,6 +1890,72 @@ class ControllerRoutingTests(unittest.TestCase):
                 payload = self.controller.ea_onemin_manager_status(force=True)
 
         self.assertEqual(payload["aggregate"]["sum_free_credits"], 910000)
+
+    def test_ea_onemin_manager_status_prefers_global_scope_and_falls_back_when_forbidden(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.controller.DB_PATH = Path(tmpdir) / "fleet.db"
+            self.controller.LOG_DIR = Path(tmpdir) / "logs"
+            self.controller.CODEX_HOME_ROOT = Path(tmpdir) / "homes"
+            self.controller.GROUP_ROOT = Path(tmpdir) / "groups"
+            self.controller.init_db()
+            self.controller._EA_ONEMIN_MANAGER_CACHE = {"fetched_at": 0.0, "payload": {}}
+
+            class DummyResponse:
+                def __init__(self, payload: dict[str, object]) -> None:
+                    self._payload = payload
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb) -> bool:
+                    return False
+
+                def read(self) -> bytes:
+                    return json.dumps(self._payload).encode("utf-8")
+
+            requested_urls: list[str] = []
+            payloads = {
+                "/v1/providers/onemin/aggregate": {"scope": "principal_bindings", "sum_free_credits": 1000},
+                "/v1/providers/onemin/runway": {"forecast": {"scope": "principal_bindings", "remaining_credits": 1000}},
+                "/v1/providers/onemin/runway?scope=global": {"forecast": {"scope": "global_pool", "remaining_credits": 2000}},
+            }
+
+            def fake_urlopen(request, timeout=3):
+                url = request.full_url
+                requested_urls.append(url)
+                if url.endswith("/v1/providers/onemin/aggregate?scope=global"):
+                    raise urllib.error.HTTPError(url, 403, "forbidden", hdrs=None, fp=None)
+                for suffix, payload in payloads.items():
+                    if url.endswith(suffix):
+                        return DummyResponse(payload)
+                raise AssertionError(url)
+
+            with mock.patch.dict(
+                self.controller.os.environ,
+                {
+                    "EA_MCP_BASE_URL": "http://ea.example",
+                    "EA_API_TOKEN": "test-token",
+                    "EA_MCP_PRINCIPAL_ID": "codex-fleet",
+                },
+                clear=False,
+            ):
+                with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                    payload = self.controller.ea_onemin_manager_status(force=True)
+
+        self.assertEqual(payload["aggregate"]["scope"], "principal_bindings")
+        self.assertEqual(payload["runway"]["forecast"]["scope"], "global_pool")
+        self.assertTrue(
+            requested_urls[0].endswith("/v1/providers/onemin/aggregate?scope=global"),
+            requested_urls,
+        )
+        self.assertTrue(
+            requested_urls[1].endswith("/v1/providers/onemin/aggregate"),
+            requested_urls,
+        )
+        self.assertTrue(
+            requested_urls[2].endswith("/v1/providers/onemin/runway?scope=global"),
+            requested_urls,
+        )
 
     def test_participant_burst_metrics_scale_one_ready_lane_at_a_time_from_credit_guard(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -4,29 +4,47 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
+try:
+    from scripts.external_proof_paths import (
+        DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR,
+        DEFAULT_EXTERNAL_PROOF_RUNBOOK,
+        DEFAULT_JOURNEY_GATES,
+        DEFAULT_RELEASE_CHANNEL,
+        DEFAULT_SUPPORT_PACKETS,
+        UI_DOCKER_DOWNLOADS_ROOT,
+        UI_LOCALIZATION_RELEASE_GATE_PATH,
+        UI_LOCAL_RELEASE_PROOF_PATH,
+        normalize_external_proof_relative_path,
+        normalize_external_proof_tuple_id,
+    )
+except ModuleNotFoundError:
+    from external_proof_paths import (
+        DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR,
+        DEFAULT_EXTERNAL_PROOF_RUNBOOK,
+        DEFAULT_JOURNEY_GATES,
+        DEFAULT_RELEASE_CHANNEL,
+        DEFAULT_SUPPORT_PACKETS,
+        UI_DOCKER_DOWNLOADS_ROOT,
+        UI_LOCALIZATION_RELEASE_GATE_PATH,
+        UI_LOCAL_RELEASE_PROOF_PATH,
+        normalize_external_proof_relative_path,
+        normalize_external_proof_tuple_id,
+    )
 
-DEFAULT_SUPPORT_PACKETS = Path("/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json")
-DEFAULT_JOURNEY_GATES = Path("/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json")
-DEFAULT_RELEASE_CHANNEL = Path(
-    "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
-)
-DEFAULT_EXTERNAL_PROOF_RUNBOOK = Path("/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md")
-DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = Path("/docker/fleet/.codex-studio/published/external-proof-commands")
 DEFAULT_MAX_ARTIFACT_AGE_HOURS = 24
-REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH = (
-    "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"
-)
-REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH = (
-    "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
-)
+REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH = str(UI_LOCAL_RELEASE_PROOF_PATH)
+REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH = str(UI_LOCALIZATION_RELEASE_GATE_PATH)
 REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
     "generate-releases-manifest.sh",
     "materialize_public_release_channel.py",
+    f"--proof {REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH}",
+    f"--ui-localization-release-gate {REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH}",
     "verify_public_release_channel.py",
     "materialize_status_plane.py",
     "verify_status_plane_semantics.py",
@@ -39,6 +57,9 @@ REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
     "materialize_weekly_product_pulse_snapshot.py",
     "chummer_design_supervisor.py status",
 )
+ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smoke_receipt"})
+ALLOWED_REQUIRED_HOSTS = frozenset({"windows", "macos", "linux"})
+
 
 
 def _parse_args() -> argparse.Namespace:
@@ -77,6 +98,19 @@ def _parse_args() -> argparse.Namespace:
             "Fail closed when release/support/journey evidence timestamps are older than this many hours. "
             "Set to 0 to disable max-age checks."
         ),
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Emit machine-readable JSON output instead of human-readable text. "
+            "Exit code still indicates pass/fail."
+        ),
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress success banner output when verification passes.",
     )
     return parser.parse_args()
 
@@ -191,6 +225,57 @@ def _normalized_token(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_proof_capture_command(value: Any) -> str:
+    raw = _normalized_token(value)
+    if not raw:
+        return ""
+    try:
+        tokens = shlex.split(raw, posix=True)
+    except ValueError:
+        tokens = raw.split()
+    return " ".join(
+        token
+        for token in tokens
+        if not token.startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
+    )
+
+
+def _normalized_required_proofs(
+    value: Any, *, field: str, failures: list[str], required: set[str] = frozenset(ALLOWED_REQUIRED_PROOFS)
+) -> list[str]:
+    if not isinstance(value, list):
+        failures.append(f"{field} must be a string array")
+        return []
+    if not value:
+        return []
+    normalized: set[str] = set()
+    for token in value:
+        if not isinstance(token, str):
+            failures.append(
+                f"{field} contains a non-string required_proofs token: {_normalized_token(token)!r}"
+            )
+            continue
+        normalized_token = token.strip().lower()
+        if normalized_token:
+            normalized.add(normalized_token)
+    if not normalized:
+        return []
+    unknown_tokens = sorted(normalized - required)
+    if unknown_tokens:
+        failures.append(
+            f"{field} contains unsupported required proof token(s): "
+            + ", ".join(unknown_tokens)
+        )
+    return sorted(normalized)
+
+
+def _normalize_expected_relative_path(value: Any, *, field: str) -> str:
+    raw = _normalized_token(value)
+    if not raw:
+        return ""
+    return normalize_external_proof_relative_path(raw, field=field)
+
+
 def _normalize_host_token(value: str) -> str:
     text = "".join(ch if ch.isalnum() else "-" for ch in _normalized_token(value).lower())
     text = text.strip("-")
@@ -234,11 +319,12 @@ def _normalized_smoke_contract(value: Any) -> dict[str, Any]:
 def _normalized_command_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [
-        _normalized_token(item)
-        for item in value
-        if _normalized_token(item)
-    ]
+    normalized = []
+    for token in value:
+        normalized_command = _normalize_proof_capture_command(token)
+        if normalized_command:
+            normalized.append(normalized_command)
+    return normalized
 
 
 def _powershell_wrap(command: str) -> str:
@@ -252,12 +338,18 @@ def _require_windows_wrapper_failfast(
     wrapper_label: str,
     failures: list[str],
 ) -> None:
+    effective_lines = [
+        line.strip()
+        for line in payload.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    effective_payload = "\n".join(effective_lines)
     required_tokens = (
         "$ErrorActionPreference = 'Stop'",
         "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
     )
     for token in required_tokens:
-        if token not in payload:
+        if token not in effective_payload:
             failures.append(
                 f"external proof {wrapper_label} is missing fail-fast token: {token}"
             )
@@ -281,15 +373,21 @@ def _require_bash_failfast(
     script_label: str,
     failures: list[str],
 ) -> None:
-    required_tokens = (
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-    )
-    for token in required_tokens:
-        if token not in payload:
-            failures.append(
-                f"external proof {script_label} is missing fail-fast token: {token}"
-            )
+    lines = payload.splitlines()
+    first_line = lines[0].strip() if lines else ""
+    if first_line != "#!/usr/bin/env bash":
+        failures.append(
+            f"external proof {script_label} is missing fail-fast token: #!/usr/bin/env bash"
+        )
+    effective_lines = [
+        line.strip()
+        for line in lines
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if "set -euo pipefail" not in effective_lines:
+        failures.append(
+            f"external proof {script_label} is missing fail-fast token: set -euo pipefail"
+        )
 
 
 def _release_external_request_index(rows: Any) -> dict[str, dict[str, Any]]:
@@ -473,6 +571,7 @@ def main() -> int:
         "unresolved_external_proof_request_count": (int, float, str),
         "unresolved_external_proof_request_hosts": list,
         "unresolved_external_proof_request_tuples": list,
+        "unresolved_external_proof_request_specs": (dict, list),
         "unresolved_external_proof_request_host_counts": dict,
         "unresolved_external_proof_request_tuple_counts": dict,
     }
@@ -482,10 +581,6 @@ def main() -> int:
             continue
         if not isinstance(support_summary.get(key), expected):
             failures.append(f"support packets summary.{key} has invalid type")
-    if "unresolved_external_proof_request_specs" not in support_summary:
-        failures.append("support packets summary.unresolved_external_proof_request_specs is missing")
-    elif not isinstance(support_summary.get("unresolved_external_proof_request_specs"), (dict, list)):
-        failures.append("support packets summary.unresolved_external_proof_request_specs has invalid type")
 
     journey_summary_key_types = {
         "blocked_external_only_count": (int, float, str),
@@ -611,23 +706,154 @@ def main() -> int:
                     failures=failures,
                 )
                 > 0
-                or any(str(item).strip() for item in (raw_group.get("tuples") or []))
+                or any(
+                    str(item).strip()
+                    for item in (
+                        raw_group.get("tuples")
+                        or raw_group.get("tuple_ids")
+                        or raw_group.get("tupleIds")
+                        or []
+                    )
+                )
                 or any(isinstance(item, dict) for item in (raw_group.get("requests") or []))
             )
         }
     )
+    support_plan_host_group_tuple_ids_invalid: list[str] = []
+    support_plan_host_group_tuple_ids_duplicates: list[str] = []
+    support_plan_host_group_tuple_ids_mismatched_host: list[str] = []
+    support_plan_host_group_empty_host_keys: list[str] = []
+    support_plan_host_group_invalid_hosts: list[str] = []
+    support_plan_request_rows_invalid_tuple_ids: list[str] = []
+    support_plan_request_rows_missing_tuple_id: list[str] = []
+    support_plan_request_rows_invalid_required_host: list[str] = []
+    support_plan_request_rows_duplicate_tuple_ids: list[str] = []
+    support_plan_request_rows_missing_required_proofs: list[str] = []
     support_plan_request_rows: list[tuple[str, int, dict[str, Any]]] = []
     for raw_host, raw_group in support_plan_host_groups.items():
-        host = str(raw_host).strip()
-        if not host or not isinstance(raw_group, dict):
+        host = _normalized_platform(raw_host)
+        if not host:
+            support_plan_host_group_empty_host_keys.append(str(raw_host))
             continue
+        if host not in ALLOWED_REQUIRED_HOSTS:
+            support_plan_host_group_invalid_hosts.append(host)
+        if not isinstance(raw_group, dict):
+            failures.append(
+                f"support packets unresolved_external_proof_execution_plan.host_groups.{host} is not an object"
+            )
+            continue
+        raw_group_tuples = raw_group.get("tuples")
+        if raw_group_tuples is None:
+            raw_group_tuples = raw_group.get("tuple_ids") or raw_group.get("tupleIds")
+        if raw_group_tuples is not None and not isinstance(raw_group_tuples, list):
+            failures.append(
+                f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.tuples is not an array"
+            )
+        host_group_tuple_ids: set[str] = set()
+        for tuple_index, raw_tuple_id in enumerate(raw_group_tuples or []):
+            tuple_id = _normalized_token(raw_tuple_id)
+            if not tuple_id:
+                failures.append(
+                    f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.tuples[{tuple_index}] is missing"
+                )
+                continue
+            try:
+                tuple_id = normalize_external_proof_tuple_id(
+                    tuple_id,
+                    field=(
+                        "support packets unresolved_external_proof_execution_plan."
+                        f"host_groups.{host}.tuples[{tuple_index}]"
+                    ),
+                )
+                if tuple_id in host_group_tuple_ids:
+                    support_plan_host_group_tuple_ids_duplicates.append(f"{host}:{tuple_id}")
+                host_group_tuple_ids.add(tuple_id)
+                tuple_parts = tuple_id.split(":")
+                tuple_host = tuple_parts[2].strip() if len(tuple_parts) == 3 else ""
+                if tuple_host and tuple_host != host:
+                    support_plan_host_group_tuple_ids_mismatched_host.append(
+                        f"{tuple_id}: tuple host ({tuple_host}) does not match group host ({host})"
+                    )
+            except ValueError as exc:
+                support_plan_host_group_tuple_ids_invalid.append(f"{host}: {tuple_id}: {exc}")
         raw_requests = raw_group.get("requests")
+        if raw_requests is None:
+            raw_requests = []
         if not isinstance(raw_requests, list):
+            failures.append(
+                f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.requests is not an array"
+            )
             continue
+        request_group_tuple_ids: set[str] = set()
         for index, item in enumerate(raw_requests):
             if not isinstance(item, dict):
+                failures.append(
+                    f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}] is not an object"
+                )
                 continue
-            support_plan_request_rows.append((host, index, dict(item)))
+            row = dict(item)
+            raw_tuple_id = row.get("tuple_id") or row.get("tupleId")
+            if not raw_tuple_id:
+                support_plan_request_rows_missing_tuple_id.append(
+                    f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].tuple_id"
+                )
+                support_plan_request_rows.append((host, index, row))
+                continue
+            tuple_id = _normalized_token(raw_tuple_id)
+            if not tuple_id:
+                support_plan_request_rows_missing_tuple_id.append(
+                    f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].tuple_id"
+                )
+                support_plan_request_rows.append((host, index, row))
+                continue
+            try:
+                tuple_id = normalize_external_proof_tuple_id(
+                    tuple_id,
+                    field=(
+                        "support packets unresolved_external_proof_execution_plan."
+                        f"host_groups.{host}.requests[{index}].tuple_id"
+                    ),
+                )
+                row["tuple_id"] = tuple_id
+                if tuple_id in request_group_tuple_ids:
+                    support_plan_request_rows_duplicate_tuple_ids.append(f"{host}:{tuple_id}")
+                request_group_tuple_ids.add(tuple_id)
+                tuple_parts = tuple_id.split(":")
+                tuple_host = tuple_parts[2].strip() if len(tuple_parts) == 3 else ""
+                if tuple_host and tuple_host != host:
+                    support_plan_request_rows_invalid_required_host.append(
+                        f"{tuple_id}: tuple host ({tuple_host}) does not match group host ({host})"
+                    )
+                required_host = _normalized_platform(
+                    row.get("required_host") or row.get("requiredHost") or row.get("platform")
+                )
+                if required_host:
+                    if required_host not in ALLOWED_REQUIRED_HOSTS:
+                        support_plan_request_rows_invalid_required_host.append(
+                            f"{tuple_id}: requiredHost is invalid: {required_host}"
+                        )
+                    elif required_host != host:
+                        support_plan_request_rows_invalid_required_host.append(
+                            f"{tuple_id}: requiredHost ({required_host}) does not match group host ({host})"
+                        )
+                required_proofs = _normalized_required_proofs(
+                    row.get("required_proofs") if row.get("required_proofs") is not None else row.get("requiredProofs"),
+                    field=(
+                        f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].required_proofs"
+                    ),
+                    failures=failures,
+                )
+                row["required_proofs"] = required_proofs
+                if not {
+                    "promoted_installer_artifact",
+                    "startup_smoke_receipt",
+                }.issubset(set(required_proofs)):
+                    support_plan_request_rows_missing_required_proofs.append(tuple_id)
+            except ValueError as exc:
+                support_plan_request_rows_invalid_tuple_ids.append(
+                    f"support packets unresolved_external_proof_execution_plan.host_groups.{host}.requests[{index}].tuple_id: {exc}"
+                )
+            support_plan_request_rows.append((host, index, row))
     support_plan_request_deadlines = sorted(
         {
             str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
@@ -646,23 +872,6 @@ def main() -> int:
             for item in (raw_group.get("requests") or [])
             if isinstance(item, dict)
             and not str(item.get("capture_deadline_utc") or item.get("captureDeadlineUtc") or "").strip()
-        }
-    )
-    support_plan_request_rows_missing_required_proofs = sorted(
-        {
-            str(item.get("tuple_id") or item.get("tupleId") or "").strip() or "<unknown>"
-            for _, _, item in support_plan_request_rows
-            if not {
-                str(token).strip().lower()
-                for token in (
-                    item.get("required_proofs")
-                    if isinstance(item.get("required_proofs"), list)
-                    else item.get("requiredProofs")
-                    if isinstance(item.get("requiredProofs"), list)
-                    else []
-                )
-                if str(token).strip()
-            }.issuperset({"promoted_installer_artifact", "startup_smoke_receipt"})
         }
     )
     support_plan_request_rows_missing_capture_commands = sorted(
@@ -729,6 +938,116 @@ def main() -> int:
             if not str(value or "").strip()
         }
     )
+    support_plan_request_rows_invalid_expected_installer_relative_paths: list[str] = []
+    support_plan_request_rows_invalid_expected_startup_smoke_receipt_paths: list[str] = []
+    for raw_host, _, item in support_plan_request_rows:
+        tuple_id = str(item.get("tuple_id") or item.get("tupleId") or "<unknown>").strip()
+        if not tuple_id:
+            tuple_id = "<unknown>"
+        installer_relative_path = item.get("expected_installer_relative_path") or item.get("expectedInstallerRelativePath")
+        if str(installer_relative_path or "").strip():
+            try:
+                _normalize_expected_relative_path(
+                    installer_relative_path,
+                    field=(
+                        "unresolved_external_proof_execution_plan.host_groups."
+                        f"{str(raw_host).strip()}.requests.expected_installer_relative_path"
+                    ),
+                )
+            except ValueError as exc:
+                support_plan_request_rows_invalid_expected_installer_relative_paths.append(f"{tuple_id}: {exc}")
+        startup_smoke_receipt_path = item.get("expected_startup_smoke_receipt_path") or item.get("expectedStartupSmokeReceiptPath")
+        if str(startup_smoke_receipt_path or "").strip():
+            try:
+                _normalize_expected_relative_path(
+                    startup_smoke_receipt_path,
+                    field=(
+                        "unresolved_external_proof_execution_plan.host_groups."
+                        f"{str(raw_host).strip()}.requests.expected_startup_smoke_receipt_path"
+                    ),
+                )
+            except ValueError as exc:
+                support_plan_request_rows_invalid_expected_startup_smoke_receipt_paths.append(
+                    f"{tuple_id}: {exc}"
+                )
+    support_specs_invalid_expected_installer_relative_paths: list[str] = []
+    support_specs_invalid_expected_startup_smoke_receipt_paths: list[str] = []
+    support_specs_invalid_tuple_ids: list[str] = []
+    support_specs_invalid_required_host: list[str] = []
+    support_specs_missing_required_proofs: list[str] = []
+    unresolved_specs_raw = support_summary.get("unresolved_external_proof_request_specs")
+    if isinstance(unresolved_specs_raw, list):
+        if unresolved_specs_raw:
+            failures.append(
+                "support packets summary.unresolved_external_proof_request_specs has invalid type"
+            )
+            unresolved_specs_raw = {}
+        else:
+            unresolved_specs_raw = {}
+    if isinstance(unresolved_specs_raw, dict):
+        for tuple_id, spec in unresolved_specs_raw.items():
+            if not isinstance(spec, dict):
+                continue
+            raw_tuple_id = str(tuple_id or "").strip() or "<unknown>"
+            normalized_tuple_id = raw_tuple_id
+            try:
+                normalized_tuple_id = normalize_external_proof_tuple_id(
+                    raw_tuple_id,
+                    field=f"summary.unresolved_external_proof_request_specs.{raw_tuple_id}.tuple_id",
+                )
+            except ValueError as exc:
+                support_specs_invalid_tuple_ids.append(f"{raw_tuple_id}: {exc}")
+                continue
+            tuple_parts = normalized_tuple_id.split(":")
+            tuple_host = tuple_parts[2].strip() if len(tuple_parts) == 3 else ""
+            required_host = _normalized_platform(spec.get("required_host") or spec.get("requiredHost"))
+            if required_host:
+                if required_host not in ALLOWED_REQUIRED_HOSTS:
+                    support_specs_invalid_required_host.append(
+                        f"{normalized_tuple_id}: required_host is invalid: {required_host}"
+                    )
+                elif tuple_host and required_host != tuple_host:
+                    support_specs_invalid_required_host.append(
+                        f"{normalized_tuple_id}: required_host ({required_host}) does not match tuple host ({tuple_host})"
+                    )
+            required_proofs = _normalized_required_proofs(
+                spec.get("required_proofs") if spec.get("required_proofs") is not None else spec.get("requiredProofs"),
+                field=f"summary.unresolved_external_proof_request_specs.{normalized_tuple_id}.required_proofs",
+                failures=failures,
+            )
+            if not {
+                "promoted_installer_artifact",
+                "startup_smoke_receipt",
+            }.issubset(set(required_proofs)):
+                support_specs_missing_required_proofs.append(normalized_tuple_id)
+            installer_relative_path = spec.get("expected_installer_relative_path") or spec.get(
+                "expectedInstallerRelativePath"
+            )
+            if str(installer_relative_path or "").strip():
+                try:
+                    _normalize_expected_relative_path(
+                        installer_relative_path,
+                        field=(
+                            "summary.unresolved_external_proof_request_specs."
+                            f"{raw_tuple_id}.expected_installer_relative_path"
+                        ),
+                    )
+                except ValueError as exc:
+                    support_specs_invalid_expected_installer_relative_paths.append(f"{raw_tuple_id}: {exc}")
+            startup_smoke_receipt_path = spec.get("expected_startup_smoke_receipt_path") or spec.get(
+                "expectedStartupSmokeReceiptPath"
+            )
+            if str(startup_smoke_receipt_path or "").strip():
+                try:
+                    _normalize_expected_relative_path(
+                        startup_smoke_receipt_path,
+                        field=(
+                            "summary.unresolved_external_proof_request_specs."
+                            f"{raw_tuple_id}.expected_startup_smoke_receipt_path"
+                        ),
+                    )
+                except ValueError as exc:
+                    support_specs_invalid_expected_startup_smoke_receipt_paths.append(f"{raw_tuple_id}: {exc}")
     support_generated_at = str(
         support_packets.get("generated_at") or support_packets.get("generatedAt") or ""
     ).strip()
@@ -772,6 +1091,9 @@ def main() -> int:
     ]
     external_request_tuples: list[str] = []
     release_external_request_rows_missing_expected_sha256: list[str] = []
+    release_external_request_rows_invalid_expected_installer_relative_paths: list[str] = []
+    release_external_request_rows_invalid_expected_startup_smoke_receipt_paths: list[str] = []
+    release_external_request_invalid_tuple_ids: list[str] = []
     if isinstance(external_proof_requests_raw, list):
         for index, request in enumerate(external_proof_requests_raw):
             if not isinstance(request, dict):
@@ -787,15 +1109,21 @@ def main() -> int:
                     f"[{index}] is missing tupleId"
                 )
                 continue
+            try:
+                tuple_id = normalize_external_proof_tuple_id(
+                    tuple_id,
+                    field=(
+                        "desktopTupleCoverage.externalProofRequests"
+                        f"[{index}].tupleId"
+                    ),
+            )
+            except ValueError as exc:
+                release_external_request_invalid_tuple_ids.append(f"{tuple_id}: {exc}")
+                continue
             external_request_tuples.append(tuple_id)
             tuple_parts = tuple_id.split(":")
-            if len(tuple_parts) != 3:
-                failures.append(
-                    "release channel desktopTupleCoverage.externalProofRequests"
-                    f"[{index}] tupleId is malformed: {tuple_id}"
-                )
-            required_host = str(request.get("requiredHost") or request.get("required_host") or "").strip().lower()
-            if required_host and required_host not in {"windows", "macos", "linux"}:
+            required_host = _normalized_platform(request.get("requiredHost") or request.get("required_host"))
+            if required_host and required_host not in ALLOWED_REQUIRED_HOSTS:
                 failures.append(
                     "release channel desktopTupleCoverage.externalProofRequests"
                     f"[{index}] requiredHost is invalid: {required_host}"
@@ -805,26 +1133,55 @@ def main() -> int:
                     "release channel desktopTupleCoverage.externalProofRequests"
                     f"[{index}] requiredHost ({required_host}) does not match tuple platform ({tuple_parts[2].strip().lower()})"
                 )
-            required_proofs_raw = request.get("requiredProofs")
-            if required_proofs_raw is None:
-                required_proofs_raw = request.get("required_proofs")
-            if not isinstance(required_proofs_raw, list) or not all(
-                isinstance(token, str) for token in required_proofs_raw
-            ):
-                failures.append(
-                    "release channel desktopTupleCoverage.externalProofRequests"
-                    f"[{index}] requiredProofs must be a string array"
-                )
-                continue
-            required_proofs = {str(token).strip().lower() for token in required_proofs_raw if str(token).strip()}
+            required_proofs = _normalized_required_proofs(
+                request.get("requiredProofs")
+                if request.get("requiredProofs") is not None
+                else request.get("required_proofs"),
+                field=f"release channel desktopTupleCoverage.externalProofRequests[{index}].requiredProofs",
+                failures=failures,
+            )
             missing_required_proofs = sorted(
-                {"promoted_installer_artifact", "startup_smoke_receipt"} - required_proofs
+                {"promoted_installer_artifact", "startup_smoke_receipt"} - set(required_proofs)
             )
             if missing_required_proofs:
                 failures.append(
                     "release channel desktopTupleCoverage.externalProofRequests"
                     f"[{index}] requiredProofs is missing required tokens: {', '.join(missing_required_proofs)}"
                 )
+            expected_installer_relative_path = (
+                request.get("expectedInstallerRelativePath")
+                if request.get("expectedInstallerRelativePath") is not None
+                else request.get("expected_installer_relative_path")
+            )
+            if str(expected_installer_relative_path or "").strip():
+                try:
+                    _normalize_expected_relative_path(
+                        expected_installer_relative_path,
+                        field=(
+                            f"desktopTupleCoverage.externalProofRequests[{index}].expectedInstallerRelativePath"
+                        ),
+                    )
+                except ValueError as exc:
+                    release_external_request_rows_invalid_expected_installer_relative_paths.append(
+                        f"{tuple_id}: {exc}"
+                    )
+            expected_startup_smoke_receipt_path = (
+                request.get("expectedStartupSmokeReceiptPath")
+                if request.get("expectedStartupSmokeReceiptPath") is not None
+                else request.get("expected_startup_smoke_receipt_path")
+            )
+            if str(expected_startup_smoke_receipt_path or "").strip():
+                try:
+                    _normalize_expected_relative_path(
+                        expected_startup_smoke_receipt_path,
+                        field=(
+                            f"desktopTupleCoverage.externalProofRequests[{index}].expectedStartupSmokeReceiptPath"
+                        ),
+                    )
+                except ValueError as exc:
+                    release_external_request_rows_invalid_expected_startup_smoke_receipt_paths.append(
+                        f"{tuple_id}: {exc}"
+                    )
             expected_installer_sha256 = (
                 request.get("expectedInstallerSha256")
                 if request.get("expectedInstallerSha256") is not None
@@ -842,12 +1199,23 @@ def main() -> int:
         for item in (support_summary.get("unresolved_external_proof_request_tuples") or [])
         if str(item).strip()
     ]
+    unresolved_tuples_invalid: list[str] = []
+    for raw_tuple_id in unresolved_tuples:
+        try:
+            normalize_external_proof_tuple_id(
+                raw_tuple_id,
+                field=(
+                    "support packets summary.unresolved_external_proof_request_tuples."
+                    f"{raw_tuple_id}"
+                ),
+            )
+        except ValueError as exc:
+            unresolved_tuples_invalid.append(f"{raw_tuple_id}: {exc}")
     unresolved_hosts = [
         str(item).strip()
         for item in (support_summary.get("unresolved_external_proof_request_hosts") or [])
         if str(item).strip()
     ]
-    unresolved_specs_raw = support_summary.get("unresolved_external_proof_request_specs")
     unresolved_specs = sorted(
         {
             str(item).strip()
@@ -867,8 +1235,22 @@ def main() -> int:
     unresolved_backlog_host_counts: dict[str, Any] = {}
     unresolved_backlog_tuple_counts: dict[str, Any] = {}
     unresolved_backlog_specs: dict[str, Any] = {}
+    unresolved_backlog_invalid_tuple_ids: list[str] = []
     if isinstance(unresolved_backlog_raw, list):
         unresolved_entries = [dict(item) for item in unresolved_backlog_raw if isinstance(item, dict)]
+        for index, item in enumerate(unresolved_entries):
+            tuple_id = str(item.get("tuple_id") or item.get("tupleId") or "").strip()
+            if tuple_id:
+                try:
+                    normalize_external_proof_tuple_id(
+                        tuple_id,
+                        field=(
+                            "support packets unresolved_external_proof"
+                            f"[{index}].tuple_id"
+                        ),
+                    )
+                except ValueError as exc:
+                    unresolved_backlog_invalid_tuple_ids.append(f"{tuple_id}: {exc}")
         unresolved_backlog_count = len(unresolved_entries)
         unresolved_backlog_hosts = sorted(
             {
@@ -904,6 +1286,16 @@ def main() -> int:
                 if str(item).strip()
             }
         )
+        for raw_tuple_id in unresolved_backlog_tuples:
+            try:
+                normalize_external_proof_tuple_id(
+                    raw_tuple_id,
+                    field=(
+                        "support packets unresolved_external_proof.tuples"
+                    ),
+                )
+            except ValueError as exc:
+                unresolved_backlog_invalid_tuple_ids.append(f"{raw_tuple_id}: {exc}")
         unresolved_backlog_host_counts = _dict_field(
             unresolved_backlog_raw.get("host_counts"),
             field="support packets unresolved_external_proof.host_counts",
@@ -1024,6 +1416,85 @@ def main() -> int:
             "support packets unresolved_external_proof_execution_plan request rows are missing expected_installer_sha256 for tuples: "
             + ", ".join(support_plan_request_rows_missing_expected_sha256)
         )
+    if support_plan_request_rows_invalid_expected_installer_relative_paths and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows have invalid expected_installer_relative_path values for tuples: "
+            + ", ".join(support_plan_request_rows_invalid_expected_installer_relative_paths)
+        )
+    if support_plan_request_rows_invalid_expected_startup_smoke_receipt_paths and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan request rows have invalid expected_startup_smoke_receipt_path values for tuples: "
+            + ", ".join(support_plan_request_rows_invalid_expected_startup_smoke_receipt_paths)
+        )
+    if support_specs_invalid_expected_installer_relative_paths and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_request_specs have invalid expected_installer_relative_path values for tuples: "
+            + ", ".join(support_specs_invalid_expected_installer_relative_paths)
+        )
+    if support_specs_invalid_tuple_ids:
+        failures.append(
+            "support packets unresolved_external_proof_request_specs contains invalid tupleId keys: "
+            + ", ".join(support_specs_invalid_tuple_ids)
+        )
+    if support_specs_invalid_required_host:
+        failures.append(
+            "support packets unresolved_external_proof_request_specs contain invalid required_host values: "
+            + ", ".join(support_specs_invalid_required_host)
+        )
+    if support_specs_missing_required_proofs:
+        failures.append(
+            "support packets unresolved_external_proof_request_specs are missing required_proofs for tuples: "
+            + ", ".join(support_specs_missing_required_proofs)
+        )
+    if support_specs_invalid_expected_startup_smoke_receipt_paths and support_plan_request_count > 0:
+        failures.append(
+            "support packets unresolved_external_proof_request_specs have invalid expected_startup_smoke_receipt_path values for tuples: "
+            + ", ".join(support_specs_invalid_expected_startup_smoke_receipt_paths)
+        )
+    if support_plan_host_group_tuple_ids_invalid:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.host_groups contain invalid tuple_ids: "
+            + ", ".join(support_plan_host_group_tuple_ids_invalid)
+        )
+    if support_plan_host_group_tuple_ids_duplicates:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.host_groups contain duplicate tuple_ids: "
+            + ", ".join(support_plan_host_group_tuple_ids_duplicates)
+        )
+    if support_plan_host_group_tuple_ids_mismatched_host:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.host_groups contain tuple_ids with host mismatches: "
+            + ", ".join(support_plan_host_group_tuple_ids_mismatched_host)
+        )
+    if support_plan_host_group_invalid_hosts:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.host_groups contain unsupported host values: "
+            + ", ".join(sorted(support_plan_host_group_invalid_hosts))
+        )
+    if support_plan_host_group_empty_host_keys:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.host_groups contains an empty host key"
+        )
+    if support_plan_request_rows_missing_tuple_id:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.request rows are missing tuple_id: "
+            + ", ".join(support_plan_request_rows_missing_tuple_id)
+        )
+    if support_plan_request_rows_invalid_tuple_ids:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.request rows contain invalid tuple_id values: "
+            + ", ".join(support_plan_request_rows_invalid_tuple_ids)
+        )
+    if support_plan_request_rows_duplicate_tuple_ids:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.request rows contain duplicate tuple_id values: "
+            + ", ".join(support_plan_request_rows_duplicate_tuple_ids)
+        )
+    if support_plan_request_rows_invalid_required_host:
+        failures.append(
+            "support packets unresolved_external_proof_execution_plan.request rows have invalid requiredHost values: "
+            + ", ".join(support_plan_request_rows_invalid_required_host)
+        )
     if missing_platforms:
         failures.append(
             "release channel missingRequiredPlatforms is not empty: "
@@ -1038,6 +1509,11 @@ def main() -> int:
         failures.append(
             "release channel missingRequiredPlatformHeadRidTuples is not empty: "
             + ", ".join(missing_tuples)
+        )
+    if release_external_request_invalid_tuple_ids:
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests contains invalid tupleId values: "
+            + ", ".join(release_external_request_invalid_tuple_ids)
         )
     duplicate_external_request_tuples = sorted(
         {
@@ -1055,6 +1531,16 @@ def main() -> int:
         failures.append(
             "release channel desktopTupleCoverage.externalProofRequests rows are missing expectedInstallerSha256 for tuples: "
             + ", ".join(sorted(set(release_external_request_rows_missing_expected_sha256)))
+        )
+    if release_external_request_rows_invalid_expected_installer_relative_paths:
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests rows have invalid expectedInstallerRelativePath values for tuples: "
+            + ", ".join(sorted(set(release_external_request_rows_invalid_expected_installer_relative_paths)))
+        )
+    if release_external_request_rows_invalid_expected_startup_smoke_receipt_paths:
+        failures.append(
+            "release channel desktopTupleCoverage.externalProofRequests rows have invalid expectedStartupSmokeReceiptPath values for tuples: "
+            + ", ".join(sorted(set(release_external_request_rows_invalid_expected_startup_smoke_receipt_paths)))
         )
     if missing_tuples and sorted(set(external_request_tuples)) != sorted(set(missing_tuples)):
         failures.append(
@@ -1103,6 +1589,11 @@ def main() -> int:
             "support packets unresolved_external_proof_request_tuples is not empty: "
             + ", ".join(unresolved_tuples)
         )
+    if unresolved_tuples_invalid:
+        failures.append(
+            "support packets unresolved_external_proof_request_tuples contains invalid tupleId values: "
+            + ", ".join(unresolved_tuples_invalid)
+        )
     if unresolved_hosts:
         failures.append(
             "support packets unresolved_external_proof_request_hosts is not empty: "
@@ -1142,6 +1633,11 @@ def main() -> int:
         failures.append(
             "support packets unresolved_external_proof.specs is not empty: "
             + ", ".join(sorted(unresolved_backlog_specs.keys()))
+        )
+    if unresolved_backlog_invalid_tuple_ids:
+        failures.append(
+            "support packets unresolved_external_proof contains invalid tuple_id values: "
+            + ", ".join(unresolved_backlog_invalid_tuple_ids)
         )
     if unresolved_entries:
         failures.append(
@@ -1348,6 +1844,14 @@ def main() -> int:
                 f"{deadline_anchor_name} plus capture_deadline_hours "
                 f"(delta_seconds={int(deadline_delta_seconds)})"
             )
+    if has_open_backlog_signal and parsed_capture_deadline_utc:
+        deadline_now = datetime.now(parsed_capture_deadline_utc.tzinfo)
+        if parsed_capture_deadline_utc < deadline_now:
+            deadline_age_seconds = int((deadline_now - parsed_capture_deadline_utc).total_seconds())
+            failures.append(
+                "support packets unresolved_external_proof_execution_plan.capture_deadline_utc has passed "
+                f"while external-proof backlog remains open (overdue_by_seconds={deadline_age_seconds})"
+            )
 
     external_proof_runbook_path, external_proof_commands_dir = _coerce_external_bundle_paths(args)
     runbook_generated_at = ""
@@ -1415,7 +1919,6 @@ def main() -> int:
                     )
                     required_tokens = [
                         *REQUIRED_POST_CAPTURE_COMMAND_TOKENS,
-                        f"--proof {REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH}",
                         (
                             "--ui-localization-release-gate "
                             + REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH
@@ -1458,33 +1961,94 @@ def main() -> int:
                         }
                     )
                 )
+                finalize_script = external_proof_commands_dir / "finalize-external-host-proof.sh"
+                finalize_script_payload = ""
+                if not finalize_script.is_file():
+                    failures.append(
+                        "external proof commands directory is missing required finalize script: "
+                        + str(finalize_script)
+                    )
+                elif not os.access(finalize_script, os.X_OK):
+                    failures.append(
+                        "external proof finalize script is not executable: "
+                        + str(finalize_script)
+                    )
+                else:
+                    try:
+                        finalize_script_payload = finalize_script.read_text(encoding="utf-8")
+                    except OSError as exc:
+                        failures.append(
+                            "external proof finalize script is unreadable: "
+                            + f"{finalize_script}: {exc}"
+                        )
+                    else:
+                        _require_bash_failfast(
+                            payload=finalize_script_payload,
+                            script_label="finalize script",
+                            failures=failures,
+                        )
+                        if "./republish-after-host-proof.sh" not in finalize_script_payload:
+                            failures.append(
+                                "external proof finalize script is missing republish invocation token: "
+                                "./republish-after-host-proof.sh"
+                            )
                 for host in required_hosts:
                     host_token = _normalize_host_token(host)
+                    preflight_script = external_proof_commands_dir / f"preflight-{host_token}-proof.sh"
                     capture_script = external_proof_commands_dir / f"capture-{host_token}-proof.sh"
                     validation_script = external_proof_commands_dir / f"validate-{host_token}-proof.sh"
                     bundle_script = external_proof_commands_dir / f"bundle-{host_token}-proof.sh"
                     ingest_script = external_proof_commands_dir / f"ingest-{host_token}-proof-bundle.sh"
+                    host_lane_script = external_proof_commands_dir / f"run-{host_token}-proof-lane.sh"
+                    preflight_script_payload = ""
                     capture_script_payload = ""
                     validation_script_payload = ""
                     bundle_script_payload = ""
                     ingest_script_payload = ""
+                    host_lane_script_payload = ""
+                    preflight_script_loaded = False
                     capture_script_loaded = False
                     validation_script_loaded = False
                     bundle_script_loaded = False
                     ingest_script_loaded = False
+                    host_lane_script_loaded = False
+                    preflight_wrapper_script = external_proof_commands_dir / f"preflight-{host_token}-proof.ps1"
                     capture_wrapper_script = external_proof_commands_dir / f"capture-{host_token}-proof.ps1"
                     validation_wrapper_script = external_proof_commands_dir / f"validate-{host_token}-proof.ps1"
                     bundle_wrapper_script = external_proof_commands_dir / f"bundle-{host_token}-proof.ps1"
                     ingest_wrapper_script = external_proof_commands_dir / f"ingest-{host_token}-proof-bundle.ps1"
+                    host_lane_wrapper_script = external_proof_commands_dir / f"run-{host_token}-proof-lane.ps1"
+                    preflight_wrapper_payload = ""
                     capture_wrapper_payload = ""
                     validation_wrapper_payload = ""
                     bundle_wrapper_payload = ""
                     ingest_wrapper_payload = ""
+                    host_lane_wrapper_payload = ""
+                    preflight_wrapper_loaded = False
                     capture_wrapper_loaded = False
                     validation_wrapper_loaded = False
                     bundle_wrapper_loaded = False
                     ingest_wrapper_loaded = False
-                    for script_path in (capture_script, validation_script, bundle_script, ingest_script):
+                    host_lane_wrapper_loaded = False
+                    if finalize_script_payload:
+                        required_finalize_tokens = (
+                            f"./validate-{host_token}-proof.sh",
+                            f"./ingest-{host_token}-proof-bundle.sh",
+                        )
+                        for token in required_finalize_tokens:
+                            if token not in finalize_script_payload:
+                                failures.append(
+                                    "external proof finalize script is missing required host token "
+                                    f"for host {host}: {token}"
+                                )
+                    for script_path in (
+                        preflight_script,
+                        capture_script,
+                        validation_script,
+                        bundle_script,
+                        ingest_script,
+                        host_lane_script,
+                    ):
                         if not script_path.is_file():
                             failures.append(
                                 "external proof commands directory is missing required host script: "
@@ -1495,6 +2059,20 @@ def main() -> int:
                             failures.append(
                                 "external proof host script is not executable: "
                                 + str(script_path)
+                            )
+                    if preflight_script.is_file():
+                        try:
+                            preflight_script_payload = preflight_script.read_text(encoding="utf-8")
+                            preflight_script_loaded = True
+                            _require_bash_failfast(
+                                payload=preflight_script_payload,
+                                script_label=f"preflight script ({host})",
+                                failures=failures,
+                            )
+                        except OSError as exc:
+                            failures.append(
+                                "external proof preflight script is unreadable: "
+                                + f"{preflight_script}: {exc}"
                             )
                     if capture_script.is_file():
                         try:
@@ -1552,7 +2130,30 @@ def main() -> int:
                                 "external proof ingest script is unreadable: "
                                 + f"{ingest_script}: {exc}"
                             )
+                    if host_lane_script.is_file():
+                        try:
+                            host_lane_script_payload = host_lane_script.read_text(encoding="utf-8")
+                            host_lane_script_loaded = True
+                            _require_bash_failfast(
+                                payload=host_lane_script_payload,
+                                script_label=f"host lane script ({host})",
+                                failures=failures,
+                            )
+                        except OSError as exc:
+                            failures.append(
+                                "external proof host lane script is unreadable: "
+                                + f"{host_lane_script}: {exc}"
+                            )
                     if host == "windows":
+                        if preflight_wrapper_script.is_file():
+                            try:
+                                preflight_wrapper_payload = preflight_wrapper_script.read_text(encoding="utf-8")
+                                preflight_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows preflight wrapper is unreadable: "
+                                    + f"{preflight_wrapper_script}: {exc}"
+                                )
                         if capture_wrapper_script.is_file():
                             try:
                                 capture_wrapper_payload = capture_wrapper_script.read_text(encoding="utf-8")
@@ -1589,7 +2190,22 @@ def main() -> int:
                                     "external proof windows ingest wrapper is unreadable: "
                                     + f"{ingest_wrapper_script}: {exc}"
                                 )
+                        if host_lane_wrapper_script.is_file():
+                            try:
+                                host_lane_wrapper_payload = host_lane_wrapper_script.read_text(encoding="utf-8")
+                                host_lane_wrapper_loaded = True
+                            except OSError as exc:
+                                failures.append(
+                                    "external proof windows host lane wrapper is unreadable: "
+                                    + f"{host_lane_wrapper_script}: {exc}"
+                                )
                     if host == "windows":
+                        if preflight_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=preflight_wrapper_payload,
+                                wrapper_label="windows preflight wrapper",
+                                failures=failures,
+                            )
                         if capture_wrapper_loaded:
                             _require_windows_wrapper_failfast(
                                 payload=capture_wrapper_payload,
@@ -1612,6 +2228,12 @@ def main() -> int:
                             _require_windows_wrapper_failfast(
                                 payload=ingest_wrapper_payload,
                                 wrapper_label="windows ingest wrapper",
+                                failures=failures,
+                            )
+                        if host_lane_wrapper_loaded:
+                            _require_windows_wrapper_failfast(
+                                payload=host_lane_wrapper_payload,
+                                wrapper_label="windows host lane wrapper",
                                 failures=failures,
                             )
                     if capture_script_loaded or validation_script_loaded:
@@ -1677,13 +2299,11 @@ def main() -> int:
                             installer_capture_path = ""
                             if installer_relative_path:
                                 installer_capture_path = (
-                                    "/docker/chummercomplete/chummer6-ui/Docker/Downloads/"
-                                    + installer_relative_path.lstrip("/")
+                                    str(UI_DOCKER_DOWNLOADS_ROOT / installer_relative_path.lstrip("/"))
                                 )
                             elif installer_file_name:
                                 installer_capture_path = (
-                                    "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/"
-                                    + installer_file_name
+                                    str(UI_DOCKER_DOWNLOADS_ROOT / "files" / installer_file_name)
                                 )
                             if expected_public_install_route and (
                                 not capture_script_loaded
@@ -1704,6 +2324,30 @@ def main() -> int:
                                 failures.append(
                                     "external proof windows capture wrapper is missing expected public install route token "
                                     f"for tuple {tuple_id}: {expected_public_install_route}"
+                                )
+                            if expected_public_install_route and (
+                                not capture_script_loaded
+                                or "external-proof-auth-missing" not in capture_script_payload
+                                or "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" not in capture_script_payload
+                            ):
+                                failures.append(
+                                    "external proof capture script is missing auth-context guard token "
+                                    f"for tuple {tuple_id}: expected markers external-proof-auth-missing and "
+                                    "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD"
+                                )
+                            if (
+                                host == "windows"
+                                and expected_public_install_route
+                                and (
+                                    not capture_wrapper_loaded
+                                    or "external-proof-auth-missing" not in capture_wrapper_payload
+                                    or "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" not in capture_wrapper_payload
+                                )
+                            ):
+                                failures.append(
+                                    "external proof windows capture wrapper is missing auth-context guard token "
+                                    f"for tuple {tuple_id}: expected markers external-proof-auth-missing and "
+                                    "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD"
                                 )
                             if installer_capture_path and (
                                 not capture_script_loaded
@@ -1765,7 +2409,7 @@ def main() -> int:
                             )
                             if installer_file_name:
                                 installer_path = (
-                                    f"/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/{installer_file_name}"
+                                    str(UI_DOCKER_DOWNLOADS_ROOT / "files" / installer_file_name)
                                 )
                                 if not validation_script_loaded or installer_path not in validation_script_payload:
                                     failures.append(
@@ -1782,8 +2426,7 @@ def main() -> int:
                             if installer_relative_path:
                                 installer_relative_token = installer_relative_path.lstrip("/")
                                 installer_relative_absolute = (
-                                    "/docker/chummercomplete/chummer6-ui/Docker/Downloads/"
-                                    + installer_relative_token
+                                    str(UI_DOCKER_DOWNLOADS_ROOT / installer_relative_token)
                                 )
                                 if (
                                     not validation_script_loaded
@@ -1907,8 +2550,7 @@ def main() -> int:
                                 else (f"files/{installer_file_name}" if installer_file_name else "")
                             )
                             installer_bundle_source_path = (
-                                "/docker/chummercomplete/chummer6-ui/Docker/Downloads/"
-                                + installer_bundle_relative_path
+                                str(UI_DOCKER_DOWNLOADS_ROOT / installer_bundle_relative_path)
                             ) if installer_bundle_relative_path else ""
                             if installer_bundle_relative_path and (
                                 not bundle_script_loaded
@@ -1972,6 +2614,57 @@ def main() -> int:
                                     "external proof ingest script is missing expected startup-smoke receipt existence check token "
                                     f"for tuple {tuple_id}: test -s \"$TARGET_ROOT/{receipt_path}\""
                                 )
+                            if installer_sha256:
+                                if (
+                                    not ingest_script_loaded
+                                    or "installer-contract-mismatch" not in ingest_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof ingest script is missing installer digest contract checks "
+                                        f"for tuple {tuple_id}: expected marker 'installer-contract-mismatch'"
+                                    )
+                                if (
+                                    not ingest_script_loaded
+                                    or installer_sha256 not in ingest_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof ingest script is missing installer digest contract token "
+                                        f"for tuple {tuple_id}: sha256={installer_sha256}"
+                                    )
+                            if receipt_path and (
+                                smoke_contract.get("status_any_of")
+                                or smoke_contract.get("ready_checkpoint")
+                                or smoke_contract.get("head_id")
+                                or smoke_contract.get("platform")
+                                or smoke_contract.get("rid")
+                                or smoke_contract.get("host_class_contains")
+                            ):
+                                if (
+                                    not ingest_script_loaded
+                                    or "receipt-contract-mismatch" not in ingest_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof ingest script is missing startup-smoke receipt contract checks "
+                                        f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
+                                    )
+                                for key, value in (
+                                    ("head_id", smoke_contract.get("head_id")),
+                                    ("platform", smoke_contract.get("platform")),
+                                    ("rid", smoke_contract.get("rid")),
+                                    ("ready_checkpoint", smoke_contract.get("ready_checkpoint")),
+                                    ("host_class_contains", smoke_contract.get("host_class_contains")),
+                                ):
+                                    token = str(value or "").strip().lower()
+                                    if not token:
+                                        continue
+                                    if (
+                                        not ingest_script_loaded
+                                        or f"\"{key}\": \"{token}\"" not in ingest_script_payload
+                                    ):
+                                        failures.append(
+                                            "external proof ingest script is missing startup-smoke contract token "
+                                            f"for tuple {tuple_id}: {key}={token}"
+                                        )
                             expected_artifact_id = _normalized_token(
                                 request.get("expected_artifact_id")
                                 or request.get("expectedArtifactId")
@@ -2091,6 +2784,41 @@ def main() -> int:
                                         "external proof windows ingest wrapper is missing wrapped ingest command: "
                                         + wrapped_ingest_command
                                     )
+                        if host_lane_script_loaded:
+                            required_host_lane_tokens = (
+                                f"./preflight-{host_token}-proof.sh",
+                                f"./capture-{host_token}-proof.sh",
+                                f"./validate-{host_token}-proof.sh",
+                                f"./bundle-{host_token}-proof.sh",
+                            )
+                            for token in required_host_lane_tokens:
+                                if token not in host_lane_script_payload:
+                                    failures.append(
+                                        "external proof host lane script is missing required token "
+                                        f"for host {host}: {token}"
+                                    )
+                        if host == "windows" and preflight_script_loaded:
+                            for command in _script_commands(preflight_script_payload):
+                                wrapped_preflight_command = _powershell_wrap(command)
+                                if (
+                                    not preflight_wrapper_loaded
+                                    or wrapped_preflight_command not in preflight_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows preflight wrapper is missing wrapped preflight command: "
+                                        + wrapped_preflight_command
+                                    )
+                        if host == "windows" and host_lane_script_loaded:
+                            for command in _script_commands(host_lane_script_payload):
+                                wrapped_host_lane_command = _powershell_wrap(command)
+                                if (
+                                    not host_lane_wrapper_loaded
+                                    or wrapped_host_lane_command not in host_lane_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows host lane wrapper is missing wrapped host lane command: "
+                                        + wrapped_host_lane_command
+                                    )
                         if bundle_script_loaded:
                             if f"host-proof-bundles/{host_token}" not in bundle_script_payload:
                                 failures.append(
@@ -2152,10 +2880,12 @@ def main() -> int:
                                 )
                     if host == "windows":
                         windows_scripts = (
+                            preflight_wrapper_script,
                             capture_wrapper_script,
                             validation_wrapper_script,
                             bundle_wrapper_script,
                             ingest_wrapper_script,
+                            host_lane_wrapper_script,
                         )
                         for script_path in windows_scripts:
                             if not script_path.is_file():
@@ -2204,12 +2934,29 @@ def main() -> int:
                 )
 
     if failures:
-        print("External-proof closure check failed:", file=sys.stderr)
-        for failure in failures:
-            print(f"- {failure}", file=sys.stderr)
+        if args.json:
+            output = {
+                "status": "failed",
+                "failure_count": len(failures),
+                "failures": failures,
+            }
+            print(json.dumps(output, sort_keys=True))
+            return 1
+        if args.quiet:
+            for failure in failures:
+                print(f"- {failure}", file=sys.stderr)
+        else:
+            print("External-proof closure check failed:", file=sys.stderr)
+            for failure in failures:
+                print(f"- {failure}", file=sys.stderr)
         return 1
 
-    print("External-proof closure check passed.")
+    if args.json:
+        print(json.dumps({"status": "passed", "failure_count": 0, "failures": []}, sort_keys=True))
+        return 0
+
+    if not args.quiet:
+        print("External-proof closure check passed.")
     return 0
 
 

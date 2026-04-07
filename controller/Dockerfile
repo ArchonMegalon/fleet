@@ -10,6 +10,8 @@ RUN apt-get update \
       bash \
       ca-certificates \
       curl \
+      docker.io \
+      docker-compose \
       git \
       gnupg \
       jq \
@@ -28,8 +30,9 @@ RUN curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsof
  && rm -rf /var/lib/apt/lists/*
 
 ARG CODEX_NPM_REFRESH_TOKEN=static
+ARG OPENAI_CODEX_VERSION=0.118.0
 RUN echo "$CODEX_NPM_REFRESH_TOKEN" >/tmp/.codex-refresh-token \
- && npm install -g @openai/codex@latest
+ && npm install -g "@openai/codex@${OPENAI_CODEX_VERSION}"
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import json
 import subprocess
 import sys
+from typing import Any
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,12 +16,23 @@ MATERIALIZE_EXTERNAL_PROOF_RUNBOOK_SCRIPT = Path("/docker/fleet/scripts/material
 
 
 def _load_verify_external_proof_closure_module():
-    spec = importlib.util.spec_from_file_location("verify_external_proof_closure", SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    previous_sys_path = list(sys.path)
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("verify_external_proof_closure", SCRIPT)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = previous_sys_path
+
+
+def _env_without_pythonpath() -> dict[str, str]:
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    return env
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -28,6 +41,19 @@ def _write_json(path: Path, payload: dict) -> None:
 
 def _iso_z(value: datetime) -> str:
     return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _replace_value_recursively(payload: Any, old: str, new: str) -> Any:
+    if isinstance(payload, dict):
+        return {
+            (new if str(key) == old else key): _replace_value_recursively(value, old, new)
+            for key, value in payload.items()
+        }
+    if isinstance(payload, list):
+        return [_replace_value_recursively(item, old, new) for item in payload]
+    if payload == old:
+        return new
+    return payload
 
 
 def _write_external_proof_bundle(
@@ -245,6 +271,77 @@ def _write_open_windows_external_proof_fixture(tmp_path: Path) -> tuple[Path, Pa
     return support_packets, journey_gates, release_channel, runbook, commands_dir
 
 
+def _write_closed_external_gaps_fixture(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path]:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "tuple_counts": {},
+                "hosts": [],
+                "tuples": [],
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": release_ts,
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "evidence": {
+                        "support_packets_generated_at": support_ts,
+                    }
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+    return support_packets, journey_gates, release_channel
+
+
 def test_coerce_external_bundle_paths_uses_defaults_for_default_core_inputs() -> None:
     module = _load_verify_external_proof_closure_module()
     args = argparse.Namespace(
@@ -279,14 +376,659 @@ def test_coerce_external_bundle_paths_does_not_force_defaults_for_custom_core_in
     assert commands_dir is None
 
 
+def test_verify_external_proof_closure_script_runs_without_pythonpath(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_env_without_pythonpath(),
+    )
+
+    assert result.returncode == 1
+    assert "No module named 'scripts.external_proof_paths'" not in result.stderr
+    assert "journey gates still report external_proof_requests in journey rows" in result.stderr
+
+
+def test_verify_external_proof_closure_json_mode_outputs_structured_failures(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("unresolved_external_proof_execution_plan", {})
+        .get("host_groups", {})
+        .get("windows", {})
+        .get("requests")
+    )
+    assert isinstance(requests, list) and requests
+    requests[0]["required_proofs"] = ["bogus-proof-token"]
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    report = json.loads(result.stdout.strip())
+    assert report["status"] == "failed"
+    assert report["failure_count"] >= 1
+    assert report["failures"]
+    assert isinstance(report["failures"], list)
+    assert any("unsupported required proof token(s)" in failure for failure in report["failures"])
+
+
+def test_verify_external_proof_closure_json_mode_outputs_success_payload(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel = _write_closed_external_gaps_fixture(tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout.strip())
+    assert report["status"] == "passed"
+    assert report["failure_count"] == 0
+    assert report["failures"] == []
+
+
+def test_verify_external_proof_closure_quiet_mode_suppresses_success_message(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel = _write_closed_external_gaps_fixture(tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--quiet",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "External-proof closure check passed." not in result.stdout
+    assert result.stdout == ""
+
+
+def test_verify_external_proof_closure_quiet_mode_emits_minimal_failure_output(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    spec = (
+        payload.get("summary", {}).get("unresolved_external_proof_request_specs", {}).get(
+            "avalonia:win-x64:windows"
+        )
+    )
+    assert isinstance(spec, dict)
+    spec["required_host"] = "beos"
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--quiet",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "External-proof closure check failed:" not in result.stderr
+    assert result.stdout == ""
+    assert "required_host (beos)" in result.stderr or "required_host is invalid: beos" in result.stderr
+
+
+def test_materialize_external_proof_runbook_script_runs_without_pythonpath() -> None:
+    result = subprocess.run(
+        [sys.executable, str(MATERIALIZE_EXTERNAL_PROOF_RUNBOOK_SCRIPT), "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_env_without_pythonpath(),
+    )
+
+    assert result.returncode == 0
+
+
+def test_verify_external_proof_closure_fails_when_tuple_ids_are_malformed(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    invalid_tuple_id = "avalonia:win-x64"
+    for path in (support_packets, journey_gates, release_channel):
+        data = _replace_value_recursively(
+            json.loads(path.read_text(encoding="utf-8")),
+            "avalonia:win-x64:windows",
+            invalid_tuple_id,
+        )
+        _write_json(path, data)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "contains invalid tupleId values" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_request_tuple_id_is_missing(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("unresolved_external_proof_execution_plan", {})
+        .get("host_groups", {})
+        .get("windows", {})
+        .get("requests")
+    )
+    assert isinstance(requests, list) and requests
+    assert isinstance(requests[0], dict)
+    requests[0].pop("tuple_id", None)
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "request rows are missing tuple_id" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_plan_host_group_has_duplicate_tuple_ids(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    host_groups = (
+        payload.get("unresolved_external_proof_execution_plan", {}).get("host_groups") or {}
+    )
+    windows_group = host_groups.get("windows")
+    assert isinstance(windows_group, dict)
+    tuples = windows_group.get("tuples")
+    assert isinstance(tuples, list) and tuples
+    tuples.append(tuples[0])
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "support packets unresolved_external_proof_execution_plan.host_groups contain duplicate tuple_ids" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_plan_has_duplicate_request_tuple_ids(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("unresolved_external_proof_execution_plan", {})
+        .get("host_groups", {})
+        .get("windows", {})
+        .get("requests")
+    )
+    assert isinstance(requests, list) and requests
+    requests.append(requests[0].copy())
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "support packets unresolved_external_proof_execution_plan.request rows contain duplicate tuple_id values" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_request_required_host_mismatches_group_host(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("unresolved_external_proof_execution_plan", {})
+        .get("host_groups", {})
+        .get("windows", {})
+        .get("requests")
+    )
+    assert isinstance(requests, list) and requests
+    requests[0]["required_host"] = "macos"
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_execution_plan.request rows have invalid requiredHost values"
+        in result.stderr
+    )
+    assert "avalonia:win-x64:windows: requiredHost (macos) does not match group host (windows)" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_request_specs_have_invalid_required_values(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    specs = (
+        payload.get("summary", {}).get("unresolved_external_proof_request_specs", {})
+    )
+    assert isinstance(specs, dict) and specs
+    spec = specs.get("avalonia:win-x64:windows")
+    assert isinstance(spec, dict)
+    spec["required_host"] = "beos"
+    spec["required_proofs"] = ["promoted_installer_artifact"]
+
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_request_specs contain invalid required_host values"
+        in result.stderr
+    )
+    assert (
+        "support packets unresolved_external_proof_request_specs are missing required_proofs for tuples"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_support_plan_host_group_host_is_unsupported(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    support_plan = payload.get("unresolved_external_proof_execution_plan")
+    assert isinstance(support_plan, dict)
+    host_groups = support_plan.get("host_groups")
+    assert isinstance(host_groups, dict)
+    host_groups["beos"] = host_groups.pop("windows")
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_execution_plan.host_groups contain unsupported host values"
+        in result.stderr
+    )
+    assert "beos" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_plan_host_group_has_empty_host_key(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    support_plan = payload.get("unresolved_external_proof_execution_plan")
+    assert isinstance(support_plan, dict)
+    host_groups = support_plan.get("host_groups")
+    assert isinstance(host_groups, dict)
+    host_groups[""] = host_groups.pop("windows")
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_execution_plan.host_groups contains an empty host key"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_support_plan_request_has_invalid_required_proofs_type(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("unresolved_external_proof_execution_plan", {})
+        .get("host_groups", {})
+        .get("windows", {})
+        .get("requests")
+    )
+    assert isinstance(requests, list) and requests
+    requests[0]["required_proofs"] = [123]
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_execution_plan.host_groups.windows.requests[0].required_proofs contains a non-string required_proofs token"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_support_plan_request_has_unknown_required_proof_token(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("unresolved_external_proof_execution_plan", {})
+        .get("host_groups", {})
+        .get("windows", {})
+        .get("requests")
+    )
+    assert isinstance(requests, list) and requests
+    requests[0]["required_proofs"] = ["startup_smoke_receipt", "bogus-proof-token"]
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_execution_plan.host_groups.windows.requests[0].required_proofs contains unsupported required proof token(s): bogus-proof-token"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_support_request_specs_have_invalid_required_proofs_type(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    specs = (
+        payload.get("summary", {}).get("unresolved_external_proof_request_specs", {})
+    )
+    assert isinstance(specs, dict)
+    spec = specs.get("avalonia:win-x64:windows")
+    assert isinstance(spec, dict)
+    spec["required_proofs"] = [123]
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "summary.unresolved_external_proof_request_specs.avalonia:win-x64:windows.required_proofs contains a non-string required_proofs token"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_support_request_specs_have_unknown_required_proof_token(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+
+    payload = json.loads(support_packets.read_text(encoding="utf-8"))
+    specs = (
+        payload.get("summary", {}).get("unresolved_external_proof_request_specs", {})
+    )
+    assert isinstance(specs, dict)
+    spec = specs.get("avalonia:win-x64:windows")
+    assert isinstance(spec, dict)
+    spec["required_proofs"] = ["promoted_installer_artifact", "bogus-proof-token"]
+    _write_json(support_packets, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "summary.unresolved_external_proof_request_specs.avalonia:win-x64:windows.required_proofs contains unsupported required proof token(s): bogus-proof-token"
+        in result.stderr
+    )
+
+
 def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(tmp_path: Path) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
     _write_json(
         support_packets,
         {
-            "generated_at": "2026-04-05T01:22:01Z",
+            "generated_at": support_ts,
             "summary": {
                 "unresolved_external_proof_request_count": 0,
                 "unresolved_external_proof_request_hosts": [],
@@ -304,11 +1046,11 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
                 "specs": {},
             },
             "unresolved_external_proof_execution_plan": {
-                "generated_at": "2026-04-05T01:22:01Z",
+                "generated_at": support_ts,
                 "request_count": 0,
                 "hosts": [],
                 "host_groups": {},
-                "release_channel_generated_at": "2026-04-05T01:21:51Z",
+                "release_channel_generated_at": release_ts,
             },
         },
     )
@@ -318,7 +1060,7 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
             "journeys": [
                 {
                     "evidence": {
-                        "support_packets_generated_at": "2026-04-05T01:22:01Z",
+                        "support_packets_generated_at": support_ts,
                     }
                 }
             ],
@@ -333,7 +1075,7 @@ def test_verify_external_proof_closure_passes_when_all_external_gaps_are_closed(
     _write_json(
         release_channel,
         {
-            "generatedAt": "2026-04-05T01:21:51Z",
+            "generatedAt": release_ts,
             "desktopTupleCoverage": {
                 "missingRequiredPlatforms": [],
                 "missingRequiredPlatformHeadPairs": [],
@@ -640,6 +1382,109 @@ def test_verify_external_proof_closure_fails_when_post_capture_script_drops_fail
     post_capture = commands_dir / "republish-after-host-proof.sh"
     post_capture.write_text(
         post_capture.read_text(encoding="utf-8").replace("set -euo pipefail\n", ""),
+        encoding="utf-8",
+    )
+    post_capture.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "external proof commands script is missing fail-fast token: set -euo pipefail"
+    ) in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_post_capture_script_only_mentions_fail_fast_in_comments(
+    tmp_path: Path,
+) -> None:
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    support_ts = _iso_z(now)
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_specs": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "tuple_counts": {},
+                "hosts": [],
+                "tuples": [],
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "release_channel_generated_at": release_ts,
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [{"evidence": {"support_packets_generated_at": support_ts}}],
+            "summary": {
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_tuples": [],
+                "blocked_external_only_host_counts": {},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+    _write_external_proof_bundle(
+        runbook_path=runbook,
+        commands_dir=commands_dir,
+        support_generated_at=support_ts,
+        release_generated_at=release_ts,
+    )
+    post_capture = commands_dir / "republish-after-host-proof.sh"
+    post_capture.write_text(
+        post_capture.read_text(encoding="utf-8").replace("set -euo pipefail", "# set -euo pipefail"),
         encoding="utf-8",
     )
     post_capture.chmod(0o755)
@@ -2570,6 +3415,55 @@ def test_verify_external_proof_closure_fails_when_windows_wrappers_omit_fail_fas
     assert "windows validation wrapper is missing fail-fast token" in result.stderr
 
 
+def test_verify_external_proof_closure_fails_when_windows_wrappers_only_mention_fail_fast_tokens_in_comments(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = (
+        _write_open_windows_external_proof_fixture(tmp_path)
+    )
+    for wrapper_name in ("capture-windows-proof.ps1", "validate-windows-proof.ps1"):
+        wrapper_path = commands_dir / wrapper_name
+        wrapper_path.write_text(
+            wrapper_path.read_text(encoding="utf-8")
+            .replace("$ErrorActionPreference = 'Stop'", "# $ErrorActionPreference = 'Stop'")
+            .replace(
+                "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                "# if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+            ),
+            encoding="utf-8",
+        )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "external proof windows capture wrapper is missing fail-fast token: "
+        "$ErrorActionPreference = 'Stop'"
+    ) in result.stderr
+    assert (
+        "external proof windows validation wrapper is missing fail-fast token: "
+        "$ErrorActionPreference = 'Stop'"
+    ) in result.stderr
+
+
 def test_verify_external_proof_closure_fails_with_open_external_gaps(tmp_path: Path) -> None:
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
@@ -3066,6 +3960,84 @@ def test_verify_external_proof_closure_fails_when_external_request_proofs_are_in
     assert "unresolved_external_proof_request_host_counts is not empty: windows:1" in result.stderr
     assert "blocked_external_only_host_counts is not empty: windows:1" in result.stderr
     assert "external_proof_requests in journey rows" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_release_channel_request_has_invalid_required_proofs_type(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+
+    payload = json.loads(release_channel.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("desktopTupleCoverage", {})
+        .get("externalProofRequests")
+    )
+    assert isinstance(requests, list) and requests
+    requests[0]["requiredProofs"] = [123]
+    _write_json(release_channel, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "desktopTupleCoverage.externalProofRequests[0].requiredProofs contains a non-string required_proofs token"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_release_channel_request_has_unknown_required_proof_token(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, _, _ = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+
+    payload = json.loads(release_channel.read_text(encoding="utf-8"))
+    requests = (
+        payload.get("desktopTupleCoverage", {})
+        .get("externalProofRequests")
+    )
+    assert isinstance(requests, list) and requests
+    requests[0]["requiredProofs"] = ["startup_smoke_receipt", "bogus-proof-token"]
+    _write_json(release_channel, payload)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "release channel desktopTupleCoverage.externalProofRequests[0].requiredProofs contains unsupported required proof token(s): bogus-proof-token"
+        in result.stderr
+    )
 
 
 def test_verify_external_proof_closure_fails_when_unresolved_backlog_dict_remains_with_zero_summaries(tmp_path: Path) -> None:
@@ -5566,6 +6538,120 @@ def test_verify_external_proof_closure_accepts_deadline_anchored_to_release_chan
     assert "capture_deadline_utc does not match" not in result.stderr
 
 
+def test_verify_external_proof_closure_fails_when_open_backlog_deadline_has_passed(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    release_ts = datetime.now(timezone.utc) - timedelta(hours=2)
+    support_ts = datetime.now(timezone.utc) - timedelta(minutes=5)
+    expired_deadline_ts = datetime.now(timezone.utc) - timedelta(minutes=2)
+    _write_json(
+        support_packets,
+        {
+            "generated_at": _iso_z(support_ts),
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": ["avalonia:win-x64:windows|windows|docker"],
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": _iso_z(support_ts),
+                "release_channel_generated_at": _iso_z(release_ts),
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(expired_deadline_ts),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "capture_deadline_utc": _iso_z(expired_deadline_ts),
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": _iso_z(support_ts)},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": _iso_z(release_ts),
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "capture_deadline_utc has passed while external-proof backlog remains open" in result.stderr
+
+
 def test_verify_external_proof_closure_checks_required_hosts_from_release_channel_when_plan_hosts_drift(
     tmp_path: Path,
 ) -> None:
@@ -6025,6 +7111,44 @@ def test_verify_external_proof_closure_fails_when_bundle_script_omits_archive_cr
     assert "tar -czf" in result.stderr
 
 
+def test_verify_external_proof_closure_fails_when_finalize_script_is_missing_required_host_tokens(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    finalize_script = commands_dir / "finalize-external-host-proof.sh"
+    finalize_payload = finalize_script.read_text(encoding="utf-8")
+    finalize_script.write_text(
+        finalize_payload.replace("./validate-windows-proof.sh", "echo validate-step-disabled"),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof finalize script is missing required host token" in result.stderr
+    assert "./validate-windows-proof.sh" in result.stderr
+
+
 def test_verify_external_proof_closure_fails_when_ingest_script_omits_expected_file_existence_check(
     tmp_path: Path,
 ) -> None:
@@ -6035,7 +7159,7 @@ def test_verify_external_proof_closure_fails_when_ingest_script_omits_expected_f
     ingest_payload = ingest_script.read_text(encoding="utf-8")
     ingest_script.write_text(
         ingest_payload.replace(
-            "test -s '$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe'",
+            "test -s \"$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe\"",
             "echo installer-file-check-disabled",
         ),
         encoding="utf-8",
@@ -6102,3 +7226,349 @@ def test_verify_external_proof_closure_fails_when_ingest_script_omits_archive_pa
     assert result.returncode == 1
     assert "external proof ingest script is missing archive path-safety validation token" in result.stderr
     assert "member.name.startswith(" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_ingest_script_omits_installer_digest_contract_checks(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    ingest_script = commands_dir / "ingest-windows-proof-bundle.sh"
+    ingest_payload = ingest_script.read_text(encoding="utf-8")
+    ingest_script.write_text(
+        ingest_payload.replace("installer-contract-mismatch", "installer-digest-check-disabled"),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof ingest script is missing installer digest contract checks" in result.stderr
+    assert "installer-contract-mismatch" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_ingest_script_omits_receipt_contract_checks(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    ingest_script = commands_dir / "ingest-windows-proof-bundle.sh"
+    ingest_payload = ingest_script.read_text(encoding="utf-8")
+    ingest_script.write_text(
+        ingest_payload.replace("receipt-contract-mismatch", "receipt-contract-check-disabled"),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof ingest script is missing startup-smoke receipt contract checks" in result.stderr
+    assert "receipt-contract-mismatch" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_support_backlog_has_absolute_expected_installer_relative_path(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    now = datetime.now(timezone.utc)
+    support_ts = _iso_z(now)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:win-x64:windows": {
+                        "required_host": "windows",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expected_artifact_id": "avalonia-win-x64-installer",
+                        "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                        "expected_installer_relative_path": "/tmp/avalonia-win-x64-installer.exe",
+                        "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expected_installer_sha256": "a" * 64,
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_installer_relative_path": "/tmp/avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "expected_installer_sha256": "a" * 64,
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-win-x64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                        "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expectedInstallerSha256": "a" * 64,
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "support packets unresolved_external_proof_execution_plan request rows have invalid expected_installer_relative_path values"
+        in result.stderr
+    )
+
+
+def test_verify_external_proof_closure_fails_when_release_channel_request_has_invalid_startup_smoke_receipt_relative_path(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    now = datetime.now(timezone.utc)
+    support_ts = _iso_z(now)
+    release_ts = _iso_z(now - timedelta(minutes=1))
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 1,
+                "unresolved_external_proof_request_hosts": ["windows"],
+                "unresolved_external_proof_request_specs": {
+                    "avalonia:win-x64:windows": {
+                        "required_host": "windows",
+                        "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expected_artifact_id": "avalonia-win-x64-installer",
+                        "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                        "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+                        "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                        "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expected_installer_sha256": "a" * 64,
+                    }
+                },
+                "unresolved_external_proof_request_tuples": ["avalonia:win-x64:windows"],
+                "unresolved_external_proof_request_host_counts": {"windows": 1},
+                "unresolved_external_proof_request_tuple_counts": {"avalonia:win-x64:windows": 1},
+            },
+            "unresolved_external_proof": {
+                "count": 1,
+                "host_counts": {"windows": 1},
+                "tuple_counts": {"avalonia:win-x64:windows": 1},
+                "hosts": ["windows"],
+                "tuples": ["avalonia:win-x64:windows"],
+                "specs": {"avalonia:win-x64:windows": {"required_host": "windows"}},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 1,
+                "hosts": ["windows"],
+                "host_groups": {
+                    "windows": {
+                        "request_count": 1,
+                        "tuples": ["avalonia:win-x64:windows"],
+                        "requests": [
+                            {
+                                "tuple_id": "avalonia:win-x64:windows",
+                                "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                "expected_artifact_id": "avalonia-win-x64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+                                "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                "expected_installer_sha256": "a" * 64,
+                                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                                "proof_capture_commands": ["echo capture-proof"],
+                            }
+                        ],
+                    }
+                },
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "journeys": [
+                {
+                    "id": "install_claim_restore_continue",
+                    "external_proof_requests": [{"tuple_id": "avalonia:win-x64:windows"}],
+                    "evidence": {"support_packets_generated_at": support_ts},
+                }
+            ],
+            "summary": {
+                "blocked_external_only_count": 1,
+                "blocked_external_only_hosts": ["windows"],
+                "blocked_external_only_tuples": ["avalonia:win-x64:windows"],
+                "blocked_external_only_host_counts": {"windows": 1},
+            },
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        "expectedArtifactId": "avalonia-win-x64-installer",
+                        "expectedInstallerFileName": "chummer-avalonia-win-x64-installer.exe",
+                        "expectedPublicInstallRoute": "/downloads/install/avalonia-win-x64-installer",
+                        "expectedStartupSmokeReceiptPath": "../startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                        "expectedInstallerSha256": "a" * 64,
+                    }
+                ],
+            },
+        },
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "release channel desktopTupleCoverage.externalProofRequests rows have invalid expectedStartupSmokeReceiptPath values"
+        in result.stderr
+    )

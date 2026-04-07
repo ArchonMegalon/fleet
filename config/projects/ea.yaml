@@ -63,4 +63,7 @@ queue_sources:
   exclude_statuses:
   - released
   label_prefix: 'Promote milestone capability: '
+- kind: tasks_work_log
+  path: /docker/fleet/state/chummer6/TASKS_WORK_LOG.md
+  mode: append
 enabled: true

@@ -52,8 +52,8 @@ review:
   branch_template: fleet/ui-kit
   bot_logins:
   - codex
-queue:
-- Seed Chummer.Ui.Kit with token canon, theme compilation, and preview/gallery ownership without any domain DTOs or HTTP clients.
-- Extract shell chrome, banners, stale-state badges, approval chips, offline banners, and accessibility/state primitives into Blazor and Avalonia UI-kit adapters.
-- Migrate presentation and play to consume Chummer.Ui.Kit as a package-only dependency and delete duplicate local token/theme/component copies.
-queue_sources: []
+queue: []
+queue_sources:
+- kind: worklist
+  path: WORKLIST.md
+  mode: replace

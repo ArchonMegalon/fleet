@@ -94,7 +94,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
 def _load_yaml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8", errors="ignore")) or {}
     return payload if isinstance(payload, dict) else {}
 
 
@@ -134,7 +134,7 @@ def _published_files(repo_root: Path) -> List[Dict[str, str]]:
         files.append(
             {
                 "path": path.name,
-                "content": path.read_text(encoding="utf-8"),
+                "content": path.read_text(encoding="utf-8", errors="ignore"),
             }
         )
     return files

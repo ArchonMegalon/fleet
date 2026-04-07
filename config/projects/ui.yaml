@@ -62,6 +62,9 @@ queue_sources:
 - kind: worklist
   path: WORKLIST.md
   mode: replace
+- kind: worklist
+  path: /docker/chummercomplete/chummer-presentation/WORKLIST.md
+  mode: append
 deployment:
   status: public
   promotion_stage: promoted_preview

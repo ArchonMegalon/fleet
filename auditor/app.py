@@ -33,7 +33,29 @@ APP_PORT = int(os.environ.get("APP_PORT", "8093"))
 APP_TITLE = "Codex Fleet Auditor"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
-CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", "/app/config/fleet.yaml"))
+FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
+
+
+def _default_config_root() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_CONFIG_ROOT", "") or "").strip()
+    candidates: List[pathlib.Path] = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    candidates.extend(
+        [
+            FLEET_MOUNT_ROOT / "config",
+            AUDITOR_DIR.parent / "config",
+            pathlib.Path("/app/config"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+CONFIG_ROOT = _default_config_root()
+CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT / "fleet.yaml")))
 POLICIES_PATH = CONFIG_PATH.with_name("policies.yaml")
 ROUTING_PATH = CONFIG_PATH.with_name("routing.yaml")
 GROUPS_PATH = CONFIG_PATH.with_name("groups.yaml")
@@ -66,10 +88,11 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
 
 def db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -231,8 +254,10 @@ def load_split_projects() -> List[Dict[str, Any]]:
         data = load_yaml(path)
         if isinstance(data.get("projects"), list):
             projects.extend(dict(item or {}) for item in data.get("projects") or [] if isinstance(item, dict))
-        elif data:
+        elif isinstance(data, dict) and str(data.get("id") or "").strip():
             projects.append(dict(data))
+        elif isinstance(data, dict):
+            continue
     return projects
 
 

@@ -1,0 +1,140 @@
+product: chummer
+version: 1
+last_reviewed: 2026-04-01
+purpose: Machine-readable flagship-grade acceptance matrix for whole-product public-release readiness.
+source_documents:
+  - FLAGSHIP_PRODUCT_BAR.md
+  - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+  - FLAGSHIP_UI_RELEASE_GATE.md
+  - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+  - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+  - PUBLIC_RELEASE_EXPERIENCE.yaml
+  - METRICS_AND_SLOS.yaml
+acceptance_axes:
+  - id: primary_path_clarity
+    rule: Each major user job exposes one obvious primary path and one bounded fallback story.
+  - id: authored_ruleset_experience
+    rule: SR4, SR5, and SR6 preserve edition-specific terminology, effect semantics, and workflow cues where the editions materially diverge.
+  - id: dense_data_expert_speed
+    rule: Power-user flows stay scannable, keyboard-safe, and comfortable under dense state and repeat use.
+  - id: rule_environment_honesty
+    rule: The active ruleset, preset, source pack, and amend package set are visible, previewable, and portable wherever they materially affect compute.
+  - id: trust_and_recovery
+    rule: Crash, update, import, reconnect, and conflict states expose honest next-safe-action guidance instead of mystery failure.
+  - id: premium_public_coherence
+    rule: Downloads, support, help, status, and in-product posture describe the same premium product reality.
+  - id: cross_surface_design_authorship
+    rule: Promoted surfaces follow one shared design contract with trustworthy theming, platform-fit layout grammar, explicit state treatment, and screenshot-backed critique evidence.
+  - id: no_step_back_client_parity
+    rule: Every legacy or adjacent client feature family that remains in scope has a first-class Chummer6 equivalent or an explicit bounded replacement story backed by the parity registry.
+
+surfaces:
+  - id: desktop_workbench
+    owner_repos:
+      - chummer6-ui
+      - chummer6-ui-kit
+      - chummer6-core
+    must_prove:
+      - One obvious flagship desktop head and install path per promoted platform.
+      - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
+      - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
+      - SR4, SR5, and SR6 use authored labels, prompts, and interaction cues where the rules differ in meaning.
+      - The active ruleset, preset, and amend-package set stay visible and previewable before a user trusts a build or explain result.
+      - Light and dark themes, focus, warning, stale, preview, and recovery states are screenshot-proven against the shared surface-design contract.
+      - No in-scope legacy or adjacent desktop feature family is stranded behind a missing action or support-only fallback; the parity registry must name the modern successor or bounded replacement.
+    evidence_sources:
+      - DESKTOP_CLIENT_PRODUCT_CUT.md
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+      - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+      - FLAGSHIP_UI_RELEASE_GATE.md
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+      - PUBLIC_RELEASE_EXPERIENCE.yaml
+      - GOLDEN_JOURNEY_RELEASE_GATES.yaml
+
+  - id: rules_and_import_parity
+    owner_repos:
+      - chummer6-core
+      - chummer5a
+    must_prove:
+      - Deterministic rules and explain provenance stay authoritative for promoted mechanics surfaces.
+      - Legacy Chummer4, Chummer5a, and approved Hero Lab imports emit explicit receipts for lossy, partial, or blocked outcomes.
+      - Oracle tests compare imported source facts against Chummer6-derived outcomes and surface divergences as hardening work.
+      - Custom drugs, stacked active effects, and timing windows resolve through deterministic engine state rather than UI-side folklore.
+      - Chummer5a-style amend packages and custom-data overlays either compile into the canonical rule-environment graph or emit explicit downgrade/block receipts.
+      - Hero Lab and serious adjacent SR6 client oracles such as Genesis / CommLink6 either map to first-class Chummer6 successor flows or emit explicit bounded parity receipts.
+    evidence_sources:
+      - BUILD_LAB_PRODUCT_MODEL.md
+      - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
+      - RULES_DRUG_SYSTEM.md
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
+      - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+      - METRICS_AND_SLOS.yaml
+
+  - id: live_play_and_mobile
+    owner_repos:
+      - chummer6-mobile
+      - chummer6-ui-kit
+      - chummer6-hub
+    must_prove:
+      - Reconnect, replay, and resume are trustworthy under degraded-network and cross-device conditions.
+      - Player and GM flows feel authored for live play instead of behaving like shrunk workbench screens.
+      - The shell clearly distinguishes live, stale, offline, pending, and conflict state.
+      - Missing or incompatible rule packs and amend packages are explicit before a resumed device computes against the wrong environment.
+      - Mobile theming, touch targets, and state visibility are proven against the shared surface-design contract instead of inheriting desktop chrome.
+    evidence_sources:
+      - CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md
+      - ROAMING_WORKSPACE_AND_ENTITLEMENT_SYNC.md
+      - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+      - journeys/rejoin-after-disconnect.md
+
+  - id: public_front_door_and_support
+    owner_repos:
+      - chummer6-hub
+      - chummer6-hub-registry
+      - chummer6-ui
+    must_prove:
+      - chummer.run, downloads, help, status, account handoff, and support views read as one product.
+      - Paying users and operators see the same release truth for install, known issues, fixes, and recovery posture.
+      - The public shelf never outruns actual signed, promoted, or supportable artifacts.
+      - Public surfaces prove calm hierarchy, bounded CTAs, and trustworthy dark/light rendering under the shared surface-design contract.
+    evidence_sources:
+      - PUBLIC_RELEASE_EXPERIENCE.yaml
+      - PUBLIC_DOWNLOADS_POLICY.md
+      - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+      - FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md
+
+  - id: publication_and_artifacts
+    owner_repos:
+      - chummer6-media-factory
+      - chummer6-hub-registry
+      - chummer6-hub
+    must_prove:
+      - Preview-before-publish remains visible where canon says preview-first is mandatory.
+      - Published artifacts keep manifests, provenance, compatibility, and recap-ready context attached.
+      - Artifact surfaces look polished enough to justify public sharing rather than feeling like debug exports.
+      - Artifact presentation preserves the shared design contract instead of falling back to utilitarian export chrome.
+    evidence_sources:
+      - CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md
+      - journeys/publish-a-grounded-artifact.md
+      - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
+      - METRICS_AND_SLOS.yaml
+
+  - id: whole_product_release_control
+    owner_repos:
+      - chummer6-design
+      - fleet
+      - executive-assistant
+    must_prove:
+      - Whole-product completion is derived from flagship acceptance and lived journey proof, not only empty milestone rows or green repo tests.
+      - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
+      - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
+    evidence_sources:
+      - FLAGSHIP_PRODUCT_BAR.md
+      - PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md
+      - PRODUCT_HEALTH_SCORECARD.yaml
+
+whole_product_release_rules:
+  - Public release claims must stay within the surfaces that pass this matrix or carry an explicit, bounded preview explanation.
+  - Empty backlog views, green repo tests, or clean worktrees are not sufficient proof of flagship-grade completion by themselves.
+  - Flagship release cannot claim no-step-back parity while any in-scope family marked `missing` or unbounded `partial` remains unresolved in `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`; a `partial` family is only bounded when Fleet's flagship-readiness parity audit records a proof-backed successor route for that family, and families listed under `scope.excluded` there, including `plugin-framework`, do not block the claim.

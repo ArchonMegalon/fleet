@@ -1,0 +1,19 @@
+{
+  "host": "windows",
+  "request_count": 2,
+  "requests": [
+    {
+      "expected_installer_bundle_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+      "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
+      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+      "tuple_id": "avalonia:win-x64:windows"
+    },
+    {
+      "expected_installer_bundle_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
+      "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
+      "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
+      "tuple_id": "blazor-desktop:win-x64:windows"
+    }
+  ],
+  "schema_version": 1
+}

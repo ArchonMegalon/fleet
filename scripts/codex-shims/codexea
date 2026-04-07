@@ -3,7 +3,18 @@ set -euo pipefail
 
 runtime_env_candidates() {
   local path
-  for path in "${CODEXEA_RUNTIME_EA_ENV_PATH:-}" "${FLEET_RUNTIME_EA_ENV_PATH:-}" "/docker/fleet/runtime.ea.env" "/docker/fleet/runtime.env"; do
+  local -a explicit_paths=()
+  for path in "${CODEXEA_RUNTIME_EA_ENV_PATH:-}" "${FLEET_RUNTIME_EA_ENV_PATH:-}"; do
+    [ -n "${path}" ] || continue
+    explicit_paths+=("${path}")
+  done
+  if [ "${#explicit_paths[@]}" -gt 0 ]; then
+    for path in "${explicit_paths[@]}"; do
+      printf '%s\n' "${path}"
+    done
+    return 0
+  fi
+  for path in "/docker/fleet/runtime.ea.env" "/docker/fleet/runtime.env"; do
     [ -n "${path}" ] || continue
     printf '%s\n' "${path}"
   done
@@ -65,6 +76,31 @@ apply_runtime_env_defaults() {
 
 apply_runtime_env_defaults
 
+runtime_env_prefers_managed_auth() {
+  case "${CODEXEA_PREFER_RUNTIME_AUTH:-1}" in
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+sync_runtime_auth_tokens() {
+  local runtime_token=""
+  runtime_env_prefers_managed_auth || return 0
+  runtime_token="$(runtime_env_value EA_MCP_API_TOKEN || true)"
+  if [ -z "${runtime_token}" ]; then
+    runtime_token="$(runtime_env_value EA_API_TOKEN || true)"
+  fi
+  [ -n "${runtime_token}" ] || return 0
+  export EA_MCP_API_TOKEN="${runtime_token}"
+  export EA_API_TOKEN="${runtime_token}"
+}
+
+sync_runtime_auth_tokens
+
 host_resolves() {
   command -v getent >/dev/null 2>&1 || return 1
   getent hosts "${1}" >/dev/null 2>&1
@@ -82,18 +118,32 @@ REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
 WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
+CODEXEA_EXEC_TRACE_PROMPT_FILE="${CODEXEA_EXEC_TRACE_PROMPT_FILE:-${HOME}/.codex/prompts/ea_exec_trace_prompt.md}"
+CODEXEA_EXEC_JSON_RENDERER="${CODEXEA_EXEC_JSON_RENDERER:-/docker/fleet/scripts/codexea_exec_json_render.py}"
 CODEXEA_BASE_PROFILE="${CODEXEA_BASE_PROFILE:-}"
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ALLOW_EASY_MODE_OVERRIDE="${CODEXEA_ALLOW_EASY_MODE_OVERRIDE:-0}"
+CODEXEA_BOOTSTRAP="${CODEXEA_BOOTSTRAP:-0}"
 CODEXEA_TRACE_STARTUP="${CODEXEA_TRACE_STARTUP:-1}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-0}"
 CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
-CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-1}"
+CODEXEA_STARTUP_STATUS="${CODEXEA_STARTUP_STATUS:-0}"
+CODEXEA_STATUS_CONNECT_TIMEOUT_SECONDS="${CODEXEA_STATUS_CONNECT_TIMEOUT_SECONDS:-2}"
+CODEXEA_STATUS_MAX_TIME_SECONDS="${CODEXEA_STATUS_MAX_TIME_SECONDS:-5}"
+CODEXEA_STARTUP_STATUS_COMPACT="${CODEXEA_STARTUP_STATUS_COMPACT:-1}"
 CODEXEA_CREDITS_INCLUDE_BILLING="${CODEXEA_CREDITS_INCLUDE_BILLING:-1}"
+CODEXEA_DISABLE_SCRIPT_WRAPPER="${CODEXEA_DISABLE_SCRIPT_WRAPPER:-0}"
 CODEXEA_STARTUP_PROMPT="${CODEXEA_STARTUP_PROMPT-}"
 CODEXEA_RESUME_PROMPT="${CODEXEA_RESUME_PROMPT-}"
 CODEXEA_INTERACTIVE_ALWAYS_EASY="${CODEXEA_INTERACTIVE_ALWAYS_EASY:-1}"
+CODEXEA_INTERACTIVE_EASY_SUBMODE="${CODEXEA_INTERACTIVE_EASY_SUBMODE:-responses_easy}"
+CODEXEA_EASY_SUBMODE="${CODEXEA_EASY_SUBMODE:-responses_fast}"
+CODEXEA_EASY_MODEL="${CODEXEA_EASY_MODEL:-ea-coder-fast}"
+CODEXEA_EASY_SUPER_MODEL="${CODEXEA_EASY_SUPER_MODEL:-onemin:gpt-5.4}"
+CODEXEA_DISABLE_MCP="${CODEXEA_DISABLE_MCP:-0}"
+CODEXEA_SKIP_GIT_REPO_CHECK="${CODEXEA_SKIP_GIT_REPO_CHECK:-1}"
+CODEXEA_NO_REPO_WORKDIR="${CODEXEA_NO_REPO_WORKDIR:-}"
 CODEXEA_USE_LIVE_PROFILE_MODELS="${CODEXEA_USE_LIVE_PROFILE_MODELS:-1}"
 CODEXEA_POST_AUDIT="${CODEXEA_POST_AUDIT:-1}"
 CODEXEA_POST_AUDIT_MODEL="${CODEXEA_POST_AUDIT_MODEL:-ea-review-light}"
@@ -138,6 +188,146 @@ env_truthy() {
       return 1
       ;;
   esac
+}
+
+is_one_minai_model() {
+  local candidate=""
+  candidate="$(strip_wrapping_quotes "${1:-}")"
+  case "${candidate}" in
+    onemin:*|ea-coder-*|ea-groundwork-*|ea-audit-*|ea-onemin|ea-onemin-* )
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+interactive_context_is_non_tty() {
+  [ ! -t 0 ] || [ ! -t 1 ]
+}
+
+script_supports_tty_wrapper() {
+  case "${SCRIPT_SUPPORTS_TTY_WRAPPER:-}" in
+    1)
+      return 0
+      ;;
+    0)
+      return 1
+      ;;
+  esac
+
+  if ! command -v script >/dev/null 2>&1; then
+    SCRIPT_SUPPORTS_TTY_WRAPPER=0
+    return 1
+  fi
+
+  local help_text=""
+  local has_command_long=0
+  local has_return_long=0
+  local has_command_short=0
+  local has_quiet_short=0
+
+  help_text="$(script --help 2>&1 || true)"
+  if printf '%s\n' "${help_text}" | grep -q -- "--command"; then
+    has_command_long=1
+  fi
+  if printf '%s\n' "${help_text}" | grep -q -- "--return"; then
+    has_return_long=1
+  fi
+  if printf '%s\n' "${help_text}" | grep -qE '(^|[[:space:]])-c([[:space:]]|$)'; then
+    has_command_short=1
+  fi
+  if printf '%s\n' "${help_text}" | grep -qE '(^|[[:space:]])(-q|--quiet)([[:space:]]|$)'; then
+    has_quiet_short=1
+  fi
+
+  if [ "${has_command_long}" -eq 1 ] && [ "${has_return_long}" -eq 1 ]; then
+    SCRIPT_SUPPORTS_TTY_WRAPPER=1
+    SCRIPT_TTY_WRAPPER_STYLE=long
+    return 0
+  fi
+
+  if [ "${has_command_short}" -eq 1 ] && [ "${has_quiet_short}" -eq 1 ]; then
+    SCRIPT_SUPPORTS_TTY_WRAPPER=1
+    SCRIPT_TTY_WRAPPER_STYLE=short
+    return 0
+  fi
+
+  SCRIPT_TTY_WRAPPER_STYLE=
+  SCRIPT_SUPPORTS_TTY_WRAPPER=0
+  return 1
+}
+
+real_codex_supports_skip_git_repo_check() {
+  case "${REAL_CODEX_SUPPORTS_SKIP_GIT_REPO_CHECK:-}" in
+    1)
+      return 0
+      ;;
+    0)
+      return 1
+      ;;
+  esac
+
+  local help_text=""
+  help_text="$("${REAL_CODEX}" --help 2>&1 || true)"
+  if printf '%s\n' "${help_text}" | grep -q -- "--skip-git-repo-check"; then
+    REAL_CODEX_SUPPORTS_SKIP_GIT_REPO_CHECK=1
+    return 0
+  fi
+
+  REAL_CODEX_SUPPORTS_SKIP_GIT_REPO_CHECK=0
+  return 1
+}
+
+real_codex_supports_no_alt_screen() {
+  case "${REAL_CODEX_SUPPORTS_NO_ALT_SCREEN:-}" in
+    1)
+      return 0
+      ;;
+    0)
+      return 1
+      ;;
+  esac
+
+  local help_text=""
+  help_text="$("${REAL_CODEX}" --help 2>&1 || true)"
+  if printf '%s\n' "${help_text}" | grep -q -- "--no-alt-screen"; then
+    REAL_CODEX_SUPPORTS_NO_ALT_SCREEN=1
+    return 0
+  fi
+
+  REAL_CODEX_SUPPORTS_NO_ALT_SCREEN=0
+  return 1
+}
+
+inside_git_repository() {
+  git -C "${PWD:-.}" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+select_default_workdir() {
+  local candidate=""
+  local explicit="${CODEXEA_NO_REPO_WORKDIR-}"
+  local -a candidates=(
+    "${explicit}"
+    "/docker/fleet"
+    "/docker/chummercomplete"
+    "/docker/fleet/repos"
+    "${HOME:-/home/$(id -un)}"
+  )
+
+  for candidate in "${candidates[@]}"; do
+    [ -n "${candidate}" ] || continue
+    if [ ! -d "${candidate}" ]; then
+      continue
+    fi
+    if git -C "${candidate}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 detect_primary_command() {
@@ -211,6 +401,7 @@ args_request_interactive_session() {
   local -a args=("$@")
   local i=0
   local saw_interactive=0
+  local primary_command=""
 
   [ "${#args[@]}" -gt 0 ] || return 1
 
@@ -220,25 +411,19 @@ args_request_interactive_session() {
         saw_interactive=1
         i=$((i + 1))
         ;;
-      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
-        i=$((i + 2))
-        ;;
-      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
-        i=$((i + 1))
-        ;;
       --)
-        return 1
-        ;;
-      -*)
-        i=$((i + 1))
-        ;;
-      *)
-        return 1
+        break
         ;;
     esac
+    i=$((i + 1))
   done
 
-  [ "${saw_interactive}" -eq 1 ]
+  [ "${saw_interactive}" -eq 1 ] || return 1
+  primary_command="$(detect_primary_command "$@")"
+  if [ -n "${primary_command}" ] && is_codex_subcommand "${primary_command}"; then
+    return 1
+  fi
+  return 0
 }
 
 strip_interactive_request_flags() {
@@ -301,8 +486,24 @@ build_base_profile_args() {
 build_bootstrap_prompt() {
   local prefix=""
 
-  if [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
+  if [ "${CODEXEA_BOOTSTRAP}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
     prefix="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
+  fi
+
+  printf '%s' "${prefix}"
+}
+
+build_exec_trace_prompt() {
+  local prefix=""
+
+  if [ "${CODEXEA_BOOTSTRAP}" = "0" ]; then
+    return 0
+  fi
+
+  if [ -r "${CODEXEA_EXEC_TRACE_PROMPT_FILE}" ]; then
+    prefix="$(cat "${CODEXEA_EXEC_TRACE_PROMPT_FILE}")"
+  else
+    prefix=$'Immediately print one short `Trace:` line with the current lane and the work you are starting.\nKeep emitting short one-line `Trace:` updates before each meaningful work unit and again if you have been quiet for roughly 20-45 seconds.\nWork the user request immediately after the first trace line. Do not wait for another instruction.'
   fi
 
   printf '%s' "${prefix}"
@@ -321,9 +522,10 @@ import urllib.request
 lane = str(sys.argv[1] or "").strip().lower()
 profile_by_lane = {
     "easy": "easy",
-    "repair": "easy",
+    "repair": "repair",
     "groundwork": "groundwork",
     "core": str(os.environ.get("CODEXEA_CORE_RESPONSES_PROFILE") or "core").strip().lower() or "core",
+    "core_rescue": "core_rescue",
     "jury": "audit",
     "survival": "survival",
 }
@@ -373,7 +575,13 @@ inject_bootstrap_prompt() {
   local idx=-1
   local prompt_prefix=""
 
-  prompt_prefix="$(build_bootstrap_prompt)"
+  [ "${#args[@]}" -gt 0 ] || return 0
+  args_request_interactive_session "${args[@]}" && {
+    printf '%s\0' "${args[@]}"
+    return
+  }
+
+  prompt_prefix="$(build_exec_trace_prompt)"
   if [ -z "${prompt_prefix}" ]; then
     printf '%s\0' "${args[@]}"
     return
@@ -433,39 +641,209 @@ args_request_exec_session() {
 
 wrap_prompt_invocation_with_exec() {
   local -a args=("$@")
+  local -a exec_prefix=()
+  local -a exec_only_args=()
+  local -a prefix_args=()
+  local arg
+  local has_skip_git_repo_check=0
   local i=0
+
+  exec_prefix=(exec)
+  if env_truthy "${CODEXEA_SKIP_GIT_REPO_CHECK:-0}" && real_codex_supports_skip_git_repo_check; then
+    for arg in "${args[@]}"; do
+      if [ "${arg}" = "--skip-git-repo-check" ]; then
+        has_skip_git_repo_check=1
+        break
+      fi
+    done
+    if [ "${has_skip_git_repo_check}" -eq 0 ]; then
+      exec_prefix+=(--skip-git-repo-check)
+    fi
+  fi
+
+  if [ "${#args[@]}" -gt 0 ] && [ "${args[0]}" = "exec" ]; then
+    printf '%s\0' "${exec_prefix[@]}"
+    if [ "${#exec_only_args[@]}" -gt 0 ]; then
+      printf '%s\0' "${exec_only_args[@]}"
+    fi
+    printf '%s\0' "${args[@]:1}"
+    return
+  fi
 
   while [ "${i}" -lt "${#args[@]}" ]; do
     case "${args[$i]}" in
-      --)
-        if [ "${i}" -gt 0 ]; then
-          printf '%s\0' "${args[@]:0:${i}}"
+      --json|--ephemeral)
+        exec_only_args+=("${args[$i]}")
+        i=$((i + 1))
+        ;;
+      -o|--output-last-message|--color|--output-schema)
+        exec_only_args+=("${args[$i]}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          exec_only_args+=("${args[$i]}")
         fi
-        printf '%s\0' exec
+        i=$((i + 1))
+        ;;
+      --)
+        if [ "${#prefix_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${prefix_args[@]}"
+        fi
+        printf '%s\0' "${exec_prefix[@]}"
+        if [ "${#exec_only_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${exec_only_args[@]}"
+        fi
         printf '%s\0' "${args[@]:${i}}"
         return
         ;;
       -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir)
-        i=$((i + 2))
+        prefix_args+=("${args[$i]}")
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          prefix_args+=("${args[$i]}")
+        fi
+        i=$((i + 1))
         ;;
       --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        prefix_args+=("${args[$i]}")
         i=$((i + 1))
         ;;
       -*)
+        prefix_args+=("${args[$i]}")
         i=$((i + 1))
         ;;
       *)
-        if [ "${i}" -gt 0 ]; then
-          printf '%s\0' "${args[@]:0:${i}}"
+        if [ "${#prefix_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${prefix_args[@]}"
         fi
-        printf '%s\0' exec
+        printf '%s\0' "${exec_prefix[@]}"
+        if [ "${#exec_only_args[@]}" -gt 0 ]; then
+          printf '%s\0' "${exec_only_args[@]}"
+        fi
         printf '%s\0' "${args[@]:${i}}"
         return
         ;;
     esac
   done
 
-  printf '%s\0' "${args[@]}"
+  if [ "${#prefix_args[@]}" -gt 0 ]; then
+    printf '%s\0' "${prefix_args[@]}"
+  fi
+  printf '%s\0' "${exec_prefix[@]}"
+  if [ "${#exec_only_args[@]}" -gt 0 ]; then
+    printf '%s\0' "${exec_only_args[@]}"
+  fi
+}
+
+append_exec_json_flag() {
+  local -a args=("$@")
+  local -a rendered=()
+  local arg
+  local inserted=0
+
+  for arg in "${args[@]}"; do
+    if [ "${arg}" = "--json" ]; then
+      printf '%s\0' "${args[@]}"
+      return
+    fi
+  done
+
+  for arg in "${args[@]}"; do
+    rendered+=("${arg}")
+    if [ "${inserted}" -eq 0 ] && [ "${arg}" = "exec" ]; then
+      rendered+=(--json)
+      inserted=1
+    fi
+  done
+
+  printf '%s\0' "${rendered[@]}"
+}
+
+args_request_raw_exec_output() {
+  local -a args=("$@")
+  local arg
+
+  for arg in "${args[@]}"; do
+    case "${arg}" in
+      --json|-o|--output-last-message)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+run_exec_session_with_clean_output() {
+  local -a cmd=("$@")
+  local -a json_cmd=()
+  local fifo_path=""
+  local stdin_file=""
+  local child_pid=0
+  local renderer_pid=0
+  local interrupted_exit=0
+  local child_exit=0
+  local tick_count=0
+
+  [ "${#cmd[@]}" -gt 0 ] || return 0
+  mapfile -d '' json_cmd < <(append_exec_json_flag "${cmd[@]}")
+  fifo_path="$(mktemp -u)"
+  mkfifo "${fifo_path}"
+
+  python3 "${CODEXEA_EXEC_JSON_RENDERER}" "$(pwd)" < "${fifo_path}" &
+  renderer_pid=$!
+
+  emit_waiting_trace 0
+  if [ -t 0 ]; then
+    "${json_cmd[@]}" < /dev/null > "${fifo_path}" 2> >(
+      while IFS= read -r line; do
+        if [ "${line}" != "Reading additional input from stdin..." ]; then
+          printf '%s\n' "${line}" >&2
+        fi
+      done
+    ) &
+  else
+    stdin_file="$(mktemp)"
+    if [ -n "${CODEXEA_STDIN_PROMPT-}" ]; then
+      printf '%s' "${CODEXEA_STDIN_PROMPT}" > "${stdin_file}"
+    else
+      cat > "${stdin_file}" || true
+    fi
+    "${json_cmd[@]}" < "${stdin_file}" > "${fifo_path}" 2> >(
+      while IFS= read -r line; do
+        if [ "${line}" != "Reading additional input from stdin..." ]; then
+          printf '%s\n' "${line}" >&2
+        fi
+      done
+    ) &
+  fi
+  child_pid=$!
+  trap 'interrupted_exit=130; kill -INT "${child_pid}" 2>/dev/null || true' INT
+  trap 'interrupted_exit=143; kill -TERM "${child_pid}" 2>/dev/null || true' TERM
+
+  while kill -0 "${child_pid}" 2>/dev/null; do
+    sleep 0.1 || break
+    kill -0 "${child_pid}" 2>/dev/null || break
+    tick_count=$((tick_count + 1))
+    if [ "${tick_count}" -ge 250 ]; then
+      emit_waiting_trace
+      tick_count=0
+    fi
+  done
+
+  set +e
+  wait "${child_pid}"
+  child_exit=$?
+  wait "${renderer_pid}" 2>/dev/null
+  set -e
+  if [ -n "${stdin_file}" ]; then
+    rm -f "${stdin_file}"
+  fi
+  trap - INT TERM
+  rm -f "${fifo_path}"
+
+  if [ "${interrupted_exit}" -ne 0 ]; then
+    return "${interrupted_exit}"
+  fi
+  return "${child_exit}"
 }
 
 emit_startup_trace() {
@@ -495,6 +873,184 @@ emit_startup_trace() {
     "${MODE}" \
     "${trace_suffix}" \
     "${next_step}" >&2
+}
+
+emit_prelaunch_wait_trace() {
+  local trace_lane="${REQUESTED_LANE:-${CODEXEA_DEFAULT_LANE:-easy}}"
+  local mode="${1:-wait}"
+  env_truthy "${CODEXEA_TRACE_STARTUP}" || return 0
+  [ -t 1 ] || return 0
+  case "${mode}" in
+    task)
+      printf 'Trace: lane=%s starting interactive session with initial task\n' \
+        "${trace_lane}" >&2
+      ;;
+    *)
+      printf 'Trace: lane=%s ready and waiting for user instructions\n' \
+        "${trace_lane}" >&2
+      ;;
+  esac
+}
+
+emit_waiting_trace() {
+  local elapsed_seconds="${1:-}"
+  env_truthy "${CODEXEA_TRACE_STARTUP}" || return 0
+  if [ -n "${elapsed_seconds}" ]; then
+    printf 'Trace: lane=%s waiting for model output (%ss)\n' "${EFFECTIVE_LANE}" "${elapsed_seconds}" >&2
+  else
+    printf 'Trace: lane=%s waiting for model output\n' "${EFFECTIVE_LANE}" >&2
+  fi
+}
+
+run_with_trace_heartbeat() {
+  local interval="${CODEXEA_TRACE_HEARTBEAT_SECONDS:-5}"
+  local -a cmd=("$@")
+  local -a effective_cmd=("${cmd[@]}")
+  local script_cmd_line=""
+  local child_pid=0
+  local interrupted_exit=0
+  local exit_code=0
+  local interval_seconds
+  local elapsed_seconds=0
+  local heartbeat_started_at=0
+  local tracer_pid=0
+  local stdin_file=""
+  local script_trace_log=""
+  local child_exit=0
+
+  [ "${#cmd[@]}" -gt 0 ] || return 0
+  env_truthy "${CODEXEA_TRACE_STARTUP}" || {
+    "${effective_cmd[@]}"
+    return $?
+  }
+  case "${interval}" in
+    ""|0|0.0)
+      "${effective_cmd[@]}"
+      return $?
+      ;;
+  esac
+  interval_seconds="$(python3 - "${interval}" <<'PY'
+import sys
+
+try:
+    interval = float(sys.argv[1] or "5")
+except ValueError:
+    interval = 5.0
+if interval <= 0:
+    interval = 5.0
+print(interval)
+PY
+)"
+
+  if [ "${CODEXEA_DISABLE_SCRIPT_WRAPPER:-0}" != "1" ] && [ "${INTERACTIVE_SESSION_REQUEST:-0}" -eq 1 ] && [ "${CODEXEA_SCRIPT_WRAPPED:-0}" != "1" ] && { [ -n "${TMUX-}" ] || [ ! -t 0 ] || [ ! -t 1 ]; }; then
+    if script_supports_tty_wrapper; then
+      script_trace_log="${CODEXEA_STATE_DIR}/codexea-script-$$-${RANDOM}.log"
+      printf -v script_cmd_line '%q ' "${cmd[@]}"
+      if [ -n "${script_cmd_line}" ]; then
+        script_cmd_line="${script_cmd_line% }"
+        case "${SCRIPT_TTY_WRAPPER_STYLE:-}" in
+          long)
+            effective_cmd=(env CODEXEA_SCRIPT_WRAPPED=1 script --quiet --return --command "${script_cmd_line}" "${script_trace_log}")
+            ;;
+          short)
+            effective_cmd=(env CODEXEA_SCRIPT_WRAPPED=1 script -q -c "${script_cmd_line}" "${script_trace_log}")
+            ;;
+        esac
+      fi
+    fi
+  fi
+
+  if [ ! -t 0 ] || [ ! -t 1 ]; then
+    stdin_file="$(mktemp)"
+    if [ -n "${CODEXEA_STDIN_PROMPT-}" ]; then
+      printf '%s' "${CODEXEA_STDIN_PROMPT}" > "${stdin_file}"
+    else
+      cat > "${stdin_file}" || true
+    fi
+    emit_waiting_trace 0
+    "${effective_cmd[@]}" < "${stdin_file}" &
+    child_pid=$!
+    trap 'interrupted_exit=130; kill -INT "${child_pid}" 2>/dev/null || true' INT
+    trap 'interrupted_exit=143; kill -TERM "${child_pid}" 2>/dev/null || true' TERM
+
+    while kill -0 "${child_pid}" 2>/dev/null; do
+      sleep 0.1 || break
+      kill -0 "${child_pid}" 2>/dev/null || break
+      exit_code=$((exit_code + 1))
+      if [ "${exit_code}" -ge 250 ]; then
+        emit_waiting_trace
+        exit_code=0
+      fi
+    done
+
+    set +e
+    wait "${child_pid}"
+    child_exit=$?
+    set -e
+    trap - INT TERM
+    rm -f "${stdin_file}"
+    if [ "${interrupted_exit}" -ne 0 ]; then
+      return "${interrupted_exit}"
+    fi
+    return "${child_exit}"
+  fi
+
+  (
+    emit_waiting_trace 0
+    heartbeat_started_at="$(date +%s)"
+    while true; do
+      sleep "${interval_seconds}" || break
+      elapsed_seconds="$(( $(date +%s) - heartbeat_started_at ))"
+      emit_waiting_trace "${elapsed_seconds}"
+    done
+  ) &
+  tracer_pid=$!
+
+  set +e
+  "${effective_cmd[@]}"
+  child_exit=$?
+  set -e
+
+  if [ "${tracer_pid}" -ne 0 ]; then
+    kill "${tracer_pid}" 2>/dev/null || true
+    wait "${tracer_pid}" 2>/dev/null || true
+  fi
+  if [ -n "${script_trace_log}" ]; then
+    rm -f "${script_trace_log}" || true
+  fi
+
+  return "${child_exit}"
+}
+
+append_query_param() {
+  local url="$1"
+  local name="$2"
+  local value="$3"
+
+  if printf '%s' "${url}" | grep -q "?" ; then
+    printf '%s&%s=%s' "${url}" "${name}" "${value}"
+  else
+    printf '%s?%s=%s' "${url}" "${name}" "${value}"
+  fi
+}
+
+interactive_route_lane() {
+  local output=""
+  local key=""
+  local value=""
+  local lane=""
+
+  [ -f "${ROUTE_HELPER}" ] || return 1
+  output="$(python3 "${ROUTE_HELPER}" "$@" 2>/dev/null)" || return 1
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      lane)
+        lane="${value}"
+        ;;
+    esac
+  done <<< "${output}"
+  [ -n "${lane}" ] || return 1
+  printf '%s' "${lane}"
 }
 
 capture_post_audit_context() {
@@ -667,6 +1223,7 @@ emit_post_audit_request() {
   command -v curl >/dev/null 2>&1 || return 0
   if [ -n "${token}" ]; then
     curl_args+=(-H "Authorization: Bearer ${token}")
+    curl_args+=(-H "X-API-Token: ${token}")
   fi
   curl_args+=(-d @"${review_file}" "${EA_BASE_URL%/}/v1/codex/review-light")
   if env_truthy "${CODEXEA_POST_AUDIT_ASYNC}"; then
@@ -708,12 +1265,24 @@ show_status() {
     esac
     shift || true
   done
-  local -a curl_args=(curl -fsS -H "X-EA-Principal-ID: ${EA_MCP_PRINCIPAL_ID}")
+  local -a curl_args=(
+    curl
+    -fsS
+    --connect-timeout "${CODEXEA_STATUS_CONNECT_TIMEOUT_SECONDS}"
+    --max-time "${CODEXEA_STATUS_MAX_TIME_SECONDS}"
+    -H "X-EA-Principal-ID: ${EA_MCP_PRINCIPAL_ID}"
+  )
   local api_token="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
-  local status_url="${EA_STATUS_URL}?window=${window}&refresh=${refresh}"
+  local status_url="${EA_STATUS_URL}"
+  status_url="$(append_query_param "${status_url}" "window" "${window}")"
+  status_url="$(append_query_param "${status_url}" "refresh" "${refresh}")"
+  if [ "${startup_compact}" -eq 1 ] && env_truthy "${CODEXEA_STARTUP_STATUS_COMPACT}"; then
+    status_url="$(append_query_param "${status_url}" "compact" "1")"
+  fi
   local body=""
   if [ -n "${api_token}" ]; then
     curl_args+=(-H "Authorization: Bearer ${api_token}")
+    curl_args+=(-H "X-API-Token: ${api_token}")
   fi
   if [ -n "${watch_seconds}" ]; then
     local -a watch_args=()
@@ -732,6 +1301,9 @@ show_status() {
   fi
   if ! body="$("${curl_args[@]}" "${status_url}" 2>/dev/null)"; then
     body="$("${curl_args[@]}" "${EA_PROFILES_URL}" 2>/dev/null)" || {
+      if [ "${startup_compact}" -eq 1 ]; then
+        return 1
+      fi
       if [ -z "${api_token}" ]; then
         echo "EA status unavailable from ${status_url} and fallback ${EA_PROFILES_URL}; EA_MCP_API_TOKEN / EA_API_TOKEN is not configured" >&2
       else
@@ -903,10 +1475,18 @@ if billing:
 PY
 }
 
+CODEXEA_STDIN_PROMPT=""
+if [ "$#" -eq 0 ] && [ ! -t 0 ]; then
+  CODEXEA_STDIN_PROMPT="$(cat || true)"
+  if [ -n "${CODEXEA_STDIN_PROMPT}" ]; then
+    set -- "${CODEXEA_STDIN_PROMPT}"
+  fi
+fi
+
 REQUESTED_LANE="${CODEXEA_DEFAULT_LANE}"
 LANE_WAS_EXPLICIT=0
 case "${1:-}" in
-  easy|repair|groundwork|core|jury|auto|survival)
+  easy|repair|groundwork|core|core_rescue|jury|auto|survival)
     REQUESTED_LANE="$1"
     LANE_WAS_EXPLICIT=1
     shift
@@ -947,11 +1527,21 @@ if [ -z "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; then
 fi
 
 if { [ "$#" -eq 0 ] || args_request_interactive_session "$@"; } && [ "${CODEXEA_STARTUP_STATUS}" != "0" ] && [ -t 1 ]; then
-  show_status --startup --refresh || true
-  printf '\n'
+  if [ "$#" -eq 0 ]; then
+    emit_prelaunch_wait_trace wait
+  else
+    emit_prelaunch_wait_trace task
+    show_status --startup --refresh || true
+    printf '\n'
+  fi
 fi
 
-if [ "$#" -gt 0 ] && [ -f "${ROUTE_HELPER}" ] && ! args_request_interactive_session "$@"; then
+ROUTING_CANDIDATE_COMMAND=""
+if [ "$#" -gt 0 ] && [ -f "${ROUTE_HELPER}" ]; then
+  ROUTING_CANDIDATE_COMMAND="$(detect_primary_command "$@")"
+fi
+
+if [ "$#" -gt 0 ] && [ -f "${ROUTE_HELPER}" ] && ! is_codex_subcommand "${ROUTING_CANDIDATE_COMMAND}" && ! args_request_interactive_session "$@"; then
   TELEMETRY_ARGS=("$@")
   if [ "${LANE_WAS_EXPLICIT}" -eq 1 ]; then
     TELEMETRY_ARGS=("${REQUESTED_LANE}" "${TELEMETRY_ARGS[@]}")
@@ -970,26 +1560,62 @@ if [ "$#" -gt 0 ] && [ -f "${ROUTE_HELPER}" ] && ! args_request_interactive_sess
   fi
 fi
 
+if [ -z "${CODEXEA_STDIN_PROMPT}" ] && [ ! -t 0 ] && [ "$#" -gt 0 ] && [ "${1}" = "exec" ] && [ "${*: -1}" = "-" ]; then
+  CODEXEA_STDIN_PROMPT="$(cat || true)"
+fi
+
+RAW_INTERACTIVE_SESSION_REQUEST=0
+NON_TTY_NOARG_INTERACTIVE_FALLBACK=0
+INTERACTIVE_REQUEST_ARGS=()
+if [ "$#" -eq 0 ] || args_request_interactive_session "$@"; then
+  RAW_INTERACTIVE_SESSION_REQUEST=1
+fi
+if [ "${RAW_INTERACTIVE_SESSION_REQUEST}" -eq 1 ] && interactive_context_is_non_tty; then
+  if args_request_interactive_session "$@"; then
+    mapfile -d '' INTERACTIVE_REQUEST_ARGS < <(strip_interactive_request_flags "$@")
+  else
+    INTERACTIVE_REQUEST_ARGS=()
+  fi
+  if [ "${#INTERACTIVE_REQUEST_ARGS[@]}" -eq 0 ]; then
+    NON_TTY_NOARG_INTERACTIVE_FALLBACK=1
+  fi
+fi
+
+if [ "${LANE_WAS_EXPLICIT}" -eq 0 ] && ! env_truthy "${CODEXEA_INTERACTIVE_ALWAYS_EASY}" && { [ "$#" -eq 0 ] || args_request_interactive_session "$@"; }; then
+  if [ "${#INTERACTIVE_REQUEST_ARGS[@]}" -eq 0 ]; then
+    if args_request_interactive_session "$@"; then
+      mapfile -d '' INTERACTIVE_ROUTE_ARGS < <(strip_interactive_request_flags "$@")
+    else
+      INTERACTIVE_ROUTE_ARGS=()
+    fi
+  else
+    INTERACTIVE_ROUTE_ARGS=("${INTERACTIVE_REQUEST_ARGS[@]}")
+  fi
+  INTERACTIVE_ROUTE_LANE="$(interactive_route_lane "${INTERACTIVE_ROUTE_ARGS[@]}" || true)"
+  if [ -n "${INTERACTIVE_ROUTE_LANE}" ]; then
+    REQUESTED_LANE="${INTERACTIVE_ROUTE_LANE}"
+  fi
+fi
+
 EFFECTIVE_LANE="${REQUESTED_LANE}"
 EFFECTIVE_SUBMODE=""
 POST_AUDIT_THIS_RUN=0
 if [ "${EFFECTIVE_LANE}" = "auto" ] || [ "${EFFECTIVE_LANE}" = "easy" ]; then
   EFFECTIVE_LANE="easy"
-  EFFECTIVE_SUBMODE="mcp"
-  EFFECTIVE_REASON="mcp_easy_locked"
+  EFFECTIVE_REASON="easy_lane_locked"
   POST_AUDIT_THIS_RUN=1
 else
   EFFECTIVE_REASON="explicit_lane_requested"
 fi
 
 if [ "${EFFECTIVE_LANE}" = "easy" ] && has_explicit_runtime_override "$@"; then
-  echo "codexea easy is locked to MCP easy; remove model/provider/profile overrides or use an explicit lane wrapper" >&2
+  echo "codexea easy is locked to EA responses easy; remove model/provider/profile overrides or use an explicit lane wrapper" >&2
   exit 2
 fi
 
 if [ "${EFFECTIVE_LANE}" = "easy" ] && [ -n "${CODEXEA_MODE_OVERRIDE}" ]; then
   if ! env_truthy "${CODEXEA_ALLOW_EASY_MODE_OVERRIDE}"; then
-    echo "codexea easy is locked to MCP; CODEXEA_MODE override is disabled unless CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1 for debugging" >&2
+    echo "codexea easy is locked to EA responses; CODEXEA_MODE override is disabled unless CODEXEA_ALLOW_EASY_MODE_OVERRIDE=1 for debugging" >&2
     exit 2
   fi
   case "${CODEXEA_MODE_OVERRIDE}" in
@@ -1006,20 +1632,34 @@ fi
 MODE=""
 MODEL=""
 REASONING=""
+if ! is_one_minai_model "${CODEXEA_EASY_MODEL}"; then
+  CODEXEA_EASY_MODEL="ea-coder-fast"
+fi
+
 case "${EFFECTIVE_LANE}" in
   easy)
-    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE:-mcp}}"
+    if [ "${RAW_INTERACTIVE_SESSION_REQUEST}" -eq 1 ]; then
+      EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_INTERACTIVE_EASY_SUBMODE}}"
+    else
+      EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CODEXEA_EASY_SUBMODE}}"
+      EFFECTIVE_REASON="responses_fast_default"
+    fi
     case "${EFFECTIVE_SUBMODE}" in
-      responses_easy|responses_fast|responses)
+      responses_easy)
         MODE="responses"
-        MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-ea-gemini-flash}}"
+        MODEL="${CODEXEA_EASY_SUPER_MODEL:-ea-gemini-flash}"
+        REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
+        ;;
+      responses_fast|responses)
+        MODE="responses"
+        MODEL="${CODEXEA_EASY_MODEL}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
         ;;
       mcp)
         MODE="mcp"
         MODEL="${CODEXEA_MODEL:-${CODEXEA_EASY_MODEL:-}}"
         REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
-        export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-gemini-2.5-flash}}"
+        export EA_MCP_MODEL="${EA_MCP_MODEL:-${CODEXEA_EASY_MCP_MODEL:-onemin:gpt-5.4}}"
         ;;
       *)
         echo "Unsupported CODEXEA easy submode: ${EFFECTIVE_SUBMODE} (expected: responses_easy, responses_fast, responses, or mcp)" >&2
@@ -1052,6 +1692,12 @@ case "${EFFECTIVE_LANE}" in
     REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_CORE_REASONING_EFFORT:-high}}"
     EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-${CORE_DEFAULT_SUBMODE}}"
     ;;
+  core_rescue)
+    MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_CORE_RESCUE_MODE:-responses}}"
+    MODEL="${CODEXEA_MODEL:-${CODEXEA_CORE_RESCUE_MODEL:-ea-coder-hard-rescue}}"
+    REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_CORE_RESCUE_REASONING_EFFORT:-high}}"
+    EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-responses_core_rescue}"
+    ;;
   jury)
     MODE="${CODEXEA_MODE_OVERRIDE:-${CODEXEA_JURY_MODE:-responses}}"
     MODEL="${CODEXEA_MODEL:-${CODEXEA_JURY_MODEL:-ea-audit-jury}}"
@@ -1066,28 +1712,35 @@ case "${EFFECTIVE_LANE}" in
     EFFECTIVE_SUBMODE="${EFFECTIVE_SUBMODE:-responses_survival}"
     ;;
   *)
-    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, repair, groundwork, core, jury, auto, survival)" >&2
+    echo "Unsupported CODEXEA lane: ${EFFECTIVE_LANE} (expected: easy, repair, groundwork, core, core_rescue, jury, auto, survival)" >&2
     exit 2
     ;;
 esac
 
-if [ "${MODE}" = "responses" ]; then
-  LIVE_PROFILE_MODEL="$(live_profile_model_for_lane "${EFFECTIVE_LANE}" 2>/dev/null || true)"
-  if [ -n "${LIVE_PROFILE_MODEL}" ]; then
-    MODEL="${LIVE_PROFILE_MODEL}"
-    case "${EFFECTIVE_LANE}" in
+    if [ "${MODE}" = "responses" ]; then
+      LIVE_PROFILE_MODEL="$(live_profile_model_for_lane "${EFFECTIVE_LANE}" 2>/dev/null || true)"
+      if [ -n "${LIVE_PROFILE_MODEL}" ]; then
+        MODEL="${LIVE_PROFILE_MODEL}"
+        if [ "${EFFECTIVE_LANE}" = "easy" ] && ! is_one_minai_model "${MODEL}"; then
+          MODEL="${CODEXEA_EASY_MODEL}"
+          REASONING="${CODEXEA_REASONING_EFFORT:-${CODEXEA_EASY_REASONING_EFFORT:-low}}"
+        fi
+        case "${EFFECTIVE_LANE}" in
       easy|repair)
         EFFECTIVE_SUBMODE="responses_fast"
         ;;
       groundwork)
         EFFECTIVE_SUBMODE="responses_groundwork"
         ;;
-      core)
-        if [ "${CODEXEA_CORE_RESPONSES_PROFILE:-core}" = "core_batch" ]; then
-          EFFECTIVE_SUBMODE="responses_core_batch"
-        else
-          EFFECTIVE_SUBMODE="responses_core"
-        fi
+          core)
+            if [ "${CODEXEA_CORE_RESPONSES_PROFILE:-core}" = "core_batch" ]; then
+              EFFECTIVE_SUBMODE="responses_core_batch"
+            else
+              EFFECTIVE_SUBMODE="responses_core"
+            fi
+            ;;
+          core_rescue)
+            EFFECTIVE_SUBMODE="responses_core_rescue"
         ;;
       jury)
         EFFECTIVE_SUBMODE="responses_audit"
@@ -1096,7 +1749,30 @@ if [ "${MODE}" = "responses" ]; then
         EFFECTIVE_SUBMODE="responses_survival"
         ;;
     esac
-  fi
+      fi
+    fi
+
+if [ "${MODE}" = "responses" ] && [ "${EFFECTIVE_LANE}" != "easy" ] && [ -n "${MODEL}" ] && ! is_one_minai_model "${MODEL}"; then
+  case "${EFFECTIVE_LANE}" in
+    core)
+      MODEL="ea-coder-hard"
+      ;;
+    core_rescue)
+      MODEL="ea-coder-hard-rescue"
+      ;;
+    jury)
+      MODEL="ea-audit-jury"
+      ;;
+    survival)
+      MODEL="ea-coder-survival"
+      ;;
+    repair)
+      MODEL="ea-coder-fast"
+      ;;
+    groundwork)
+      MODEL="ea-groundwork-gemini"
+      ;;
+  esac
 fi
 
 export CODEXEA_LANE="${EFFECTIVE_LANE}"
@@ -1106,7 +1782,18 @@ BASE_PROFILE_ARGS=()
 INTERACTIVE_ARGS=()
 
 if [ "${CODEXEA_NO_ALT_SCREEN}" != "0" ]; then
-  INTERACTIVE_ARGS+=(--no-alt-screen)
+  if real_codex_supports_no_alt_screen; then
+    INTERACTIVE_ARGS+=(--no-alt-screen)
+  fi
+fi
+if env_truthy "${CODEXEA_SKIP_GIT_REPO_CHECK}" && real_codex_supports_skip_git_repo_check; then
+  INTERACTIVE_ARGS+=(--skip-git-repo-check)
+fi
+if [ "${RAW_INTERACTIVE_SESSION_REQUEST}" -eq 1 ] && [ "$#" -eq 0 ] && ! inside_git_repository; then
+  CODEXEA_INTERACTIVE_WORKDIR="$(select_default_workdir || true)"
+  if [ -n "${CODEXEA_INTERACTIVE_WORKDIR}" ]; then
+    INTERACTIVE_ARGS+=( -C "${CODEXEA_INTERACTIVE_WORKDIR}" )
+  fi
 fi
 
 case "${MODE}" in
@@ -1118,6 +1805,7 @@ case "${MODE}" in
   responses)
     : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=300000}"
     : "${CODEXEA_STREAM_MAX_RETRIES:=5}"
+    EA_AUTH_TOKEN="${EA_API_TOKEN:-${EA_MCP_API_TOKEN:-}}"
     EA_CODEX_PROFILE="${EFFECTIVE_LANE}"
     if [ "${EA_CODEX_PROFILE}" = "core" ] && [ -n "${CODEXEA_CORE_RESPONSES_PROFILE:-}" ]; then
       EA_CODEX_PROFILE="${CODEXEA_CORE_RESPONSES_PROFILE}"
@@ -1126,8 +1814,8 @@ case "${MODE}" in
       EA_CODEX_PROFILE="audit"
     fi
     EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"X-EA-Codex-Profile\"=\"${EA_CODEX_PROFILE}\"}"
-    if [ -n "${EA_API_TOKEN:-}" ]; then
-      EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"X-EA-Codex-Profile\"=\"${EA_CODEX_PROFILE}\",\"Authorization\"=\"Bearer ${EA_API_TOKEN}\"}"
+    if [ -n "${EA_AUTH_TOKEN:-}" ]; then
+      EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"X-EA-Codex-Profile\"=\"${EA_CODEX_PROFILE}\",\"Authorization\"=\"Bearer ${EA_AUTH_TOKEN}\",\"x-api-token\"=\"${EA_AUTH_TOKEN}\"}"
     fi
     EA_DEFAULT_ARGS+=(
       -c 'model_provider="ea"'
@@ -1149,12 +1837,28 @@ esac
 if [ -n "${REASONING}" ]; then
   EA_DEFAULT_ARGS+=(-c "model_reasoning_effort=\"${REASONING}\"")
 fi
+if env_truthy "${CODEXEA_DISABLE_MCP}"; then
+  EA_DEFAULT_ARGS+=(-c 'mcp_servers={}')
+fi
 
 mapfile -d '' BASE_PROFILE_ARGS < <(build_base_profile_args "$@")
 mapfile -d '' ADJUSTED_ARGS < <(inject_bootstrap_prompt "$@")
+if [ "${NON_TTY_NOARG_INTERACTIVE_FALLBACK}" -eq 1 ]; then
+  ADJUSTED_ARGS=(exec -)
+fi
+PRIMARY_COMMAND=""
+if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ]; then
+  PRIMARY_COMMAND="$(detect_primary_command "${ADJUSTED_ARGS[@]}")"
+fi
 INTERACTIVE_SESSION_REQUEST=0
-if [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] || args_request_interactive_session "${ADJUSTED_ARGS[@]}"; then
+if [ "${NON_TTY_NOARG_INTERACTIVE_FALLBACK}" -eq 1 ]; then
   INTERACTIVE_SESSION_REQUEST=1
+elif [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] || args_request_interactive_session "${ADJUSTED_ARGS[@]}"; then
+  INTERACTIVE_SESSION_REQUEST=1
+fi
+RESUME_SESSION_REQUEST=0
+if [ "${PRIMARY_COMMAND}" = "resume" ]; then
+  RESUME_SESSION_REQUEST=1
 fi
 EXEC_SESSION_REQUEST=0
 if args_request_exec_session "${ADJUSTED_ARGS[@]}"; then
@@ -1163,12 +1867,31 @@ if args_request_exec_session "${ADJUSTED_ARGS[@]}"; then
 else
   EXEC_SESSION_ARGS=()
 fi
+if [ "${NON_TTY_NOARG_INTERACTIVE_FALLBACK}" -eq 1 ]; then
+  EXEC_SESSION_REQUEST=1
+  if [ "${#EXEC_SESSION_ARGS[@]}" -eq 0 ]; then
+    mapfile -d '' EXEC_SESSION_ARGS < <(wrap_prompt_invocation_with_exec "${ADJUSTED_ARGS[@]}")
+  fi
+fi
+EXPLICIT_EXEC_SUBCOMMAND_REQUEST=0
+if [ "${PRIMARY_COMMAND}" = "exec" ]; then
+  EXPLICIT_EXEC_SUBCOMMAND_REQUEST=1
+fi
 INTERACTIVE_SESSION_WITH_FLAGS=0
 if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ] && args_request_interactive_session "${ADJUSTED_ARGS[@]}"; then
   INTERACTIVE_SESSION_WITH_FLAGS=1
   mapfile -d '' INTERACTIVE_SESSION_ARGS < <(strip_interactive_request_flags "${ADJUSTED_ARGS[@]}")
 else
   INTERACTIVE_SESSION_ARGS=()
+fi
+PROMPT_TRACE_HEARTBEAT_REQUEST=1
+if [ "${INTERACTIVE_SESSION_WITH_FLAGS}" -eq 1 ]; then
+  if [ -z "${TMUX-}" ] || ([ -t 0 ] && [ -t 1 ]); then
+    PROMPT_TRACE_HEARTBEAT_REQUEST=0
+  fi
+fi
+if [ "${INTERACTIVE_SESSION_REQUEST}" -eq 1 ] || [ "${RESUME_SESSION_REQUEST}" -eq 1 ]; then
+  PROMPT_TRACE_HEARTBEAT_REQUEST=0
 fi
 
 if [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ] && { [ -n "${CODEXEA_WATCHDOG_RESUME_SESSION_ID:-}" ] || [ -n "${CODEXEA_WATCHDOG_RESUME_PROMPT+x}" ]; }; then
@@ -1191,19 +1914,22 @@ elif [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] && [ -n "${CODEXEA_WATCHDOG_ACTIVE:-}" ]; 
   fi
 elif [ "${INTERACTIVE_SESSION_WITH_FLAGS}" -eq 1 ]; then
   CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${INTERACTIVE_SESSION_ARGS[@]}")
-elif [ "${INTERACTIVE_SESSION_REQUEST}" -eq 1 ] && [ "${#ADJUSTED_ARGS[@]}" -gt 0 ]; then
+elif [ "${RESUME_SESSION_REQUEST}" -eq 1 ]; then
   CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${ADJUSTED_ARGS[@]}")
 elif [ "${EXEC_SESSION_REQUEST}" -eq 1 ]; then
   CODEXEA_CMD=("${REAL_CODEX}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${EXEC_SESSION_ARGS[@]}")
   if [ "${#ADJUSTED_ARGS[@]}" -gt 0 ] && [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
     export CODEXEA_POST_AUDIT_OBJECTIVE="${ADJUSTED_ARGS[*]}"
   fi
-elif [ "${#ADJUSTED_ARGS[@]}" -eq 0 ] && [ "${CODEXEA_BOOTSTRAP:-1}" != "0" ] && [ -r "${BOOTSTRAP_PROMPT_FILE}" ]; then
-  BOOTSTRAP_PROMPT="$(cat "${BOOTSTRAP_PROMPT_FILE}")"
-  BOOTSTRAP_PROMPT+=$'\n\n'"Start now in $(pwd). Account for the startup status already shown, then continue the next unfinished slice."
-  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${BOOTSTRAP_PROMPT}")
+elif [ "${INTERACTIVE_SESSION_REQUEST}" -eq 1 ] && [ "${#ADJUSTED_ARGS[@]}" -gt 0 ]; then
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${ADJUSTED_ARGS[@]}")
+elif [ "${#ADJUSTED_ARGS[@]}" -eq 0 ]; then
+  CODEXEA_CMD=("${REAL_CODEX}" "${INTERACTIVE_ARGS[@]}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}")
+  if [ -n "${CODEXEA_STARTUP_PROMPT}" ]; then
+    CODEXEA_CMD+=("${CODEXEA_STARTUP_PROMPT}")
+  fi
   if [ -z "${CODEXEA_POST_AUDIT_OBJECTIVE:-}" ]; then
-    export CODEXEA_POST_AUDIT_OBJECTIVE="Continue the next unfinished slice in $(pwd)."
+    export CODEXEA_POST_AUDIT_OBJECTIVE="Bootstrap interactive CodexEA session in $(pwd)."
   fi
 else
   CODEXEA_CMD=("${REAL_CODEX}" "${BASE_PROFILE_ARGS[@]}" "${EA_DEFAULT_ARGS[@]}" "${ADJUSTED_ARGS[@]}")
@@ -1213,18 +1939,39 @@ else
 fi
 
 emit_startup_trace "$(
-  if [ "${INTERACTIVE_SESSION_REQUEST}" -eq 1 ]; then
+  if [ "${RESUME_SESSION_REQUEST}" -eq 1 ]; then
+    printf '%s' "start_resume_session"
+  elif [ "${EXEC_SESSION_REQUEST}" -eq 1 ] || [ "${EXPLICIT_EXEC_SUBCOMMAND_REQUEST}" -eq 1 ]; then
+    if [ "${RAW_INTERACTIVE_SESSION_REQUEST}" -eq 1 ] && [ "${NON_TTY_NOARG_INTERACTIVE_FALLBACK}" -eq 1 ] && [ -z "${CODEXEA_TRACE_HEARTBEAT_SECONDS+x}" ]; then
+      printf '%s' "start_interactive_session"
+    else
+      printf '%s' "start_exec_session"
+    fi
+  elif [ "${INTERACTIVE_SESSION_REQUEST}" -eq 1 ]; then
     printf '%s' "start_interactive_session"
-  elif [ "${EXEC_SESSION_REQUEST}" -eq 1 ]; then
-    printf '%s' "start_exec_session"
   else
     printf '%s' "start_prompt_session"
   fi
 )"
 
+USE_CLEAN_EXEC_OUTPUT=0
+if [ "${CODEXEA_CLEAN_EXEC_OUTPUT:-1}" = "1" ] && ! args_request_raw_exec_output "${ADJUSTED_ARGS[@]}"; then
+  if [ "${EXEC_SESSION_REQUEST}" -eq 1 ] || [ "${EXPLICIT_EXEC_SUBCOMMAND_REQUEST}" -eq 1 ]; then
+    if [ "${INTERACTIVE_SESSION_REQUEST}" -eq 0 ]; then
+      USE_CLEAN_EXEC_OUTPUT=1
+    fi
+  fi
+fi
+
 if [ "${POST_AUDIT_THIS_RUN}" -eq 1 ] && capture_post_audit_context; then
   set +e
-  "${CODEXEA_CMD[@]}"
+  if [ "${USE_CLEAN_EXEC_OUTPUT}" -eq 1 ]; then
+    run_exec_session_with_clean_output "${CODEXEA_CMD[@]}"
+  elif [ "${PROMPT_TRACE_HEARTBEAT_REQUEST}" -eq 1 ]; then
+    run_with_trace_heartbeat "${CODEXEA_CMD[@]}"
+  else
+    "${CODEXEA_CMD[@]}"
+  fi
   CODEXEA_EXIT=$?
   set -e
   export CODEXEA_POST_AUDIT_EXIT_CODE="${CODEXEA_EXIT}"
@@ -1233,6 +1980,22 @@ if [ "${POST_AUDIT_THIS_RUN}" -eq 1 ] && capture_post_audit_context; then
   if build_post_audit_request "${REVIEW_REQUEST_FILE}"; then
     emit_post_audit_request "${REVIEW_REQUEST_FILE}"
   fi
+  exit "${CODEXEA_EXIT}"
+fi
+
+if [ "${USE_CLEAN_EXEC_OUTPUT}" -eq 1 ]; then
+  set +e
+  run_exec_session_with_clean_output "${CODEXEA_CMD[@]}"
+  CODEXEA_EXIT=$?
+  set -e
+  exit "${CODEXEA_EXIT}"
+fi
+
+if [ "${PROMPT_TRACE_HEARTBEAT_REQUEST}" -eq 1 ]; then
+  set +e
+  run_with_trace_heartbeat "${CODEXEA_CMD[@]}"
+  CODEXEA_EXIT=$?
+  set -e
   exit "${CODEXEA_EXIT}"
 fi
 

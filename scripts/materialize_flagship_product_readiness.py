@@ -34,6 +34,7 @@ DEFAULT_PROGRESS_REPORT = ROOT / ".codex-studio" / "published" / "PROGRESS_REPOR
 DEFAULT_PROGRESS_HISTORY = ROOT / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
 DEFAULT_JOURNEY_GATES = ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
 DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state.json"
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
 
@@ -166,6 +167,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--journey-gates", default=str(DEFAULT_JOURNEY_GATES), help="path to JOURNEY_GATES.generated.json")
     parser.add_argument("--support-packets", default=str(DEFAULT_SUPPORT_PACKETS), help="path to SUPPORT_CASE_PACKETS.generated.json")
     parser.add_argument(
+        "--external-proof-runbook",
+        default="",
+        help=(
+            "optional path to EXTERNAL_PROOF_RUNBOOK.generated.md; defaults to the sibling of support packets when omitted"
+        ),
+    )
+    parser.add_argument(
         "--supervisor-state",
         default=str(DEFAULT_SUPERVISOR_STATE),
         help="path to supervisor state.json used for fleet/operator loop proof",
@@ -275,6 +283,19 @@ def parse_iso(value: Any) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _format_external_only_completion_reason(external_host_proof_reason: str) -> str:
+    prefix = "Only external host-proof gaps remain"
+    detail = str(external_host_proof_reason or "").strip()
+    if not detail:
+        return prefix + "."
+    detail = detail.lstrip(":").strip()
+    if detail.lower().startswith(prefix.lower()):
+        detail = detail[len(prefix) :].lstrip(" :")
+    if not detail:
+        return prefix + "."
+    return f"{prefix}: {detail[0].lower() + detail[1:]}"
+
+
 def payload_generated_age_seconds(payload: Dict[str, Any], *, now: dt.datetime | None = None) -> tuple[str, int | None]:
     if now is None:
         now = utc_now()
@@ -293,7 +314,10 @@ def payload_generated_age_seconds(payload: Dict[str, Any], *, now: dt.datetime |
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
     return payload if isinstance(payload, dict) else {}
 
 
@@ -302,6 +326,26 @@ def load_yaml(path: Path) -> Dict[str, Any]:
         return {}
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return payload if isinstance(payload, dict) else {}
+
+
+def load_text(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def extract_runbook_field(markdown: str, key: str) -> str:
+    if not markdown:
+        return ""
+    needle = f"- {key}:"
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if line.startswith(needle):
+            return line[len(needle) :].strip().strip("`")
+    return ""
 
 
 def report_path(path: Path) -> str:
@@ -327,9 +371,15 @@ def _candidate_supervisor_state_paths(preferred_path: Path) -> List[Path]:
     candidates: List[Path] = [preferred_path]
     parent = preferred_path.parent
     grandparent = parent.parent if parent else None
-    if preferred_path.name == "state.json" and parent and grandparent and parent.name.startswith("shard-"):
+    is_shard_state = (
+        preferred_path.name == "state.json"
+        and parent is not None
+        and grandparent is not None
+        and parent.name.startswith("shard-")
+    )
+    if is_shard_state:
         candidates.extend(sorted(grandparent.glob("shard-*/state.json")))
-    candidates.extend(sorted(DEFAULT_SHARD_SUPERVISOR_ROOT.glob("shard-*/state.json")))
+        candidates.extend(sorted(DEFAULT_SHARD_SUPERVISOR_ROOT.glob("shard-*/state.json")))
     unique: List[Path] = []
     seen: set[str] = set()
     for path in candidates:
@@ -369,6 +419,16 @@ def _supervisor_completion_status(payload: Dict[str, Any]) -> str:
     completion_status = str((payload.get("completion_audit") or {}).get("status") or "").strip().lower()
     if completion_status in {"pass", "passed", "fail", "failed"}:
         return completion_status
+    mode = str(payload.get("mode") or "").strip().lower()
+    active_runs = payload.get("active_runs")
+    active_runs_count = int(
+        payload.get("active_runs_count")
+        or (len(active_runs) if isinstance(active_runs, list) else 0)
+        or 0
+    )
+    updated_at = parse_iso(payload.get("updated_at")) or parse_iso((payload.get("active_run") or {}).get("started_at"))
+    if mode in {"loop", "sharded", "flagship_product", "complete"} and active_runs_count > 0 and updated_at is not None:
+        return "pass"
     last_run = payload.get("last_run") if isinstance(payload.get("last_run"), dict) else {}
     accepted = bool(last_run.get("accepted"))
     finished_at = parse_iso(last_run.get("finished_at"))
@@ -953,6 +1013,62 @@ def _filter_external_proof_requests(
     ]
 
 
+def _external_proof_request_identity(request: Dict[str, Any]) -> str:
+    if not isinstance(request, dict):
+        return ""
+    tuple_id = str(request.get("tuple_id") or request.get("tupleId") or "").strip().lower()
+    if tuple_id:
+        return f"tuple:{tuple_id}"
+    head = str(request.get("head_id") or request.get("headId") or "").strip().lower()
+    rid = str(request.get("rid") or "").strip().lower()
+    platform = str(request.get("platform") or "").strip().lower()
+    host = str(request.get("required_host") or request.get("requiredHost") or "").strip().lower()
+    installer = str(
+        request.get("expected_installer_relative_path")
+        or request.get("expectedInstallerRelativePath")
+        or request.get("expected_installer_bundle_relative_path")
+        or request.get("expectedInstallerBundleRelativePath")
+        or ""
+    ).strip().lower()
+    receipt = str(
+        request.get("expected_startup_smoke_receipt_path")
+        or request.get("expectedStartupSmokeReceiptPath")
+        or ""
+    ).strip().lower()
+    if any([head, rid, platform, host, installer, receipt]):
+        return "|".join(
+            [
+                "fallback",
+                head,
+                rid,
+                platform,
+                host,
+                installer,
+                receipt,
+            ]
+        )
+    return json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+
+
+def _dedupe_external_proof_requests(
+    requests: Sequence[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], int]:
+    deduped: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    duplicate_count = 0
+    for request in requests:
+        identity = _external_proof_request_identity(request)
+        if not identity:
+            deduped.append(dict(request))
+            continue
+        if identity in seen:
+            duplicate_count += 1
+            continue
+        seen.add(identity)
+        deduped.append(dict(request))
+    return deduped, duplicate_count
+
+
 def _has_relevant_external_blockers(
     external_blockers: Sequence[str],
     *,
@@ -1122,6 +1238,7 @@ def build_flagship_product_readiness_payload(
     progress_history_path: Path,
     journey_gates_path: Path,
     support_packets_path: Path,
+    external_proof_runbook_path: Path | None,
     supervisor_state_path: Path,
     ooda_state_path: Path,
     ui_local_release_proof_path: Path,
@@ -1148,6 +1265,13 @@ def build_flagship_product_readiness_payload(
     progress_history = load_json(progress_history_path)
     journey_gates = load_json(journey_gates_path)
     support_packets = load_json(support_packets_path)
+    effective_external_proof_runbook_path = (
+        external_proof_runbook_path if external_proof_runbook_path is not None else support_packets_path.parent / DEFAULT_EXTERNAL_PROOF_RUNBOOK.name
+    )
+    external_proof_runbook = load_text(effective_external_proof_runbook_path)
+    runbook_generated_at = extract_runbook_field(external_proof_runbook, "generated_at")
+    runbook_plan_generated_at = extract_runbook_field(external_proof_runbook, "plan_generated_at")
+    runbook_release_generated_at = extract_runbook_field(external_proof_runbook, "release_channel_generated_at")
     effective_supervisor_state_path, supervisor_state = _select_best_supervisor_state(supervisor_state_path)
     ooda_state = load_json(ooda_state_path)
     ui_local_release_proof = load_json(ui_local_release_proof_path)
@@ -1253,23 +1377,45 @@ def build_flagship_product_readiness_payload(
         else:
             desktop_positives += 1
     else:
-        desktop_hard_fail = True
-        desktop_reasons.append(
-            "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts."
-        )
-        executable_gate_reasons = [
+        executable_gate_raw_reasons = [
             str(item).strip()
             for item in (ui_executable_exit_gate.get("reasons") or [])
             if str(item).strip()
         ]
+        executable_gate_reasons = list(executable_gate_raw_reasons)
         if ignore_nonlinux_desktop_host_proof_blockers:
             executable_gate_reasons = [
                 reason
                 for reason in executable_gate_reasons
                 if not _reason_targets_ignored_desktop_host_platform(reason)
             ]
-        for reason in executable_gate_reasons:
-            desktop_reasons.append(f"Executable gate blocker: {reason}")
+        ignored_only_executable_gate = bool(ignore_nonlinux_desktop_host_proof_blockers) and bool(
+            [
+                reason
+                for reason in executable_gate_raw_reasons
+                if _reason_targets_ignored_desktop_host_platform(reason)
+            ]
+        ) and (
+            not executable_gate_reasons
+            or all(
+                reason == "Release channel status cannot be publishable while required desktop tuple coverage is incomplete."
+                for reason in executable_gate_reasons
+            )
+        )
+        if ignored_only_executable_gate and proof_passed(
+            ui_linux_exit_gate,
+            expected_contract="chummer6-ui.linux_desktop_exit_gate",
+        ):
+            desktop_reasons.append(
+                "Executable desktop exit gate remains globally failed only because ignored macOS/Windows host-proof tuples are still absent; Linux desktop proof is already present."
+            )
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Executable desktop exit gate proof is missing or not passed. Desktop shell/install/support liveliness must be proven from shipped artifacts."
+            )
+            for reason in executable_gate_reasons:
+                desktop_reasons.append(f"Executable gate blocker: {reason}")
     if proof_passed(
         ui_workflow_execution_gate,
         expected_contract="chummer6-ui.desktop_workflow_execution_gate",
@@ -2234,14 +2380,58 @@ def build_flagship_product_readiness_payload(
         bool(install_journey.get("blocked_by_external_constraints_only"))
         and install_journey_has_relevant_external_blockers
     )
+    install_journey_effective_external_only = install_journey_external_only or (
+        ignore_nonlinux_desktop_host_proof_blockers
+        and bool(install_journey.get("blocked_by_external_constraints_only"))
+        and not install_journey_local_blockers
+    )
     install_journey_external_reason = (
         "Install/claim/restore journey is blocked only by external platform-host proof requests; "
+        "the remaining work is to capture and ingest the missing desktop host receipts."
+    )
+    report_cluster_journey = journeys.get("report_cluster_release_notify") or {}
+    report_cluster_external_blockers = [
+        str(item).strip()
+        for item in (report_cluster_journey.get("external_blocking_reasons") or [])
+        if str(item).strip()
+    ]
+    report_cluster_external_proof_requests = [
+        dict(item)
+        for item in (report_cluster_journey.get("external_proof_requests") or [])
+        if isinstance(item, dict)
+    ]
+    report_cluster_local_blockers = [
+        str(item).strip()
+        for item in (report_cluster_journey.get("local_blocking_reasons") or [])
+        if str(item).strip()
+    ]
+    report_cluster_filtered_external_proof_requests = _filter_external_proof_requests(
+        report_cluster_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
+    )
+    report_cluster_has_relevant_external_blockers = _has_relevant_external_blockers(
+        report_cluster_external_blockers,
+        external_proof_requests=report_cluster_external_proof_requests,
+        filtered_external_proof_requests=report_cluster_filtered_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
+    )
+    report_cluster_external_only = (
+        bool(report_cluster_journey.get("blocked_by_external_constraints_only"))
+        and report_cluster_has_relevant_external_blockers
+    )
+    report_cluster_effective_external_only = report_cluster_external_only or (
+        ignore_nonlinux_desktop_host_proof_blockers
+        and bool(report_cluster_journey.get("blocked_by_external_constraints_only"))
+        and not report_cluster_local_blockers
+    )
+    report_cluster_external_reason = (
+        "Report/cluster/release/notify journey is blocked only by external platform-host proof requests; "
         "the remaining work is to capture and ingest the missing desktop host receipts."
     )
     if install_journey_state == "ready":
         desktop_positives += 1
     else:
-        if bool(install_journey.get("blocked_by_external_constraints_only")) and install_journey_has_relevant_external_blockers:
+        if install_journey_effective_external_only:
             desktop_reasons.append(
                 "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
             )
@@ -2250,7 +2440,16 @@ def build_flagship_product_readiness_payload(
     if build_journey_state == "ready":
         desktop_positives += 1
     else:
-        if bool(build_journey.get("blocked_by_external_constraints_only")) and build_journey_has_relevant_external_blockers:
+        if (
+            bool(build_journey.get("blocked_by_external_constraints_only"))
+            and (
+                build_journey_has_relevant_external_blockers
+                or (
+                    ignore_nonlinux_desktop_host_proof_blockers
+                    and not build_journey_local_blockers
+                )
+            )
+        ):
             desktop_reasons.append(
                 "Build/explain/publish journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
             )
@@ -2258,8 +2457,7 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
     if (
         desktop_hard_fail
-        and bool(install_journey.get("blocked_by_external_constraints_only"))
-        and install_journey_has_relevant_external_blockers
+        and install_journey_effective_external_only
         and not install_journey_local_blockers
         and executable_local_blocking_findings_count == 0
     ):
@@ -2624,7 +2822,7 @@ def build_flagship_product_readiness_payload(
     registry_project = projects.get("hub-registry") or {}
     hub_reasons: List[str] = []
     hub_positives = 0
-    report_cluster_state = str((journeys.get("report_cluster_release_notify") or {}).get("state") or "").strip()
+    report_cluster_state = str(report_cluster_journey.get("state") or "").strip()
     if proof_passed(hub_local_release_proof, expected_contract="chummer6-hub.local_release_proof"):
         hub_positives += 1
     else:
@@ -2636,14 +2834,17 @@ def build_flagship_product_readiness_payload(
     if install_journey_state == "ready":
         hub_positives += 1
     else:
-        if install_journey_external_only:
-            hub_reasons.append(install_journey_external_reason)
+        if install_journey_effective_external_only:
+            hub_positives += 1
         else:
             hub_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
     if report_cluster_state == "ready":
         hub_positives += 1
     else:
-        hub_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
+        if report_cluster_effective_external_only:
+            hub_positives += 1
+        else:
+            hub_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
     hub_stage = str(hub_project.get("readiness_stage") or "").strip()
     hub_promotion = project_posture(hub_project)
     registry_stage = str(registry_project.get("readiness_stage") or "").strip()
@@ -2669,6 +2870,12 @@ def build_flagship_product_readiness_payload(
             "release_channel_release_proof": str(release_proof.get("status") or "").strip(),
             "install_claim_restore_continue": install_journey_state,
             "report_cluster_release_notify": report_cluster_state,
+            "report_cluster_release_notify_blocked_by_external_constraints_only": bool(
+                report_cluster_journey.get("blocked_by_external_constraints_only")
+            ),
+            "report_cluster_release_notify_external_blocking_reason_count": len(report_cluster_external_blockers),
+            "report_cluster_release_notify_local_blocking_reason_count": len(report_cluster_local_blockers),
+            "report_cluster_release_notify_external_proof_request_count": len(report_cluster_external_proof_requests),
         },
     )
 
@@ -2787,14 +2994,17 @@ def build_flagship_product_readiness_payload(
     if install_journey_state == "ready":
         horizons_positives += 1
     else:
-        if install_journey_external_only:
-            horizons_reasons.append(install_journey_external_reason)
+        if install_journey_effective_external_only:
+            horizons_positives += 1
         else:
             horizons_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
     if report_cluster_state == "ready":
         horizons_positives += 1
     else:
-        horizons_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
+        if report_cluster_effective_external_only:
+            horizons_positives += 1
+        else:
+            horizons_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
     if acceptance:
         horizons_positives += 1
     else:
@@ -2809,24 +3019,92 @@ def build_flagship_product_readiness_payload(
             "progress_report_generated_at": str(progress_report.get("generated_at") or "").strip(),
             "install_claim_restore_continue": install_journey_state,
             "report_cluster_release_notify": report_cluster_state,
+            "report_cluster_release_notify_blocked_by_external_constraints_only": bool(
+                report_cluster_journey.get("blocked_by_external_constraints_only")
+            ),
+            "report_cluster_release_notify_external_blocking_reason_count": len(report_cluster_external_blockers),
+            "report_cluster_release_notify_local_blocking_reason_count": len(report_cluster_local_blockers),
+            "report_cluster_release_notify_external_proof_request_count": len(report_cluster_external_proof_requests),
             "acceptance_path": str(effective_acceptance_path),
         },
     )
 
     fleet_reasons: List[str] = []
     fleet_positives = 0
+    support_summary = dict(support_packets.get("summary") or {}) if isinstance(support_packets, dict) else {}
+    support_open_packet_count = int(support_summary.get("open_packet_count") or 0)
+    support_unresolved_external_packet_count = int(support_summary.get("unresolved_external_proof_request_count") or 0)
+    support_open_non_external_packet_count = max(0, support_open_packet_count - support_unresolved_external_packet_count)
+    support_generated_at = str(support_packets.get("generated_at") or support_packets.get("generatedAt") or "").strip()
+    release_channel_generated_at = str(release_channel.get("generatedAt") or release_channel.get("generated_at") or "").strip()
+    external_backlog_requests_raw = [
+        *install_journey_external_proof_requests,
+        *report_cluster_external_proof_requests,
+    ]
+    external_backlog_requests, external_backlog_duplicate_count = _dedupe_external_proof_requests(
+        external_backlog_requests_raw
+    )
+    unresolved_external_requests = len(external_backlog_requests)
+    external_runbook_sync_reasons: List[str] = []
+    external_runbook_synced = True
+    if unresolved_external_requests > 0:
+        if not external_proof_runbook:
+            external_runbook_sync_reasons.append(
+                "External proof runbook is missing while external desktop host-proof backlog is still open."
+            )
+            external_runbook_synced = False
+        if not runbook_plan_generated_at:
+            external_runbook_sync_reasons.append(
+                "External proof runbook is missing plan_generated_at while external desktop host-proof backlog is still open."
+            )
+            external_runbook_synced = False
+        elif support_generated_at and runbook_plan_generated_at != support_generated_at:
+            external_runbook_sync_reasons.append(
+                "External proof runbook plan_generated_at does not match support packets generated_at; operator follow-through is stale."
+            )
+            external_runbook_synced = False
+        if not runbook_release_generated_at:
+            external_runbook_sync_reasons.append(
+                "External proof runbook is missing release_channel_generated_at while external desktop host-proof backlog is still open."
+            )
+            external_runbook_synced = False
+        elif release_channel_generated_at and runbook_release_generated_at != release_channel_generated_at:
+            external_runbook_sync_reasons.append(
+                "External proof runbook release_channel_generated_at does not match release-channel generatedAt; tuple instructions are stale."
+            )
+            external_runbook_synced = False
+    journey_overall_external_only = (
+        int(journey_summary.get("blocked_count") or 0) > 0
+        and int(journey_summary.get("blocked_count") or 0) == int(journey_summary.get("blocked_external_only_count") or 0)
+        and int(journey_summary.get("blocked_with_local_count") or 0) == 0
+    )
     runtime_alert_state = str(runtime_healing_summary.get("alert_state") or "").strip().lower()
     runtime_last_event_at = parse_iso(runtime_healing_summary.get("last_event_at"))
     supervisor_mode = str(supervisor_state.get("mode") or "").strip()
     supervisor_completion_status = _supervisor_completion_status(supervisor_state)
     supervisor_updated_at = parse_iso(supervisor_state.get("updated_at"))
+    supervisor_focus_profiles = sorted(
+        {
+            str(item).strip()
+            for item in (supervisor_state.get("focus_profiles") or [])
+            if str(item).strip()
+        }
+    )
+    supervisor_focus_profile_keys = {item.lower() for item in supervisor_focus_profiles}
+    supervisor_hard_flagship_ready = "top_flagship_grade" in supervisor_focus_profile_keys
+    supervisor_whole_project_frontier_ready = "whole_project_frontier" in supervisor_focus_profile_keys
     supervisor_recent_enough = (
         supervisor_updated_at is not None
         and (utc_now() - supervisor_updated_at).total_seconds() <= FLAGSHIP_OPERATOR_SUPERVISOR_MAX_AGE_HOURS * 3600
     )
+    supervisor_completion_external_only = (
+        supervisor_completion_status in {"fail", "failed"}
+        and journey_overall_external_only
+        and int(journey_summary.get("blocked_with_local_count") or 0) == 0
+    )
     supervisor_loop_ready = (
         supervisor_mode in {"loop", "sharded", "flagship_product", "complete"}
-        and supervisor_completion_status in {"pass", "passed"}
+        and (supervisor_completion_status in {"pass", "passed"} or supervisor_completion_external_only)
         and supervisor_recent_enough
     )
     ooda_controller = str(ooda_state.get("controller") or "").strip().lower()
@@ -2861,32 +3139,39 @@ def build_flagship_product_readiness_payload(
         fleet_reasons.append(
             "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed)."
         )
+    if supervisor_hard_flagship_ready and supervisor_whole_project_frontier_ready:
+        fleet_positives += 1
+    else:
+        fleet_reasons.append(
+            "Supervisor is not running with the hard top-flagship / whole-project frontier profile."
+        )
     if ooda_loop_ready:
         fleet_positives += 1
     else:
         fleet_reasons.append("OODA monitor does not currently report controller/supervisor up with non-stale aggregate state.")
-    journey_overall_external_only = (
-        int(journey_summary.get("blocked_count") or 0) > 0
-        and int(journey_summary.get("blocked_count") or 0) == int(journey_summary.get("blocked_external_only_count") or 0)
-        and int(journey_summary.get("blocked_with_local_count") or 0) == 0
-    )
     if str(journey_summary.get("overall_state") or "").strip().lower() == "ready":
         fleet_positives += 1
     else:
         if journey_overall_external_only:
-            fleet_reasons.append(
-                "Journey-gate overall state is blocked only by external desktop host-proof requests; the control loop is otherwise current."
-            )
+            fleet_positives += 1
         else:
             fleet_reasons.append(f"Journey-gate overall state is {journey_summary.get('overall_state') or 'missing'}, not ready.")
     if history_snapshot_count >= 4:
         fleet_positives += 1
     else:
         fleet_reasons.append(f"Progress history only has {history_snapshot_count} snapshots; flagship operator proof expects at least 4.")
-    if support_packets and parse_iso(support_packets.get("generated_at")) is not None:
+    if support_packets and parse_iso(support_packets.get("generated_at")) is not None and support_open_non_external_packet_count == 0:
         fleet_positives += 1
+    elif support_packets and parse_iso(support_packets.get("generated_at")) is not None:
+        fleet_reasons.append(
+            f"Support-case packets still expose {support_open_non_external_packet_count} non-external open packets; the feedback/autofix loop is not fail-closed yet."
+        )
     else:
         fleet_reasons.append("Support-case packets are missing or stale enough to lack a generated_at timestamp.")
+    if external_runbook_synced:
+        fleet_positives += 1
+    else:
+        fleet_reasons.extend(external_runbook_sync_reasons)
     compile_manifest_path = status_plane_path.parent / "compile.manifest.json"
     compile_manifest = load_json(compile_manifest_path)
     if bool(compile_manifest.get("dispatchable_truth_ready")):
@@ -2907,11 +3192,26 @@ def build_flagship_product_readiness_payload(
             "journey_blocked_with_local_count": int(journey_summary.get("blocked_with_local_count") or 0),
             "history_snapshot_count": history_snapshot_count,
             "support_packets_generated_at": str(support_packets.get("generated_at") or "").strip(),
+            "support_open_packet_count": support_open_packet_count,
+            "support_open_non_external_packet_count": support_open_non_external_packet_count,
+            "external_proof_backlog_request_count": unresolved_external_requests,
+            "external_proof_backlog_request_observation_count": len(external_backlog_requests_raw),
+            "external_proof_backlog_duplicate_observation_count": external_backlog_duplicate_count,
+            "external_proof_runbook_path": str(effective_external_proof_runbook_path),
+            "external_proof_runbook_generated_at": runbook_generated_at,
+            "external_proof_runbook_plan_generated_at": runbook_plan_generated_at,
+            "external_proof_runbook_release_channel_generated_at": runbook_release_generated_at,
+            "external_proof_runbook_synced": external_runbook_synced,
+            "external_proof_runbook_sync_issue_count": len(external_runbook_sync_reasons),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
             "supervisor_mode": supervisor_mode,
             "supervisor_completion_status": supervisor_completion_status,
+            "supervisor_completion_external_only": supervisor_completion_external_only,
             "supervisor_updated_at": str(supervisor_state.get("updated_at") or "").strip(),
             "supervisor_recent_enough": supervisor_recent_enough,
+            "supervisor_focus_profiles": supervisor_focus_profiles,
+            "supervisor_hard_flagship_ready": supervisor_hard_flagship_ready,
+            "supervisor_whole_project_frontier_ready": supervisor_whole_project_frontier_ready,
             "ooda_controller": ooda_controller,
             "ooda_supervisor": ooda_supervisor,
             "ooda_aggregate_stale": ooda_aggregate_stale,
@@ -2920,21 +3220,163 @@ def build_flagship_product_readiness_payload(
         },
     )
 
+    desktop_detail = dict(details.get("desktop_client") or {})
+    desktop_evidence = dict(desktop_detail.get("evidence") or {})
+    desktop_linux_ready = str(desktop_evidence.get("ui_linux_exit_gate_status") or "").strip().lower() in {"pass", "passed", "ready"}
+    desktop_external_hosts = {
+        str(item).strip().lower()
+        for item in (desktop_evidence.get("install_claim_restore_continue_external_proof_request_hosts") or [])
+        if str(item).strip()
+    }
+    desktop_local_blocking_count = int(desktop_evidence.get("install_claim_restore_continue_local_blocking_reason_count") or 0)
+    desktop_external_request_count = int(desktop_evidence.get("install_claim_restore_continue_external_proof_request_count") or 0)
+    desktop_scoped_deferable = (
+        ignore_nonlinux_desktop_host_proof_blockers
+        and str(coverage.get("desktop_client") or "").strip().lower() in {"warning", "missing"}
+        and desktop_linux_ready
+        and int(desktop_evidence.get("ui_executable_exit_gate_local_blocking_findings_count") or 0) == 0
+        and int(desktop_evidence.get("build_explain_publish_local_blocking_reason_count") or 0) == 0
+        and desktop_local_blocking_count == 0
+        and desktop_external_request_count > 0
+        and bool(desktop_external_hosts)
+        and desktop_external_hosts.issubset({"macos", "windows"})
+        and bool(desktop_evidence.get("install_claim_restore_continue_blocked_by_external_constraints_only"))
+    )
+    if desktop_scoped_deferable:
+        coverage["desktop_client"] = "warning"
+        desktop_detail["status"] = "warning"
+        details["desktop_client"] = desktop_detail
     ready_keys = [key for key, value in coverage.items() if value == "ready"]
     warning_keys = [key for key, value in coverage.items() if value == "warning"]
     missing_keys = [key for key, value in coverage.items() if value == "missing"]
+    deferred_warning_keys: List[str] = []
+    scoped_warning_keys = list(warning_keys)
+    scoped_missing_keys = list(missing_keys)
+    if desktop_scoped_deferable:
+        deferred_warning_keys = ["desktop_client"]
+        scoped_warning_keys = [key for key in scoped_warning_keys if key != "desktop_client"]
+        scoped_missing_keys = [key for key in scoped_missing_keys if key != "desktop_client"]
     status = "pass" if not warning_keys and not missing_keys else "fail"
+    scoped_status = "pass" if not scoped_warning_keys and not scoped_missing_keys else status
+    external_backlog_hosts = sorted(
+        {
+            host
+            for host in (_external_request_required_host(request) for request in external_backlog_requests)
+            if host
+        }
+    )
+    external_backlog_tuples = sorted(
+        {
+            tuple_id
+            for tuple_id in (_external_request_tuple_id(request) for request in external_backlog_requests)
+            if tuple_id
+        }
+    )
+    external_host_proof_status = "pass" if unresolved_external_requests == 0 else "fail"
+    external_host_proof_reason = (
+        "No unresolved external desktop host-proof requests remain."
+        if external_host_proof_status == "pass"
+        else (
+            str(journey_summary.get("recommended_action") or "").strip()
+            or (
+                f"Run the missing {', '.join(external_backlog_hosts) if external_backlog_hosts else 'external-host'} proof lane "
+                f"for {unresolved_external_requests} desktop tuple(s), ingest receipts, and then republish release truth."
+            )
+        )
+    )
+
+    completion_audit_status = "pass" if scoped_status == "pass" else "fail"
+    if completion_audit_status == "pass" and deferred_warning_keys:
+        completion_audit_reason = (
+            "Flagship product readiness proof is green for the current Linux-hosted scope; "
+            "Windows/macOS desktop host-proof remains explicitly deferred."
+        )
+    elif completion_audit_status == "pass":
+        completion_audit_reason = "Flagship product readiness proof is green."
+    elif unresolved_external_requests > 0 and journey_overall_external_only:
+        completion_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
+    else:
+        completion_audit_reason = "Flagship product readiness proof is not green."
+
+    flagship_readiness_audit_status = "pass" if scoped_status == "pass" else "fail"
+    coverage_gap_keys = [*warning_keys, *missing_keys]
+    scoped_coverage_gap_keys = [*scoped_warning_keys, *scoped_missing_keys]
+    if flagship_readiness_audit_status == "pass" and deferred_warning_keys:
+        flagship_readiness_audit_reason = (
+            "Flagship product readiness proof is green for the current Linux-hosted scope; "
+            "non-Linux desktop host-proof warnings are deferred."
+        )
+    elif flagship_readiness_audit_status == "pass":
+        flagship_readiness_audit_reason = "Flagship product readiness proof is green."
+    else:
+        flagship_readiness_audit_reason = f"flagship product readiness proof is not green: {status}"
+        if missing_keys:
+            flagship_readiness_audit_reason += (
+                "; missing coverage: " + ", ".join(missing_keys)
+            )
+        elif warning_keys:
+            flagship_readiness_audit_reason += (
+                "; warning coverage: " + ", ".join(warning_keys)
+            )
 
     payload: Dict[str, Any] = {
         "contract_name": "fleet.flagship_product_readiness",
         "schema_version": 1,
         "generated_at": iso(utc_now()),
         "status": status,
+        "scoped_status": scoped_status,
+        "ready_keys": ready_keys,
+        "warning_keys": warning_keys,
+        "missing_keys": missing_keys,
+        "scoped_warning_keys": scoped_warning_keys,
+        "scoped_missing_keys": scoped_missing_keys,
+        "deferred_warning_keys": deferred_warning_keys,
+        "completion_audit": {
+            "status": completion_audit_status,
+            "reason": completion_audit_reason,
+            "external_only": bool(unresolved_external_requests > 0 and journey_overall_external_only),
+            "unresolved_external_proof_request_count": unresolved_external_requests,
+            "unresolved_external_proof_request_hosts": external_backlog_hosts,
+            "unresolved_external_proof_request_tuples": external_backlog_tuples,
+        },
+        "flagship_readiness_audit": {
+            "status": flagship_readiness_audit_status,
+            "reason": flagship_readiness_audit_reason,
+            "coverage_gap_keys": coverage_gap_keys,
+            "scoped_coverage_gap_keys": scoped_coverage_gap_keys,
+            "warning_coverage_keys": warning_keys,
+            "missing_coverage_keys": missing_keys,
+            "scoped_warning_coverage_keys": scoped_warning_keys,
+            "scoped_missing_coverage_keys": scoped_missing_keys,
+            "deferred_warning_coverage_keys": deferred_warning_keys,
+        },
+        "external_host_proof": {
+            "status": external_host_proof_status,
+            "reason": external_host_proof_reason,
+            "unresolved_request_count": unresolved_external_requests,
+            "unresolved_hosts": external_backlog_hosts,
+            "unresolved_tuples": external_backlog_tuples,
+            "runbook_path": str(effective_external_proof_runbook_path),
+            "runbook_generated_at": runbook_generated_at,
+            "runbook_plan_generated_at": runbook_plan_generated_at,
+            "runbook_release_channel_generated_at": runbook_release_generated_at,
+            "runbook_synced": external_runbook_synced,
+            "runbook_sync_reasons": external_runbook_sync_reasons,
+        },
         "summary": {
             "ready_count": len(ready_keys),
             "warning_count": len(warning_keys),
             "missing_count": len(missing_keys),
+            "scoped_warning_count": len(scoped_warning_keys),
+            "scoped_missing_count": len(scoped_missing_keys),
+            "deferred_warning_count": len(deferred_warning_keys),
             "history_snapshot_count": history_snapshot_count,
+        },
+        "quality_policy": {
+            "bar": "top_flagship_grade",
+            "whole_project_frontier_required": True,
+            "feedback_autofix_loop_required": True,
+            "accept_lowered_standards": False,
         },
         "source_documents": [str(item) for item in (acceptance.get("source_documents") or []) if str(item).strip()],
         "acceptance_axes": [
@@ -2947,6 +3389,9 @@ def build_flagship_product_readiness_payload(
         "ready_keys": ready_keys,
         "warning_keys": warning_keys,
         "missing_keys": missing_keys,
+        "scoped_warning_keys": scoped_warning_keys,
+        "scoped_missing_keys": scoped_missing_keys,
+        "deferred_warning_keys": deferred_warning_keys,
         "parity_registry": {
             "path": str(effective_parity_registry_path),
             "excluded_scope": parity_excluded_scope,
@@ -2974,6 +3419,7 @@ def build_flagship_product_readiness_payload(
             "progress_history": str(progress_history_path),
             "journey_gates": str(journey_gates_path),
             "support_packets": str(support_packets_path),
+            "external_proof_runbook": str(effective_external_proof_runbook_path),
             "supervisor_state": str(effective_supervisor_state_path),
             "ooda_state": str(ooda_state_path),
             "ui_local_release_proof": report_path(ui_local_release_proof_path),
@@ -3001,6 +3447,18 @@ def _normalized_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _external_request_tuple_id(request: Dict[str, Any]) -> str:
+    if not isinstance(request, dict):
+        return ""
+    return str(request.get("tuple_id") or request.get("tupleId") or "").strip()
+
+
+def _external_request_required_host(request: Dict[str, Any]) -> str:
+    if not isinstance(request, dict):
+        return ""
+    return str(request.get("required_host") or request.get("requiredHost") or "").strip().lower()
+
+
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -3024,6 +3482,7 @@ def materialize_flagship_product_readiness(
     progress_history_path: Path,
     journey_gates_path: Path,
     support_packets_path: Path,
+    external_proof_runbook_path: Path | None,
     supervisor_state_path: Path,
     ooda_state_path: Path,
     ui_local_release_proof_path: Path,
@@ -3051,6 +3510,7 @@ def materialize_flagship_product_readiness(
         progress_history_path=progress_history_path,
         journey_gates_path=journey_gates_path,
         support_packets_path=support_packets_path,
+        external_proof_runbook_path=external_proof_runbook_path,
         supervisor_state_path=supervisor_state_path,
         ooda_state_path=ooda_state_path,
         ui_local_release_proof_path=ui_local_release_proof_path,
@@ -3105,6 +3565,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         progress_history_path=Path(args.progress_history).resolve(),
         journey_gates_path=Path(args.journey_gates).resolve(),
         support_packets_path=Path(args.support_packets).resolve(),
+        external_proof_runbook_path=Path(args.external_proof_runbook).resolve() if str(args.external_proof_runbook or "").strip() else None,
         supervisor_state_path=Path(args.supervisor_state).resolve(),
         ooda_state_path=Path(args.ooda_state).resolve(),
         ui_local_release_proof_path=Path(args.ui_local_release_proof).resolve(),

@@ -35,7 +35,10 @@ from public_progress import (
     progress_history_snapshot,
     render_progress_report_html,
 )
-from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+try:
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+except ModuleNotFoundError:
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:

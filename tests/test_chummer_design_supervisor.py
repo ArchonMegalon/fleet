@@ -1062,6 +1062,9 @@ def _write_flagship_product_readiness(
         "fleet_and_operator_loop",
     ),
     unresolved_parity_families: tuple[dict[str, object], ...] = (),
+    coverage_details: dict[str, object] | None = None,
+    completion_audit: dict[str, object] | None = None,
+    external_host_proof: dict[str, object] | None = None,
 ) -> None:
     now_text = generated_at or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     coverage = {key: ("ready" if key in ready_keys else "missing") for key in (
@@ -1081,6 +1084,9 @@ def _write_flagship_product_readiness(
                 "generated_at": now_text,
                 "status": status,
                 "coverage": coverage,
+                "coverage_details": dict(coverage_details or {}),
+                "completion_audit": dict(completion_audit or {}),
+                "external_host_proof": dict(external_host_proof or {}),
                 "parity_registry": {
                     "excluded_scope": ["plugin-framework"],
                     "unresolved_families": list(unresolved_parity_families),
@@ -8133,6 +8139,97 @@ def test_live_shard_summaries_persist_refreshed_shard_state() -> None:
         assert persisted["frontier_ids"] == summaries[0]["frontier_ids"]
 
 
+def test_live_shard_summaries_apply_runtime_focus_profiles(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Install lane",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet", "chummer6-ui"],
+                            "exit_criteria": ["Install lane ships."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Continue flagship closure.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-03-31T08:00:00Z",
+                "mode": "loop",
+                "frontier_ids": [],
+                "open_milestone_ids": [1],
+            },
+        )
+
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT", str(aggregate_root))
+        monkeypatch.setenv(
+            "CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE",
+            "top_flagship_grade,whole_project_frontier",
+        )
+
+        module._live_shard_summaries(_args(root), aggregate_root)
+        persisted = json.loads((shard_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["focus_profiles"] == ["top_flagship_grade", "whole_project_frontier"]
+
+
+def test_live_state_with_current_completion_audit_keeps_shard_focus_profiles(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Continue flagship closure.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-05T05:00:00Z",
+                "mode": "completion_review",
+                "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+                "focus_owners": ["fleet"],
+                "focus_texts": ["operator"],
+                "completion_audit": {"status": "fail", "reason": "external only"},
+                "full_product_audit": {"status": "fail", "reason": "external only"},
+            },
+        )
+        args = _args(root)
+        args.state_root = str(aggregate_root)
+
+        state, history = module._effective_supervisor_state(aggregate_root, history_limit=module.ETA_HISTORY_LIMIT)
+        updated, _ = module._live_state_with_current_completion_audit(
+            args,
+            aggregate_root,
+            state,
+            history,
+            include_shards=True,
+            refresh_flagship_readiness=False,
+        )
+
+        assert updated["focus_profiles"] == ["top_flagship_grade", "whole_project_frontier"]
+
+
 def test_live_shard_summaries_refresh_each_shard_with_its_own_configured_frontier_pack(
     monkeypatch,
 ) -> None:
@@ -8446,6 +8543,98 @@ def test_persist_live_state_snapshot_strips_aggregate_only_fields() -> None:
         assert "shards" not in persisted
 
 
+def test_write_state_preserves_matching_active_run_from_existing_state() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        active_run = {
+            "run_id": "run-1",
+            "frontier_ids": [13],
+            "open_milestone_ids": [13],
+            "last_message_path": "",
+        }
+        (state_root / "state.json").write_text(json.dumps({"active_run": active_run}), encoding="utf-8")
+
+        frontier_item = Namespace(id=13)
+        module._write_state(
+            state_root,
+            mode="flagship_product",
+            run=None,
+            open_milestones=[frontier_item],
+            frontier=[frontier_item],
+        )
+
+        persisted = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["mode"] == "flagship_product"
+        assert persisted["active_run"]["run_id"] == "run-1"
+
+
+def test_persist_live_state_snapshot_preserves_matching_active_run_from_existing_state() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        active_run = {
+            "run_id": "run-2",
+            "frontier_ids": [21],
+            "open_milestone_ids": [21],
+            "last_message_path": "",
+        }
+        (state_root / "state.json").write_text(json.dumps({"active_run": active_run}), encoding="utf-8")
+
+        module._persist_live_state_snapshot(
+            state_root,
+            {
+                "updated_at": "2026-04-01T09:00:00Z",
+                "mode": "flagship_product",
+                "frontier_ids": [21],
+                "open_milestone_ids": [21],
+                "state_root": "/tmp/aggregate",
+            },
+        )
+
+        persisted = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["mode"] == "flagship_product"
+        assert persisted["active_run"]["run_id"] == "run-2"
+
+
+def test_persist_live_state_snapshot_preserves_matching_active_run_with_unseen_process() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        active_run = {
+            "run_id": "run-3",
+            "frontier_ids": [34],
+            "open_milestone_ids": [34],
+            "last_message_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/20260405T151549Z/last_message.txt",
+        }
+        (state_root / "state.json").write_text(
+            json.dumps(
+                {
+                    "updated_at": "2026-04-05T15:16:01Z",
+                    "active_run": active_run,
+                    "last_run": None,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        module._persist_live_state_snapshot(
+            state_root,
+            {
+                "updated_at": "2026-04-05T15:16:01Z",
+                "mode": "flagship_product",
+                "frontier_ids": [34],
+                "open_milestone_ids": [34],
+            },
+        )
+
+        persisted = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["active_run"]["run_id"] == "run-3"
+
+
 def test_live_state_with_current_completion_audit_overlays_fresh_completion_truth() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -8642,6 +8831,128 @@ def test_full_product_frontier_decomposes_unresolved_parity_families() -> None:
         frontier = module._full_product_frontier(_args(root))
 
         assert [item.title for item in frontier] == ["Parity family: Legacy And Adjacent Import Oracles"]
+
+
+def test_full_product_frontier_marks_external_only_blockers_explicitly(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS", "0")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="fail",
+            coverage_details={
+                "fleet_and_operator_loop": {
+                    "evidence": {
+                        "supervisor_completion_external_only": True,
+                    }
+                }
+            },
+        )
+
+        frontier = module._full_product_frontier(_args(root))
+
+        assert frontier
+        assert all(item.status == "blocked_external_host_proof" for item in frontier)
+
+
+def test_full_product_frontier_defaults_to_not_started_without_external_only_signal(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS", "0")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="fail",
+            coverage_details={
+                "fleet_and_operator_loop": {
+                    "evidence": {
+                        "supervisor_completion_external_only": False,
+                    }
+                }
+            },
+        )
+
+        frontier = module._full_product_frontier(_args(root))
+
+        assert frontier
+        assert all(item.status == "not_started" for item in frontier)
+
+
+def test_full_product_frontier_derives_external_only_from_backlog_counters(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS", "0")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="fail",
+            coverage_details={
+                "fleet_and_operator_loop": {
+                    "evidence": {
+                        "supervisor_completion_external_only": False,
+                        "external_proof_backlog_request_count": 4,
+                        "support_open_non_external_packet_count": 0,
+                        "journey_blocked_with_local_count": 0,
+                    }
+                }
+            },
+        )
+
+        frontier = module._full_product_frontier(_args(root))
+
+        assert frontier
+        assert all(item.status == "blocked_external_host_proof" for item in frontier)
+
+
+def test_full_product_frontier_uses_completion_external_only_signal_when_fleet_axis_is_ready(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS", "0")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(
+            root,
+            status="fail",
+            coverage_details={},
+            completion_audit={
+                "external_only": True,
+                "unresolved_external_proof_request_count": 4,
+            },
+            external_host_proof={
+                "unresolved_request_count": 4,
+            },
+        )
+
+        frontier = module._full_product_frontier(_args(root))
+
+        assert frontier
+        assert all(item.status == "blocked_external_host_proof" for item in frontier)
+
+
+def test_derive_flagship_product_context_honors_frontier_id_override() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        _write_completion_evidence(root)
+        _write_flagship_product_readiness(root, status="fail")
+        shard_root = root / "state" / "chummer_design_supervisor" / "shard-3"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+        args.frontier_id = [3449507998]
+
+        context = module.derive_flagship_product_context(
+            args,
+            shard_root,
+            base_context=module.derive_context(args),
+        )
+
+        assert context["frontier_ids"] == [3449507998]
+        assert [item.id for item in context["frontier"]] == [3449507998]
 
 
 def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries() -> None:
@@ -8889,6 +9200,100 @@ def test_effective_supervisor_state_uses_active_runs_list_for_multiple_live_shar
         assert "active_run" not in state
         assert [item["_shard"] for item in state["active_runs"]] == ["shard-1", "shard-2"]
         assert [item["run_id"] for item in state["active_runs"]] == ["run-1", "run-2"]
+        assert state["active_runs_count"] == 2
+
+
+def test_effective_supervisor_state_ignores_null_only_base_eta_when_shards_have_live_eta() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        aggregate_root = Path(tmp) / "state" / "chummer_design_supervisor"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+        shard_one_root = aggregate_root / "shard-1"
+        shard_two_root = aggregate_root / "shard-2"
+        shard_one_root.mkdir(parents=True, exist_ok=True)
+        shard_two_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            aggregate_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:31:59Z",
+                "mode": "sharded",
+                "eta": {
+                    "summary": None,
+                    "eta_confidence": None,
+                    "predicted_completion_at": None,
+                    "remaining_open_milestones": None,
+                    "remaining_in_progress_milestones": None,
+                    "remaining_not_started_milestones": None,
+                },
+            },
+        )
+        module._write_json(
+            shard_one_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:31:48Z",
+                "mode": "loop",
+                "open_milestone_ids": [1, 2],
+                "frontier_ids": [1, 2],
+                "eta": {
+                    "status": "estimated",
+                    "eta_human": "1d-2d",
+                    "eta_confidence": "medium",
+                    "summary": "2 open milestones remain (0 in progress, 2 not started).",
+                    "remaining_open_milestones": 2,
+                    "remaining_in_progress_milestones": 0,
+                    "remaining_not_started_milestones": 2,
+                },
+                "active_run": {
+                    "run_id": "run-1",
+                    "frontier_ids": [1, 2],
+                    "open_milestone_ids": [1, 2],
+                    "started_at": "2026-04-04T16:31:48Z",
+                },
+            },
+        )
+        module._write_json(
+            shard_two_root / "state.json",
+            {
+                "updated_at": "2026-04-04T16:31:51Z",
+                "mode": "loop",
+                "open_milestone_ids": [13],
+                "frontier_ids": [13],
+                "eta": {
+                    "status": "estimated",
+                    "eta_human": "1d-2d",
+                    "eta_confidence": "medium",
+                    "summary": "1 open milestone remains (0 in progress, 1 not started).",
+                    "remaining_open_milestones": 1,
+                    "remaining_in_progress_milestones": 0,
+                    "remaining_not_started_milestones": 1,
+                },
+                "active_run": {
+                    "run_id": "run-2",
+                    "frontier_ids": [13],
+                    "open_milestone_ids": [13],
+                    "started_at": "2026-04-04T16:31:51Z",
+                },
+            },
+        )
+        (aggregate_root / "active_shards.json").write_text(
+            json.dumps(
+                {
+                    "active_shards": [
+                        {"name": "shard-1", "frontier_ids": [1, 2]},
+                        {"name": "shard-2", "frontier_ids": [13]},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        state, _history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+
+        assert state["eta"]["summary"]
+        assert state["eta"]["remaining_open_milestones"] == 3
+        assert state["eta"]["remaining_in_progress_milestones"] == 3
+        assert state["eta"]["remaining_not_started_milestones"] == 0
+        assert state["active_runs_count"] == 2
 
 
 def test_live_state_with_current_completion_audit_accepts_synthetic_receipt_on_external_worker_blocker() -> None:

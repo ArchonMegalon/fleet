@@ -62,23 +62,23 @@ accounts:
 
   acct-ea-review-light:
     auth_kind: ea
-    allowed_models: [ea-review-light]
+    allowed_models: [ea-review-light, ea-coder-hard-batch]
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
     max_parallel_runs: 1
     lane: review_light
-    codex_model_aliases: [ea-review-light]
+    codex_model_aliases: [ea-review-light, ea-coder-hard-batch]
 
   acct-ea-jury:
     auth_kind: ea
-    allowed_models: [ea-audit-jury]
+    allowed_models: [ea-audit-jury, ea-coder-hard-batch]
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
     max_parallel_runs: 1
     lane: jury
-    codex_model_aliases: [ea-audit-jury]
+    codex_model_aliases: [ea-audit-jury, ea-coder-hard-batch]
 
   acct-ea-repair:
     auth_kind: ea
