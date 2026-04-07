@@ -158,6 +158,11 @@ Required proof areas:
    - initial shell, menu open, settings open, loaded runner, dense light, dense dark
    - loaded-runner tab posture
    - cyberware/cyberlimb dialog posture
+5. Hard anchors
+   - opening desktop posture must read as Chummer5a successor workbench (no launch/dashboard substitution)
+   - real functional `File` menu with open/save/import command surfaces
+   - master-index route is first-class from the shell and actionable
+   - character roster route is first-class from the shell and actionable
 
 ## Failure policy
 
@@ -170,6 +175,10 @@ The desktop gate fails if any of the following are true:
 - a workflow family has catalog proof but no executable UI receipt
 - Blazor Desktop is promoted without a real launchable user-facing surface
 - the shell no longer feels recognizably close to Chummer5a in theme, layout, loaded-runner tabs, or dense builder-dialog posture
+- the opening workbench does not read as a Chummer5a successor
+- `File` menu is not real (menu roots or commands are inert)
+- master-index is not a first-class runtime-backed route
+- character roster is not a first-class runtime-backed route
 
 ## Fleet handoff
 

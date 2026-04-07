@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-07T17:22:19Z'
+generated_at: '2026-04-07T17:27:40Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-2
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -94,11 +94,3 @@ full_product_audit:
 frontier_count: 0
 frontier_ids: []
 frontier: []
-eta:
-  status: flagship_delivery
-  eta_human: 6h-10h
-  eta_confidence: low
-  basis: full_product_frontier_heuristic
-  blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 0 synthetic slices. Outstanding readiness coverage: desktop_client, fleet_and_operator_loop.'

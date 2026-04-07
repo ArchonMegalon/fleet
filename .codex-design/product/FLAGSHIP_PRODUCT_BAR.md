@@ -76,6 +76,7 @@ Flagship grade therefore requires:
 * the `File` menu is a real desktop menu with visible working actions
 * master index and character roster are first-class routes from the desktop shell, not buried utilities
 * decorative shell theater must never replace the actual workbench on startup
+* these are release blockers: a missing real `File` menu, missing master-index route, or missing character-roster route fails flagship desktop completion.
 
 ### 5. Recovery must be boring
 

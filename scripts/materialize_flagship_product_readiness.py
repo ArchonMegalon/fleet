@@ -96,6 +96,12 @@ DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS = (
     "Contacts_diary_and_support_routes_execute_with_public_path_visibility",
     "Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
 )
+DESKTOP_VISUAL_FAMILIARITY_HARD_BAR_MILESTONE2_TESTS = (
+    "Opening_mainframe_preserves_chummer5a_successor_workbench_posture",
+    "Runtime_backed_file_menu_preserves_working_open_save_import_routes",
+    "Master_index_is_a_first_class_runtime_backed_workbench_route",
+    "Character_roster_is_a_first_class_runtime_backed_workbench_route",
+)
 DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS = (
     ("Opening_mainframe_preserves_chummer5a_successor_workbench_posture",),
     ("Runtime_backed_file_menu_preserves_working_open_save_import_routes",),
@@ -1529,7 +1535,20 @@ def build_flagship_product_readiness_payload(
                 group,
             )
         )
+        visual_hard_bar_missing_tests = sorted(
+            set(DESKTOP_VISUAL_FAMILIARITY_HARD_BAR_MILESTONE2_TESTS).intersection(
+                set(visual_reported_missing_milestone2_tests)
+            )
+        )
         visual_milestone2_integrity_gap = False
+        if visual_hard_bar_missing_tests:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity hard-bar failed on flagship anchors: "
+                + ", ".join(visual_hard_bar_missing_tests)
+                + "."
+            )
         if visual_missing_required_milestone2_tests_from_inventory:
             visual_milestone2_integrity_gap = True
             desktop_hard_fail = True
@@ -3342,18 +3361,7 @@ def build_flagship_product_readiness_payload(
     }
     desktop_local_blocking_count = int(desktop_evidence.get("install_claim_restore_continue_local_blocking_reason_count") or 0)
     desktop_external_request_count = int(desktop_evidence.get("install_claim_restore_continue_external_proof_request_count") or 0)
-    desktop_scoped_deferable = (
-        ignore_nonlinux_desktop_host_proof_blockers
-        and str(coverage.get("desktop_client") or "").strip().lower() in {"warning", "missing"}
-        and desktop_linux_ready
-        and int(desktop_evidence.get("ui_executable_exit_gate_local_blocking_findings_count") or 0) == 0
-        and int(desktop_evidence.get("build_explain_publish_local_blocking_reason_count") or 0) == 0
-        and desktop_local_blocking_count == 0
-        and desktop_external_request_count > 0
-        and bool(desktop_external_hosts)
-        and desktop_external_hosts.issubset({"macos", "windows"})
-        and bool(desktop_evidence.get("install_claim_restore_continue_blocked_by_external_constraints_only"))
-    )
+    desktop_scoped_deferable = False
     if desktop_scoped_deferable:
         desktop_detail["scoped_deferable"] = True
         details["desktop_client"] = desktop_detail

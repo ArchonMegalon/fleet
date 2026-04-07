@@ -38,7 +38,9 @@ surfaces:
       - One obvious flagship desktop head and install path per promoted platform.
       - The opening desktop surface reads like a Chummer5a-successor workbench, not decorative shell theater.
       - The desktop shell preserves Chummer5a-like visual similarity in density, layout, and navigation rhythm.
+      - Opening posture release blocker: the first visible state must be a familiar Chummer5a-like workbench and load/section rhythm.
       - The `File` menu is a real desktop menu with visible working actions, not a cosmetic label.
+      - Hard parity gate: `File` menu, master index, and character roster are mandatory runtime-backed routes in shell launch and must remain active at readiness time.
       - Master index and character roster are first-class runtime-backed routes from the desktop shell.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
@@ -140,6 +142,7 @@ surfaces:
       - PRODUCT_HEALTH_SCORECARD.yaml
 
 whole_product_release_rules:
+  - Desktop completeness cannot be satisfied by deferred non-linux evidence-only status; Chummer5a-anchored visual and shell-route blockers must be resolved in proof, not deferred.
   - Public release claims must stay within the surfaces that pass this matrix or carry an explicit, bounded preview explanation.
   - Empty backlog views, green repo tests, or clean worktrees are not sufficient proof of flagship-grade completion by themselves.
   - Flagship release cannot claim no-step-back parity while any in-scope family marked `missing` or unbounded `partial` remains unresolved in `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`; a `partial` family is only bounded when Fleet's flagship-readiness parity audit records a proof-backed successor route for that family, and families listed under `scope.excluded` there, including `plugin-framework`, do not block the claim.

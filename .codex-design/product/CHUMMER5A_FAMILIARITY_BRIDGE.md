@@ -25,6 +25,8 @@ It must not casually discard the old workbench grammar.
 
 The flagship desktop shell must preserve these Chummer5a cues in recognizable form:
 
+These are hard release gates, not optional polish: if any anchor is missing at production-readiness time, desktop flagship readiness must remain non-green.
+
 ### 0. Opening workbench must read like Chummer, not a generic shell
 
 The first thing a paying desktop user sees must feel like a Chummer5a successor mainframe.
@@ -35,6 +37,7 @@ Required:
 * a veteran user can immediately orient to the workbench without hunting for the actual character tools
 * the shell keeps visual similarity to Chummer5a in density, chrome posture, and "where do I start working" clarity
 * "modern shell" copy or decorative flagship messaging must not displace the familiar workbench landmarks
+* missing this anchor fails release-readiness for desktop flagship regardless of non-Linux blocker status
 
 ### 1. Classic top-level menu posture
 
@@ -48,6 +51,7 @@ Required:
 * `Help`
 
 When the active workspace exposes edit or character-special actions, `Edit` and `Special` may appear between `File` and `Tools`, but they must behave like desktop menus rather than web nav tabs.
+* missing a functional `File` menu is a blocker for flagship desktop acceptance
 
 ### 2. Immediate toolstrip under the menu
 
@@ -141,6 +145,8 @@ The flagship client must also preserve modern equivalents for the legacy utility
 * sheet viewer, print/export, and adjacent exchange lanes
 
 These do not need to keep old window names or old layout quirks.
+
+The master-index and character-roster lanes are explicit flagship blockers; they must be reachable from the opening workbench and have verified, runtime-backed routes.
 
 They do need one obvious, first-class modern route in the promoted client.
 
