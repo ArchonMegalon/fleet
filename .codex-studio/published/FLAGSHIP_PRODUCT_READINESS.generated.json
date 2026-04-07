@@ -1,108 +1,78 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-06T20:49:59Z",
+  "generated_at": "2026-04-07T15:08:39Z",
   "status": "fail",
   "scoped_status": "fail",
   "ready_keys": [
     "rules_engine_and_import",
+    "hub_and_registry",
     "mobile_play_shell",
     "ui_kit_and_flagship_polish",
-    "media_artifacts"
+    "media_artifacts",
+    "horizons_and_public_surface"
   ],
   "warning_keys": [
-    "hub_and_registry",
-    "horizons_and_public_surface",
+    "desktop_client",
     "fleet_and_operator_loop"
   ],
-  "missing_keys": [
-    "desktop_client"
-  ],
+  "missing_keys": [],
   "scoped_warning_keys": [
-    "hub_and_registry",
-    "horizons_and_public_surface",
+    "desktop_client",
     "fleet_and_operator_loop"
   ],
-  "scoped_missing_keys": [
-    "desktop_client"
-  ],
+  "scoped_missing_keys": [],
   "deferred_warning_keys": [],
   "completion_audit": {
     "status": "fail",
     "reason": "Flagship product readiness proof is not green.",
     "external_only": false,
-    "unresolved_external_proof_request_count": 4,
-    "unresolved_external_proof_request_hosts": [
-      "macos",
-      "windows"
-    ],
-    "unresolved_external_proof_request_tuples": [
-      "avalonia:osx-arm64:macos",
-      "avalonia:win-x64:windows",
-      "blazor-desktop:osx-arm64:macos",
-      "blazor-desktop:win-x64:windows"
-    ]
+    "unresolved_external_proof_request_count": 0,
+    "unresolved_external_proof_request_hosts": [],
+    "unresolved_external_proof_request_tuples": []
   },
   "flagship_readiness_audit": {
     "status": "fail",
-    "reason": "flagship product readiness proof is not green: fail; missing coverage: desktop_client",
+    "reason": "flagship product readiness proof is not green: fail; warning coverage: desktop_client, fleet_and_operator_loop",
     "coverage_gap_keys": [
-      "hub_and_registry",
-      "horizons_and_public_surface",
-      "fleet_and_operator_loop",
-      "desktop_client"
+      "desktop_client",
+      "fleet_and_operator_loop"
     ],
     "scoped_coverage_gap_keys": [
-      "hub_and_registry",
-      "horizons_and_public_surface",
-      "fleet_and_operator_loop",
-      "desktop_client"
+      "desktop_client",
+      "fleet_and_operator_loop"
     ],
     "warning_coverage_keys": [
-      "hub_and_registry",
-      "horizons_and_public_surface",
+      "desktop_client",
       "fleet_and_operator_loop"
     ],
-    "missing_coverage_keys": [
-      "desktop_client"
-    ],
+    "missing_coverage_keys": [],
     "scoped_warning_coverage_keys": [
-      "hub_and_registry",
-      "horizons_and_public_surface",
+      "desktop_client",
       "fleet_and_operator_loop"
     ],
-    "scoped_missing_coverage_keys": [
-      "desktop_client"
-    ],
+    "scoped_missing_coverage_keys": [],
     "deferred_warning_coverage_keys": []
   },
   "external_host_proof": {
-    "status": "fail",
-    "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
-    "unresolved_request_count": 4,
-    "unresolved_hosts": [
-      "macos",
-      "windows"
-    ],
-    "unresolved_tuples": [
-      "avalonia:osx-arm64:macos",
-      "avalonia:win-x64:windows",
-      "blazor-desktop:osx-arm64:macos",
-      "blazor-desktop:win-x64:windows"
-    ],
+    "status": "pass",
+    "reason": "No unresolved external desktop host-proof requests remain.",
+    "unresolved_request_count": 0,
+    "unresolved_hosts": [],
+    "unresolved_tuples": [],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-04-06T20:49:59Z",
-    "runbook_plan_generated_at": "2026-04-06T20:43:24Z",
-    "runbook_release_channel_generated_at": "2026-04-05T06:24:27Z",
+    "runbook_generated_at": "2026-04-07T14:34:21Z",
+    "runbook_plan_generated_at": "2026-04-07T14:34:20Z",
+    "runbook_release_channel_generated_at": "2026-04-07T02:07:32Z",
     "runbook_synced": true,
     "runbook_sync_reasons": []
   },
   "summary": {
-    "ready_count": 4,
-    "warning_count": 3,
-    "missing_count": 1,
-    "scoped_warning_count": 3,
-    "scoped_missing_count": 1,
+    "ready_count": 6,
+    "warning_count": 2,
+    "missing_count": 0,
+    "scoped_warning_count": 2,
+    "scoped_missing_count": 0,
     "deferred_warning_count": 0,
     "history_snapshot_count": 11
   },
@@ -132,24 +102,21 @@
     "no_step_back_client_parity"
   ],
   "coverage": {
-    "desktop_client": "missing",
+    "desktop_client": "warning",
     "rules_engine_and_import": "ready",
-    "hub_and_registry": "warning",
+    "hub_and_registry": "ready",
     "mobile_play_shell": "ready",
     "ui_kit_and_flagship_polish": "ready",
     "media_artifacts": "ready",
-    "horizons_and_public_surface": "warning",
+    "horizons_and_public_surface": "ready",
     "fleet_and_operator_loop": "warning"
   },
   "coverage_details": {
     "desktop_client": {
-      "status": "missing",
+      "status": "warning",
       "summary": "Desktop flagship proof is still incomplete.",
       "reasons": [
-        "Executable desktop exit gate remains globally failed only because ignored macOS/Windows host-proof tuples are still absent; Linux desktop proof is already present.",
-        "Release channel receipt is stale (138332s old; max 86400s).",
-        "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed.",
-        "Install/claim/restore journey is blocked, not ready."
+        "Executable desktop exit gate remains globally failed only because ignored macOS/Windows host-proof tuples are still absent; Linux desktop proof is already present."
       ],
       "evidence": {
         "ui_stage": "publicly_promoted",
@@ -157,67 +124,26 @@
         "ui_local_release_status": "passed",
         "ui_executable_exit_gate_status": "fail",
         "ui_executable_exit_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
-        "ui_executable_exit_gate_reason_count": 44,
+        "ui_executable_exit_gate_reason_count": 3,
         "ui_executable_exit_gate_reasons": [
-          "Release channel does not publish desktop install media for required platform 'windows'.",
-          "Release channel does not publish desktop install media for required platform 'macos'.",
           "Windows desktop exit gate is missing or not passing.",
-          "Windows gate reason: Release channel does not publish a promoted Windows install medium artifact for avalonia (win-x64).",
-          "Windows gate reason: Promoted Windows installer is missing from the active public downloads shelf.",
           "Windows gate reason: Windows startup smoke receipt is missing for promoted installer bytes.",
-          "Windows gate reason: Windows startup smoke requires a Windows-capable host; current host cannot run promoted Windows installer smoke.",
-          "Windows desktop exit gate windows_installer_path does not exist.",
-          "Windows promoted installer bytes appear only in quarantine and cannot count as shipped proof: /docker/chummercomplete/chummer6-ui/.codex-studio/quarantine/unpromoted-desktop-installers-20260403T2110Z/chummer-avalonia-win-x64-installer.exe, /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/20260401-windows-installer-payload-missing/chummer-avalonia-win-x64-installer.exe.",
-          "Windows quarantine contains payload-valid installer candidate bytes, but promotion remains blocked until matching startup smoke proof exists: /docker/chummercomplete/chummer6-ui/.codex-studio/quarantine/unpromoted-desktop-installers-20260403T2110Z/chummer-avalonia-win-x64-installer.exe.",
-          "Windows quarantine contains installer candidate bytes that fail embedded payload/sample marker checks and cannot be promoted: /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/20260401-windows-installer-payload-missing/chummer-avalonia-win-x64-installer.exe.",
-          "Windows startup smoke receipt path is missing/unreadable for promoted installer bytes.",
-          "Windows installer receipt does not confirm embedded payload marker for promoted tuple avalonia:win-x64.",
-          "Windows installer receipt does not confirm bundled demo sample marker for promoted tuple avalonia:win-x64.",
-          "Windows gate reason: Release channel does not publish a promoted Windows install medium artifact for blazor-desktop (win-x64).",
-          "Windows promoted installer bytes appear only in quarantine and cannot count as shipped proof: /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/20260401-windows-installer-payload-missing/chummer-blazor-desktop-win-x64-installer.exe.",
-          "Windows quarantine contains installer candidate bytes that fail embedded payload/sample marker checks and cannot be promoted: /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/20260401-windows-installer-payload-missing/chummer-blazor-desktop-win-x64-installer.exe.",
-          "Windows installer receipt does not confirm embedded payload marker for promoted tuple blazor-desktop:win-x64.",
-          "Windows installer receipt does not confirm bundled demo sample marker for promoted tuple blazor-desktop:win-x64.",
-          "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:windows, blazor-desktop:windows, avalonia:macos, blazor-desktop:macos.",
-          "Release channel is missing required desktop platform/head/rid installer tuple(s): avalonia:osx-arm64:macos, avalonia:win-x64:windows, blazor-desktop:osx-arm64:macos, blazor-desktop:win-x64:windows.",
-          "Release channel status cannot be publishable while required desktop tuple coverage is incomplete.",
-          "macOS desktop exit gate is missing or not passing for promoted head 'avalonia' (osx-arm64).",
-          "macOS gate reason (avalonia/osx-arm64): Release channel does not publish a promoted macOS install medium artifact for avalonia (osx-arm64).",
-          "macOS gate reason (avalonia/osx-arm64): Promoted macOS installer file is missing locally for avalonia (osx-arm64).",
-          "macOS gate reason (avalonia/osx-arm64): macOS startup smoke receipt is missing for avalonia (osx-arm64).",
-          "macOS gate reason (avalonia/osx-arm64): macOS startup smoke requires a macOS host with hdiutil; current host cannot run promoted macOS installer smoke.",
-          "macOS startup smoke is not passing for promoted head 'avalonia' (osx-arm64).",
-          "macOS installer artifact is missing for promoted head 'avalonia' (osx-arm64).",
-          "macOS gate installer path is missing or unreadable for promoted head 'avalonia' (osx-arm64).",
-          "macOS promoted installer bytes appear only in quarantine for head 'avalonia' (osx-arm64) and cannot count as shipped proof: /docker/chummercomplete/chummer6-ui/.codex-studio/quarantine/unpromoted-desktop-installers-20260403T2110Z/chummer-avalonia-osx-arm64-installer.dmg.",
-          "macOS quarantine installer marker checks are skipped for unsupported artifact formats on this host; payload/sample markers were not asserted for head 'avalonia' (osx-arm64): /docker/chummercomplete/chummer6-ui/.codex-studio/quarantine/unpromoted-desktop-installers-20260403T2110Z/chummer-avalonia-osx-arm64-installer.dmg.",
-          "macOS startup smoke receipt path is missing or unreadable for promoted head 'avalonia' (osx-arm64).",
-          "macOS desktop exit gate is missing or not passing for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS gate reason (blazor-desktop/osx-arm64): Release channel does not publish a promoted macOS install medium artifact for blazor-desktop (osx-arm64).",
-          "macOS gate reason (blazor-desktop/osx-arm64): Promoted macOS installer file is missing locally for blazor-desktop (osx-arm64).",
-          "macOS gate reason (blazor-desktop/osx-arm64): macOS startup smoke receipt is missing for blazor-desktop (osx-arm64).",
-          "macOS gate reason (blazor-desktop/osx-arm64): macOS startup smoke requires a macOS host with hdiutil; current host cannot run promoted macOS installer smoke.",
-          "macOS startup smoke is not passing for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS installer artifact is missing for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS gate installer path is missing or unreadable for promoted head 'blazor-desktop' (osx-arm64).",
-          "macOS promoted installer bytes appear only in quarantine for head 'blazor-desktop' (osx-arm64) and cannot count as shipped proof: /docker/chummercomplete/chummer6-ui/.codex-studio/quarantine/unpromoted-desktop-installers-20260403T2110Z/chummer-blazor-desktop-osx-arm64-installer.dmg.",
-          "macOS quarantine installer marker checks are skipped for unsupported artifact formats on this host; payload/sample markers were not asserted for head 'blazor-desktop' (osx-arm64): /docker/chummercomplete/chummer6-ui/.codex-studio/quarantine/unpromoted-desktop-installers-20260403T2110Z/chummer-blazor-desktop-osx-arm64-installer.dmg.",
-          "macOS startup smoke receipt path is missing or unreadable for promoted head 'blazor-desktop' (osx-arm64)."
+          "Windows gate reason: Windows startup smoke requires a Windows-capable host; current host cannot run promoted Windows installer smoke."
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 27751,
-          "desktop workflow execution gate proof_age_seconds": 162,
-          "desktop visual familiarity gate proof_age_seconds": 162
+          "flagship UI release gate proof_age_seconds": 3154,
+          "desktop workflow execution gate proof_age_seconds": 124,
+          "desktop visual familiarity gate proof_age_seconds": 124
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-04T21:08:27.946225Z",
-        "ui_executable_gate_age_seconds": 171691,
+        "ui_executable_gate_generated_at": "2026-04-07T15:08:31.683580Z",
+        "ui_executable_gate_age_seconds": 8,
         "ui_linux_exit_gate_status": "passed",
-        "ui_windows_exit_gate_status": "failed",
-        "ui_windows_exit_gate_payload_marker_present": false,
-        "ui_windows_exit_gate_sample_marker_present": false,
+        "ui_windows_exit_gate_status": "passed",
+        "ui_windows_exit_gate_payload_marker_present": true,
+        "ui_windows_exit_gate_sample_marker_present": true,
         "ui_workflow_execution_gate_status": "pass",
         "ui_workflow_execution_gate_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
         "ui_workflow_execution_gate_family_missing_receipt_count": 0,
@@ -313,24 +239,30 @@
         "sr4_sr6_frontier_receipt_path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
-        "release_channel_generated_at": "2026-04-05T06:24:27Z",
-        "release_channel_age_seconds": 138332,
+        "release_channel_generated_at": "2026-04-07T02:07:32Z",
+        "release_channel_age_seconds": 46867,
         "release_channel_freshness_max_age_seconds": 86400,
-        "release_channel_freshness_ok": false,
+        "release_channel_freshness_ok": true,
         "release_channel_id": "docker",
         "release_channel_heads": [
           "avalonia",
           "blazor-desktop"
         ],
         "release_channel_has_linux_public_installer": true,
-        "release_channel_has_windows_public_installer": false,
-        "release_channel_has_macos_public_installer": false,
+        "release_channel_has_windows_public_installer": true,
+        "release_channel_has_macos_public_installer": true,
         "release_channel_linux_promoted_tuples": [
           "avalonia:linux-x64",
           "blazor-desktop:linux-x64"
         ],
-        "release_channel_windows_promoted_tuples": [],
-        "release_channel_macos_promoted_tuples": [],
+        "release_channel_windows_promoted_tuples": [
+          "avalonia:win-x64",
+          "blazor-desktop:win-x64"
+        ],
+        "release_channel_macos_promoted_tuples": [
+          "avalonia:osx-arm64",
+          "blazor-desktop:osx-arm64"
+        ],
         "release_channel_promoted_tuple_heads": [
           "avalonia",
           "blazor-desktop"
@@ -367,8 +299,8 @@
         "release_channel_tuple_coverage_missing_pair_inventory_mismatch": [],
         "release_channel_tuple_coverage_missing_platform_inventory_mismatch": [],
         "release_channel_tuple_coverage_missing_head_inventory_mismatch": [],
-        "release_channel_rollout_state": "coverage_incomplete",
-        "release_channel_supportability_state": "review_required",
+        "release_channel_rollout_state": "local_docker_preview",
+        "release_channel_supportability_state": "local_docker_proven",
         "ui_executable_gate_visual_required_promoted_heads": [
           "avalonia",
           "blazor-desktop"
@@ -428,196 +360,31 @@
         "ui_executable_gate_linux_missing_or_failing_keys": [],
         "ui_executable_gate_linux_stale_promoted_tuple_keys": [],
         "ui_executable_gate_windows_statuses": {
-          "avalonia:win-x64": "fail",
+          "avalonia:win-x64": "pass",
           "blazor-desktop:win-x64": "fail"
         },
-        "ui_executable_gate_windows_tuple_count": 0,
-        "ui_executable_gate_windows_passing_tuple_count": 0,
+        "ui_executable_gate_windows_tuple_count": 2,
+        "ui_executable_gate_windows_passing_tuple_count": 1,
         "ui_executable_gate_windows_missing_or_failing_keys": [
-          "avalonia:win-x64",
           "blazor-desktop:win-x64"
         ],
         "ui_executable_gate_windows_stale_promoted_tuple_keys": [],
         "ui_executable_gate_macos_statuses": {
-          "avalonia:osx-arm64": "fail",
-          "blazor-desktop:osx-arm64": "fail"
+          "avalonia:osx-arm64": "pass",
+          "blazor-desktop:osx-arm64": "pass"
         },
-        "ui_executable_gate_macos_tuple_count": 0,
-        "ui_executable_gate_macos_passing_tuple_count": 0,
-        "ui_executable_gate_macos_missing_or_failing_keys": [
-          "avalonia:osx-arm64",
-          "blazor-desktop:osx-arm64"
-        ],
+        "ui_executable_gate_macos_tuple_count": 2,
+        "ui_executable_gate_macos_passing_tuple_count": 2,
+        "ui_executable_gate_macos_missing_or_failing_keys": [],
         "ui_executable_gate_macos_stale_promoted_tuple_keys": [],
-        "install_claim_restore_continue": "blocked",
+        "install_claim_restore_continue": "ready",
         "build_explain_publish": "ready",
-        "install_claim_restore_continue_external_blocking_reason_count": 7,
-        "install_claim_restore_continue_local_blocking_reason_count": 1,
-        "install_claim_restore_continue_external_proof_request_count": 4,
-        "install_claim_restore_continue_external_proof_request_hosts": [
-          "macos",
-          "windows"
-        ],
-        "install_claim_restore_continue_external_proof_request_tuples": [
-          "avalonia:osx-arm64:macos",
-          "avalonia:win-x64:windows",
-          "blazor-desktop:osx-arm64:macos",
-          "blazor-desktop:win-x64:windows"
-        ],
-        "install_claim_restore_continue_external_proof_requests": [
-          {
-            "tuple_id": "avalonia:osx-arm64:macos",
-            "channel_id": "docker",
-            "required_host": "macos",
-            "required_proofs": [
-              "promoted_installer_artifact",
-              "startup_smoke_receipt"
-            ],
-            "head_id": "avalonia",
-            "rid": "osx-arm64",
-            "platform": "macos",
-            "tuple_identity_valid": true,
-            "required_host_matches_tuple_platform": true,
-            "expected_artifact_id": "avalonia-osx-arm64-installer",
-            "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
-            "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
-            "expected_installer_sha256": "086e7c0f2c55da5a3932c324f54b3bd98fabe6dc7715553406c3c9a74f24f89a",
-            "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
-            "startup_smoke_receipt_contract": {
-              "status_any_of": [
-                "pass",
-                "passed",
-                "ready"
-              ],
-              "ready_checkpoint": "pre_ui_event_loop",
-              "head_id": "avalonia",
-              "platform": "macos",
-              "rid": "osx-arm64",
-              "host_class_contains": "macos"
-            },
-            "proof_capture_commands": [
-              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ],
-            "tuple_entry_count": 1,
-            "tuple_unique": true
-          },
-          {
-            "tuple_id": "avalonia:win-x64:windows",
-            "channel_id": "docker",
-            "required_host": "windows",
-            "required_proofs": [
-              "promoted_installer_artifact",
-              "startup_smoke_receipt"
-            ],
-            "head_id": "avalonia",
-            "rid": "win-x64",
-            "platform": "windows",
-            "tuple_identity_valid": true,
-            "required_host_matches_tuple_platform": true,
-            "expected_artifact_id": "avalonia-win-x64-installer",
-            "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
-            "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
-            "expected_installer_sha256": "529a427c84a36082fe66d09a4547b17bd6c5046d2e4586277c5b7cd0c83ab00f",
-            "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
-            "startup_smoke_receipt_contract": {
-              "status_any_of": [
-                "pass",
-                "passed",
-                "ready"
-              ],
-              "ready_checkpoint": "pre_ui_event_loop",
-              "head_id": "avalonia",
-              "platform": "windows",
-              "rid": "win-x64",
-              "host_class_contains": "windows"
-            },
-            "proof_capture_commands": [
-              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ],
-            "tuple_entry_count": 1,
-            "tuple_unique": true
-          },
-          {
-            "tuple_id": "blazor-desktop:osx-arm64:macos",
-            "channel_id": "docker",
-            "required_host": "macos",
-            "required_proofs": [
-              "promoted_installer_artifact",
-              "startup_smoke_receipt"
-            ],
-            "head_id": "blazor-desktop",
-            "rid": "osx-arm64",
-            "platform": "macos",
-            "tuple_identity_valid": true,
-            "required_host_matches_tuple_platform": true,
-            "expected_artifact_id": "blazor-desktop-osx-arm64-installer",
-            "expected_installer_file_name": "chummer-blazor-desktop-osx-arm64-installer.dmg",
-            "expected_installer_relative_path": "files/chummer-blazor-desktop-osx-arm64-installer.dmg",
-            "expected_installer_sha256": "19af740fb995ee5dff0c5c7a4e601159d8779ce08b4ce47ae3b0db7f796cd581",
-            "expected_public_install_route": "/downloads/install/blazor-desktop-osx-arm64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json",
-            "startup_smoke_receipt_contract": {
-              "status_any_of": [
-                "pass",
-                "passed",
-                "ready"
-              ],
-              "ready_checkpoint": "pre_ui_event_loop",
-              "head_id": "blazor-desktop",
-              "platform": "macos",
-              "rid": "osx-arm64",
-              "host_class_contains": "macos"
-            },
-            "proof_capture_commands": [
-              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ],
-            "tuple_entry_count": 1,
-            "tuple_unique": true
-          },
-          {
-            "tuple_id": "blazor-desktop:win-x64:windows",
-            "channel_id": "docker",
-            "required_host": "windows",
-            "required_proofs": [
-              "promoted_installer_artifact",
-              "startup_smoke_receipt"
-            ],
-            "head_id": "blazor-desktop",
-            "rid": "win-x64",
-            "platform": "windows",
-            "tuple_identity_valid": true,
-            "required_host_matches_tuple_platform": true,
-            "expected_artifact_id": "blazor-desktop-win-x64-installer",
-            "expected_installer_file_name": "chummer-blazor-desktop-win-x64-installer.exe",
-            "expected_installer_relative_path": "files/chummer-blazor-desktop-win-x64-installer.exe",
-            "expected_installer_sha256": "bc960d8d8081bd3e661b6f7ac281ee08879a5eeb007d45ec0bdfb9a98f188499",
-            "expected_public_install_route": "/downloads/install/blazor-desktop-win-x64-installer",
-            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-blazor-desktop-win-x64.receipt.json",
-            "startup_smoke_receipt_contract": {
-              "status_any_of": [
-                "pass",
-                "passed",
-                "ready"
-              ],
-              "ready_checkpoint": "pre_ui_event_loop",
-              "head_id": "blazor-desktop",
-              "platform": "windows",
-              "rid": "win-x64",
-              "host_class_contains": "windows"
-            },
-            "proof_capture_commands": [
-              "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-win-x64-installer.exe blazor-desktop win-x64 Chummer.Blazor.Desktop.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-              "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh"
-            ],
-            "tuple_entry_count": 1,
-            "tuple_unique": true
-          }
-        ],
+        "install_claim_restore_continue_external_blocking_reason_count": 0,
+        "install_claim_restore_continue_local_blocking_reason_count": 0,
+        "install_claim_restore_continue_external_proof_request_count": 0,
+        "install_claim_restore_continue_external_proof_request_hosts": [],
+        "install_claim_restore_continue_external_proof_request_tuples": [],
+        "install_claim_restore_continue_external_proof_requests": [],
         "install_claim_restore_continue_relevant_external_proof_request_count": 0,
         "build_explain_publish_relevant_external_proof_request_count": 0,
         "desktop_ignore_nonlinux_desktop_host_proof_blockers": true,
@@ -663,11 +430,9 @@
       }
     },
     "hub_and_registry": {
-      "status": "warning",
-      "summary": "Hub and registry flagship proof is still incomplete.",
-      "reasons": [
-        "Install/claim/restore journey is blocked, not ready."
-      ],
+      "status": "ready",
+      "summary": "Hub, registry, and public release shelf proof are aligned.",
+      "reasons": [],
       "evidence": {
         "hub_stage": "publicly_promoted",
         "hub_promotion": "public",
@@ -675,12 +440,12 @@
         "hub_local_release_status": "passed",
         "release_channel_status": "published",
         "release_channel_release_proof": "passed",
-        "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "blocked",
-        "report_cluster_release_notify_blocked_by_external_constraints_only": true,
-        "report_cluster_release_notify_external_blocking_reason_count": 4,
+        "install_claim_restore_continue": "ready",
+        "report_cluster_release_notify": "ready",
+        "report_cluster_release_notify_blocked_by_external_constraints_only": false,
+        "report_cluster_release_notify_external_blocking_reason_count": 0,
         "report_cluster_release_notify_local_blocking_reason_count": 0,
-        "report_cluster_release_notify_external_proof_request_count": 4
+        "report_cluster_release_notify_external_proof_request_count": 0
       }
     },
     "mobile_play_shell": {
@@ -719,55 +484,59 @@
       }
     },
     "horizons_and_public_surface": {
-      "status": "warning",
-      "summary": "Horizons and public-surface flagship proof is still incomplete.",
-      "reasons": [
-        "Install/claim/restore journey is blocked, not ready."
-      ],
+      "status": "ready",
+      "summary": "Horizons posture and public surface proof are aligned with live release truth.",
+      "reasons": [],
       "evidence": {
         "public_group_deployment_status": "public",
         "progress_report_generated_at": "2026-04-05T07:12:14Z",
-        "install_claim_restore_continue": "blocked",
-        "report_cluster_release_notify": "blocked",
-        "report_cluster_release_notify_blocked_by_external_constraints_only": true,
-        "report_cluster_release_notify_external_blocking_reason_count": 4,
+        "install_claim_restore_continue": "ready",
+        "report_cluster_release_notify": "ready",
+        "report_cluster_release_notify_blocked_by_external_constraints_only": false,
+        "report_cluster_release_notify_external_blocking_reason_count": 0,
         "report_cluster_release_notify_local_blocking_reason_count": 0,
-        "report_cluster_release_notify_external_proof_request_count": 4,
-        "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+        "report_cluster_release_notify_external_proof_request_count": 0,
+        "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
+        "flagship_bar_mirror_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_BAR.md",
+        "flagship_bar_mirror_exists": true,
+        "horizons_overview_mirror_path": "/docker/fleet/.codex-design/product/HORIZONS.md",
+        "horizons_overview_mirror_exists": true,
+        "canonical_horizon_doc_count": 16,
+        "mirror_horizon_doc_count": 16,
+        "missing_mirror_horizon_doc_names": []
       }
     },
     "fleet_and_operator_loop": {
       "status": "warning",
       "summary": "Fleet and operator-loop flagship proof is still incomplete.",
       "reasons": [
-        "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed).",
-        "Journey-gate overall state is blocked, not ready."
+        "Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed)."
       ],
       "evidence": {
         "runtime_healing_alert_state": "healthy",
         "runtime_healing_last_event_at": "",
         "runtime_healing_override_stale_incident": false,
-        "journey_overall_state": "blocked",
-        "journey_blocked_external_only_count": 1,
-        "journey_blocked_with_local_count": 1,
+        "journey_overall_state": "ready",
+        "journey_blocked_external_only_count": 0,
+        "journey_blocked_with_local_count": 0,
         "history_snapshot_count": 11,
-        "support_packets_generated_at": "2026-04-06T20:43:24Z",
-        "support_open_packet_count": 4,
+        "support_packets_generated_at": "2026-04-07T14:34:20Z",
+        "support_open_packet_count": 0,
         "support_open_non_external_packet_count": 0,
-        "external_proof_backlog_request_count": 4,
-        "external_proof_backlog_request_observation_count": 8,
-        "external_proof_backlog_duplicate_observation_count": 4,
+        "external_proof_backlog_request_count": 0,
+        "external_proof_backlog_request_observation_count": 0,
+        "external_proof_backlog_duplicate_observation_count": 0,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-04-06T20:49:59Z",
-        "external_proof_runbook_plan_generated_at": "2026-04-06T20:43:24Z",
-        "external_proof_runbook_release_channel_generated_at": "2026-04-05T06:24:27Z",
+        "external_proof_runbook_generated_at": "2026-04-07T14:34:21Z",
+        "external_proof_runbook_plan_generated_at": "2026-04-07T14:34:20Z",
+        "external_proof_runbook_release_channel_generated_at": "2026-04-07T02:07:32Z",
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
-        "supervisor_mode": "flagship_product",
-        "supervisor_completion_status": "fail",
+        "supervisor_mode": "sharded",
+        "supervisor_completion_status": "",
         "supervisor_completion_external_only": false,
-        "supervisor_updated_at": "2026-04-06T20:49:59Z",
+        "supervisor_updated_at": "2026-04-07T14:34:16Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",
@@ -778,7 +547,7 @@
         "ooda_controller": "up",
         "ooda_supervisor": "up",
         "ooda_aggregate_stale": false,
-        "ooda_timestamp_stale": true,
+        "ooda_timestamp_stale": false,
         "ooda_steady_complete_quiet": false
       }
     }
@@ -807,8 +576,8 @@
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "external_proof_runbook": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/shard-3/state.json",
-    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
+    "supervisor_state": "/docker/fleet/state/chummer_design_supervisor/state.json",
+    "ooda_state": "/docker/fleet/state/design_supervisor_ooda/overwatch_20260407T133004Z_60s/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
     "ui_linux_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
@@ -819,8 +588,8 @@
     "sr4_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr6_workflow_parity_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
     "sr4_sr6_frontier_receipt": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
-    "hub_local_release_proof": "/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
-    "mobile_local_release_proof": "/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
+    "hub_local_release_proof": "/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json",
+    "mobile_local_release_proof": "/docker/chummercomplete/chummer-play/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json",
     "release_channel": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
     "releases_json": "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
   }

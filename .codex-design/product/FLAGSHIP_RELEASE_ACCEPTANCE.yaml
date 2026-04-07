@@ -36,6 +36,10 @@ surfaces:
       - chummer6-core
     must_prove:
       - One obvious flagship desktop head and install path per promoted platform.
+      - The opening desktop surface reads like a Chummer5a-successor workbench, not decorative shell theater.
+      - The desktop shell preserves Chummer5a-like visual similarity in density, layout, and navigation rhythm.
+      - The `File` menu is a real desktop menu with visible working actions, not a cosmetic label.
+      - Master index and character roster are first-class runtime-backed routes from the desktop shell.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
       - SR4, SR5, and SR6 use authored labels, prompts, and interaction cues where the rules differ in meaning.
@@ -129,6 +133,7 @@ surfaces:
       - Whole-product completion is derived from flagship acceptance and lived journey proof, not only empty milestone rows or green repo tests.
       - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
       - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
+      - Desktop completion cannot be claimed while Chummer5a-familiar opening posture, real `File` menu behavior, or first-class master-index and character-roster routes remain missing.
     evidence_sources:
       - FLAGSHIP_PRODUCT_BAR.md
       - PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md

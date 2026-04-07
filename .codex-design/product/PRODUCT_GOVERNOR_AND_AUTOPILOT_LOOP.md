@@ -18,6 +18,35 @@ The loop stays grounded by a simple rule:
 
 > design truth is not enough; product reality must compile into governed course correction.
 
+## Supervisor currentness
+
+The product governor is only authoritative when it is current on the live product state.
+If the governor is stale, its decision record is not fit to steer the whole product.
+
+Currentness means:
+
+* the latest release-health picture has been read
+* the latest blocker, support, and feedback clusters have been read
+* the latest public promise, route, and policy posture have been read
+* the latest flagship readiness evidence has been read
+* the last freeze, reroute, or escalation decision is still explainable against the current state
+
+If any of those inputs are missing or stale, the governor must treat the current path as provisional and publish a refresh before issuing hard product steering.
+
+## Flagship OODA bar
+
+The flagship product must not advance on intuition, stale signal, or local convenience.
+Any flagship-facing decision or release posture must show a complete OODA chain:
+
+* Observe: the actual current product state is explicit and sourced
+* Orient: the implication for trust, safety, scope, and promise fit is named
+* Decide: one clear action is chosen, with an owner and reason
+* Act: the action is published into the right repo, Hub, Fleet, or canon lane
+
+For flagship work, OODA is not advisory.
+It is the minimum decision standard for promotion, freeze, reroute, rollback, or public commitment.
+If the loop cannot be written down end to end, the product is not ready to move as flagship-ready.
+
 ## Role split
 
 ### Lead designer
@@ -45,6 +74,8 @@ Owns:
 * stop, freeze, reroute, and escalation decisions when reality contradicts plan
 * weekly program pulse using `PRODUCT_HEALTH_SCORECARD.yaml`
 * final routing of clustered support and feedback packets into code, docs, queue, policy, or canon changes
+* explicit currentness confirmation before hard steering
+* flagship OODA enforcement for promotion, freeze, reroute, rollback, and public commitment decisions
 
 Does not own:
 
@@ -100,6 +131,8 @@ The live operator implementation lives in Fleet:
 * Fleet owns the durable runtime loop, traces, evals, canaries, packets, dashboards, and operator evidence
 * Hub owns the user, install, community, and support/control truth those loops read or update
 * shell sessions may start or inspect the loop, but they are entrypoints only and not the durable control plane
+* every flagship promotion, freeze, reroute, rollback, or public commitment must be backed by an explicit OODA record
+* if the supervising operator is not current, the loop must pause hard product steering until currentness is restored
 
 The closed loop is:
 
@@ -130,6 +163,7 @@ Every packet must answer:
 * which release/channel/build is affected
 * whether the issue is a code defect, docs gap, queue problem, policy gap, or canon contradiction
 * whether the issue threatens public trust, release safety, or roadmap honesty
+* whether the current evidence is sufficient for a flagship decision or whether the product must wait for a fresh packet
 
 ### Decide
 
@@ -152,6 +186,7 @@ Actions must publish into one of:
 * Fleet queue or package change
 * design canon update
 * release-governance decision
+* explicit flagship OODA record with the decision owner, rationale, and exit condition
 
 ## Freeze and reroute authority
 
@@ -169,6 +204,8 @@ Every freeze or reroute needs:
 * one written reason
 * one exit condition
 * one named downstream action
+* one currentness statement showing which live signals were refreshed before the call
+* one OODA trail proving the decision was made from current evidence
 
 ## Weekly program pulse
 
@@ -185,6 +222,8 @@ The minimum weekly pulse publishes:
 * progress trend direction and delta
 * top freeze or reroute decisions
 * the next checkpoint question
+* supervisor-currentness status
+* flagship OODA compliance status for the week
 
 The scorecard source is `PRODUCT_HEALTH_SCORECARD.yaml`.
 

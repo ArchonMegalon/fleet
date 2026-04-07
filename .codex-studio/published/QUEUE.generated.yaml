@@ -1,3 +1,254 @@
-source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c
-mode: append
-items: []
+mode: replace
+items:
+  - repo: chummer6-hub
+    package_id: blocker-release-upload-bootstrap
+    title: "Flagship blocker: mac release bootstrap upload path"
+    task: "Audit and harden the mac release bootstrap so invalid staged upload payloads fail earlier and surface exact rejection detail."
+    package_kind: implementation
+    design_owner: flagship-release-control
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - Chummer.Run.Api/wwwroot/artifacts/mac-codex-release-pipeline/bootstrap.sh
+    owned_surfaces:
+      - blocker:release-upload-bootstrap
+    dependencies: []
+    max_touched_files: 1
+    priority: 10
+  - repo: chummer6-hub
+    package_id: blocker-release-upload-promotion-validator
+    title: "Flagship blocker: release promotion validator"
+    task: "Audit the server-side release promotion validator for the staged upload 400 and fix any safe contract mismatch."
+    package_kind: implementation
+    design_owner: flagship-release-control
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - Chummer.Run.Api/Services/ReleaseBundlePromotionService.cs
+    owned_surfaces:
+      - blocker:release-promotion-validator
+    dependencies: []
+    max_touched_files: 1
+    priority: 11
+  - repo: chummer6-hub
+    package_id: blocker-release-upload-controller
+    title: "Flagship blocker: staged upload completion controller"
+    task: "Audit the staged upload controller path for deterministic problem detail and safe promotion flow around session completion."
+    package_kind: implementation
+    design_owner: flagship-release-control
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - Chummer.Run.Api/Controllers/InternalReleaseBundlesController.cs
+    owned_surfaces:
+      - blocker:release-upload-controller
+    dependencies: []
+    max_touched_files: 1
+    priority: 12
+  - repo: chummer6-hub
+    package_id: blocker-hub-local-release-proof
+    title: "Flagship blocker: hub local release proof"
+    task: "Audit hub local release proof generation for install-claim-restore and report-cluster-release-notify truth and recency."
+    package_kind: implementation
+    design_owner: flagship-release-control
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/materialize_hub_local_release_proof.py
+    owned_surfaces:
+      - blocker:hub-local-release-proof
+    dependencies: []
+    max_touched_files: 1
+    priority: 13
+  - repo: chummer6-hub
+    package_id: blocker-runservices-release-manifest
+    title: "Flagship blocker: run-services release manifest generator"
+    task: "Audit the run-services release manifest generator for public-shelf coherence and upload/promotion readiness."
+    package_kind: implementation
+    design_owner: flagship-release-control
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/generate-releases-manifest.sh
+    owned_surfaces:
+      - blocker:runservices-release-manifest
+    dependencies: []
+    max_touched_files: 1
+    priority: 14
+  - repo: chummer6-ui
+    package_id: blocker-ui-release-manifest
+    title: "Flagship blocker: ui release manifest generator"
+    task: "Audit the UI-side release manifest generator for zero-artifact resilience and flagship-safe projection."
+    package_kind: implementation
+    design_owner: flagship-desktop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/generate-releases-manifest.sh
+    owned_surfaces:
+      - blocker:ui-release-manifest
+    dependencies: []
+    max_touched_files: 1
+    priority: 15
+  - repo: chummer6-ui
+    package_id: blocker-ui-http-publisher
+    title: "Flagship blocker: ui http bundle publisher"
+    task: "Audit the UI-side HTTP bundle publisher for staged/direct upload correctness and deterministic release payload handling."
+    package_kind: implementation
+    design_owner: flagship-desktop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/publish-download-bundle-http.sh
+    owned_surfaces:
+      - blocker:ui-http-publisher
+    dependencies: []
+    max_touched_files: 1
+    priority: 16
+  - repo: chummer6-ui
+    package_id: blocker-ui-filesystem-publisher
+    title: "Flagship blocker: ui bundle publish orchestration"
+    task: "Audit the UI publish orchestration script for dist-to-shelf coherence and installer proof preservation."
+    package_kind: implementation
+    design_owner: flagship-desktop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/publish-download-bundle.sh
+    owned_surfaces:
+      - blocker:ui-publish-orchestration
+    dependencies: []
+    max_touched_files: 1
+    priority: 17
+  - repo: chummer6-ui
+    package_id: blocker-desktop-executable-gate
+    title: "Flagship blocker: desktop executable exit gate"
+    task: "Audit the executable desktop exit gate for real tuple-proof detection bugs without lowering the flagship bar."
+    package_kind: implementation
+    design_owner: flagship-desktop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/ai/milestones/materialize-desktop-executable-exit-gate.sh
+    owned_surfaces:
+      - blocker:desktop-executable-gate
+    dependencies: []
+    max_touched_files: 1
+    priority: 18
+  - repo: chummer6-ui
+    package_id: blocker-macos-exit-gate
+    title: "Flagship blocker: macOS promoted installer proof"
+    task: "Audit the macOS desktop exit gate for promoted installer tuple proof detection and shipped-artifact coherence."
+    package_kind: implementation
+    design_owner: flagship-desktop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/materialize-macos-desktop-exit-gate.sh
+    owned_surfaces:
+      - blocker:macos-exit-gate
+    dependencies: []
+    max_touched_files: 1
+    priority: 19
+  - repo: chummer6-ui
+    package_id: blocker-windows-exit-gate
+    title: "Flagship blocker: Windows promoted installer proof"
+    task: "Audit the Windows desktop exit gate for promoted installer tuple proof detection and shipped-artifact coherence."
+    package_kind: implementation
+    design_owner: flagship-desktop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/materialize-windows-desktop-exit-gate.sh
+    owned_surfaces:
+      - blocker:windows-exit-gate
+    dependencies: []
+    max_touched_files: 1
+    priority: 20
+  - repo: chummer6-hub-registry
+    package_id: blocker-public-release-channel-materializer
+    title: "Flagship blocker: public release channel materializer"
+    task: "Audit public release channel materialization for install-claim-restore and report-cluster-release-notify proof propagation and desktop shelf coherence."
+    package_kind: implementation
+    design_owner: flagship-release-control
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/materialize_public_release_channel.py
+    owned_surfaces:
+      - blocker:public-release-channel-materializer
+    dependencies: []
+    max_touched_files: 1
+    priority: 21
+  - repo: fleet
+    package_id: blocker-supervisor-currentness
+    title: "Flagship blocker: supervisor currentness"
+    task: "Audit supervisor-currentness and flagship OODA state output so valid current state is published and counted correctly."
+    package_kind: implementation
+    design_owner: flagship-operator-loop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/chummer_design_supervisor.py
+    owned_surfaces:
+      - blocker:supervisor-currentness
+    dependencies: []
+    max_touched_files: 1
+    priority: 22
+  - repo: fleet
+    package_id: blocker-operator-ooda-monitor
+    title: "Flagship blocker: operator OODA monitor"
+    task: "Audit operator OODA monitor output and current_8h publication so the fleet/operator loop can clear when the proof is actually current."
+    package_kind: implementation
+    design_owner: flagship-operator-loop
+    architecture_sensitive: true
+    premium_required: true
+    allow_credit_burn: true
+    allowed_lanes:
+      - core_booster
+    allowed_paths:
+      - scripts/ooda_design_supervisor.py
+    owned_surfaces:
+      - blocker:operator-ooda-monitor
+    dependencies: []
+    max_touched_files: 1
+    priority: 23

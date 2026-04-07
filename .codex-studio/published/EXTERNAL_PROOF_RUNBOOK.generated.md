@@ -1,9 +1,9 @@
 # External Proof Runbook
 
-- generated_at: 2026-04-07T02:07:34Z
+- generated_at: 2026-04-07T14:34:21Z
 - unresolved_request_count: 0
 - unresolved_hosts: (none)
-- plan_generated_at: 2026-04-07T02:07:33Z
+- plan_generated_at: 2026-04-07T14:34:20Z
 - release_channel_generated_at: 2026-04-07T02:07:32Z
 - capture_deadline_hours: 24
 - capture_deadline_utc: 2026-04-08T02:07:32Z

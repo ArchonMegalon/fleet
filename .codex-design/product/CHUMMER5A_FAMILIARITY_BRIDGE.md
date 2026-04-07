@@ -25,6 +25,17 @@ It must not casually discard the old workbench grammar.
 
 The flagship desktop shell must preserve these Chummer5a cues in recognizable form:
 
+### 0. Opening workbench must read like Chummer, not a generic shell
+
+The first thing a paying desktop user sees must feel like a Chummer5a successor mainframe.
+
+Required:
+
+* the opening surface reads as a serious character-work mainframe, not a marketing dashboard, launch pad, or shell theater
+* a veteran user can immediately orient to the workbench without hunting for the actual character tools
+* the shell keeps visual similarity to Chummer5a in density, chrome posture, and "where do I start working" clarity
+* "modern shell" copy or decorative flagship messaging must not displace the familiar workbench landmarks
+
 ### 1. Classic top-level menu posture
 
 The desktop shell keeps a real top menu with familiar desktop semantics.

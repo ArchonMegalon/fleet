@@ -9,6 +9,7 @@ They exist so future product intent lives in `chummer6-design`, not only in down
 * Horizon docs are canon for future-capability posture, not promises of shipment.
 * Horizon docs must stay consistent with `VISION.md`, `ARCHITECTURE.md`, `EXTERNAL_TOOLS_PLANE.md`, and `PROGRAM_MILESTONES.yaml`.
 * The public `Chummer6` guide may explain Horizons in human language, but it may not outrun this directory.
+* Every horizon must read as hard-flagship-grade frontier intent: premium, explicit, and build-path aware, even while it remains horizon-only.
 * Public votes, surveys, Discord chatter, and guide feedback are advisory inputs only.
 * A horizon becomes implementation work only when the owning repos, bounded tool posture, milestone ties, and build path are explicit.
 * Horizons that analyze human session behavior must define consent, privacy, and non-truth boundaries explicitly.
@@ -97,4 +98,5 @@ Every horizon must define, either in its long-form doc or in `HORIZON_REGISTRY.y
 Horizons are where Chummer names the future without letting the future silently widen the current release boundary.
 
 They are also where Chummer records how a future lane could become bounded research and then real build work later, instead of existing only as public guide copy.
+The frontier narrative here must stay hard-flagship-grade across all horizons: sharp enough to shape architecture, bounded enough to stay non-promissory.
 If a future lane matters enough to shape today's architecture, its required foundations must be visible now rather than rediscovered after the release surface hardens.

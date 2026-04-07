@@ -100,6 +100,7 @@ That no longer blocks the no-step-back parity claim because the current successo
 3. Modern consolidation is good when it preserves or improves the same user job, trust posture, and speed.
 4. A missing or partial family must live in machine-readable milestone truth, not only in prose complaints or migration notes.
 5. The plugin framework remains intentionally out of scope for this parity program.
+6. Visual familiarity is release-blocking, not decorative: the desktop opening surface must still read as a Chummer5a-successor workbench, the `File` menu must be real, and master-index and character-roster routes must remain first-class.
 
 ## Added milestone lane
 

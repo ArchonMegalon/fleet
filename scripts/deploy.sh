@@ -159,7 +159,8 @@ Commands:
   probe-magixai-api-live [--width W] [--height H]
       Probe live AI Magicx API endpoint and auth/header variants through the wrapper path.
   run-ea-chummer6-guide-worker [worker args...]
-      Run the EA Chummer6 text/OODA worker only and write/update downstream overrides in Fleet state.
+      Run the EA Chummer6 text/OODA worker, refresh media pack assets, and regenerate
+      publish the Chummer6 guide repo from that state.
   render-ea-chummer6-media-pack
       Run the EA Chummer6 media worker only and refresh the local media asset pack from the current overrides.
   bootstrap-chummer6-browseract-workflows
@@ -1064,7 +1065,7 @@ build_chummer_windows_downloads() {
   local apps_csv="${CHUMMER_DESKTOP_APPS:-blazor-desktop}"
   local dist_dir="${CHUMMER_DESKTOP_DIST_DIR:-$build_root/dist}"
   local bundle_dir="${CHUMMER_DESKTOP_BUNDLE_DIR:-$build_root/bundle}"
-  local deploy_dir="${CHUMMER_DOWNLOADS_DEPLOY_DIR:-/docker/chummer5a/Docker/Downloads}"
+  local deploy_dir="${CHUMMER_DOWNLOADS_DEPLOY_DIR:-/docker/chummercomplete/chummer-presentation/Chummer.Portal/downloads}"
   local live_verify_target="${CHUMMER_DOWNLOADS_VERIFY_URL:-$deploy_dir}"
   local release_stamp="${CHUMMER_RELEASE_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
   local release_version="${CHUMMER_RELEASE_VERSION:-run-${release_stamp}}"
@@ -2057,6 +2058,9 @@ PY
     cleanup_local_chummer6_worker_processes
     cleanup_chummer6_worker_processes
     python3 /docker/EA/scripts/chummer6_guide_worker.py "$@"
+    fleet_admin_python /docker/EA/scripts/chummer6_guide_media_worker.py render-pack
+    python3 /docker/fleet/scripts/finish_chummer6_guide.py
+    bash /docker/fleet/scripts/deploy.sh verify-config
     ;;
   render-ea-chummer6-media-pack)
     shift

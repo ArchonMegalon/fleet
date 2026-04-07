@@ -24,7 +24,12 @@ ROOT = Path("/docker/fleet")
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_MIRROR_OUT = ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_ACCEPTANCE = ROOT / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+DEFAULT_FLAGSHIP_BAR = ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_BAR.md"
+DEFAULT_HORIZONS_OVERVIEW = ROOT / ".codex-design" / "product" / "HORIZONS.md"
+DEFAULT_HORIZONS_DIR = ROOT / ".codex-design" / "product" / "horizons"
 CANONICAL_ACCEPTANCE = Path("/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
+CANONICAL_FLAGSHIP_BAR = Path("/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PRODUCT_BAR.md")
+CANONICAL_HORIZONS_DIR = Path("/docker/chummercomplete/chummer-design/products/chummer/horizons")
 DEFAULT_PARITY_REGISTRY = ROOT / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
 CANONICAL_PARITY_REGISTRY = Path(
     "/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
@@ -76,6 +81,10 @@ DESKTOP_EXECUTABLE_GATE_REQUIRED_PROOF_AGE_KEYS = (
     "desktop visual familiarity gate proof_age_seconds",
 )
 DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS = (
+    "Opening_mainframe_preserves_chummer5a_successor_workbench_posture",
+    "Runtime_backed_file_menu_preserves_working_open_save_import_routes",
+    "Master_index_is_a_first_class_runtime_backed_workbench_route",
+    "Character_roster_is_a_first_class_runtime_backed_workbench_route",
     "Runtime_backed_shell_chrome_stays_enabled_after_runner_load",
     "Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture",
     "Loaded_runner_header_stays_tab_panel_only_without_metric_cards",
@@ -88,6 +97,10 @@ DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS = (
     "Magic_matrix_and_consumables_workflows_execute_with_specific_dialog_fields_and_confirm_actions",
 )
 DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS = (
+    ("Opening_mainframe_preserves_chummer5a_successor_workbench_posture",),
+    ("Runtime_backed_file_menu_preserves_working_open_save_import_routes",),
+    ("Master_index_is_a_first_class_runtime_backed_workbench_route",),
+    ("Character_roster_is_a_first_class_runtime_backed_workbench_route",),
     ("Runtime_backed_shell_chrome_stays_enabled_after_runner_load",),
     ("Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture",),
     ("Loaded_runner_header_stays_tab_panel_only_without_metric_cards",),
@@ -1106,6 +1119,10 @@ def _normalized_status_map(value: Any) -> Dict[str, str]:
     return normalized
 
 
+def _status_or_bool_ok(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"pass", "passed", "ready", "true", "yes", "1"}
+
+
 def _normalized_stale_receipt_inventory(value: Any) -> List[Dict[str, str]]:
     if not isinstance(value, list):
         return []
@@ -1468,6 +1485,32 @@ def build_flagship_product_readiness_payload(
         visual_missing_legacy_interaction_keys = _as_string_list(
             visual_evidence.get("missing_required_legacy_interaction_keys")
         )
+        visual_failing_legacy_interaction_keys = _as_string_list(
+            visual_evidence.get("failing_required_legacy_interaction_keys")
+        )
+        visual_missing_desktop_landmark_keys = sorted(
+            set(visual_missing_legacy_interaction_keys).union(set(visual_failing_legacy_interaction_keys)).intersection(
+                {
+                    "runtimeBackedFileMenuRoutes",
+                    "runtimeBackedMasterIndex",
+                    "runtimeBackedCharacterRoster",
+                    "legacyMainframeVisualSimilarity",
+                }
+            )
+        )
+        visual_landmark_statuses = {
+            key: str(visual_evidence.get(key) or "").strip().lower()
+            for key in (
+                "runtimeBackedFileMenuRoutes",
+                "runtimeBackedMasterIndex",
+                "runtimeBackedCharacterRoster",
+                "legacyMainframeVisualSimilarity",
+            )
+        }
+        visual_nonpassing_desktop_landmark_keys = sorted(
+            key for key, value in visual_landmark_statuses.items()
+            if not _status_or_bool_ok(value)
+        )
         visual_required_tests_set = set(visual_required_tests)
         visual_missing_tests_set = set(visual_missing_tests)
         visual_missing_required_milestone2_tests_from_inventory: List[str] = []
@@ -1505,6 +1548,26 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Desktop visual familiarity gate reports missing required legacy interaction proof keys."
             )
+        if visual_failing_legacy_interaction_keys:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity gate reports non-passing required legacy interaction proof keys."
+            )
+        if visual_missing_desktop_landmark_keys:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity gate is missing required Chummer5a desktop landmark proof keys: "
+                + ", ".join(visual_missing_desktop_landmark_keys)
+            )
+        if visual_nonpassing_desktop_landmark_keys:
+            visual_milestone2_integrity_gap = True
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Desktop visual familiarity gate does not currently pass the required Chummer5a desktop landmark proof keys: "
+                + ", ".join(visual_nonpassing_desktop_landmark_keys)
+            )
         if not visual_milestone2_integrity_gap:
             desktop_positives += 1
     else:
@@ -1539,6 +1602,16 @@ def build_flagship_product_readiness_payload(
         )
         visual_missing_legacy_interaction_keys = _as_string_list(
             visual_evidence.get("missing_required_legacy_interaction_keys")
+        )
+        visual_missing_desktop_landmark_keys = sorted(
+            set(visual_missing_legacy_interaction_keys).intersection(
+                {
+                    "runtimeBackedFileMenuRoutes",
+                    "runtimeBackedMasterIndex",
+                    "runtimeBackedCharacterRoster",
+                    "legacyMainframeVisualSimilarity",
+                }
+            )
         )
     localization_locale_summary = (
         ui_localization_release_gate.get("locale_summary")
@@ -2983,6 +3056,20 @@ def build_flagship_product_readiness_payload(
 
     horizons_reasons: List[str] = []
     horizons_positives = 0
+    flagship_bar_mirror_exists = DEFAULT_FLAGSHIP_BAR.is_file()
+    flagship_bar_canonical_exists = CANONICAL_FLAGSHIP_BAR.is_file()
+    horizons_overview_mirror_exists = DEFAULT_HORIZONS_OVERVIEW.is_file()
+    mirror_horizon_doc_names = (
+        {path.name for path in DEFAULT_HORIZONS_DIR.glob("*.md")}
+        if DEFAULT_HORIZONS_DIR.is_dir()
+        else set()
+    )
+    canonical_horizon_doc_names = (
+        {path.name for path in CANONICAL_HORIZONS_DIR.glob("*.md")}
+        if CANONICAL_HORIZONS_DIR.is_dir()
+        else set()
+    )
+    missing_mirror_horizon_doc_names = sorted(canonical_horizon_doc_names - mirror_horizon_doc_names)
     if progress_report:
         horizons_positives += 1
     else:
@@ -3005,10 +3092,28 @@ def build_flagship_product_readiness_payload(
             horizons_positives += 1
         else:
             horizons_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
+    if horizons_overview_mirror_exists:
+        horizons_positives += 1
+    else:
+        horizons_reasons.append("Fleet design mirror is missing HORIZONS.md.")
     if acceptance:
         horizons_positives += 1
     else:
         horizons_reasons.append("Flagship acceptance matrix is missing from the design mirror.")
+    if flagship_bar_mirror_exists:
+        horizons_positives += 1
+    elif flagship_bar_canonical_exists:
+        horizons_reasons.append("Fleet design mirror is missing FLAGSHIP_PRODUCT_BAR.md.")
+    else:
+        horizons_reasons.append("Canonical FLAGSHIP_PRODUCT_BAR.md is missing.")
+    if canonical_horizon_doc_names and not missing_mirror_horizon_doc_names:
+        horizons_positives += 1
+    elif canonical_horizon_doc_names:
+        horizons_reasons.append(
+            "Fleet design mirror is missing horizon canon files: " + ", ".join(missing_mirror_horizon_doc_names) + "."
+        )
+    else:
+        horizons_reasons.append("Canonical horizon doc set is missing or unreadable.")
     coverage["horizons_and_public_surface"], details["horizons_and_public_surface"] = _coverage_entry(
         positives=horizons_positives,
         reasons=horizons_reasons,
@@ -3026,6 +3131,13 @@ def build_flagship_product_readiness_payload(
             "report_cluster_release_notify_local_blocking_reason_count": len(report_cluster_local_blockers),
             "report_cluster_release_notify_external_proof_request_count": len(report_cluster_external_proof_requests),
             "acceptance_path": str(effective_acceptance_path),
+            "flagship_bar_mirror_path": str(DEFAULT_FLAGSHIP_BAR),
+            "flagship_bar_mirror_exists": flagship_bar_mirror_exists,
+            "horizons_overview_mirror_path": str(DEFAULT_HORIZONS_OVERVIEW),
+            "horizons_overview_mirror_exists": horizons_overview_mirror_exists,
+            "canonical_horizon_doc_count": len(canonical_horizon_doc_names),
+            "mirror_horizon_doc_count": len(mirror_horizon_doc_names),
+            "missing_mirror_horizon_doc_names": missing_mirror_horizon_doc_names,
         },
     )
 
@@ -3243,8 +3355,7 @@ def build_flagship_product_readiness_payload(
         and bool(desktop_evidence.get("install_claim_restore_continue_blocked_by_external_constraints_only"))
     )
     if desktop_scoped_deferable:
-        coverage["desktop_client"] = "warning"
-        desktop_detail["status"] = "warning"
+        desktop_detail["scoped_deferable"] = True
         details["desktop_client"] = desktop_detail
     ready_keys = [key for key, value in coverage.items() if value == "ready"]
     warning_keys = [key for key, value in coverage.items() if value == "warning"]
@@ -3252,12 +3363,10 @@ def build_flagship_product_readiness_payload(
     deferred_warning_keys: List[str] = []
     scoped_warning_keys = list(warning_keys)
     scoped_missing_keys = list(missing_keys)
-    if desktop_scoped_deferable:
+    if desktop_scoped_deferable and str(coverage.get("desktop_client") or "").strip().lower() == "warning":
         deferred_warning_keys = ["desktop_client"]
-        scoped_warning_keys = [key for key in scoped_warning_keys if key != "desktop_client"]
-        scoped_missing_keys = [key for key in scoped_missing_keys if key != "desktop_client"]
     status = "pass" if not warning_keys and not missing_keys else "fail"
-    scoped_status = "pass" if not scoped_warning_keys and not scoped_missing_keys else status
+    scoped_status = status
     external_backlog_hosts = sorted(
         {
             host
@@ -3285,28 +3394,18 @@ def build_flagship_product_readiness_payload(
         )
     )
 
-    completion_audit_status = "pass" if scoped_status == "pass" else "fail"
-    if completion_audit_status == "pass" and deferred_warning_keys:
-        completion_audit_reason = (
-            "Flagship product readiness proof is green for the current Linux-hosted scope; "
-            "Windows/macOS desktop host-proof remains explicitly deferred."
-        )
-    elif completion_audit_status == "pass":
+    completion_audit_status = "pass" if status == "pass" else "fail"
+    if completion_audit_status == "pass":
         completion_audit_reason = "Flagship product readiness proof is green."
     elif unresolved_external_requests > 0 and journey_overall_external_only:
         completion_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
     else:
         completion_audit_reason = "Flagship product readiness proof is not green."
 
-    flagship_readiness_audit_status = "pass" if scoped_status == "pass" else "fail"
+    flagship_readiness_audit_status = "pass" if status == "pass" else "fail"
     coverage_gap_keys = [*warning_keys, *missing_keys]
     scoped_coverage_gap_keys = [*scoped_warning_keys, *scoped_missing_keys]
-    if flagship_readiness_audit_status == "pass" and deferred_warning_keys:
-        flagship_readiness_audit_reason = (
-            "Flagship product readiness proof is green for the current Linux-hosted scope; "
-            "non-Linux desktop host-proof warnings are deferred."
-        )
-    elif flagship_readiness_audit_status == "pass":
+    if flagship_readiness_audit_status == "pass":
         flagship_readiness_audit_reason = "Flagship product readiness proof is green."
     else:
         flagship_readiness_audit_reason = f"flagship product readiness proof is not green: {status}"

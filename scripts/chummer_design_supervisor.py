@@ -4831,6 +4831,28 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
     return updated
 
 
+def _has_current_flagship_pass_proof(state: Dict[str, Any]) -> bool:
+    completion_audit = dict(state.get("completion_audit") or {})
+    full_product_audit = dict(state.get("full_product_audit") or {})
+    if not completion_audit or not full_product_audit:
+        return False
+    if str(completion_audit.get("status") or "").strip().lower() != "pass":
+        return False
+    if str(full_product_audit.get("status") or "").strip().lower() != "pass":
+        return False
+    if _state_open_milestone_ids(state):
+        return False
+    if _state_frontier_ids(state):
+        return False
+    active_run = state.get("active_run")
+    if isinstance(active_run, dict) and active_run:
+        return False
+    active_runs = state.get("active_runs")
+    if isinstance(active_runs, list) and any(isinstance(item, dict) and item for item in active_runs):
+        return False
+    return True
+
+
 def _state_frontier_ids(state: Dict[str, Any]) -> List[Any]:
     active_run = dict(state.get("active_run") or {})
     active_frontier_ids = list(active_run.get("frontier_ids") or [])
@@ -5061,6 +5083,8 @@ def _effective_supervisor_state(
     worker_lane_health = _latest_nonempty_state_field(populated_states, "worker_lane_health")
     if worker_lane_health:
         aggregate["worker_lane_health"] = worker_lane_health
+    if _has_current_flagship_pass_proof(aggregate):
+        aggregate["mode"] = "complete"
     shard_blockers: List[Dict[str, str]] = []
     in_progress_ids: Set[int] = set()
     aggregate_shards: List[Dict[str, Any]] = []
@@ -6323,7 +6347,7 @@ def _live_state_with_current_completion_audit(
                 if shard_values:
                     updated[key] = shard_values
             if len(updated.get("shards") or []) > 1:
-                updated["mode"] = "sharded"
+                updated["mode"] = "complete" if _has_current_flagship_pass_proof(updated) else "sharded"
             else:
                 updated["mode"] = mode
             updated.update(_reconcile_aggregate_shard_truth(updated))
