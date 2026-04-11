@@ -6,7 +6,8 @@ rules:
 - Horizon docs in `products/chummer/horizons/*.md` remain the long-form human-readable canon.
 - A horizon listed here is a future-capability lane, not a shipment promise.
 - A horizon must define an eventual build path before it is treated as more than public storytelling.
-- Registry rows should keep owner, dependency, eventual-build-path, and handoff-gate framing explicit enough for flagship review.
+- A horizon does not count as flagship or near-term release scope until its build path advances beyond `horizon`, its owner handoff gate is materially satisfied, and owning repos can cite executable proof instead of public-guide ambition.
+- Open flagship blockers and lived-system release blockers outrank horizon storytelling; horizons must not dilute or outrun current release truth.
 optional_fields:
 - family
 - wow_promise
@@ -56,7 +57,7 @@ horizons:
   - session continuity receipt
   - reconnect replay summary
   public_signal_eligible: true
-  owner_handoff_gate: Core, mobile, and hub must prove replay-safe continuity on the same semantic family before this lane can leave horizon.
+  owner_handoff_gate: Session continuity proof must exist across core, mobile, and hub without second semantic families.
 - id: alice
   title: ALICE
   status: horizon
@@ -95,7 +96,7 @@ horizons:
   - build comparison brief
   - what-if receipt packet
   public_signal_eligible: true
-  owner_handoff_gate: Core-owned truth must drive comparison output, and no assistant-side heuristic may become the dependency boundary before promotion.
+  owner_handoff_gate: Simulation and comparison output must consume core-owned truth rather than assistant-side heuristics.
 - id: karma-forge
   title: KARMA FORGE
   status: horizon
@@ -142,7 +143,7 @@ horizons:
   booster_nudge: Governed rules evolution burns approval, compatibility, and rollback effort, so early support may stay in guided preview while the lane is still expensive to operate safely.
   free_later_intent: Long-run intent is broad access after approval, compatibility, and rollback costs stop making the lane unusually expensive to operate safely.
   recognition_eligible: true
-  owner_handoff_gate: Core must own the rule-pack semantics while hub and registry own approvals and compatibility metadata before any promotion.
+  owner_handoff_gate: Rule evolution must route through governed packages, approvals, and compatibility metadata before promotion.
 - id: knowledge-fabric
   title: KNOWLEDGE FABRIC
   status: horizon
@@ -184,8 +185,8 @@ horizons:
   - cited rules answer
   - explain receipt pack
   - searchable rules projection
-  public_signal_eligible: true
-  owner_handoff_gate: Core-owned projections must stay visibly cited and non-authoritative, with no bypass of receipts, before promotion out of horizon.
+  public_signal_eligible: false
+  owner_handoff_gate: Knowledge projections must be visibly derived, cited, and non-authoritative before promotion out of horizon.
 - id: jackpoint
   title: JACKPOINT
   status: horizon
@@ -238,7 +239,7 @@ horizons:
   booster_nudge: Finished dossier and recap lanes burn editorial, narration, preview, and provenance effort, so early access may begin in guided preview while those loops are still expensive.
   free_later_intent: Long-run intent is broader access after editorial, narration, and provenance loops become cheaper and safer to operate at scale.
   recognition_eligible: true
-  owner_handoff_gate: Registry manifests and media receipts must preserve provenance across hub and media-factory handoffs before the studio is promoted beyond horizon.
+  owner_handoff_gate: Registry manifests and media receipts must survive format changes before the studio is promoted beyond horizon.
 - id: runsite
   title: RUNSITE
   status: horizon
@@ -281,7 +282,7 @@ horizons:
   - route overlay
   - narrated location brief
   public_signal_eligible: true
-  owner_handoff_gate: Spatial artifacts must stay bounded from live mechanics and combat truth, with media-factory render artifacts remaining the dependency, before any promotion.
+  owner_handoff_gate: Spatial artifacts must remain clearly outside live mechanics and combat truth before any promotion.
 - id: runbook-press
   title: RUNBOOK PRESS
   status: horizon
@@ -330,7 +331,7 @@ horizons:
   resource_burden: high
   booster_nudge: Long-form publishing carries editorial, compatibility, and publication-manifest cost, so the lane may begin in guided preview while those burdens remain high.
   recognition_eligible: true
-  owner_handoff_gate: Registry-owned publication and compatibility metadata must stay coupled to approved source packs before this lane becomes research-ready.
+  owner_handoff_gate: Publication and compatibility metadata must remain registry-owned before this lane becomes research-ready.
 - id: ghostwire
   title: GHOSTWIRE
   status: horizon
@@ -374,15 +375,15 @@ horizons:
   - after-action report
   - what-if comparison
   - forensics receipt packet
-  public_signal_eligible: true
-  owner_handoff_gate: Replay must prove reducer-safe, receipt-backed reconstruction across core, mobile, hub, and media-factory dependencies before it can leave horizon status.
+  public_signal_eligible: false
+  owner_handoff_gate: Replay must prove reducer-safe, receipt-backed reconstruction before it can leave horizon status.
 - id: table-pulse
   title: TABLE PULSE
   status: horizon
   family: table_coaching_social_dynamics
   canon_doc: products/chummer/horizons/table-pulse.md
   public_guide:
-    enabled: true
+    enabled: false
     order: 75
   pain_label: I know the table drifted, but I cannot say where the energy, pacing, or spotlight balance broke.
   wow_promise: GMs get opt-in post-session coaching about table dynamics without turning Chummer into surveillance.
@@ -417,7 +418,7 @@ horizons:
   - pacing diagnostic
   - narrated coaching summary
   public_signal_eligible: false
-  owner_handoff_gate: Coaching analysis must remain opt-in, post-session, privacy-bounded, and separate from session and moderation truth before it moves beyond horizon.
+  owner_handoff_gate: Coaching analysis must remain opt-in, post-session, privacy-bounded, and clearly separate from session truth before it moves beyond horizon.
 - id: local-co-processor
   title: LOCAL CO-PROCESSOR
   status: horizon
@@ -456,4 +457,4 @@ horizons:
   - local acceleration receipt
   - portable host compatibility report
   public_signal_eligible: false
-  owner_handoff_gate: Hosted-first parity must hold across core, ui, and mobile before any local acceleration lane is treated as more than optional research.
+  owner_handoff_gate: Hosted-first parity must hold before any local acceleration lane is treated as more than optional research.

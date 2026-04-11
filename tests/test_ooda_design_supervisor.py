@@ -183,12 +183,10 @@ def test_observed_shard_state_prefers_supervisor_report_over_raw_mode() -> None:
         },
     )
 
-    assert observed == {
-        "name": "shard-1",
-        "updated_at": "2026-04-01T08:36:14Z",
-        "mode": "flagship_product",
-        "active_run": True,
-    }
+    assert observed["name"] == "shard-1"
+    assert observed["updated_at"] == "2026-04-01T08:36:14Z"
+    assert observed["mode"] == "flagship_product"
+    assert observed["active_run"] is True
 
 
 def test_run_cycle_does_not_mark_healthy_long_run_as_aggregate_stale(

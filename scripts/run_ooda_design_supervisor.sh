@@ -50,6 +50,7 @@ if [[ -L "$current_link" ]]; then
 fi
 
 ln -sfn "$(basename "$monitor_root")" "$current_link"
+ln -sfn "${current_alias}/state.json" "${state_root}/state.json"
 
 if [[ "$foreground_mode" == "1" || "$foreground_mode" == "true" || "$foreground_mode" == "yes" ]]; then
   exec python3 scripts/ooda_design_supervisor.py \

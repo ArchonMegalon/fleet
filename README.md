@@ -109,7 +109,7 @@ CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=chummer6-ui bash scripts/run_chummer_desig
 CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT=desktop,client bash scripts/run_chummer_design_supervisor.sh
 ```
 
-By default, the supervisor rotates across protected operator accounts from `config/accounts.yaml`, including the current `tibor.girschele`, `the.girscheles`, and `archon.megalon` owner pools, and backs off credential sources that are usage-limited or auth-stale.
+For EA / OneMinAI lanes, the supervisor now routes each shard dynamically across healthy configured accounts from `config/accounts.yaml` based on lane and model, then backs off credential sources that are usage-limited or auth-stale. `CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES` and `CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS` are explicit pinning overrides, not the normal routing path.
 
 In Fleet `main`, `compile.manifest.json`, `STATUS_PLANE.generated.yaml`, and `SUPPORT_CASE_PACKETS.generated.json` are treated as committed public control artifacts. Downstream repos may still materialize equivalent publish/runtime artifacts locally until their own promotion flow catches up.
 
@@ -335,10 +335,11 @@ Fleet now treats EA's provider registry as the canonical runtime read model for 
 
 Health-aware dispatch now follows that same truth instead of separate handwritten summaries:
 
-- `groundwork` and `easy` stay Gemini-first and show slot posture directly
-- `review_light` and `jury` keep the BrowserAct/ChatPlayground audit path visible as backend plus provider posture
-- `core` stays isolated and serialized; it does not silently absorb ordinary cheap-loop work
-- when mission policy or live capacity says a lane is unavailable, Fleet waits or requeues instead of opening a paid path implicitly
+- `groundwork` and `easy` stay health-routed through the EA/OneMinAI path and show slot posture directly
+- `review_light` and `jury` stay audit-grade lanes with explicit provider/backend posture instead of hidden fallthrough
+- `core` stays isolated for the heavy implementation slices; it does not silently absorb ordinary cheap-loop work
+- when mission policy or live capacity says a lane is unavailable, Fleet waits or requeues instead of opening a degraded premium path implicitly
+- when `CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES=1` is enabled for a premium burst, Fleet prefers the full hard-capable OneMinAI account pool first and keeps `repair` / `survival` as reserve lanes instead of active premium routing
 
 For the Fleet self-project, local review handoff also stays serialized by design: one slice moves through `groundwork -> jury -> groundwork ... -> jury -> land`, and nonstop operation keeps that loop moving without bypassing review or merge authority.
 

@@ -5,10 +5,8 @@ services:
       args:
         CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     container_name: fleet-controller
     restart: unless-stopped
     init: true
@@ -29,6 +27,7 @@ services:
       - ./state:/var/lib/codex-fleet
       - ./config:/app/config:ro
       - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.codex/auth.json:/run/secrets/chatgpt.auth.json:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
       - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
       - /docker:/docker
@@ -49,10 +48,8 @@ services:
       args:
         CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     container_name: fleet-studio
     restart: unless-stopped
     init: true
@@ -70,6 +67,7 @@ services:
       - ./state:/var/lib/codex-fleet
       - ./config:/app/config:ro
       - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.codex/auth.json:/run/secrets/chatgpt.auth.json:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
       - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
       - /docker:/docker
@@ -90,10 +88,8 @@ services:
       args:
         CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     container_name: fleet-design-supervisor
     restart: unless-stopped
     init: true
@@ -102,6 +98,9 @@ services:
     environment:
       CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT: /var/lib/codex-fleet/chummer_design_supervisor
       CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT: "1"
+      CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS: "900"
+      CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB: "2"
+      CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB: "0.28"
       TZ: UTC
     volumes:
       - ./state:/var/lib/codex-fleet
@@ -115,6 +114,12 @@ services:
     command: ["bash", "/opt/codex-fleet/scripts/run_chummer_design_supervisor.sh"]
     networks:
       - fleet_net
+    healthcheck:
+      test: ["CMD-SHELL", "python /opt/codex-fleet/scripts/healthcheck_design_supervisor.py"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
   fleet-design-overwatch:
     build:
@@ -122,10 +127,8 @@ services:
       args:
         CODEX_NPM_REFRESH_TOKEN: ${CODEX_NPM_REFRESH_TOKEN:-static}
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     container_name: fleet-design-overwatch
     restart: unless-stopped
     init: true
@@ -138,8 +141,8 @@ services:
       OODA_SUPERVISOR_STATE_ROOT: /var/lib/codex-fleet/chummer_design_supervisor
       OODA_MONITOR_STATE_ROOT: /var/lib/codex-fleet/design_supervisor_ooda
       OODA_DURATION_SECONDS: "28800"
-      OODA_POLL_SECONDS: "300"
-      OODA_STALE_SECONDS: "900"
+      OODA_POLL_SECONDS: "30"
+      OODA_STALE_SECONDS: "180"
       OODA_CURRENT_ALIAS: current_8h
       OODA_FOREGROUND_MODE: "1"
       TZ: UTC
@@ -147,6 +150,7 @@ services:
       - ./state:/var/lib/codex-fleet
       - ./config:/app/config:ro
       - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.codex/auth.json:/run/secrets/chatgpt.auth.json:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
       - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
       - /docker:/docker
@@ -174,10 +178,8 @@ services:
     build:
       context: ./admin
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     container_name: fleet-admin
     restart: unless-stopped
     init: true
@@ -196,6 +198,7 @@ services:
       - ./state:/var/lib/codex-fleet
       - ./config:/app/config
       - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.codex/auth.json:/run/secrets/chatgpt.auth.json:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
       - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}:ro
       - /docker:/docker
@@ -242,10 +245,8 @@ services:
     build:
       context: ./quartermaster
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     container_name: fleet-quartermaster
     restart: unless-stopped
     init: true
@@ -302,22 +303,20 @@ services:
     restart: unless-stopped
     init: true
     env_file:
-      - path: ./runtime.ea.env
-        required: false
-      - path: ./runtime.env
-        required: false
+      - ./runtime.ea.env
+      - ./runtime.env
     environment:
-      FLEET_REBUILD_COMPOSE_FILE: /workspace/docker-compose.yml
-      FLEET_REBUILD_STATE_DIR: /workspace/state/rebuilder
+      FLEET_REBUILD_COMPOSE_FILE: /docker/fleet/docker-compose.yml
+      FLEET_REBUILD_STATE_DIR: /docker/fleet/state/rebuilder
       TZ: UTC
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./:/workspace
-    command: ["sh", "/workspace/scripts/rebuild-loop.sh"]
+      - /docker:/docker
+    command: ["sh", "/docker/fleet/scripts/rebuild-loop.sh"]
     networks:
       - fleet_net
     healthcheck:
-      test: ["CMD-SHELL", "test -f /workspace/state/rebuilder/heartbeat.txt"]
+      test: ["CMD-SHELL", "test -f /docker/fleet/state/rebuilder/heartbeat.txt"]
       interval: 30s
       timeout: 5s
       retries: 3

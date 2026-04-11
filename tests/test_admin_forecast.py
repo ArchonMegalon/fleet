@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import yaml
+
 
 MODULE_PATH = Path("/docker/fleet/admin/app.py")
 
@@ -137,7 +139,7 @@ class AdminForecastTests(unittest.TestCase):
             old_db_path = self.admin.DB_PATH
             self.admin.DB_PATH = db_path
             self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
-            self.admin.ea_codex_profiles = lambda force=False: {
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
                 "profiles": [
                     {"model": "ea-coder-hard", "provider_hint_order": ["onemin"]},
                     {"model": "ea-coder-survival", "provider_hint_order": ["browseract"]},
@@ -169,12 +171,12 @@ class AdminForecastTests(unittest.TestCase):
             old_db_path = self.admin.DB_PATH
             self.admin.DB_PATH = db_path
             self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
-            self.admin.ea_codex_profiles = lambda force=False: {
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
                 "profiles": [
                     {"model": "ea-coder-hard-batch", "provider_hint_order": ["onemin"]},
                 ]
             }
-            self.admin.ea_onemin_manager_status = lambda force=False: {
+            self.admin.ea_onemin_manager_status = lambda force=False, cache_only=False: {
                 "aggregate": {
                     "sum_free_credits": 1000,
                     "sum_max_credits": 2000,
@@ -197,6 +199,32 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(aggregate["active_onemin_projects"], ["fleet"])
             self.assertEqual(card["active_lease_count"], 1)
             self.assertEqual(card["active_lease_count_source"], "fleet_runtime_backfill")
+
+    def test_active_run_rows_excludes_orphaned_unlinked_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            conn.execute(
+                "CREATE TABLE projects (id TEXT PRIMARY KEY, status TEXT, active_run_id INTEGER)"
+            )
+            conn.execute(
+                "CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT, status TEXT, finished_at TEXT)"
+            )
+            conn.execute("INSERT INTO projects(id, status, active_run_id) VALUES('fleet', 'dispatch_pending', NULL)")
+            conn.execute("INSERT INTO projects(id, status, active_run_id) VALUES('ui', 'running', 2)")
+            conn.execute("INSERT INTO runs(id, project_id, status, finished_at) VALUES(1, 'fleet', 'running', NULL)")
+            conn.execute("INSERT INTO runs(id, project_id, status, finished_at) VALUES(2, 'ui', 'running', NULL)")
+            conn.commit()
+            conn.close()
+
+            old_db_path = self.admin.DB_PATH
+            self.admin.DB_PATH = db_path
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+
+            rows = self.admin.active_run_rows()
+
+        self.assertEqual([int(row["id"]) for row in rows], [2])
 
     def test_eligible_account_aliases_excludes_reserved_and_unclassified_chatgpt_accounts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -249,8 +277,8 @@ class AdminForecastTests(unittest.TestCase):
     def test_ea_onemin_manager_billing_aggregate_infers_topup_eta_from_billing_cycle(self) -> None:
         fixed_now = self.admin.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.admin.dt.timezone.utc)
         with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
-            self.admin.ea_codex_profiles = lambda force=False: {"profiles": []}
-            self.admin.ea_onemin_manager_status = lambda force=False: {
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {"profiles": []}
+            self.admin.ea_onemin_manager_status = lambda force=False, cache_only=False: {
                 "aggregate": {
                     "sum_free_credits": 101_747_905,
                     "sum_max_credits": 173_550_000,
@@ -280,8 +308,8 @@ class AdminForecastTests(unittest.TestCase):
     def test_ea_onemin_manager_billing_aggregate_replaces_stale_past_topup_eta(self) -> None:
         fixed_now = self.admin.dt.datetime(2026, 3, 23, 11, 10, 2, tzinfo=self.admin.dt.timezone.utc)
         with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
-            self.admin.ea_codex_profiles = lambda force=False: {"profiles": []}
-            self.admin.ea_onemin_manager_status = lambda force=False: {
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {"profiles": []}
+            self.admin.ea_onemin_manager_status = lambda force=False, cache_only=False: {
                 "aggregate": {
                     "sum_free_credits": 101_747_905,
                     "sum_max_credits": 173_550_000,
@@ -428,6 +456,53 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(payload["items"], ["Overlay queue slice"])
             self.assertEqual(payload["source_queue_fingerprint"], expected_fingerprint)
 
+    def test_merge_queue_overlay_item_preserves_structured_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            project = {
+                "path": str(root),
+                "queue": ["Existing queue slice"],
+            }
+            structured_item = {
+                "package_id": "audit-task-17",
+                "title": "Structured overlay slice",
+                "allowed_lanes": ["core_booster"],
+            }
+
+            overlay_path = self.admin.merge_queue_overlay_item(project, structured_item, mode="append")
+            payload = self.admin.load_yaml(overlay_path)
+
+            self.assertEqual(payload["mode"], "append")
+            self.assertEqual(payload["items"], [structured_item])
+
+    def test_audit_candidate_queue_overlay_item_preserves_structured_metadata(self) -> None:
+        candidate = {
+            "id": 17,
+            "scope_id": "fleet",
+            "finding_key": "project.design_mirror_missing_or_stale",
+            "title": "Refresh local design mirror",
+            "detail": "Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.",
+            "task_meta_json": json.dumps(
+                {
+                    "allowed_lanes": ["core_booster"],
+                    "allow_credit_burn": True,
+                    "design_owner": "fleet-platform",
+                }
+            ),
+        }
+
+        item = self.admin.audit_candidate_queue_overlay_item(candidate)
+
+        self.assertEqual(item["package_id"], "audit-task-17")
+        self.assertEqual(item["source_ref"], "audit_task_candidates[17]")
+        self.assertEqual(item["title"], candidate["detail"])
+        self.assertEqual(item["task"], candidate["detail"])
+        self.assertEqual(item["allowed_lanes"], ["core_booster"])
+        self.assertTrue(item["allow_credit_burn"])
+        self.assertEqual(item["design_owner"], "fleet-platform")
+        self.assertEqual(item["allowed_paths"], [".codex-design"])
+        self.assertEqual(item["owned_surfaces"], ["design_mirror:fleet"])
+
     def test_onemin_codexer_runtime_payload_falls_back_to_batch_model_when_profiles_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "fleet.db"
@@ -446,13 +521,169 @@ class AdminForecastTests(unittest.TestCase):
             old_db_path = self.admin.DB_PATH
             self.admin.DB_PATH = db_path
             self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
-            self.admin.ea_codex_profiles = lambda force=False: {}
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {}
 
             payload = self.admin.onemin_codexer_runtime_payload()
 
             self.assertEqual(payload["active_onemin_codexers"], 1)
             self.assertEqual(payload["active_onemin_booster_codexers"], 0)
             self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
+
+    def test_onemin_codexer_runtime_payload_backfills_from_design_supervisor_shards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            accounts_path = root / "accounts.yaml"
+            accounts_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "accounts": {
+                            "acct-ea-core": {
+                                "auth_kind": "ea",
+                                "allowed_models": ["ea-coder-hard"],
+                            },
+                            "acct-ea-fleet": {
+                                "auth_kind": "ea",
+                                "allowed_models": ["ea-gemini-flash"],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            state_root = root / "chummer_design_supervisor"
+            (state_root / "shard-1").mkdir(parents=True, exist_ok=True)
+            (state_root / "shard-2").mkdir(parents=True, exist_ok=True)
+            (state_root / "active_shards.json").write_text(
+                json.dumps(
+                    {
+                        "active_shards": [
+                            {"name": "shard-1", "worker_lane": "core"},
+                            {"name": "shard-2", "worker_lane": "easy"},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (state_root / "shard-1" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "active_run": {
+                            "run_id": "run-1",
+                            "selected_account_alias": "acct-ea-core",
+                            "selected_model": "ea-coder-hard",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (state_root / "shard-2" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "active_run": {
+                            "run_id": "run-2",
+                            "selected_account_alias": "acct-ea-fleet",
+                            "selected_model": "default",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            old_db_path = self.admin.DB_PATH
+            old_accounts_path = self.admin.ACCOUNTS_PATH
+            old_state_root = self.admin.DESIGN_SUPERVISOR_STATE_ROOT
+            self.admin.DB_PATH = root / "missing.db"
+            self.admin.ACCOUNTS_PATH = accounts_path
+            self.admin.DESIGN_SUPERVISOR_STATE_ROOT = state_root
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            self.addCleanup(setattr, self.admin, "ACCOUNTS_PATH", old_accounts_path)
+            self.addCleanup(setattr, self.admin, "DESIGN_SUPERVISOR_STATE_ROOT", old_state_root)
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
+                "profiles": [
+                    {"model": "ea-coder-hard", "provider_hint_order": ["onemin"]},
+                ]
+            }
+
+            payload = self.admin.onemin_codexer_runtime_payload()
+
+            self.assertEqual(payload["active_onemin_codexers"], 1)
+            self.assertEqual(payload["active_onemin_booster_codexers"], 0)
+            self.assertEqual(payload["active_onemin_accounts"], ["acct-ea-core"])
+            self.assertEqual(payload["active_onemin_lane_usage"], {"core": 1})
+            self.assertEqual(payload["active_onemin_projects"], ["chummer_design_supervisor"])
+
+    def test_ea_onemin_manager_billing_aggregate_backfills_active_leases_from_design_supervisor_shards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            accounts_path = root / "accounts.yaml"
+            accounts_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "accounts": {
+                            "acct-ea-core": {
+                                "auth_kind": "ea",
+                                "allowed_models": ["ea-coder-hard-batch"],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            state_root = root / "chummer_design_supervisor"
+            (state_root / "shard-1").mkdir(parents=True, exist_ok=True)
+            (state_root / "active_shards.json").write_text(
+                json.dumps({"active_shards": [{"name": "shard-1", "worker_lane": "core"}]}),
+                encoding="utf-8",
+            )
+            (state_root / "shard-1" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "active_run": {
+                            "run_id": "run-1",
+                            "selected_account_alias": "acct-ea-core",
+                            "selected_model": "ea-coder-hard-batch",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            old_db_path = self.admin.DB_PATH
+            old_accounts_path = self.admin.ACCOUNTS_PATH
+            old_state_root = self.admin.DESIGN_SUPERVISOR_STATE_ROOT
+            self.admin.DB_PATH = root / "missing.db"
+            self.admin.ACCOUNTS_PATH = accounts_path
+            self.admin.DESIGN_SUPERVISOR_STATE_ROOT = state_root
+            self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
+            self.addCleanup(setattr, self.admin, "ACCOUNTS_PATH", old_accounts_path)
+            self.addCleanup(setattr, self.admin, "DESIGN_SUPERVISOR_STATE_ROOT", old_state_root)
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
+                "profiles": [
+                    {"model": "ea-coder-hard-batch", "provider_hint_order": ["onemin"]},
+                ]
+            }
+            self.admin.ea_onemin_manager_status = lambda force=False, cache_only=False: {
+                "aggregate": {
+                    "sum_free_credits": 1000,
+                    "sum_max_credits": 2000,
+                    "active_lease_count": 0,
+                    "accounts": [],
+                },
+                "runway": {
+                    "current_burn_per_hour": None,
+                    "hours_remaining_current_pace": None,
+                },
+            }
+
+            aggregate = self.admin.ea_onemin_manager_billing_aggregate()
+
+            self.assertEqual(aggregate["active_lease_count"], 1)
+            self.assertEqual(aggregate["runtime_active_lease_count"], 1)
+            self.assertEqual(aggregate["active_lease_count_source"], "fleet_runtime_backfill")
+            self.assertEqual(aggregate["active_onemin_projects"], ["chummer_design_supervisor"])
+            self.assertEqual(aggregate["active_onemin_accounts"], ["acct-ea-core"])
 
     def test_onemin_codexer_runtime_payload_tracks_booster_lane_from_runtime_tasks(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -486,7 +717,7 @@ class AdminForecastTests(unittest.TestCase):
             old_db_path = self.admin.DB_PATH
             self.admin.DB_PATH = db_path
             self.addCleanup(setattr, self.admin, "DB_PATH", old_db_path)
-            self.admin.ea_codex_profiles = lambda force=False: {
+            self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
                 "profiles": [
                     {"model": "ea-coder-hard-batch", "provider_hint_order": ["onemin"]},
                 ]
@@ -683,7 +914,7 @@ class AdminForecastTests(unittest.TestCase):
         self.assertTrue(payload[0]["finish_outlook"])
 
     def test_ea_lane_capacity_snapshot_keeps_repair_profile_distinct_from_easy(self) -> None:
-        self.admin.ea_codex_profiles = lambda: {
+        self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
             "profiles": [
                 {"profile": "easy", "model": "ea-coder-fast", "provider_hint_order": ["magixai"]},
                 {"profile": "repair", "model": "ea-coder-fast", "provider_hint_order": ["magixai"]},
@@ -697,7 +928,7 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(snapshots["repair"]["model"], "ea-coder-fast")
 
     def test_ea_lane_capacity_snapshot_prefers_provider_registry_details(self) -> None:
-        self.admin.ea_codex_profiles = lambda: {
+        self.admin.ea_codex_profiles = lambda force=False, cache_only=False: {
             "profiles": [
                 {"profile": "review_light", "model": "ea-review-light", "provider_hint_order": ["browseract"]},
             ],
@@ -1049,12 +1280,12 @@ class AdminForecastTests(unittest.TestCase):
 
     def test_mission_board_payload_includes_jury_telemetry(self) -> None:
         self.admin.load_latest_telemetry_payload = lambda _status: {"summary": {}, "review_loop": {}, "worker_utilization": {}}
-        self.admin.jury_telemetry_payload = lambda status, lane_capacities: {
+        self.admin.jury_telemetry_payload = lambda status, lane_capacities, cache_only=False: {
             "active_jury_jobs": 1,
             "queued_jury_jobs": 2,
             "blocked_total_workers": 3,
         }
-        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {}
+        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False, cache_only=False: {}
 
         payload = self.admin.mission_board_payload(
             {"projects": [], "groups": [], "config": {"spider": {}, "lanes": {}}, "account_pools": []},
@@ -1118,7 +1349,7 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(by_lane["core"]["policy_reason"], "credit burn disabled")
 
     def test_mission_board_payload_includes_billing_truth_card(self) -> None:
-        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {
+        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False, cache_only=False: {
             "sum_free_credits": 1_000_000,
             "sum_max_credits": 2_000_000,
             "remaining_percent_total": 50.0,
@@ -1158,21 +1389,21 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(credit["slot_count_with_member_reconciliation"], 1)
 
     def test_mission_board_payload_includes_booster_runtime_card(self) -> None:
-        self.admin.jury_telemetry_payload = lambda status, lane_capacities: {
+        self.admin.jury_telemetry_payload = lambda status, lane_capacities, cache_only=False: {
             "participant_burst": {
                 "active_lanes": 2,
                 "sponsor_ready_lanes": 2,
                 "effective_capacity_by_project": {"core": 3},
             }
         }
-        self.admin.onemin_codexer_runtime_payload = lambda: {
+        self.admin.onemin_codexer_runtime_payload = lambda cache_only=False: {
             "active_onemin_codexers": 2,
             "active_onemin_booster_codexers": 0,
             "active_onemin_projects": ["core", "ui"],
             "active_onemin_accounts": ["acct-ea-core", "acct-ea-fleet"],
             "active_onemin_lane_usage": {"core_authority": 2},
         }
-        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False: {
+        self.admin.ea_onemin_manager_billing_aggregate = lambda force=False, cache_only=False: {
             "sum_free_credits": 800_000,
             "sum_max_credits": 2_000_000,
             "remaining_percent_total": 40.0,
@@ -1210,6 +1441,59 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(booster["credits_left_percent"], 40.0)
         self.assertEqual(booster["hours_remaining_with_topup"], 420.0)
         self.assertEqual(booster["effective_capacity_by_project"]["core"], 3)
+
+    def test_mission_board_payload_threads_cache_only_to_provider_surfaces(self) -> None:
+        seen: dict[str, list[bool]] = {"execution": [], "provider": [], "booster": []}
+
+        def fake_execution_loop_payload(
+            status,
+            *,
+            queue_forecast,
+            blocker_forecast,
+            lane_capacities=None,
+            cache_only=False,
+        ):
+            seen["execution"].append(cache_only)
+            return {
+                "title": "Idle",
+                "current_lane": "idle",
+                "provider": "none",
+                "brain": "none",
+                "current_stage_label": "Idle",
+                "jury_telemetry": {},
+            }
+
+        def fake_provider_credit_card_payload(*, cache_only=False):
+            seen["provider"].append(cache_only)
+            return {}
+
+        def fake_booster_runtime_card_payload(jury_telemetry, provider_credit, *, cache_only=False):
+            seen["booster"].append(cache_only)
+            return {}
+
+        self.admin.execution_loop_payload = fake_execution_loop_payload
+        self.admin.provider_credit_card_payload = fake_provider_credit_card_payload
+        self.admin.booster_runtime_card_payload = fake_booster_runtime_card_payload
+        self.admin.truth_freshness_payload = lambda status: {}
+        self.admin.group_cards_payload = lambda status: []
+        self.admin.build_review_gate_bridge_items = lambda status: []
+        self.admin.build_healer_activity_items = lambda status: []
+
+        self.admin.mission_board_payload(
+            {"projects": [], "groups": [], "config": {"spider": {}}, "account_pools": []},
+            mission_snapshot={},
+            queue_forecast={"now": {}, "next": {}},
+            vision_forecast={},
+            capacity_forecast={"lanes": [], "critical_path_lane": "groundwork", "mission_runway": "forever", "pool_runway": "7d"},
+            blocker_forecast={"now": "none", "next": "none", "vision": "none"},
+            attention=[],
+            lane_capacities={},
+            cache_only=True,
+        )
+
+        self.assertEqual(seen["execution"], [True])
+        self.assertEqual(seen["provider"], [True])
+        self.assertEqual(seen["booster"], [True])
 
     def test_status_surface_payload_promotes_canonical_views(self) -> None:
         status = {
@@ -1286,7 +1570,7 @@ class AdminForecastTests(unittest.TestCase):
             "contract_name": "fleet.status_plane",
             "generated_at": "2026-03-18T12:05:00Z",
         }
-        self.admin.admin_status_payload = lambda: {
+        self.admin.admin_status_payload = lambda public_mode=False: {
             "generated_at": "2026-03-18T12:00:00Z",
             "projects": [
                 {
@@ -1364,6 +1648,52 @@ class AdminForecastTests(unittest.TestCase):
         self.assertNotIn("config", payload)
         self.assertNotIn("accounts", payload)
 
+    def test_public_dashboard_status_payload_requests_public_mode(self) -> None:
+        requested: list[bool] = []
+        self.admin.admin_status_payload = lambda public_mode=False: requested.append(public_mode) or {
+            "public_status": {"contract_name": "fleet.public_status"}
+        }
+
+        payload = self.admin.public_dashboard_status_payload()
+
+        self.assertEqual(requested, [True])
+        self.assertEqual(payload["contract_name"], "fleet.public_status")
+
+    def test_admin_status_public_mode_skips_runtime_healing_incident_sync(self) -> None:
+        self.admin.normalize_config = lambda: {
+            "schema_version": "test",
+            "policies": {},
+            "spider": {},
+            "account_policy": {},
+            "projects": [],
+            "groups": [],
+            "accounts": {},
+            "lanes": {},
+            "project_groups": [],
+        }
+        self.admin.config_consistency_warnings = lambda _config: []
+        self.admin.merged_projects = lambda cache_only=False: []
+        self.admin.runtime_healing_payload = lambda: {"summary": {}, "services": []}
+        self.admin.sync_runtime_healing_incidents = lambda _payload: (_ for _ in ()).throw(
+            AssertionError("public mode should not sync incidents")
+        )
+        self.admin.load_program_registry = lambda _config: {}
+        self.admin.group_runtime_rows = lambda: {}
+        self.admin.work_package_summary_payload = lambda _config: {}
+        self.admin.recent_auditor_run = lambda: {}
+        self.admin.studio_publish_events = lambda: []
+        self.admin.group_publish_events = lambda: []
+        self.admin.group_runs = lambda: []
+        self.admin.load_design_mirror_status = lambda: {}
+        self.admin.recent_runs = lambda: []
+        self.admin.participant_lane_rows_for_admin = lambda statuses=None: []
+        self.admin.cockpit_payload_from_status = lambda status, cache_only=False: {"summary": {}}
+        self.admin.canonical_public_status_payload = lambda status, cache_only=False: {}
+
+        payload = self.admin.admin_status_payload(public_mode=True)
+
+        self.assertEqual(payload["public_status"], {})
+
     def test_published_artifact_freshness_prefers_progress_generated_at(self) -> None:
         fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
         self.admin.compile_manifest_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
@@ -1376,11 +1706,46 @@ class AdminForecastTests(unittest.TestCase):
         )
         self.admin.load_published_yaml_payload = lambda _filename: {"generated_at": "2026-03-26T11:50:00Z"}
 
-        with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
-            payload = self.admin.published_artifact_freshness_payload()
+        with mock.patch.object(self.admin, "_progress_artifact_source_paths", return_value=[]):
+            with mock.patch.object(self.admin, "_status_plane_source_paths", return_value=[]):
+                with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
+                    payload = self.admin.published_artifact_freshness_payload()
 
         self.assertEqual(payload["progress_report"]["state"], "fresh")
         self.assertEqual(payload["progress_report"]["at"], "2026-03-26T11:45:00Z")
+
+    def test_published_artifact_freshness_marks_source_drift_as_stale(self) -> None:
+        fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
+        progress_source_at = self.admin.dt.datetime(2026, 3, 26, 11, 59, 30, tzinfo=self.admin.UTC)
+        status_source_at = self.admin.dt.datetime(2026, 3, 26, 11, 58, 0, tzinfo=self.admin.UTC)
+        self.admin.compile_manifest_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
+        self.admin.support_case_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "10m"}}
+        self.admin.journey_gates_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "12m"}}
+        self.admin.release_channel_surface_payload = lambda: {"freshness": {"state": "fresh", "label": "fresh", "age_human": "5m"}}
+        self.admin.load_published_json_payload = lambda filename: (
+            {"generated_at": "2026-03-26T11:45:00Z", "as_of": "2026-03-23"}
+            if filename == self.admin.PROGRESS_REPORT_FILENAME
+            else {"generated_at": "2026-03-26T11:40:00Z"}
+        )
+        self.admin.load_published_yaml_payload = lambda _filename: {"generated_at": "2026-03-26T11:50:00Z"}
+
+        def fake_latest_path_mtime(paths):
+            first = str((list(paths) or [Path("missing")])[0])
+            return progress_source_at if "progress-source" in first else status_source_at
+
+        with mock.patch.object(self.admin, "_progress_artifact_source_paths", return_value=[Path("/tmp/progress-source")]):
+            with mock.patch.object(self.admin, "_status_plane_source_paths", return_value=[Path("/tmp/status-source")]):
+                with mock.patch.object(self.admin, "_latest_path_mtime", side_effect=fake_latest_path_mtime):
+                    with mock.patch.object(self.admin, "utc_now", return_value=fixed_now):
+                        payload = self.admin.published_artifact_freshness_payload()
+
+        self.assertEqual(payload["progress_report"]["state"], "stale")
+        self.assertEqual(payload["progress_history"]["state"], "stale")
+        self.assertEqual(payload["status_plane"]["state"], "stale")
+        self.assertEqual(payload["progress_report"]["source_updated_at"], "2026-03-26T11:59:30Z")
+        self.assertEqual(payload["status_plane"]["source_updated_at"], "2026-03-26T11:58:00Z")
+        self.assertIn("published progress report", payload["progress_report"]["reason"])
+        self.assertIn("published status plane", payload["status_plane"]["reason"])
 
     def test_release_channel_surface_prefers_runtime_registry_truth(self) -> None:
         runtime_payload = {
@@ -1443,7 +1808,12 @@ class AdminForecastTests(unittest.TestCase):
 
         with mock.patch.object(self.admin, "release_channel_runtime_url", return_value="http://registry/current"):
             with mock.patch.object(self.admin, "load_json_url_payload", return_value=runtime_payload):
-                payload = self.admin.release_channel_surface_payload()
+                with mock.patch.object(
+                    self.admin,
+                    "utc_now",
+                    return_value=self.admin.dt.datetime(2026, 3, 28, 17, 0, tzinfo=self.admin.UTC),
+                ):
+                    payload = self.admin.release_channel_surface_payload()
 
         self.assertEqual(payload["truth_source"], "registry_runtime")
         self.assertEqual(payload["freshness"]["state"], "fresh")
@@ -1503,6 +1873,42 @@ class AdminForecastTests(unittest.TestCase):
                 "materialize_journey_gates.py",
             ],
         )
+
+    def test_public_progress_report_payload_refreshes_stale_artifact_before_loading_generated_bundle(self) -> None:
+        stale = {
+            "progress_report": {"state": "stale"},
+            "progress_history": {"state": "stale"},
+        }
+        fresh = {
+            "progress_report": {"state": "fresh"},
+            "progress_history": {"state": "fresh"},
+        }
+        expected = {"parts": [{"id": "core"}]}
+
+        with mock.patch.object(self.admin, "published_artifact_freshness_payload", side_effect=[stale, fresh]):
+            with mock.patch.object(self.admin, "maybe_refresh_published_artifacts", return_value={"status": "refreshed"}) as refresher:
+                with mock.patch.object(self.admin, "load_progress_report_payload", return_value=expected) as loader:
+                    payload = self.admin.public_progress_report_payload()
+
+        self.assertEqual(payload, expected)
+        refresher.assert_called_once_with()
+        loader.assert_called_once_with(repo_root=self.admin.FLEET_MOUNT_ROOT, prefer_generated=True)
+
+    def test_public_progress_report_payload_falls_back_to_live_build_when_artifact_stays_stale(self) -> None:
+        stale = {
+            "progress_report": {"state": "stale"},
+            "progress_history": {"state": "fresh"},
+        }
+        expected = {"parts": [{"id": "core"}], "eta_scope": "live"}
+
+        with mock.patch.object(self.admin, "published_artifact_freshness_payload", side_effect=[stale, stale]):
+            with mock.patch.object(self.admin, "maybe_refresh_published_artifacts", return_value={"status": "cooldown"}) as refresher:
+                with mock.patch.object(self.admin, "load_progress_report_payload", return_value=expected) as loader:
+                    payload = self.admin.public_progress_report_payload()
+
+        self.assertEqual(payload, expected)
+        refresher.assert_called_once_with()
+        loader.assert_called_once_with(repo_root=self.admin.FLEET_MOUNT_ROOT, prefer_generated=False)
 
     def test_runtime_healing_payload_surfaces_service_state_and_recent_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

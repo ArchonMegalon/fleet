@@ -195,6 +195,9 @@ _MAIL_OUTBOX_ROOT_ENV = str(os.environ.get("FLEET_MAIL_OUTBOX_ROOT", "") or "").
 _MAIL_STATE_PATH_ENV = str(os.environ.get("FLEET_MAIL_STATE_PATH", "") or "").strip()
 MAIL_OUTBOX_ROOT: Optional[pathlib.Path] = pathlib.Path(_MAIL_OUTBOX_ROOT_ENV) if _MAIL_OUTBOX_ROOT_ENV else None
 MAIL_STATE_PATH: Optional[pathlib.Path] = pathlib.Path(_MAIL_STATE_PATH_ENV) if _MAIL_STATE_PATH_ENV else None
+_DB_WAL_READY = False
+_DB_WAL_LOCK = threading.Lock()
+_LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = ""
 RUNTIME_FALLBACK_ROOT = pathlib.Path(
     os.environ.get("FLEET_RUNTIME_FALLBACK_ROOT", "/tmp/codex-fleet-runtime")
 )
@@ -848,9 +851,19 @@ def db() -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
+    global _DB_WAL_READY
+    if not _DB_WAL_READY:
+        with _DB_WAL_LOCK:
+            if not _DB_WAL_READY:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower():
+                        raise
+                else:
+                    _DB_WAL_READY = True
     return conn
 
 
@@ -871,6 +884,8 @@ def table_exists(name: str) -> bool:
 
 
 def init_db() -> None:
+    global _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE
+    _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = ""
     with db() as conn:
         conn.executescript(
             """
@@ -3011,27 +3026,49 @@ def sync_work_packages_to_db(config: Dict[str, Any]) -> None:
                     (now_text, *sorted(seen)),
                 )
     with db() as conn:
-        rows = conn.execute(
-            "SELECT package_id, dependencies_json, status, runtime_state FROM work_packages ORDER BY project_id, queue_index, package_id"
-        ).fetchall()
-        for row in rows:
-            package_id = str(row["package_id"] or "").strip()
-            if not package_id:
-                continue
-            current_status = str(row["status"] or "").strip().lower()
-            runtime_state = str(row["runtime_state"] or "").strip().lower()
-            if current_status in TERMINAL_WORK_PACKAGE_STATUSES or runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES:
-                continue
-            package = work_package_row(package_id) or {}
-            next_status = "ready" if work_package_dependencies_satisfied(package) and current_status != "blocked" else "waiting_dependency"
-            if str(((package.get("task_meta") or {}).get("dispatchability_state")) or "dispatchable").strip().lower() != "dispatchable":
-                next_status = "blocked"
-            conn.execute(
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                """
+                SELECT package_id, dependencies_json, task_meta_json, status, runtime_state
+                FROM work_packages
+                ORDER BY project_id, queue_index, package_id
+                """
+            ).fetchall()
+        ]
+    status_by_package = {
+        str(row.get("package_id") or "").strip(): str(row.get("status") or "").strip().lower()
+        for row in rows
+        if str(row.get("package_id") or "").strip()
+    }
+    status_updates: List[Tuple[str, str, str]] = []
+    for row in rows:
+        package_id = str(row.get("package_id") or "").strip()
+        if not package_id:
+            continue
+        current_status = str(row.get("status") or "").strip().lower()
+        runtime_state = str(row.get("runtime_state") or "").strip().lower()
+        if current_status in TERMINAL_WORK_PACKAGE_STATUSES or runtime_state in ACTIVE_WORK_PACKAGE_RUNTIME_STATES:
+            continue
+        dependencies = [str(item).strip() for item in json_field(row.get("dependencies_json"), []) if str(item).strip()]
+        task_meta = json_field(row.get("task_meta_json"), {})
+        dependencies_ready = all(status_by_package.get(dep) in TERMINAL_WORK_PACKAGE_STATUSES for dep in dependencies)
+        next_status = "ready" if dependencies_ready and current_status != "blocked" else "waiting_dependency"
+        if str((task_meta or {}).get("dispatchability_state") or "dispatchable").strip().lower() != "dispatchable":
+            next_status = "blocked"
+        if next_status != current_status:
+            status_updates.append((next_status, now_text, package_id))
+    if status_updates:
+        with db() as conn:
+            conn.executemany(
                 "UPDATE work_packages SET status=?, updated_at=? WHERE package_id=?",
-                (next_status, now_text, package_id),
+                status_updates,
             )
     for project_cfg in config.get("projects") or []:
-        sync_project_progress_from_packages(str(project_cfg.get("id") or ""))
+        project_id = str(project_cfg.get("id") or "").strip()
+        if not project_id or not project_uses_package_scheduler(config, project_id):
+            continue
+        sync_project_progress_from_packages(project_id)
 
 
 def representative_work_package_for_project(project_id: str) -> Optional[Dict[str, Any]]:
@@ -6342,11 +6379,14 @@ def quartermaster_lane_admission(
     reserved_scale_up_count: int = 0,
     refresh_if_due: bool = False,
     force_reconcile: bool = False,
+    allow_missing_plan: bool = False,
 ) -> Dict[str, Any]:
     resolved_plan = dict(plan or {})
     if not resolved_plan:
         resolved_plan = dict((quartermaster_tick_if_due(config) if refresh_if_due else quartermaster_capacity_plan()) or {})
     qm_enforced = quartermaster_enforcement_enabled(resolved_plan)
+    if not resolved_plan and allow_missing_plan:
+        qm_enforced = False
     qm_authoritative = quartermaster_plan_is_authoritative(resolved_plan) if resolved_plan else False
     qm_status = quartermaster_plan_status(resolved_plan)
     qm_snapshot = (
@@ -7582,32 +7622,63 @@ def queue_overlay_path(project_cfg: Dict[str, Any]) -> pathlib.Path:
     return studio_published_root(project_cfg) / "QUEUE.generated.yaml"
 
 
-def merge_queue_overlay_item(project_cfg: Dict[str, Any], item_text: str, *, mode: str = "append") -> pathlib.Path:
-    path = queue_overlay_path(project_cfg)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = load_yaml(path)
+def normalize_queue_overlay_item(item: Any) -> Optional[Any]:
+    if isinstance(item, dict):
+        return dict(item)
+    if isinstance(item, list):
+        return list(item)
+    if isinstance(item, (str, int, float)):
+        text = str(item).strip()
+        if text:
+            return text
+    return None
+
+
+def queue_overlay_payload_items(data: Any) -> List[Any]:
     if isinstance(data, list):
-        items = [str(item).strip() for item in data if str(item).strip()]
-        existing_mode = "append"
+        raw_items = data
     elif isinstance(data, dict):
-        existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
         raw_items = data.get("items")
         if raw_items is None:
             raw_items = data.get("queue")
-        items = [str(item).strip() for item in (raw_items or []) if str(item).strip()]
     else:
-        existing_mode = "append"
-        items = []
-    text = str(item_text).strip()
+        raw_items = []
+    items: List[Any] = []
+    for item in raw_items or []:
+        normalized = normalize_queue_overlay_item(item)
+        if normalized is not None:
+            items.append(normalized)
+    return items
+
+
+def queue_overlay_item_identity(item: Any) -> str:
+    normalized = normalize_queue_overlay_item(item)
+    if normalized is None:
+        return ""
+    if isinstance(normalized, (dict, list)):
+        return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return f"text:{normalized}"
+
+
+def merge_queue_overlay_item(project_cfg: Dict[str, Any], item: Any, *, mode: str = "append") -> pathlib.Path:
+    path = queue_overlay_path(project_cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_yaml(path)
+    existing_mode = "append"
+    if isinstance(data, dict):
+        existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
+    items = queue_overlay_payload_items(data)
+    normalized_item = normalize_queue_overlay_item(item)
     queue_mode = str(mode or existing_mode or "append").strip().lower() or "append"
-    if text:
-        items = [item for item in items if item != text]
+    if normalized_item is not None:
+        item_key = queue_overlay_item_identity(normalized_item)
+        items = [existing for existing in items if queue_overlay_item_identity(existing) != item_key]
         if queue_mode == "replace":
-            items = [text]
+            items = [normalized_item]
         elif queue_mode == "prepend":
-            items = [text] + items
+            items = [normalized_item] + items
         else:
-            items.append(text)
+            items.append(normalized_item)
     save_yaml(
         path,
         {
@@ -7623,15 +7694,7 @@ def queue_overlay_items(project_cfg: Dict[str, Any]) -> List[Any]:
     path = queue_overlay_path(project_cfg)
     if not path.exists() or not path.is_file():
         return []
-    data = load_yaml(path)
-    if isinstance(data, list):
-        return [item for item in data if (isinstance(item, (str, int, float)) and str(item).strip()) or isinstance(item, (dict, list))]
-    if isinstance(data, dict):
-        raw_items = data.get("items")
-        if raw_items is None:
-            raw_items = data.get("queue")
-        return [item for item in (raw_items or []) if (isinstance(item, (str, int, float)) and str(item).strip()) or isinstance(item, (dict, list))]
-    return []
+    return queue_overlay_payload_items(load_yaml(path))
 
 
 def audit_candidate_queue_text(candidate_row: sqlite3.Row) -> str:
@@ -7668,6 +7731,117 @@ def audit_task_candidate_meta(candidate: Any) -> Dict[str, Any]:
         raw = "{}"
     value = json_field(raw, {})
     return value if isinstance(value, dict) else {}
+
+
+AUDIT_QUEUE_OVERLAY_META_KEYS = {
+    "acceptance_level",
+    "allow_core_rescue",
+    "allow_credit_burn",
+    "allow_paid_fast_lane",
+    "allowed_lanes",
+    "allowed_paths",
+    "architecture_sensitive",
+    "audit_lane",
+    "base_ref",
+    "branch_name",
+    "branch_policy",
+    "budget_class",
+    "core_rescue_after_round",
+    "dependencies",
+    "denied_paths",
+    "design_owner",
+    "design_sensitive",
+    "difficulty",
+    "dispatchability_state",
+    "final_reviewer_lane",
+    "first_review_required",
+    "groundwork_required",
+    "horizon_family",
+    "jury_acceptance_required",
+    "jury_required",
+    "landing_lane",
+    "latency_class",
+    "max_review_rounds",
+    "max_touched_files",
+    "merge_owner_lane",
+    "operator_override_required",
+    "owned_surfaces",
+    "package_id",
+    "package_kind",
+    "participant_eligible",
+    "premium_beneficial",
+    "premium_required",
+    "priority",
+    "protected_runtime",
+    "publish_truth_sources",
+    "required_reviewer_lane",
+    "review_lane",
+    "risk_level",
+    "signoff_requirements",
+    "source_items",
+    "sponsor_source",
+    "task",
+    "title",
+    "ttl_seconds",
+    "workflow_kind",
+}
+
+
+def audit_candidate_queue_overlay_item(candidate: Any, task_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    meta = dict(task_meta or audit_task_candidate_meta(candidate) or {})
+    queue_item = dict(meta.get("queue_item") or {}) if isinstance(meta.get("queue_item"), dict) else {}
+    if isinstance(candidate, sqlite3.Row):
+        keys = set(candidate.keys())
+        candidate_id = int(candidate["id"]) if "id" in keys and candidate["id"] is not None else 0
+        title = str(candidate["title"] if "title" in keys else "")
+        detail = str(candidate["detail"] if "detail" in keys else "")
+        finding_key = str(candidate["finding_key"] if "finding_key" in keys else "")
+        scope_id = str(candidate["scope_id"] if "scope_id" in keys else "")
+    elif isinstance(candidate, dict):
+        candidate_id = int(candidate.get("id") or 0)
+        title = str(candidate.get("title") or "")
+        detail = str(candidate.get("detail") or "")
+        finding_key = str(candidate.get("finding_key") or "")
+        scope_id = str(candidate.get("scope_id") or "")
+    else:
+        candidate_id = 0
+        title = ""
+        detail = ""
+        finding_key = ""
+        scope_id = ""
+
+    preferred_title = str(detail or title).strip() or str(title or detail).strip()
+    detail_text = str(detail).strip() or preferred_title
+    if preferred_title:
+        queue_item.setdefault("title", preferred_title)
+    if detail_text:
+        queue_item.setdefault("task", detail_text)
+    if candidate_id:
+        queue_item.setdefault("package_id", f"audit-task-{candidate_id}")
+        queue_item.setdefault("source_ref", f"audit_task_candidates[{candidate_id}]")
+    elif preferred_title:
+        queue_item.setdefault("package_id", f"audit-task-{package_safe_token(preferred_title)[:48]}")
+    if finding_key:
+        queue_item.setdefault("audit_finding_key", finding_key)
+    if scope_id:
+        queue_item.setdefault("audit_scope_id", scope_id)
+
+    for key in AUDIT_QUEUE_OVERLAY_META_KEYS:
+        value = meta.get(key)
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, dict):
+            queue_item.setdefault(key, dict(value))
+        elif isinstance(value, list):
+            queue_item.setdefault(key, list(value))
+        else:
+            queue_item.setdefault(key, value)
+
+    if finding_key == "project.design_mirror_missing_or_stale":
+        queue_item.setdefault("allowed_paths", [".codex-design"])
+        if scope_id:
+            queue_item.setdefault("owned_surfaces", [f"design_mirror:{scope_id}"])
+    return queue_item
 
 
 def audit_finding_is_recommended(finding_key: Any) -> bool:
@@ -7883,7 +8057,12 @@ def publish_project_audit_candidate_runtime(
 
     project_id = str(project_cfg["id"])
     finding = audit_finding_row(str(candidate_row["scope_type"]), str(candidate_row["scope_id"]), str(candidate_row["finding_key"]))
-    overlay_path = merge_queue_overlay_item(project_cfg, str(candidate_row["detail"] or candidate_row["title"] or "").strip(), mode=queue_mode)
+    task_meta = audit_task_candidate_meta(candidate_row)
+    overlay_path = merge_queue_overlay_item(
+        project_cfg,
+        audit_candidate_queue_overlay_item(candidate_row, task_meta),
+        mode=queue_mode,
+    )
 
     feedback_dir = pathlib.Path(project_cfg["path"]) / project_cfg.get("feedback_dir", "feedback")
     feedback_dir.mkdir(parents=True, exist_ok=True)
@@ -8021,7 +8200,11 @@ def publish_group_audit_candidate_runtime(
         except KeyError:
             project_cfg = None
         if project_cfg:
-            overlay_path = merge_queue_overlay_item(project_cfg, str(candidate_row["detail"] or candidate_row["title"] or "").strip(), mode="append")
+            overlay_path = merge_queue_overlay_item(
+                project_cfg,
+                audit_candidate_queue_overlay_item(candidate_row),
+                mode="append",
+            )
             files_written.append({"target_type": "project", "target_id": project_id, "path": str(overlay_path), "file_count": 1})
             with db() as conn:
                 row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
@@ -8279,6 +8462,28 @@ def latest_worker_activity_at(project_cfg: Dict[str, Any], project_row: sqlite3.
     return max(timestamps) if timestamps else None
 
 
+def latest_run_activity_at(run_row: sqlite3.Row) -> Optional[dt.datetime]:
+    timestamps: List[dt.datetime] = []
+    if "run_started_at" in run_row.keys():
+        started_at = parse_iso(run_row["run_started_at"])
+    elif "started_at" in run_row.keys():
+        started_at = parse_iso(run_row["started_at"])
+    else:
+        started_at = None
+    if started_at:
+        timestamps.append(started_at)
+    log_path_text = ""
+    if "run_log_path" in run_row.keys():
+        log_path_text = str(run_row["run_log_path"] or "").strip()
+    elif "log_path" in run_row.keys():
+        log_path_text = str(run_row["log_path"] or "").strip()
+    if log_path_text:
+        log_path = pathlib.Path(log_path_text)
+        if log_path.exists():
+            timestamps.append(dt.datetime.fromtimestamp(log_path.stat().st_mtime, tz=UTC))
+    return max(timestamps) if timestamps else None
+
+
 def reconcile_orphaned_active_runs(config: Dict[str, Any]) -> int:
     grace_seconds = max(300, int(get_policy(config, "orphaned_runtime_grace_seconds", 300) or 300))
     max_failures = int(get_policy(config, "max_consecutive_failures", 3))
@@ -8300,6 +8505,24 @@ def reconcile_orphaned_active_runs(config: Dict[str, Any]) -> int:
             WHERE p.active_run_id IS NOT NULL
                OR p.status IN ('starting', 'running', 'verifying')
             ORDER BY p.id
+            """
+        ).fetchall()
+        unlinked_rows = conn.execute(
+            """
+            SELECT p.*,
+                   r.id AS run_id,
+                   r.job_kind AS run_job_kind,
+                   r.status AS run_status,
+                   r.started_at AS run_started_at,
+                   r.finished_at AS run_finished_at,
+                   r.log_path AS run_log_path,
+                   r.final_message_path AS run_final_message_path
+            FROM runs r
+            JOIN projects p ON p.id = r.project_id
+            WHERE r.status IN ('starting', 'running', 'verifying')
+              AND r.finished_at IS NULL
+              AND CAST(COALESCE(p.active_run_id, 0) AS INTEGER) <> r.id
+            ORDER BY r.id
             """
         ).fetchall()
     recovered = 0
@@ -8372,6 +8595,47 @@ def reconcile_orphaned_active_runs(config: Dict[str, Any]) -> int:
         )
         recovered += 1
     if recovered:
+        reconcile_stuck_work_package_runtime_links()
+    recovered_unlinked = 0
+    for row in unlinked_rows:
+        project_id = str(row["id"] or "").strip()
+        run_id = int(row["run_id"] or 0)
+        if not project_id or run_id <= 0:
+            continue
+        task_row = runtime_task_row(project_id)
+        task_run_id = int((task_row or {}).get("run_id") or 0)
+        if task_run_id == run_id and live_runtime_task_handle(project_id) is not None:
+            continue
+        run_status = str(row["run_status"] or "").strip().lower()
+        if run_status not in ACTIVE_RUN_STATUSES:
+            continue
+        run_finished_at = parse_iso(row["run_finished_at"])
+        if run_finished_at is not None:
+            continue
+        activity_at = latest_run_activity_at(row)
+        if activity_at and activity_at > now - dt.timedelta(seconds=grace_seconds):
+            continue
+        anchor_at = activity_at or parse_iso(row["run_started_at"]) or now
+        stale_age_seconds = int(max(0, (now - anchor_at).total_seconds()))
+        reason = f"run is no longer linked from project.active_run_id and saw no log activity for {stale_age_seconds}s"
+        with db() as conn:
+            conn.execute(
+                """
+                UPDATE runs
+                SET status='failed',
+                    finished_at=COALESCE(finished_at, ?),
+                    error_class='orphaned_runtime',
+                    error_message=COALESCE(error_message, ?)
+                WHERE id=?
+                  AND status IN ('starting', 'running', 'verifying')
+                """,
+                (iso(now), reason, run_id),
+            )
+        if task_run_id == run_id:
+            clear_runtime_task(project_id)
+        recovered_unlinked += 1
+    recovered += recovered_unlinked
+    if recovered_unlinked:
         reconcile_stuck_work_package_runtime_links()
     return recovered
 
@@ -8939,16 +9203,14 @@ def merge_dynamic_participant_accounts(fleet: Dict[str, Any]) -> None:
             PARTICIPANT_LANE_ACTIVE,
             PARTICIPANT_LANE_PAUSED,
         ],
-        refresh=True,
+        refresh=False,
     )
-    with db() as conn:
-        for lane_row in lane_rows:
-            lane_id = str(lane_row.get("lane_id") or "").strip()
-            if not lane_id:
-                continue
-            account_cfg = participant_lane_account_config(lane_row, core_backends)
-            accounts[str(lane_row.get("account_alias") or "").strip()] = account_cfg
-            sync_participant_lane_account(conn, lane_row, account_cfg)
+    for lane_row in lane_rows:
+        lane_id = str(lane_row.get("lane_id") or "").strip()
+        if not lane_id:
+            continue
+        account_cfg = participant_lane_account_config(lane_row, core_backends)
+        accounts[str(lane_row.get("account_alias") or "").strip()] = account_cfg
     fleet["accounts"] = accounts
 
 
@@ -9078,6 +9340,26 @@ def normalize_config() -> Dict[str, Any]:
     return fleet
 
 
+def account_config_sync_signature(accounts: Dict[str, Any]) -> str:
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for alias in sorted(str(key or "").strip() for key in (accounts or {}).keys() if str(key or "").strip()):
+        account = dict((accounts or {}).get(alias) or {})
+        auth_kind = str(account.get("auth_kind") or "api_key")
+        normalized[alias] = {
+            "auth_kind": auth_kind,
+            "api_key_file": str(account.get("api_key_file") or ""),
+            "api_key_env": str(account.get("api_key_env") or ""),
+            "auth_json_file": str(account.get("auth_json_file") or ""),
+            "allowed_models": normalize_allowed_models_for_account(auth_kind, account.get("allowed_models", [])),
+            "daily_budget_usd": account.get("daily_budget_usd"),
+            "monthly_budget_usd": account.get("monthly_budget_usd"),
+            "max_parallel_runs": int(account.get("max_parallel_runs", 1)),
+            "health_state": str(account.get("health_state", "ready") or "ready"),
+        }
+    payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
 def get_policy(config: Dict[str, Any], key: str, default: Any) -> Any:
     return (config.get("policies") or {}).get(key, default)
 
@@ -9163,44 +9445,48 @@ def effective_allowed_models_for_account(
 
 def sync_config_to_db(config: Dict[str, Any]) -> None:
     now = iso(utc_now())
+    global _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE
+    account_signature = account_config_sync_signature(config.get("accounts") or {})
+    sync_accounts = account_signature != _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE
     with db() as conn:
-        for alias, account in (config.get("accounts") or {}).items():
-            auth_kind = account.get("auth_kind", "api_key")
-            allowed_models = normalize_allowed_models_for_account(auth_kind, account.get("allowed_models", []))
-            conn.execute(
-                """
-                INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, health_state, updated_at)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(alias) DO UPDATE SET
-                    auth_kind=excluded.auth_kind,
-                    api_key_file=excluded.api_key_file,
-                    api_key_env=excluded.api_key_env,
-                    auth_json_file=excluded.auth_json_file,
-                    allowed_models_json=excluded.allowed_models_json,
-                    daily_budget_usd=excluded.daily_budget_usd,
-                    monthly_budget_usd=excluded.monthly_budget_usd,
-                    max_parallel_runs=excluded.max_parallel_runs,
-                    health_state=CASE
-                        WHEN excluded.health_state IN ('disabled', 'draining', 'exhausted') THEN excluded.health_state
-                        WHEN accounts.health_state='auth_stale' THEN accounts.health_state
-                        ELSE excluded.health_state
-                    END,
-                    updated_at=excluded.updated_at
-                """,
-                (
-                    alias,
-                    auth_kind,
-                    account.get("api_key_file", ""),
-                    account.get("api_key_env", ""),
-                    account.get("auth_json_file", ""),
-                    json.dumps(allowed_models),
-                    account.get("daily_budget_usd"),
-                    account.get("monthly_budget_usd"),
-                    int(account.get("max_parallel_runs", 1)),
-                    str(account.get("health_state", "ready") or "ready"),
-                    now,
-                ),
-            )
+        if sync_accounts:
+            for alias, account in (config.get("accounts") or {}).items():
+                auth_kind = account.get("auth_kind", "api_key")
+                allowed_models = normalize_allowed_models_for_account(auth_kind, account.get("allowed_models", []))
+                conn.execute(
+                    """
+                    INSERT INTO accounts(alias, auth_kind, api_key_file, api_key_env, auth_json_file, allowed_models_json, daily_budget_usd, monthly_budget_usd, max_parallel_runs, health_state, updated_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(alias) DO UPDATE SET
+                        auth_kind=excluded.auth_kind,
+                        api_key_file=excluded.api_key_file,
+                        api_key_env=excluded.api_key_env,
+                        auth_json_file=excluded.auth_json_file,
+                        allowed_models_json=excluded.allowed_models_json,
+                        daily_budget_usd=excluded.daily_budget_usd,
+                        monthly_budget_usd=excluded.monthly_budget_usd,
+                        max_parallel_runs=excluded.max_parallel_runs,
+                        health_state=CASE
+                            WHEN excluded.health_state IN ('disabled', 'draining', 'exhausted') THEN excluded.health_state
+                            WHEN accounts.health_state='auth_stale' THEN accounts.health_state
+                            ELSE excluded.health_state
+                        END,
+                        updated_at=excluded.updated_at
+                    """,
+                    (
+                        alias,
+                        auth_kind,
+                        account.get("api_key_file", ""),
+                        account.get("api_key_env", ""),
+                        account.get("auth_json_file", ""),
+                        json.dumps(allowed_models),
+                        account.get("daily_budget_usd"),
+                        account.get("monthly_budget_usd"),
+                        int(account.get("max_parallel_runs", 1)),
+                        str(account.get("health_state", "ready") or "ready"),
+                        now,
+                    ),
+                )
 
         for project in config.get("projects", []):
             row = conn.execute("SELECT * FROM projects WHERE id=?", (project["id"],)).fetchone()
@@ -9258,6 +9544,8 @@ def sync_config_to_db(config: Dict[str, Any]) -> None:
                         """,
                         (next_status, next_slice, next_status, READY_STATUS, now, project["id"]),
                     )
+    if sync_accounts:
+        _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = account_signature
     sync_work_packages_to_db(config)
 
 
@@ -12154,6 +12442,7 @@ def launch_local_review_runtime_task(
         reserved_scale_up_count=reserved_scale_up_count,
         refresh_if_due=True,
         force_reconcile=True,
+        allow_missing_plan=True,
     )
     if bool(qm_gate.get("blocked")):
         update_project_status(
@@ -16211,7 +16500,7 @@ def studio_published_files(project_cfg: Dict[str, Any]) -> List[pathlib.Path]:
     return files
 
 
-def apply_queue_overlay(project_cfg: Dict[str, Any], queue: List[str]) -> List[str]:
+def apply_queue_overlay(project_cfg: Dict[str, Any], queue: List[Any]) -> List[Any]:
     overlay_path = studio_published_root(project_cfg) / "QUEUE.generated.yaml"
     if not overlay_path.exists() or not overlay_path.is_file():
         return queue
@@ -16220,14 +16509,18 @@ def apply_queue_overlay(project_cfg: Dict[str, Any], queue: List[str]) -> List[s
     except Exception:
         return queue
     if isinstance(data, list):
-        items = [str(item).strip() for item in data if str(item).strip()]
+        items = [item for item in data if (isinstance(item, (str, int, float)) and str(item).strip()) or isinstance(item, (dict, list))]
         mode = "append"
     elif isinstance(data, dict):
         mode = str(data.get("mode", "append")).strip().lower() or "append"
         raw_items = data.get("items")
         if raw_items is None:
             raw_items = data.get("queue")
-        items = [str(item).strip() for item in (raw_items or []) if str(item).strip()]
+        items = [
+            item
+            for item in (raw_items or [])
+            if (isinstance(item, (str, int, float)) and str(item).strip()) or isinstance(item, (dict, list))
+        ]
     else:
         return queue
     if not items:
@@ -16239,7 +16532,7 @@ def apply_queue_overlay(project_cfg: Dict[str, Any], queue: List[str]) -> List[s
     return list(queue) + items
 
 
-def resolve_project_queue(project_cfg: Dict[str, Any]) -> List[str]:
+def resolve_project_queue(project_cfg: Dict[str, Any]) -> List[Any]:
     queue = list(project_cfg.get("queue") or [])
     for source_cfg in project_cfg.get("queue_sources") or []:
         queue = apply_queue_source(project_cfg, queue, source_cfg)
@@ -17287,17 +17580,34 @@ def usage_for_account(alias: str, period: str) -> Dict[str, float]:
 
 
 def active_run_count_for_account(alias: str) -> int:
+    sql = """
+        SELECT COUNT(*)
+        FROM runs
+        WHERE account_alias=?
+          AND status IN ('starting', 'running')
+          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
+    """
+    if table_exists("projects"):
+        sql += """
+          AND (
+                COALESCE(NULLIF(TRIM(runs.project_id), ''), '') = ''
+                OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = runs.project_id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM projects p
+                    WHERE p.id = runs.project_id
+                      AND (
+                            CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = runs.id
+                            OR (
+                                CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = 0
+                                AND COALESCE(NULLIF(TRIM(p.status), ''), '') IN ('starting', 'running', 'verifying')
+                            )
+                      )
+                )
+          )
+        """
     with db() as conn:
-        row = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM runs
-            WHERE account_alias=?
-              AND status IN ('starting', 'running')
-              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
-            """,
-            (alias,),
-        ).fetchone()
+        row = conn.execute(sql, (alias,)).fetchone()
     return int(row[0] if row else 0)
 
 
@@ -17306,17 +17616,34 @@ def active_run_count_for_aliases(aliases: Sequence[str]) -> int:
     if not clean_aliases:
         return 0
     placeholders = ",".join("?" for _ in clean_aliases)
+    sql = f"""
+        SELECT COUNT(*)
+        FROM runs
+        WHERE account_alias IN ({placeholders})
+          AND status IN ('starting', 'running')
+          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
+    """
+    if table_exists("projects"):
+        sql += """
+          AND (
+                COALESCE(NULLIF(TRIM(runs.project_id), ''), '') = ''
+                OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = runs.project_id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM projects p
+                    WHERE p.id = runs.project_id
+                      AND (
+                            CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = runs.id
+                            OR (
+                                CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = 0
+                                AND COALESCE(NULLIF(TRIM(p.status), ''), '') IN ('starting', 'running', 'verifying')
+                            )
+                      )
+                )
+          )
+        """
     with db() as conn:
-        row = conn.execute(
-            f"""
-            SELECT COUNT(*)
-            FROM runs
-            WHERE account_alias IN ({placeholders})
-              AND status IN ('starting', 'running')
-              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
-            """,
-            tuple(clean_aliases),
-        ).fetchone()
+        row = conn.execute(sql, tuple(clean_aliases)).fetchone()
     return int(row[0] if row else 0)
 
 
@@ -17339,6 +17666,25 @@ def active_run_count_for_credential_source(alias: str, *, exclude_run_id: Option
           AND status IN ('starting', 'running', 'verifying')
           AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
     """
+    if table_exists("projects"):
+        sql += """
+          AND (
+                COALESCE(NULLIF(TRIM(runs.project_id), ''), '') = ''
+                OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = runs.project_id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM projects p
+                    WHERE p.id = runs.project_id
+                      AND (
+                            CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = runs.id
+                            OR (
+                                CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = 0
+                                AND COALESCE(NULLIF(TRIM(p.status), ''), '') IN ('starting', 'running', 'verifying')
+                            )
+                      )
+                )
+          )
+        """
     if exclude_run_id is not None:
         sql += " AND id<>?"
         params.append(int(exclude_run_id))
@@ -17359,17 +17705,34 @@ def active_run_families_for_aliases(aliases: Sequence[str]) -> set[str]:
     if not clean_aliases:
         return set()
     placeholders = ",".join("?" for _ in clean_aliases)
+    sql = f"""
+        SELECT account_alias
+        FROM runs
+        WHERE account_alias IN ({placeholders})
+          AND status IN ('starting', 'running', 'verifying')
+          AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
+    """
+    if table_exists("projects"):
+        sql += """
+          AND (
+                COALESCE(NULLIF(TRIM(runs.project_id), ''), '') = ''
+                OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = runs.project_id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM projects p
+                    WHERE p.id = runs.project_id
+                      AND (
+                            CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = runs.id
+                            OR (
+                                CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = 0
+                                AND COALESCE(NULLIF(TRIM(p.status), ''), '') IN ('starting', 'running', 'verifying')
+                            )
+                      )
+                )
+          )
+        """
     with db() as conn:
-        rows = conn.execute(
-            f"""
-            SELECT account_alias
-            FROM runs
-            WHERE account_alias IN ({placeholders})
-              AND status IN ('starting', 'running', 'verifying')
-              AND COALESCE(NULLIF(TRIM(job_kind), ''), 'coding') IN ('coding', 'healing', 'local_review')
-            """,
-            tuple(clean_aliases),
-        ).fetchall()
+        rows = conn.execute(sql, tuple(clean_aliases)).fetchall()
     return {account_execution_family(row["account_alias"]) for row in rows if row["account_alias"]}
 
 
@@ -18080,7 +18443,7 @@ def account_lane_can_serve_allowed_lanes(configured_lane: str, allowed_lanes: Se
     if clean_configured in normalized:
         return True
     if clean_configured == "core":
-        return any(lane in {"core_authority", "core_rescue"} for lane in normalized)
+        return any(lane in {"core_authority", "core_booster", "core_rescue"} for lane in normalized)
     if clean_configured == "review_light":
         return "review_shard" in normalized
     if clean_configured == "jury":
@@ -19500,6 +19863,35 @@ def prepare_account_environment(alias: str, account_cfg: Dict[str, Any]) -> Dict
     return env
 
 
+def apply_ea_lane_submode_environment(env: Dict[str, str], lane: str, lane_submode: str) -> Dict[str, str]:
+    clean_lane = str(lane or "").strip().lower()
+    clean_submode = str(lane_submode or "").strip().lower()
+    if not clean_lane or not clean_submode:
+        return env
+    if clean_lane == "easy":
+        if clean_submode in {"mcp", "responses", "responses_fast", "responses_easy"}:
+            env["CODEXEA_EASY_SUBMODE"] = clean_submode
+        return env
+    mode_override = "mcp" if clean_submode == "mcp" else "responses" if clean_submode.startswith("responses") else ""
+    if not mode_override:
+        return env
+    mode_vars = {
+        "repair": "CODEXEA_REPAIR_MODE",
+        "groundwork": "CODEXEA_GROUNDWORK_MODE",
+        "core": "CODEXEA_CORE_MODE",
+        "core_rescue": "CODEXEA_CORE_RESCUE_MODE",
+        "jury": "CODEXEA_JURY_MODE",
+        "review_light": "CODEXEA_REVIEW_LIGHT_MODE",
+        "survival": "CODEXEA_SURVIVAL_MODE",
+    }
+    mode_var = mode_vars.get(clean_lane)
+    if mode_var:
+        env[mode_var] = mode_override
+    if clean_lane == "core" and clean_submode == "responses_core_batch":
+        env["CODEXEA_CORE_RESPONSES_PROFILE"] = "core_batch"
+    return env
+
+
 @dataclass
 class CommandResult:
     exit_code: int
@@ -19803,14 +20195,17 @@ def parse_unsupported_chatgpt_model(text: str) -> Optional[str]:
 @dataclass
 class RuntimeState:
     tasks: Dict[str, Any]
-    stop: asyncio.Event
+    stop: threading.Event
     last_design_mirror_sync_at: Optional[dt.datetime] = None
+    startup_reconcile_pending: bool = False
     controller_loop: Optional[asyncio.AbstractEventLoop] = None
+    scheduler_thread: Optional[threading.Thread] = None
+    scheduler_task: Optional[Any] = None
     heartbeat_thread: Optional[threading.Thread] = None
     heartbeat_stop: Optional[threading.Event] = None
 
 
-state = RuntimeState(tasks={}, stop=asyncio.Event())
+state = RuntimeState(tasks={}, stop=threading.Event())
 app = FastAPI(title=APP_TITLE)
 
 
@@ -20061,12 +20456,14 @@ async def execute_project_slice(
 
         use_ea_shim = runtime_model.startswith("ea-") and auth_kind_uses_ea_runtime(str(account_cfg.get("auth_kind") or ""))
         if use_ea_shim:
+            ea_lane = lane_for_ea_runtime_model(runtime_model, str(decision.get("lane") or "core"))
             env["CODEXEA_MODEL"] = runtime_model
             if decision.get("reasoning_effort"):
                 env["CODEXEA_REASONING_EFFORT"] = str(decision["reasoning_effort"])
+            apply_ea_lane_submode_environment(env, ea_lane, str(decision.get("lane_submode") or ""))
             cmd = [
                 codexea_binary(),
-                lane_for_ea_runtime_model(runtime_model, str(decision.get("lane") or "core")),
+                ea_lane,
                 "exec",
                 "--json",
                 "--cd",
@@ -20931,6 +21328,7 @@ async def execute_local_review_fallback(
         target_lane=target_lane,
         refresh_if_due=True,
         force_reconcile=True,
+        allow_missing_plan=True,
     )
     if bool(qm_gate.get("blocked")):
         update_project_status(
@@ -21889,6 +22287,9 @@ async def scheduler_loop() -> None:
         config = normalize_config()
         try:
             write_controller_heartbeat(status="running", detail="scheduler_tick")
+            if state.startup_reconcile_pending:
+                reconcile_abandoned_runs(config)
+                state.startup_reconcile_pending = False
             if bool(get_policy(config, "auto_heal_enabled", True)):
                 auto_publish_approved_audit_candidates(config)
             publish_support_packets_to_feedback(config)
@@ -22261,6 +22662,15 @@ async def scheduler_loop() -> None:
         await asyncio.sleep(int(get_policy(config, "scheduler_interval_seconds", 15)))
 
 
+def scheduler_thread_main() -> None:
+    asyncio.run(scheduler_loop())
+
+
+async def scheduler_thread_watch(thread: threading.Thread) -> None:
+    while thread.is_alive() and not state.stop.is_set():
+        await asyncio.sleep(1.0)
+
+
 def alliance_window_start(config: Dict[str, Any]) -> dt.datetime:
     hours = int(config.get("spider", {}).get("token_alliance_window_hours", 24))
     return utc_now() - dt.timedelta(hours=hours)
@@ -22528,11 +22938,10 @@ def estimate_fleet_eta(config: Dict[str, Any], projects: List[Dict[str, Any]], n
 async def startup() -> None:
     ensure_dirs()
     init_db()
-    config = normalize_config()
+    normalize_config()
     write_controller_heartbeat(status="starting", detail="startup")
-    reconcile_abandoned_runs(config)
-    sync_design_repo_mirrors(config, skip_dirty_repos=True)
-    state.last_design_mirror_sync_at = utc_now()
+    state.last_design_mirror_sync_at = None
+    state.startup_reconcile_pending = True
     state.controller_loop = asyncio.get_running_loop()
     state.stop.clear()
     state.heartbeat_stop = threading.Event()
@@ -22544,14 +22953,34 @@ async def startup() -> None:
         daemon=True,
     )
     state.heartbeat_thread.start()
-    app.state.scheduler = asyncio.create_task(scheduler_loop())
+    state.scheduler_thread = threading.Thread(
+        target=scheduler_thread_main,
+        name="fleet-controller-scheduler",
+        daemon=True,
+    )
+    if state.scheduler_thread is not state.heartbeat_thread:
+        state.scheduler_thread.start()
+    state.scheduler_task = asyncio.create_task(scheduler_thread_watch(state.scheduler_thread))
+    setattr(app.state, "scheduler", state.scheduler_task)
 
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
     state.stop.set()
-    state.controller_loop = None
     write_controller_heartbeat(status="stopping", detail="shutdown")
+    scheduler_task = state.scheduler_task
+    if scheduler_task is not None:
+        try:
+            scheduler_task.cancel()
+        except Exception:
+            pass
+        state.scheduler_task = None
+    if hasattr(app.state, "scheduler"):
+        setattr(app.state, "scheduler", None)
+    scheduler_thread = state.scheduler_thread
+    if scheduler_thread:
+        scheduler_thread.join(timeout=2.0)
+        state.scheduler_thread = None
     heartbeat_stop = state.heartbeat_stop
     if heartbeat_stop:
         heartbeat_stop.set()
@@ -22560,11 +22989,7 @@ async def shutdown() -> None:
     if heartbeat_thread:
         heartbeat_thread.join(timeout=2.0)
         state.heartbeat_thread = None
-    task = getattr(app.state, "scheduler", None)
-    if task:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+    state.controller_loop = None
 
 
 @app.get("/health", response_class=PlainTextResponse)

@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import sqlite3
+import threading
 import traceback
 import urllib.parse
 from dataclasses import dataclass
@@ -67,6 +68,9 @@ GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent 
 STUDIO_DIRNAME = ".codex-studio"
 STUDIO_PUBLISHED_DIRNAME = f"{STUDIO_DIRNAME}/published"
 STUDIO_DRAFTS_DIRNAME = f"{STUDIO_DIRNAME}/drafts"
+_DB_WAL_READY = False
+_DB_WAL_LOCK = threading.Lock()
+_LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = ""
 ALLOWED_STUDIO_FILES = {
     "VISION.md",
     "ROADMAP.md",
@@ -488,13 +492,25 @@ def db() -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
+    global _DB_WAL_READY
+    if not _DB_WAL_READY:
+        with _DB_WAL_LOCK:
+            if not _DB_WAL_READY:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower():
+                        raise
+                else:
+                    _DB_WAL_READY = True
     return conn
 
 
 def init_db() -> None:
+    global _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE
+    _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = ""
     with db() as conn:
         conn.executescript(
             """
@@ -860,6 +876,29 @@ def normalize_config() -> Dict[str, Any]:
     return fleet
 
 
+def account_config_sync_signature(accounts: Dict[str, Any]) -> str:
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for alias in sorted(str(key or "").strip() for key in (accounts or {}).keys() if str(key or "").strip()):
+        account = dict((accounts or {}).get(alias) or {})
+        normalized[alias] = {
+            "auth_kind": str(account.get("auth_kind") or "api_key"),
+            "api_key_file": str(account.get("api_key_file") or ""),
+            "api_key_env": str(account.get("api_key_env") or ""),
+            "auth_json_file": str(account.get("auth_json_file") or ""),
+            "allowed_models": [
+                str(item or "").strip()
+                for item in account.get("allowed_models", [])
+                if str(item or "").strip()
+            ],
+            "daily_budget_usd": account.get("daily_budget_usd"),
+            "monthly_budget_usd": account.get("monthly_budget_usd"),
+            "max_parallel_runs": int(account.get("max_parallel_runs", 1)),
+            "health_state": str(account.get("health_state", "ready") or "ready"),
+        }
+    payload = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
 def studio_autonomy_specs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     studio_cfg = config.get("studio", {}) or {}
     autonomy_cfg = studio_cfg.get("autonomy", {}) or {}
@@ -1072,6 +1111,10 @@ def automation_message_for_role(spec: Dict[str, Any], reason: str, trigger_paylo
 
 
 def sync_accounts_to_db(config: Dict[str, Any]) -> None:
+    global _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE
+    account_signature = account_config_sync_signature(config.get("accounts") or {})
+    if account_signature == _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE:
+        return
     now = iso(utc_now())
     with db() as conn:
         for alias, account in (config.get("accounts") or {}).items():
@@ -1110,6 +1153,7 @@ def sync_accounts_to_db(config: Dict[str, Any]) -> None:
                     now,
                 ),
             )
+    _LAST_SYNCED_ACCOUNT_CONFIG_SIGNATURE = account_signature
 
 
 def get_project_cfg(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:

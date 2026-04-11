@@ -33,15 +33,7 @@ def test_finisher_uses_canonical_horizon_set() -> None:
         "hub-registry",
         "media-factory",
     }
-    assert set(finish.HORIZONS) == {
-        "alice",
-        "jackpoint",
-        "karma-forge",
-        "nexus-pan",
-        "runbook-press",
-        "runsite",
-        "table-pulse",
-    }
+    assert set(finish.HORIZONS) == set(finish.canonical_horizon_slugs())
 
 
 def test_audit_generated_repo_rejects_any_svg_asset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

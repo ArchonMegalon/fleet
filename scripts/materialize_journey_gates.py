@@ -5,14 +5,15 @@ import argparse
 import datetime as dt
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import yaml
 try:
-    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 except ModuleNotFoundError:
-    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 
 
 UTC = dt.timezone.utc
@@ -66,8 +67,8 @@ REPO_ROOT_CANDIDATES = {
     "chummer6-ui": (Path("/docker/chummercomplete/chummer6-ui"),),
     "chummer6-mobile": (Path("/docker/chummercomplete/chummer6-mobile"),),
     "chummer6-media-factory": (
-        Path("/docker/chummercomplete/chummer-media-factory"),
         Path("/docker/fleet/repos/chummer-media-factory"),
+        Path("/docker/chummercomplete/chummer-media-factory"),
     ),
     "executive-assistant": (Path("/docker/EA"),),
 }
@@ -947,15 +948,35 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return payload if isinstance(payload, dict) else {}
+    for attempt in range(3):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            if attempt >= 2:
+                return {}
+            time.sleep(0.05 * (attempt + 1))
+            continue
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
 
 
 def load_yaml(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return payload if isinstance(payload, dict) else {}
+    for attempt in range(3):
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            if attempt >= 2:
+                return {}
+            time.sleep(0.05 * (attempt + 1))
+            continue
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+    return {}
 
 
 def artifact_state(name: str, payload: Dict[str, Any], *, time_field: str) -> Dict[str, Any]:
@@ -2596,7 +2617,7 @@ def main(argv: List[str] | None = None) -> int:
         support_packets_path=Path(args.support_packets).resolve(),
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    write_text_atomic(out_path, json.dumps(payload, indent=2, sort_keys=False) + "\n")
     manifest_repo_root = repo_root_for_published_path(out_path)
     if manifest_repo_root is not None:
         write_compile_manifest(manifest_repo_root)

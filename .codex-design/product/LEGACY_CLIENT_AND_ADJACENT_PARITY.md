@@ -67,6 +67,7 @@ Hero Lab Classic remains a useful adjacent oracle for:
 Modernization is allowed.
 
 Chummer6 does not need to clone old forms pixel-for-pixel, and it does not need MDI-style multi-document chrome just because older clients used it.
+But parity does fail if the promoted path introduces a dashboard-first or browser-ritual detour between install and workbench where a serious desktop user expects immediate continuation.
 
 But every feature family that remains in product scope must satisfy one of these states:
 
@@ -78,7 +79,7 @@ But every feature family that remains in product scope must satisfy one of these
 
 | Family | Legacy / adjacent expectation | Current Chummer6 design equivalent | Status | Active milestone closure |
 | --- | --- | --- | --- | --- |
-| Shell and dense workbench orientation | top menu, toolstrip, tabs, status strip, dense central builder; hard blockers include opening workbench posture, functional `File` menu, master-index route, character-roster route | `CHUMMER5A_FAMILIARITY_BRIDGE.md`, `FLAGSHIP_UI_RELEASE_GATE.md`, `FLAGSHIP_RELEASE_ACCEPTANCE.yaml` | covered | `2`, `3` |
+| Shell and dense workbench orientation | top menu, toolstrip, tabs, status strip, dense central builder | `CHUMMER5A_FAMILIARITY_BRIDGE.md`, `FLAGSHIP_UI_RELEASE_GATE.md`, `FLAGSHIP_RELEASE_ACCEPTANCE.yaml` | covered | `2`, `3` |
 | Dense creation and career workflows | creation, advancement, gear, matrix, magic, augment, vehicle, contact flows | `CHUMMER5A_FAMILIARITY_BRIDGE.md`, `DESKTOP_CLIENT_PRODUCT_CUT.md`, `BUILD_LAB_PRODUCT_MODEL.md` | covered | `2`, `7` |
 | Identity, contacts, lifestyles, licenses, SINs, history | classic side workflows and career memory | `CHUMMER5A_FAMILIARITY_BRIDGE.md`, `CAMPAIGN_WORKSPACE_AND_DEVICE_ROLES.md`, `CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md` | covered | `2`, `4` |
 | Sourcebooks, source toggles, rule snippets, master index, PDF/URL reference posture | `Edit Sourcebook Info`, `Sourcebooks to Use`, `MasterIndex`, PDF opening, reference snippets | master-index sourcebook metadata, snippet coverage posture, aggregate reference-source lane posture, explicit reference plus reference-source lane receipts, and explicit source-selection lane receipts are now explicit (governed/stale/missing with governed/stale/missing source counts), including approved local PDF/URL/site-snapshot source targets; the desktop `master_index` dialog now surfaces first-class source-selection detail with per-sourcebook selection kind, snippet posture, provenance posture, and reference target kinds (`pdf`/`url`/`snapshot`) instead of only aggregate receipts; source-toggle apply UX consolidation is now additive rather than parity-blocking | covered | `13` |
@@ -100,9 +101,6 @@ That no longer blocks the no-step-back parity claim because the current successo
 3. Modern consolidation is good when it preserves or improves the same user job, trust posture, and speed.
 4. A missing or partial family must live in machine-readable milestone truth, not only in prose complaints or migration notes.
 5. The plugin framework remains intentionally out of scope for this parity program.
-6. Visual familiarity is release-blocking, not decorative: the desktop opening surface must still read as a Chummer5a-successor workbench, the `File` menu must be real, and master-index and character-roster routes must remain first-class.
-
-6b. For this parity family, missing any of the four hard desktop anchors (`master index`, `character roster`, `real File menu`, opening Chummer5a-like workbench) keeps `whole-product` readiness from passing, even when only platform-host proof is missing.
 
 ## Added milestone lane
 

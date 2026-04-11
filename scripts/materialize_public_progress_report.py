@@ -36,9 +36,9 @@ from public_progress import (
     render_progress_report_html,
 )
 try:
-    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 except ModuleNotFoundError:
-    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -95,8 +95,7 @@ def parse_as_of(raw: Optional[str]) -> Optional[dt.date]:
 
 
 def _write_text(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    write_text_atomic(path, content)
 
 
 def _canonical_bundle_requested(out_path: Path) -> bool:

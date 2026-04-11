@@ -320,7 +320,7 @@ def account_lane_can_serve_allowed_lanes(configured_lane: str, allowed_lanes: Se
     if clean_configured in normalized:
         return True
     if clean_configured == "core":
-        return bool(normalized & {"core_authority", "core_rescue"})
+        return bool(normalized & {"core_authority", "core_booster", "core_rescue"})
     if clean_configured == "review_light":
         return "review_shard" in normalized
     if clean_configured == "jury":

@@ -226,6 +226,33 @@ class ConsistencyGroundworkTests(unittest.TestCase):
 
         self.assertFalse(any(item["kind"] == "unserved_task_lane" and item["scope_id"] == "mobile" for item in warnings))
 
+    def test_core_account_serves_core_booster_slice_without_false_lane_warning(self) -> None:
+        consistency = load_consistency_module()
+
+        warnings = consistency.config_consistency_warnings(
+            {
+                "lanes": consistency.DEFAULT_LANES,
+                "accounts": {
+                    "acct-ea-core": {"auth_kind": "api_key", "lane": "core", "codex_model_aliases": ["ea-coder-hard"]},
+                },
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "accounts": ["acct-ea-core"],
+                        "account_policy": {
+                            "preferred_accounts": ["acct-ea-core"],
+                            "allow_chatgpt_accounts": False,
+                            "allow_api_accounts": True,
+                        },
+                        "review": {"enabled": True, "mode": "local"},
+                        "queue": [{"title": "Run booster package", "allowed_lanes": ["core_booster"], "allow_credit_burn": True}],
+                    }
+                ],
+            }
+        )
+
+        self.assertFalse(any(item["kind"] == "unserved_task_lane" and item["scope_id"] == "fleet" for item in warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

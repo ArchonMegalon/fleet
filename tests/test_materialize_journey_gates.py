@@ -70,13 +70,13 @@ def test_release_channel_external_proof_requests_normalize_and_dedupe() -> None:
     assert requests[0]["required_host"] == "windows"
     assert requests[0]["required_proofs"] == ["promoted_installer_artifact"]
     assert requests[0]["proof_capture_commands"] == [
-        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
     ]
     assert requests[1]["required_host"] == "macos"
     assert requests[1]["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
     assert requests[1]["proof_capture_commands"] == [
-        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-blazor-desktop-osx-arm64-installer.dmg blazor-desktop osx-arm64 Chummer.Blazor.Desktop /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
     ]
 
@@ -1291,7 +1291,7 @@ groups: []
     assert journey["state"] == "blocked"
     request = next(item for item in journey["external_proof_requests"] if item["tuple_id"] == "avalonia:win-x64:windows")
     assert request["proof_capture_commands"] == [
-        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
     ]
     assert any(
@@ -2701,9 +2701,15 @@ def test_install_claim_restore_continue_requires_fresh_desktop_executable_exit_g
     assert desktop_exit_proof.get("json_must_equal") == {
         "local_blocking_findings_count": 0,
         "evidence.hub_registry_root_trusted_for_startup_smoke_proof": True,
-        "evidence.flagship_status": "pass",
         "evidence.visual_familiarity_status": "pass",
         "evidence.workflow_execution_status": "pass",
+        "evidence.desktop_familiarity.file_menu_live": True,
+        "evidence.desktop_familiarity.master_index_first_class": True,
+        "evidence.desktop_familiarity.character_roster_first_class": True,
+        "evidence.desktop_familiarity.startup_opens_workbench_not_landing": True,
+        "evidence.install_experience.manual_browser_claim_code_required": False,
+        "evidence.install_experience.claim_flow_surface": "installer_or_in_app",
+        "evidence.install_experience.product_installer_guides_head_choice": True,
         "evidence.receipt_scope.windows_gate:avalonia:win-x64.within_repo_root": True,
         "evidence.receipt_scope.windows_gate:blazor-desktop:win-x64.within_repo_root": True,
         "evidence.receipt_scope.linux_gate:avalonia:linux-x64.within_repo_root": True,

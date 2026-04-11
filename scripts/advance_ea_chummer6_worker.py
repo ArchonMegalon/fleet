@@ -5604,7 +5604,285 @@ def _collect_strings(value: object) -> list[str]:
     return found
 
 
-def _collect_humanized_candidates(body: dict[str, object]) -> list[str]:
+WORD_COUNT_LINE_RE = re.compile(r"^\d+\s*Words?$", re.IGNORECASE)
+HUMANIZER_MARKDOWN_TERMINATORS = (
+    "[Switch to Undetectable]",
+    "Changed words / phrases",
+    "WARNING:",
+    "Copy Output",
+    "Humanize Again",
+    "How UD AI Turns AI-Generated Content into Humanized Content",
+    "### ",
+)
+
+
+def _clean_markdown_line(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _normalized_text(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip().lower()
+
+
+SPACING_REPAIR_WORDS = {
+    "a",
+    "about",
+    "after",
+    "all",
+    "also",
+    "an",
+    "and",
+    "are",
+    "around",
+    "as",
+    "at",
+    "attached",
+    "be",
+    "because",
+    "before",
+    "black",
+    "box",
+    "but",
+    "by",
+    "calculated",
+    "can",
+    "campaign",
+    "characters",
+    "copy",
+    "designed",
+    "do",
+    "does",
+    "don't",
+    "everything",
+    "for",
+    "forward",
+    "from",
+    "gamemasters",
+    "gms",
+    "great",
+    "have",
+    "helpful",
+    "helps",
+    "how",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "it's",
+    "keep",
+    "keeps",
+    "local",
+    "look",
+    "math",
+    "more",
+    "moving",
+    "mysterious",
+    "not",
+    "of",
+    "on",
+    "open",
+    "or",
+    "organized",
+    "out",
+    "players",
+    "plus",
+    "prepare",
+    "provides",
+    "really",
+    "receipts",
+    "references",
+    "relying",
+    "result",
+    "results",
+    "rules",
+    "see",
+    "sessions",
+    "shadowrun",
+    "so",
+    "some",
+    "stays",
+    "that",
+    "the",
+    "their",
+    "them",
+    "there",
+    "they",
+    "they're",
+    "this",
+    "to",
+    "tool",
+    "track",
+    "transparent",
+    "trustworthy",
+    "trying",
+    "understand",
+    "up",
+    "useful",
+    "way",
+    "we",
+    "where",
+    "which",
+    "while",
+    "with",
+    "workflow",
+    "worry",
+    "would",
+    "what",
+    "what's",
+    "workspace",
+    "you",
+    "you're",
+    "your",
+}
+SPACING_REPAIR_SHORT_WORDS = {
+    "a",
+    "i",
+    "an",
+    "as",
+    "at",
+    "be",
+    "by",
+    "do",
+    "if",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "so",
+    "to",
+    "up",
+    "we",
+}
+SPACING_REPAIR_TOKEN_RE = re.compile(r"\b[A-Za-z][A-Za-z']*[A-Za-z]\b")
+
+
+def _is_noise_candidate(value: str) -> bool:
+    lowered = str(value or "").lower()
+    if len(value) <= 40 or "http" in lowered or lowered.startswith("task_"):
+        return True
+    return any(token in lowered for token in ("workflow_id", "workflow_name", "browseract_task_id"))
+
+
+def _spacing_repair_lexicon(original_text: str) -> set[str]:
+    lexicon = set(SPACING_REPAIR_WORDS)
+    for token in re.findall(r"[A-Za-z][A-Za-z']+", str(original_text or "").lower()):
+        lexicon.add(token)
+    return lexicon
+
+
+def _split_spacing_artifact_token(token: str, lexicon: set[str]) -> str:
+    lowered = token.lower()
+    if lowered in lexicon:
+        return token
+    length = len(token)
+    best: list[tuple[int, list[str]] | None] = [None] * (length + 1)
+    best[length] = (0, [])
+    for index in range(length - 1, -1, -1):
+        winner: tuple[int, list[str]] | None = None
+        for next_index in range(index + 1, min(length, index + 24) + 1):
+            piece = lowered[index:next_index]
+            if piece not in lexicon:
+                continue
+            if len(piece) == 1 and piece not in {"a", "i"}:
+                continue
+            if len(piece) == 2 and piece not in SPACING_REPAIR_SHORT_WORDS:
+                continue
+            remainder = best[next_index]
+            if remainder is None:
+                continue
+            score = (len(piece) * len(piece)) - 2 + remainder[0]
+            parts = [token[index:next_index], *remainder[1]]
+            if winner is None or score > winner[0]:
+                winner = (score, parts)
+        best[index] = winner
+    resolved = best[0]
+    if resolved is None or len(resolved[1]) <= 1:
+        return token
+    threshold = 1 if length <= 4 else length + 2
+    if resolved[0] < threshold:
+        return token
+    return " ".join(resolved[1])
+
+
+def _repair_spacing_artifacts(text: str, original_text: str) -> str:
+    repaired = str(text or "").strip()
+    if not repaired:
+        return repaired
+    repaired = re.sub(r"(?<=[,;:!?])(?=[A-Za-z0-9])", " ", repaired)
+    repaired = re.sub(r'([A-Za-z0-9]["”])(?=[A-Za-z])', r"\1 ", repaired)
+    repaired = re.sub(r"\s+", " ", repaired).strip()
+    lexicon = _spacing_repair_lexicon(original_text)
+    repaired = SPACING_REPAIR_TOKEN_RE.sub(lambda match: _split_spacing_artifact_token(match.group(0), lexicon), repaired)
+    return re.sub(r"\s+", " ", repaired).strip()
+
+
+def _token_overlap_score(left: str, right: str) -> tuple[int, float]:
+    left_tokens = _token_set(left)
+    right_tokens = _token_set(right)
+    if not left_tokens or not right_tokens:
+        return 0, 0.0
+    overlap = len(left_tokens & right_tokens)
+    ratio = overlap / max(1, len(left_tokens))
+    return overlap, ratio
+
+
+def _is_original_markdown_line(line: str, original_text: str) -> bool:
+    candidate = _clean_markdown_line(line).lstrip("×").strip()
+    if not candidate:
+        return False
+    if _normalized_text(candidate) == _normalized_text(original_text):
+        return True
+    overlap, ratio = _token_overlap_score(original_text, candidate)
+    return overlap >= max(4, min(10, len(_token_set(original_text)) - 1)) and ratio >= 0.85
+
+
+def _is_markdown_terminator(line: str) -> bool:
+    normalized = _clean_markdown_line(line)
+    if not normalized:
+        return False
+    if WORD_COUNT_LINE_RE.fullmatch(normalized):
+        return True
+    return any(normalized.startswith(prefix) for prefix in HUMANIZER_MARKDOWN_TERMINATORS)
+
+
+def _collect_markdown_humanized_candidates(markdown: str, original_text: str) -> list[str]:
+    if not markdown.strip() or not original_text.strip():
+        return []
+    lines = [_clean_markdown_line(line) for line in str(markdown).splitlines()]
+    lines = [line for line in lines if line]
+    candidates: list[str] = []
+    index = 0
+    while index < len(lines):
+        if not _is_original_markdown_line(lines[index], original_text):
+            index += 1
+            continue
+        start = index + 1
+        while start < len(lines) and _is_original_markdown_line(lines[start], original_text):
+            start += 1
+        if start < len(lines) and WORD_COUNT_LINE_RE.fullmatch(lines[start]):
+            start += 1
+        captured: list[str] = []
+        while start < len(lines):
+            line = lines[start]
+            if _is_markdown_terminator(line):
+                break
+            if line.startswith("!["):
+                start += 1
+                continue
+            captured.append(line)
+            start += 1
+        candidate = re.sub(r"\s+", " ", " ".join(captured)).strip()
+        if candidate:
+            candidates.append(candidate)
+        index = max(start, index + 1)
+    return candidates
+
+
+def _collect_humanized_candidates(body: dict[str, object], original_text: str) -> list[str]:
     candidates: list[str] = []
     output = body.get("output")
     if isinstance(output, dict):
@@ -5628,6 +5906,10 @@ def _collect_humanized_candidates(body: dict[str, object]) -> list[str]:
                         ).strip()
                         if value:
                             candidates.append(value)
+                        for field in ("content", "markdown", "page_markdown", "page_content"):
+                            markdown = str(item.get(field) or "").strip()
+                            if markdown:
+                                candidates.extend(_collect_markdown_humanized_candidates(markdown, original_text))
     return candidates
 
 
@@ -5670,12 +5952,11 @@ def _token_set(text: str) -> set[str]:
 
 
 def extract_humanized_text(body: dict[str, object], original_text: str) -> str:
-    candidates = _collect_humanized_candidates(body)
+    candidates = _collect_humanized_candidates(body, original_text)
     original_tokens = _token_set(original_text)
     scored: list[tuple[int, int, str]] = []
     for value in candidates:
-        lowered = value.lower()
-        if len(value) <= 40 or "http" in lowered or lowered.startswith("task_") or "workflow" in lowered:
+        if _is_noise_candidate(value):
             continue
         overlap = len(_token_set(value) & original_tokens)
         scored.append((overlap, len(value), value))
@@ -5683,7 +5964,7 @@ def extract_humanized_text(body: dict[str, object], original_text: str) -> str:
         scored.sort(reverse=True)
         best_overlap, _best_len, best_value = scored[0]
         if best_overlap > 0:
-            return best_value
+            return _repair_spacing_artifacts(best_value, original_text)
         raise RuntimeError("browseract:humanizer_output_mismatch")
     raise RuntimeError("browseract:no_humanized_text")
 

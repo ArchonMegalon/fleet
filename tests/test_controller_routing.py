@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import importlib.util
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -506,6 +507,66 @@ class ControllerRoutingTests(unittest.TestCase):
                 ).fetchone()
             self.assertEqual(row["backoff_until"], self.controller.iso(until))
             self.assertEqual(row["last_error"], "authentication failed for this account; recheck at later")
+
+    def test_active_run_count_for_account_ignores_unlinked_inactive_orphaned_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            now = self.controller.iso(self.controller.utc_now())
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(id, path, queue_json, status, queue_index, updated_at)
+                    VALUES('fleet', ?, '[]', 'dispatch_pending', 0, ?)
+                    """,
+                    (str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO projects(id, path, queue_json, status, queue_index, updated_at)
+                    VALUES('ui', ?, '[]', 'running', 0, ?)
+                    """,
+                    (str(root), now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO accounts(
+                        alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at
+                    )
+                    VALUES('acct-ea-fleet', 'ea', '[]', 4, 'ready', ?)
+                    """,
+                    (now,),
+                )
+                orphan_run_id = conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, slice_name, status, model, started_at, job_kind
+                    )
+                    VALUES('fleet', 'acct-ea-fleet', 'Orphaned run', 'running', 'ea-gemini-flash', ?, 'coding')
+                    """,
+                    (now,),
+                ).lastrowid
+                active_run_id = conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, slice_name, status, model, started_at, job_kind
+                    )
+                    VALUES('ui', 'acct-ea-fleet', 'Live run', 'running', 'ea-gemini-flash', ?, 'coding')
+                    """,
+                    (now,),
+                ).lastrowid
+                conn.execute("UPDATE projects SET active_run_id=? WHERE id='ui'", (int(active_run_id),))
+
+            self.assertEqual(self.controller.active_run_count_for_account("acct-ea-fleet"), 1)
+            self.assertEqual(self.controller.active_run_count_for_aliases(["acct-ea-fleet"]), 1)
+            self.assertEqual(self.controller.active_run_count_for_credential_source("acct-ea-fleet"), 1)
+            self.assertEqual(self.controller.active_run_families_for_aliases(["acct-ea-fleet"]), {"ea"})
+            self.assertGreater(int(orphan_run_id), 0)
 
     def test_set_account_auth_failure_backoff_applies_to_shared_chatgpt_source_even_with_active_sibling_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -3520,6 +3581,89 @@ class ControllerRoutingTests(unittest.TestCase):
         )
         self.assertEqual(payload.get("items"), ["Overlay Queue Slice"])
 
+    def test_merge_queue_overlay_item_preserves_structured_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            project_cfg = {
+                "id": "core",
+                "path": str(repo_root),
+                "queue": ["Base Queue Slice"],
+                "feedback_dir": "feedback",
+            }
+            structured_item = {
+                "package_id": "audit-task-17",
+                "title": "Structured overlay slice",
+                "allowed_lanes": ["core_booster"],
+            }
+
+            overlay_path = self.controller.merge_queue_overlay_item(project_cfg, structured_item, mode="append")
+            payload = self.controller.load_yaml(overlay_path)
+
+        self.assertEqual(payload.get("items"), [structured_item])
+
+    def test_audit_candidate_queue_overlay_item_preserves_structured_metadata(self) -> None:
+        candidate = {
+            "id": 17,
+            "scope_id": "fleet",
+            "finding_key": "project.design_mirror_missing_or_stale",
+            "title": "Refresh local design mirror",
+            "detail": "Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.",
+            "task_meta_json": json.dumps(
+                {
+                    "allowed_lanes": ["core_booster"],
+                    "allow_credit_burn": True,
+                    "design_owner": "fleet-platform",
+                }
+            ),
+        }
+
+        item = self.controller.audit_candidate_queue_overlay_item(candidate)
+
+        self.assertEqual(item["package_id"], "audit-task-17")
+        self.assertEqual(item["source_ref"], "audit_task_candidates[17]")
+        self.assertEqual(item["title"], candidate["detail"])
+        self.assertEqual(item["task"], candidate["detail"])
+        self.assertEqual(item["allowed_lanes"], ["core_booster"])
+        self.assertTrue(item["allow_credit_burn"])
+        self.assertEqual(item["design_owner"], "fleet-platform")
+        self.assertEqual(item["allowed_paths"], [".codex-design"])
+        self.assertEqual(item["owned_surfaces"], ["design_mirror:fleet"])
+
+    def test_apply_queue_overlay_preserves_structured_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            published_root = repo_root / ".codex-studio" / "published"
+            published_root.mkdir(parents=True, exist_ok=True)
+            (published_root / "QUEUE.generated.yaml").write_text(
+                self.controller.yaml.safe_dump(
+                    {
+                        "mode": "prepend",
+                        "items": [
+                            {
+                                "title": "Structured Queue Slice",
+                                "allowed_lanes": ["core_booster"],
+                                "allow_credit_burn": True,
+                            }
+                        ],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": ["Base Queue Slice"],
+                "feedback_dir": "feedback",
+            }
+
+            queue = self.controller.resolve_project_queue(project_cfg)
+
+        self.assertIsInstance(queue[0], dict)
+        self.assertEqual(queue[0]["title"], "Structured Queue Slice")
+        self.assertEqual(queue[0]["allowed_lanes"], ["core_booster"])
+        self.assertEqual(queue[1], "Base Queue Slice")
+
     def test_init_db_repairs_work_package_pull_request_foreign_key_after_pull_request_migration(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -4115,6 +4259,76 @@ class ControllerRoutingTests(unittest.TestCase):
             str(row["current_slice"]),
             "Compile booster-ready work packages from queue truth",
         )
+        self.assertIsNone(row["active_run_id"])
+
+    def test_sync_work_packages_does_not_override_non_package_scheduler_project_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            (repo_root / ".codex-studio" / "published").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex-studio" / "published" / "WORKPACKAGES.generated.yaml").write_text(
+                "\n".join(
+                    [
+                        "work_packages:",
+                        "  - package_id: fleet-a",
+                        "    title: Slice A",
+                        "    allowed_paths:",
+                        "      - src/a.py",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            config = {
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "path": str(repo_root),
+                        "queue": ["Raw queue slice"],
+                        "enabled": True,
+                    }
+                ],
+                "project_groups": [
+                    {
+                        "id": "shared-group",
+                        "mode": "lockstep",
+                        "projects": ["fleet"],
+                    }
+                ],
+                "lanes": {"core": {"id": "core", "runtime_model": "ea-coder-hard"}},
+                "accounts": {},
+            }
+
+            self.controller.sync_config_to_db(config)
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    UPDATE projects
+                    SET status='running',
+                        current_slice='Raw queue slice',
+                        active_run_id=NULL,
+                        updated_at=?
+                    WHERE id='fleet'
+                    """,
+                    (self.controller.iso(self.controller.utc_now()),),
+                )
+
+            self.controller.sync_work_packages_to_db(config)
+
+            with self.controller.db() as conn:
+                row = conn.execute(
+                    "SELECT status, current_slice, active_run_id FROM projects WHERE id='fleet'"
+                ).fetchone()
+
+        self.assertEqual(str(row["status"]), "running")
+        self.assertEqual(str(row["current_slice"]), "Raw queue slice")
         self.assertIsNone(row["active_run_id"])
 
     def test_apply_exec_stalled_account_backoff_after_threshold(self) -> None:
@@ -5942,6 +6156,38 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertIsNone(project_row["active_run_id"])
         self.assertIn("pause requested", str(project_row["last_error"] or ""))
 
+    def test_startup_defers_design_repo_sync_until_scheduler(self) -> None:
+        fake_task = object()
+        fake_thread = mock.Mock()
+        fake_thread.start = mock.Mock()
+        fake_state = types.SimpleNamespace()
+
+        def fake_create_task(coro):
+            coro.close()
+            return fake_task
+
+        async def run_startup() -> None:
+            with mock.patch.object(self.controller, "ensure_dirs"):
+                with mock.patch.object(self.controller, "init_db"):
+                    with mock.patch.object(self.controller, "normalize_config", return_value={}):
+                        with mock.patch.object(self.controller, "write_controller_heartbeat"):
+                            with mock.patch.object(self.controller, "reconcile_abandoned_runs") as reconcile_mock:
+                                with mock.patch.object(self.controller, "sync_design_repo_mirrors") as sync_mock:
+                                    with mock.patch.object(self.controller.asyncio, "create_task", side_effect=fake_create_task):
+                                        with mock.patch.object(self.controller.threading, "Thread", return_value=fake_thread):
+                                            with mock.patch.object(self.controller.app, "state", fake_state):
+                                                self.controller.state.startup_reconcile_pending = False
+                                                self.controller.state.last_design_mirror_sync_at = self.controller.utc_now()
+                                                await self.controller.startup()
+                                                self.assertIsNone(self.controller.state.last_design_mirror_sync_at)
+                                                self.assertTrue(self.controller.state.startup_reconcile_pending)
+                                                reconcile_mock.assert_not_called()
+                                                sync_mock.assert_not_called()
+                                                self.assertIs(self.controller.app.state.scheduler, fake_task)
+                                            fake_thread.start.assert_called_once()
+
+        asyncio.run(run_startup())
+
     def test_execute_project_slice_persists_quartermaster_metadata_in_spider_decision(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
         now = self.controller.iso(self.controller.utc_now())
@@ -6281,6 +6527,139 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertNotIn('model_provider="ea"', captured_cmd)
         self.assertNotIn('model_providers.ea.base_url="http://host.docker.internal:8090/v1"', captured_cmd)
         self.assertNotIn('model_providers.ea.http_headers={"X-EA-Principal-ID"="codex-fleet"}', captured_cmd)
+
+    def test_execute_project_slice_easy_mcp_sets_codexea_easy_submode(self) -> None:
+        repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
+        now = self.controller.iso(self.controller.utc_now())
+        config["accounts"]["acct-ea-fleet"] = {
+            "lane": "easy",
+            "auth_kind": "ea",
+            "codex_model_aliases": ["ea-gemini-flash"],
+        }
+        with self.controller.db() as conn:
+            conn.execute(
+                """
+                INSERT INTO accounts(
+                    alias, auth_kind, allowed_models_json, max_parallel_runs, health_state, updated_at
+                )
+                VALUES('acct-ea-fleet', 'ea', ?, 1, 'ready', ?)
+                """,
+                (json.dumps(["ea-gemini-flash"]), now),
+            )
+            conn.execute(
+                "UPDATE projects SET status='running', current_slice=?, last_run_at=? WHERE id='fleet'",
+                (str(slice_item["title"]), now),
+            )
+            project_row = conn.execute("SELECT * FROM projects WHERE id='fleet'").fetchone()
+        self.assertIsNotNone(project_row)
+        decision = {
+            "tier": "bounded_fix",
+            "reasoning_effort": "low",
+            "estimated_prompt_chars": 1024,
+            "estimated_input_tokens": 256,
+            "estimated_output_tokens": 256,
+            "predicted_changed_files": 1,
+            "requires_contract_authority": False,
+            "reason": "test easy mcp launch",
+            "lane": "easy",
+            "lane_submode": "mcp",
+            "selected_profile": "default",
+            "why_not_cheaper": "",
+            "escalation_reason": "",
+            "expected_allowance_burn": {},
+            "allowed_lanes": ["easy"],
+            "required_reviewer_lane": "jury",
+            "final_reviewer_lane": "jury",
+            "task_meta": {},
+            "spark_eligible": False,
+            "runtime_model": "ea-gemini-flash",
+            "lane_capacity": {},
+        }
+
+        captured_cmd: list[str] = []
+        captured_env: dict[str, str] = {}
+
+        async def fake_run_command(cmd, **kwargs):
+            captured_cmd[:] = list(cmd)
+            captured_env.update(dict(kwargs.get("env") or {}))
+            raise asyncio.CancelledError
+
+        with mock.patch.object(self.controller, "prepare_account_environment", return_value={}):
+            with mock.patch.object(self.controller, "touch_account"):
+                with mock.patch.object(self.controller, "record_account_selection"):
+                    with mock.patch.object(self.controller, "build_prompt", return_value="prompt"):
+                        with mock.patch.object(self.controller, "git_dirty_snapshot", return_value={}):
+                            with mock.patch.object(self.controller, "run_command", side_effect=fake_run_command):
+                                with mock.patch.object(self.controller, "project_enabled_in_desired_state", return_value=False):
+                                    with self.assertRaises(asyncio.CancelledError):
+                                        asyncio.run(
+                                            self.controller.execute_project_slice(
+                                                config,
+                                                project_cfg,
+                                                project_row,
+                                                str(slice_item["title"]),
+                                                decision,
+                                                "acct-ea-fleet",
+                                                "ea-gemini-flash",
+                                                "test note",
+                                                [],
+                                            )
+                                        )
+
+        self.assertEqual(captured_cmd[0], "/docker/fleet/scripts/codex-shims/codexea")
+        self.assertEqual(captured_cmd[1:3], ["easy", "exec"])
+        self.assertEqual(captured_env["CODEXEA_MODEL"], "ea-gemini-flash")
+        self.assertEqual(captured_env["CODEXEA_EASY_SUBMODE"], "mcp")
+
+    def test_reconcile_orphaned_active_runs_marks_unlinked_stale_runs_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            config = {
+                "policies": {"orphaned_runtime_grace_seconds": 300},
+                "projects": [{"id": "fleet", "path": str(repo_root)}],
+                "accounts": {"acct-ea-fleet": {"lane": "easy", "auth_kind": "ea"}},
+            }
+            self.controller.sync_config_to_db(config)
+            started_at = self.controller.utc_now() - self.controller.dt.timedelta(minutes=11)
+            log_path = self.controller.LOG_DIR / "fleet" / "stale-orphan.jsonl"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text("stale\n", encoding="utf-8")
+            stale_ts = (started_at - self.controller.dt.timedelta(minutes=1)).timestamp()
+            os.utime(log_path, (stale_ts, stale_ts))
+            with self.controller.db() as conn:
+                run_id = conn.execute(
+                    """
+                    INSERT INTO runs(
+                        project_id, account_alias, job_kind, slice_name, status, model,
+                        reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path
+                    )
+                    VALUES(?, ?, 'coding', 'Orphaned slice', 'running', 'ea-gemini-flash', 'low', 'bounded_fix', 'test orphan', ?, ?, '', '')
+                    """,
+                    ("fleet", "acct-ea-fleet", self.controller.iso(started_at), str(log_path)),
+                ).lastrowid
+                conn.execute(
+                    "UPDATE projects SET status='dispatch_pending', active_run_id=NULL, current_slice='Orphaned slice', updated_at=? WHERE id='fleet'",
+                    (self.controller.iso(self.controller.utc_now()),),
+                )
+
+            recovered = self.controller.reconcile_orphaned_active_runs(config)
+
+            self.assertEqual(recovered, 1)
+            with self.controller.db() as conn:
+                run_row = conn.execute(
+                    "SELECT status, error_class, finished_at FROM runs WHERE id=?",
+                    (int(run_id),),
+                ).fetchone()
+            self.assertEqual(run_row["status"], "failed")
+            self.assertEqual(run_row["error_class"], "orphaned_runtime")
+            self.assertIsNotNone(run_row["finished_at"])
 
     def test_execute_local_review_cancellation_marks_run_paused_and_does_not_auto_relaunch(self) -> None:
         repo_root, config, project_cfg, slice_item = self._configure_groundwork_loop_fixture()
@@ -7226,6 +7605,86 @@ class ControllerRoutingTests(unittest.TestCase):
             self.assertEqual(account_cfg["participant_hub_group_id"], "grp_1")
             self.assertEqual(account_cfg["participant_sponsor_session_id"], "sps_1")
             self.assertEqual(account_cfg["participant_lane_role"], "review")
+
+    def test_normalize_config_keeps_dynamic_participant_accounts_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            config_path = root / "fleet.yaml"
+            accounts_path = root / "accounts.yaml"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "projects": [
+                            {
+                                "id": "fleet",
+                                "path": str(repo_root),
+                                "participant_burst": {
+                                    "enabled": True,
+                                    "allow_chatgpt_accounts": True,
+                                    "max_active_workers": 2,
+                                    "preferred_models": ["gpt-5.4", "gpt-5.3-codex"],
+                                },
+                            }
+                        ],
+                        "core_backends": {
+                            "chatgpt_participant": {
+                                "auth_class": "chatgpt_auth_json",
+                                "runtime_model": "gpt-5.4",
+                                "allowed_models": ["gpt-5.4", "gpt-5.3-codex"],
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            accounts_path.write_text(json.dumps({"accounts": {}}), encoding="utf-8")
+
+            self.controller.CONFIG_PATH = config_path
+            self.controller.ACCOUNTS_PATH = accounts_path
+            self.controller.POLICIES_PATH = config_path.with_name("policies.yaml")
+            self.controller.ROUTING_PATH = config_path.with_name("routing.yaml")
+            self.controller.GROUPS_PATH = config_path.with_name("groups.yaml")
+            self.controller.PROJECTS_DIR = config_path.parent / "projects"
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller._CONFIG_CONSISTENCY_BLOCKERS = []
+            self.controller._CONFIG_CONSISTENCY_BLOCKER_SIGNATURE = ""
+            self.controller.init_db()
+
+            config = self.controller.normalize_config()
+            self.controller.sync_config_to_db(config)
+            lane = self.controller.create_participant_lane_record(
+                config,
+                {
+                    "project_id": "fleet",
+                    "subject_id": "subject-1",
+                    "subject_label": "Pilot One",
+                },
+            )
+
+            with (
+                mock.patch.object(
+                    self.controller,
+                    "sync_participant_lane_runtime",
+                    side_effect=AssertionError("normalize_config must not refresh participant runtime"),
+                ),
+                mock.patch.object(
+                    self.controller,
+                    "sync_participant_lane_account",
+                    side_effect=AssertionError("normalize_config must not persist participant accounts"),
+                ),
+            ):
+                normalized = self.controller.normalize_config()
+
+            self.assertIn(lane["account_alias"], normalized["accounts"])
+            self.assertEqual(
+                normalized["accounts"][lane["account_alias"]]["participant_lane_id"],
+                lane["lane_id"],
+            )
 
     def test_activate_participant_lane_marks_receipt_status_when_targets_are_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

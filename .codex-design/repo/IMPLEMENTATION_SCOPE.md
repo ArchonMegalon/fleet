@@ -177,3 +177,5 @@ Reject changes that:
 * store raw participant Codex/OpenAI auth data in Hub
 * bypass mirrored design canon with repo-local policy inventions
 * blur the difference between managed EA core burst and participant direct burst
+* skip fail-closed completion evidence when desktop flagship proof is missing real workbench-first startup, a first-class master index or character roster, or in-product claim/recovery handling
+* let Fleet mark the desktop flagship as complete while the user still sees a generic shell, a browser-ritual claim detour, or a framework-first installer choice

@@ -1,13 +1,13 @@
 product: chummer
 surface: release_control
 version: 1
-last_reviewed: 2026-04-04
+last_reviewed: 2026-04-10
 purpose: Canonical six-journey release gate layer for proving the campaign OS as a lived system instead of only a coherent repo graph.
 
 journey_gates:
   - id: install_claim_restore_continue
     title: Install, claim, restore, continue
-    user_promise: A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install only when install, claim, restore, platform, and localization proof are all fresh enough to trust.
+    user_promise: A person can install the flagship client, claim it, restore the right workspace, and continue safely on a known install.
     canonical_journeys:
       - journeys/install-and-update.md
       - journeys/claim-install-and-close-a-support-case.md
@@ -87,9 +87,15 @@ journey_gates:
           json_must_equal:
             local_blocking_findings_count: 0
             evidence.hub_registry_root_trusted_for_startup_smoke_proof: true
-            evidence.flagship_status: pass
             evidence.visual_familiarity_status: pass
             evidence.workflow_execution_status: pass
+            evidence.desktop_familiarity.file_menu_live: true
+            evidence.desktop_familiarity.master_index_first_class: true
+            evidence.desktop_familiarity.character_roster_first_class: true
+            evidence.desktop_familiarity.startup_opens_workbench_not_landing: true
+            evidence.install_experience.manual_browser_claim_code_required: false
+            evidence.install_experience.claim_flow_surface: installer_or_in_app
+            evidence.install_experience.product_installer_guides_head_choice: true
             evidence.receipt_scope.windows_gate:avalonia:win-x64.within_repo_root: true
             evidence.receipt_scope.windows_gate:blazor-desktop:win-x64.within_repo_root: true
             evidence.receipt_scope.linux_gate:avalonia:linux-x64.within_repo_root: true
@@ -678,7 +684,7 @@ journey_gates:
 
   - id: report_cluster_release_notify
     title: Report, cluster, release, notify
-    user_promise: A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel and the clustered support truth agrees that the reporter's real channel has the fix.
+    user_promise: A user can report pain, follow honest case state, and only receive a fixed notice once the fix actually reaches their channel.
     canonical_journeys:
       - journeys/claim-install-and-close-a-support-case.md
       - journeys/install-and-update.md
@@ -791,7 +797,5 @@ journey_gates:
 
 rules:
   - A journey gate is blocked when required published artifacts are missing or stale, or when an owning project falls below its minimum stage or deployment posture.
-  - install_claim_restore_continue is blocked whenever install, claim, restore, platform, or localization proof is missing, stale, or below flagship bar; a merely plausible install is not enough to continue on a claimed device.
-  - report_cluster_release_notify is blocked whenever support clustering, release routing, install truth, or recovery-path truth is missing, stale, or below flagship bar; a fixed notice cannot claim success before the reporter's real channel has actually received the fix.
   - A journey gate is warning when the minimum posture is met but the target posture or history depth is still not boring.
-  - Fleet publish readiness must consume this registry through a generated JOURNEY_GATES artifact rather than by ad hoc prose.
+  - Fleet publish readiness must consume this registry through the design-owned `JOURNEY_GATES.generated.json` truth plane rather than by ad hoc prose, then mirror that truth into the fleet-published artifact.

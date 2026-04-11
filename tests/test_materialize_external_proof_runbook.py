@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -8,6 +9,20 @@ from pathlib import Path
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_external_proof_runbook.py")
+
+
+def _load_runbook_module():
+    previous_sys_path = list(sys.path)
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("materialize_external_proof_runbook", SCRIPT)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = previous_sys_path
 
 
 def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Path) -> None:
@@ -103,6 +118,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     )
 
     assert result.returncode == 0, result.stderr
+    module = _load_runbook_module()
     payload = out.read_text(encoding="utf-8")
     commands_dir = out.parent / "external-proof-commands"
     windows_capture = commands_dir / "capture-windows-proof.sh"
@@ -184,7 +200,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" in payload
     assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in payload
     assert "python3 scripts/verify_public_release_channel.py" in payload
-    assert "--release-channel /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json" in payload
+    assert f"--release-channel {module.DEFAULT_RELEASE_CHANNEL}" in payload
     assert payload.index("python3 scripts/materialize_status_plane.py") < payload.index(
         "python3 scripts/materialize_journey_gates.py"
     )

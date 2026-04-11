@@ -18,6 +18,7 @@ try:
         DEFAULT_RELEASE_CHANNEL,
         DEFAULT_SUPPORT_PACKETS,
         FLEET_ROOT,
+        RELEASE_CHANNEL_REPO_ROOT,
         UI_DOCKER_DOWNLOADS_FILES_ROOT,
         UI_DOCKER_DOWNLOADS_ROOT,
         UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT,
@@ -36,6 +37,7 @@ except ModuleNotFoundError:
         DEFAULT_RELEASE_CHANNEL,
         DEFAULT_SUPPORT_PACKETS,
         FLEET_ROOT,
+        RELEASE_CHANNEL_REPO_ROOT,
         UI_DOCKER_DOWNLOADS_FILES_ROOT,
         UI_DOCKER_DOWNLOADS_ROOT,
         UI_DOCKER_DOWNLOADS_STARTUP_SMOKE_ROOT,
@@ -70,7 +72,7 @@ def _post_capture_republish_commands() -> list[str]:
     return [
         f"cd {shlex.quote(str(UI_REPO_ROOT))} && ./scripts/generate-releases-manifest.sh",
         "cd "
-        + shlex.quote(str(DEFAULT_RELEASE_CHANNEL.parent.parent))
+        + shlex.quote(str(RELEASE_CHANNEL_REPO_ROOT))
         + " && python3 scripts/materialize_public_release_channel.py --manifest "
         + shlex.quote(str(DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH))
         + " --downloads-dir "
@@ -82,7 +84,7 @@ def _post_capture_republish_commands() -> list[str]:
         + " --ui-localization-release-gate "
         + shlex.quote(str(UI_LOCALIZATION_RELEASE_GATE_PATH))
         + " --channel docker --version unpublished --published-at \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" --output .codex-studio/published/RELEASE_CHANNEL.generated.json",
-        f"cd {shlex.quote(str(DEFAULT_RELEASE_CHANNEL.parent.parent))} && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
+        f"cd {shlex.quote(str(RELEASE_CHANNEL_REPO_ROOT))} && python3 scripts/verify_public_release_channel.py .codex-studio/published/RELEASE_CHANNEL.generated.json",
         f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_status_plane.py --out .codex-studio/published/STATUS_PLANE.generated.yaml",
         f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml",
         "cd "

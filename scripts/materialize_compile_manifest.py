@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 import types
 from pathlib import Path
 from typing import Any, Dict, List
@@ -151,6 +152,22 @@ def repo_root_for_published_path(path: Path) -> Path | None:
     return studio_root.parent
 
 
+def write_text_atomic(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=path.suffix or ".tmp",
+        prefix=f"{path.stem}.",
+        dir=str(path.parent),
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        handle.write(content)
+        tmp_path = Path(handle.name)
+    tmp_path.replace(path)
+    return path
+
+
 def write_compile_manifest(
     repo_root: Path,
     *,
@@ -179,8 +196,7 @@ def write_compile_manifest(
         },
         files,
     )
-    resolved_out_path.parent.mkdir(parents=True, exist_ok=True)
-    resolved_out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text_atomic(resolved_out_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return resolved_out_path
 
 

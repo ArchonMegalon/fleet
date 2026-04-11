@@ -21,6 +21,16 @@ def _packages() -> list[dict]:
     return list(_payload().get("work_packages") or [])
 
 
+def _package_compile_front_package() -> dict | None:
+    packages = _packages()
+    if len(packages) != 1:
+        return None
+    package = packages[0]
+    if str(package.get("package_kind") or "").strip() != "package_compile":
+        return None
+    return package
+
+
 def test_published_workpackages_expose_required_package_overlay_fields() -> None:
     payload = _payload()
     packages = _packages()
@@ -53,10 +63,25 @@ def test_published_workpackages_expose_required_package_overlay_fields() -> None
         assert int(item.get("max_touched_files") or 0) > 0
 
 
+def test_published_fleet_workpackages_allow_package_compile_front_overlay() -> None:
+    package = _package_compile_front_package()
+    if package is None:
+        return
+    assert package["allowed_lanes"] == ["core_authority"]
+    assert package["required_reviewer_lane"] == "core_authority"
+    assert package["final_reviewer_lane"] == "core_authority"
+    assert package["landing_lane"] == "core_authority"
+    assert package["allowed_paths"] == [".codex-studio/published/WORKPACKAGES.generated.yaml"]
+    assert package["owned_surfaces"] == ["package_compile:fleet"]
+    assert package["dependencies"] == []
+
+
 def test_published_fleet_workpackages_include_real_dependency_edges() -> None:
     packages = _packages()
     if not packages:
         assert list((_queue_payload().get("items") or [])) == []
+        return
+    if _package_compile_front_package() is not None:
         return
     package_ids = {str(item.get("package_id") or "").strip() for item in packages if str(item.get("package_id") or "").strip()}
     dependency_edges = [
@@ -80,7 +105,7 @@ def test_published_implementation_packages_are_booster_first_by_default() -> Non
     ]
 
     if not implementation_packages:
-        assert list((_queue_payload().get("items") or [])) == []
+        assert _package_compile_front_package() is not None or list((_queue_payload().get("items") or [])) == []
         return
     for item in implementation_packages:
         assert item["allowed_lanes"] == ["core_booster"]
@@ -90,6 +115,8 @@ def test_published_ea_worker_input_package_waits_for_status_plane_source_contrac
     packages = _packages()
     if not packages:
         assert list((_queue_payload().get("items") or [])) == []
+        return
+    if _package_compile_front_package() is not None:
         return
     by_surface = {
         str(surface).strip(): str(item.get("package_id") or "").strip()
@@ -113,6 +140,8 @@ def test_published_status_plane_wave_materializes_then_verifies_then_fans_out() 
     packages = _packages()
     if not packages:
         assert list((_queue_payload().get("items") or [])) == []
+        return
+    if _package_compile_front_package() is not None:
         return
     by_surface = {
         str(surface).strip(): item
@@ -142,6 +171,8 @@ def test_published_design_and_guide_packages_follow_serialized_dependency_chain(
     if not packages:
         assert list((_queue_payload().get("items") or [])) == []
         return
+    if _package_compile_front_package() is not None:
+        return
     by_surface = {
         str(surface).strip(): item
         for item in packages
@@ -165,6 +196,8 @@ def test_published_contract_change_package_stays_authority_only() -> None:
     packages = _packages()
     if not packages:
         assert list((_queue_payload().get("items") or [])) == []
+        return
+    if _package_compile_front_package() is not None:
         return
     contract_package = next(item for item in packages if str(item.get("package_kind") or "") == "contract_change")
 

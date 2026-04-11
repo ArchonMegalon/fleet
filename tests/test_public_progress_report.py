@@ -211,6 +211,413 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertNotIn("average_active_boosters", payload["participation"])
         self.assertNotIn("peak_active_boosters", payload["participation"])
 
+    def test_build_progress_report_payload_does_not_promote_tactical_supervisor_eta_to_full_product_weeks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "config" / "program_milestones.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "projects": {
+                            "alpha": {
+                                "design_total_weight": 10,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                            "beta": {
+                                "design_total_weight": 20,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            supervisor_state = {
+                "mode": "sharded",
+                "frontier_ids": [101, 102, 103],
+                "open_milestone_ids": [101, 102, 103],
+                "active_runs_count": 6,
+                "eta": {
+                    "status": "estimated",
+                    "eta_human": "8-16h",
+                    "eta_confidence": "medium",
+                    "basis": "empirical_open_milestone_burn",
+                    "scope_kind": "open_milestone_frontier",
+                    "scope_label": "Current open milestone frontier",
+                    "scope_warning": "This is a tactical frontier ETA only.",
+                    "remaining_open_milestones": 3,
+                    "remaining_in_progress_milestones": 3,
+                    "remaining_not_started_milestones": 0,
+                },
+            }
+            with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                with mock.patch.object(self.progress, "_load_chummer_design_supervisor_state", return_value=supervisor_state):
+                    payload = self.progress.build_progress_report_payload(
+                        repo_root=root,
+                        now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                        commit_counter=lambda _repo: 0,
+                    )
+
+        self.assertEqual(payload["eta_scope"], "full_product_queue_unestimated")
+        self.assertEqual(payload["eta_summary"], "tracked in full-product frontier")
+        self.assertIsNone(payload["full_product_queue"]["eta"]["eta_weeks_low"])
+        self.assertIsNone(payload["full_product_queue"]["eta"]["eta_weeks_high"])
+        self.assertEqual(payload["full_product_queue"]["eta"]["scope_kind"], "open_milestone_frontier")
+        self.assertIn("should not be read as a full-product parity ETA", payload["release_readiness"]["summary"])
+        self.assertTrue(
+            any("tactical" in str(item).lower() for item in (payload.get("method") or {}).get("limitations") or [])
+        )
+
+    def test_build_progress_report_payload_rebuilds_supervisor_state_from_shards_when_aggregate_state_is_blank(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "config" / "program_milestones.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "projects": {
+                            "alpha": {
+                                "design_total_weight": 10,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                            "beta": {
+                                "design_total_weight": 20,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            state_root = root / "state" / "chummer_design_supervisor"
+            (state_root / "shard-1").mkdir(parents=True, exist_ok=True)
+            (state_root / "shard-2").mkdir(parents=True, exist_ok=True)
+            (state_root / "state.json").write_text(
+                json.dumps({"mode": "sharded", "active_runs_count": 0, "eta": None}),
+                encoding="utf-8",
+            )
+            (state_root / "shard-1" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "updated_at": "2026-04-08T18:04:07Z",
+                        "mode": "flagship_product",
+                        "frontier_ids": [101],
+                        "active_run": {"run_id": "run-1", "frontier_ids": [101]},
+                        "eta": {
+                            "status": "flagship_delivery",
+                            "scope_kind": "flagship_product_readiness",
+                            "remaining_open_milestones": 0,
+                            "remaining_in_progress_milestones": 0,
+                            "remaining_not_started_milestones": 1,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (state_root / "shard-2" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "updated_at": "2026-04-08T18:04:18Z",
+                        "mode": "flagship_product",
+                        "frontier_ids": [102],
+                        "active_run": {"run_id": "run-2", "frontier_ids": [102]},
+                        "eta": {
+                            "status": "flagship_delivery",
+                            "scope_kind": "flagship_product_readiness",
+                            "remaining_open_milestones": 0,
+                            "remaining_in_progress_milestones": 0,
+                            "remaining_not_started_milestones": 1,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.progress, "DEFAULT_DESIGN_SUPERVISOR_STATE_PATH", state_root / "state.json"):
+                with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                    payload = self.progress.build_progress_report_payload(
+                        repo_root=root,
+                        now=dt.datetime(2026, 4, 8, 18, 5, tzinfo=UTC),
+                        commit_counter=lambda _repo: 0,
+                    )
+
+        self.assertEqual(payload["eta_scope"], "full_product_queue_unestimated")
+        self.assertEqual(payload["eta_summary"], "tracked in full-product frontier")
+        self.assertEqual(payload["full_product_queue"]["active_runs_count"], 2)
+        self.assertEqual(payload["full_product_queue"]["open_frontier_milestones"], 2)
+        self.assertEqual(payload["full_product_queue"]["eta"]["scope_kind"], "flagship_product_readiness")
+        self.assertEqual(payload["full_product_queue"]["eta"]["remaining_open_milestones"], 2)
+        self.assertIsNone(payload["full_product_queue"]["eta"]["eta_weeks_low"])
+        self.assertIsNone(payload["full_product_queue"]["eta"]["eta_weeks_high"])
+
+    def test_build_progress_report_payload_skips_blank_shard_state_files_when_rebuilding_supervisor_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "config" / "program_milestones.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "projects": {
+                            "alpha": {
+                                "design_total_weight": 10,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                            "beta": {
+                                "design_total_weight": 20,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            state_root = root / "state" / "chummer_design_supervisor"
+            (state_root / "shard-1").mkdir(parents=True, exist_ok=True)
+            (state_root / "shard-2").mkdir(parents=True, exist_ok=True)
+            (state_root / "state.json").write_text("", encoding="utf-8")
+            (state_root / "shard-1" / "state.json").write_text(
+                json.dumps(
+                    {
+                        "updated_at": "2026-04-08T18:04:18Z",
+                        "mode": "flagship_product",
+                        "frontier_ids": [102],
+                        "active_run": {"run_id": "run-2", "frontier_ids": [102]},
+                        "eta": {
+                            "status": "flagship_delivery",
+                            "scope_kind": "flagship_product_readiness",
+                            "remaining_open_milestones": 0,
+                            "remaining_in_progress_milestones": 0,
+                            "remaining_not_started_milestones": 1,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (state_root / "shard-2" / "state.json").write_text("", encoding="utf-8")
+            with mock.patch.object(self.progress, "DEFAULT_DESIGN_SUPERVISOR_STATE_PATH", state_root / "state.json"):
+                with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                    payload = self.progress.build_progress_report_payload(
+                        repo_root=root,
+                        now=dt.datetime(2026, 4, 8, 18, 5, tzinfo=UTC),
+                        commit_counter=lambda _repo: 0,
+                    )
+
+        self.assertEqual(payload["full_product_queue"]["active_runs_count"], 1)
+        self.assertEqual(payload["full_product_queue"]["open_frontier_milestones"], 1)
+        self.assertEqual(payload["full_product_queue"]["eta"]["scope_kind"], "flagship_product_readiness")
+        self.assertEqual(payload["full_product_queue"]["eta"]["remaining_open_milestones"], 1)
+
+    def test_build_progress_report_payload_clamps_false_completion_when_repo_backlog_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "fleet-repo").mkdir(parents=True, exist_ok=True)
+            (root / "fleet-repo" / "WORKLIST.md").write_text(
+                "\n".join(
+                    [
+                        "# Worklist Queue",
+                        "",
+                        "| ID | Status | Priority | Task | Owner | Notes |",
+                        "|---|---|---|---|---|---|",
+                        "| WL-300 | queued | P0 | Restore live queue truth | agent | note |",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "config" / "projects" / "fleet.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "id": "fleet",
+                        "path": str(root / "fleet-repo"),
+                        "review": {"repo": "fleet"},
+                        "lifecycle": "live",
+                        "queue": [],
+                        "queue_sources": [{"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"}],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / "config" / "program_milestones.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "projects": {
+                            "alpha": {
+                                "design_total_weight": 10,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                            "beta": {
+                                "design_total_weight": 20,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.progress, "_load_chummer_design_supervisor_state", return_value={}):
+                with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                    payload = self.progress.build_progress_report_payload(
+                        repo_root=root,
+                        now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                        commit_counter=lambda _repo: 0,
+                    )
+
+        self.assertEqual(payload["overall_progress_percent"], 99)
+        self.assertEqual(payload["progress_percent"], 99)
+        self.assertEqual(payload["percent_complete"], 99)
+        self.assertEqual(payload["active_slice"], "Restore live queue truth")
+        self.assertEqual(payload["eta_summary"], "tracked in repo backlog")
+        self.assertEqual(payload["release_readiness"]["status"], "warning")
+        self.assertTrue(any(risk.get("key") == "repo_local_backlog" for risk in payload["top_risks"]))
+        self.assertEqual(payload["repo_backlog"]["open_item_count"], 1)
+        self.assertEqual(payload["repo_backlog"]["open_project_count"], 1)
+        self.assertEqual(payload["repo_backlog"]["lead_task"], "Restore live queue truth")
+
+    def test_build_progress_report_payload_surfaces_flagship_truth_from_upstream_proofs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            (root / "config" / "program_milestones.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "projects": {
+                            "alpha": {
+                                "design_total_weight": 10,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                            "beta": {
+                                "design_total_weight": 20,
+                                "uncovered_scope": [],
+                                "remaining_milestones": [],
+                            },
+                        }
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            proof_dir = root / "proofs"
+            proof_dir.mkdir(parents=True, exist_ok=True)
+
+            import_parity_path = proof_dir / "IMPORT_PARITY_CERTIFICATION.generated.json"
+            import_parity_path.write_text(json.dumps({"status": "passed"}), encoding="utf-8")
+            chummer5a_path = proof_dir / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+            chummer5a_path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            sr4_path = proof_dir / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+            sr4_path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            sr6_path = proof_dir / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+            sr6_path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            visual_path = proof_dir / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+            visual_path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
+            executable_path = proof_dir / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+            executable_path.write_text(
+                json.dumps(
+                    {
+                        "status": "fail",
+                        "summary": "Desktop executable exit gate is not fully proven.",
+                        "reasons": [
+                            "Release channel does not publish desktop install media for required platform 'windows'.",
+                            "Windows gate reason: Windows startup smoke requires a Windows-capable host; current host cannot run promoted Windows installer smoke.",
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(self.progress, "DEFAULT_IMPORT_PARITY_CERTIFICATION_PATH", import_parity_path):
+                with mock.patch.object(self.progress, "DEFAULT_CHUMMER5A_DESKTOP_WORKFLOW_PARITY_PATH", chummer5a_path):
+                    with mock.patch.object(self.progress, "DEFAULT_SR4_DESKTOP_WORKFLOW_PARITY_PATH", sr4_path):
+                        with mock.patch.object(self.progress, "DEFAULT_SR6_DESKTOP_WORKFLOW_PARITY_PATH", sr6_path):
+                            with mock.patch.object(self.progress, "DEFAULT_DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE_PATH", visual_path):
+                                with mock.patch.object(self.progress, "DEFAULT_DESKTOP_EXECUTABLE_EXIT_GATE_PATH", executable_path):
+                                    with mock.patch.object(self.progress, "load_progress_history_payload", return_value={"snapshots": []}):
+                                        payload = self.progress.build_progress_report_payload(
+                                            repo_root=root,
+                                            now=dt.datetime(2026, 3, 23, 10, 0, tzinfo=UTC),
+                                            commit_counter=lambda _repo: 0,
+                                        )
+
+        self.assertEqual(payload["flagship_readiness"]["status"], "warning")
+        self.assertTrue(payload["flagship_readiness"]["feature_parity_proven"])
+        self.assertTrue(payload["flagship_readiness"]["layout_familiarity_proven"])
+        self.assertEqual(payload["release_readiness"]["status"], "warning")
+        self.assertIn("Windows installer/startup evidence", payload["release_readiness"]["summary"])
+        self.assertEqual(payload["parity"]["status"], "warning")
+        self.assertIn("desktop visual-familiarity gate is green", payload["parity"]["summary"])
+        self.assertTrue(any(risk.get("key") == "flagship_release_truth" for risk in payload["top_risks"]))
+
+    def test_repo_local_backlog_snapshot_dedupes_same_task_across_multiple_queue_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._seed_repo_root(root)
+            repo = root / "ui-repo"
+            repo.mkdir(parents=True, exist_ok=True)
+            duplicate_task = "Improve onboarding trust copy"
+            (repo / "WORKLIST.md").write_text(
+                "\n".join(
+                    [
+                        "# Worklist Queue",
+                        "",
+                        "| ID | Status | Priority | Task | Owner | Notes |",
+                        "|---|---|---|---|---|---|",
+                        f"| WL-240 | queued | P0 | {duplicate_task} | agent | note |",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "external-ui-worklist.md").write_text(
+                "\n".join(
+                    [
+                        "# Worklist Queue",
+                        "",
+                        "| ID | Status | Priority | Task | Owner | Notes |",
+                        "|---|---|---|---|---|---|",
+                        f"| WL-241 | queued | P1 | {duplicate_task} | agent | duplicate |",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "config" / "projects" / "ui.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "id": "ui",
+                        "path": str(repo),
+                        "review": {"repo": "ui"},
+                        "lifecycle": "live",
+                        "queue": [],
+                        "queue_sources": [
+                            {"kind": "worklist", "path": "WORKLIST.md", "mode": "replace"},
+                            {"kind": "worklist", "path": str(root / "external-ui-worklist.md"), "mode": "append"},
+                        ],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+
+            snapshot = self.progress._repo_local_backlog_snapshot(self.progress._project_configs(root / "config" / "projects"))
+
+        self.assertEqual(snapshot["open_item_count"], 1)
+        self.assertEqual(snapshot["open_project_count"], 1)
+        self.assertEqual(snapshot["lead_task"], duplicate_task)
+        self.assertEqual(snapshot["open_items"], [{"project_id": "ui", "repo_slug": "ui", "task": duplicate_task}])
+
     def test_render_progress_report_html_contains_participation_link_and_poster(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

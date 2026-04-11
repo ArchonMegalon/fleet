@@ -3,7 +3,7 @@ lifecycle: live
 dispatch_priority: 260
 path: /docker/fleet
 design_doc: /docker/fleet/README.md
-verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_public_progress_report.py::PublicProgressReportTests::test_published_progress_report_matches_generated_contract tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_capacity_plane.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
+verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out .codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_capacity_plane.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
 feedback_dir: feedback
 state_file: .agent-state.json
 enabled: true
@@ -50,7 +50,8 @@ account_policy:
   - acct-ea-review-light
   - acct-ea-jury
   - acct-ea-survival
-  emergency_chatgpt_fallback_accounts: []
+  emergency_chatgpt_fallback_accounts:
+  - acct-chatgpt-archon
   allow_chatgpt_accounts: false
   allow_api_accounts: true
   spark_enabled: false
@@ -107,5 +108,74 @@ workflow:
   first_review_required: true
   jury_acceptance_required: true
   core_rescue_after_round: 0
-queue: []
-queue_sources: []
+queue:
+- package_id: fleet-postclient-trust-status
+  title: Make fleet trust and status publication strictly live-truth so stale aggregate snapshots, poisoned completion receipts, and misleading ETA/currentness states cannot survive into post-client operations.
+  package_kind: implementation
+  design_owner: fleet-platform
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+- package_id: fleet-postclient-project-config-extraction
+  title: Extract Chummer-specific shard topology, focus heuristics, proof paths, and owner-group routing out of launcher logic into explicit project configuration contracts.
+  package_kind: implementation
+  design_owner: fleet-platform
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  dependencies:
+  - fleet-postclient-trust-status
+- package_id: fleet-postclient-operating-profiles
+  title: Add steady-state fleet operating profiles (`maintenance`, `standard`, `burst`) with explicit shard caps, resource budgets, and safe promotion-demotion rules.
+  package_kind: implementation
+  design_owner: fleet-platform
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  dependencies:
+  - fleet-postclient-trust-status
+- package_id: fleet-postclient-proof-orchestration
+  title: Promote executable gates, parity proofs, and flagship-readiness materializers into first-class orchestrated jobs with freshness windows, retries, and dependency edges.
+  package_kind: implementation
+  design_owner: fleet-platform
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  dependencies:
+  - fleet-postclient-project-config-extraction
+- package_id: fleet-postclient-operator-surface
+  title: Build a compact operator surface for shard mix, queue health, proof freshness, account health, resource pressure, and blocked milestones.
+  package_kind: implementation
+  design_owner: fleet-operator-loop
+  architecture_sensitive: false
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  dependencies:
+  - fleet-postclient-trust-status
+- package_id: fleet-postclient-restart-safe-config
+  title: Consolidate restart-safe fleet runtime configuration and validate reboot recovery behavior so policy survives supervisor restarts and host reboots without tribal knowledge.
+  package_kind: implementation
+  design_owner: fleet-platform
+  architecture_sensitive: true
+  premium_required: true
+  allow_credit_burn: true
+  allowed_lanes:
+  - core_booster
+  dependencies:
+  - fleet-postclient-project-config-extraction
+  - fleet-postclient-operating-profiles
+queue_sources:
+- kind: worklist
+  path: WORKLIST.md
+  mode: replace
+  fallback_only_if_empty: true

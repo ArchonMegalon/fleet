@@ -16,13 +16,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
+try:
+    from scripts.external_proof_paths import resolve_release_channel_path
+except ModuleNotFoundError:
+    from external_proof_paths import resolve_release_channel_path
 
 
 ROOT = Path("/docker/fleet")
 DEFAULT_OUT_PATH = Path("/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json")
 DEFAULT_SOURCE_MIRROR_NAME = "SUPPORT_CASE_SOURCE_MIRROR.generated.json"
-DEFAULT_RELEASE_CHANNEL_PATH = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
+DEFAULT_RELEASE_CHANNEL_PATH = resolve_release_channel_path()
 DEFAULT_RUNTIME_ENV_CANDIDATES = (
     ROOT / "runtime.env",
     ROOT / ".env",
@@ -154,7 +158,7 @@ def _support_source_request_headers(source: str, *, bearer_token: str = "") -> D
         headers["Authorization"] = f"Bearer {bearer_token}"
     parsed = urllib.parse.urlparse(str(source or "").strip())
     hostname = _normalize_text(parsed.hostname).lower()
-    if hostname == "127.0.0.1" and _normalize_text(parsed.path) == "/api/v1/support/cases/triage":
+    if hostname in {"127.0.0.1", "host.docker.internal", "localhost"} and _normalize_text(parsed.path) == "/api/v1/support/cases/triage":
         headers.setdefault("Host", "chummer.run")
         headers.setdefault("X-Forwarded-Proto", "https")
     return headers
@@ -301,8 +305,7 @@ def _build_source_mirror_payload(source_payload: Dict[str, Any], *, source_label
 
 def _write_source_mirror(path: Path, source_payload: Dict[str, Any], *, source_label: str) -> None:
     mirror_payload = _build_source_mirror_payload(source_payload, source_label=source_label)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text_atomic(path, json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n")
 
 
 def _load_cached_source_mirror(path: Path) -> Dict[str, Any]:
@@ -1504,8 +1507,7 @@ def _seed_source_mirror_from_cached_packets(path: Path, existing_payload: Dict[s
         "origin_source_kind": _source_kind(source_label),
         "seeded_from_cached_packets_generated_at": _normalize_text(existing_payload.get("generated_at")),
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text_atomic(path, json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n")
     return _normalize_source_payload(mirror_payload)
 
 
@@ -1639,27 +1641,29 @@ def main(argv: List[str] | None = None) -> int:
         payload = build_packets_payload(source_payload, source_label, release_channel_index=release_channel_index)
         _write_source_mirror(source_mirror_path, source_payload, source_label=source_label)
     except SystemExit as exc:
+        refresh_error = str(exc)
         cached_payload = _load_cached_packets_payload(out_path)
-        if not _is_auth_refresh_error(str(exc)):
+        remote_source = _source_kind(source_label) == "remote_url"
+        if not remote_source and not _is_auth_refresh_error(refresh_error):
             raise
+        payload = {}
         authoritative_fallback_errors: List[str] = []
-        for candidate_source in _candidate_authoritative_fallback_sources(source_label):
-            try:
-                source_payload, resolved_label = _load_json_source(candidate_source, bearer_token=bearer_token)
-                payload = build_packets_payload(source_payload, resolved_label, release_channel_index=release_channel_index)
-                source = dict(payload.get("source") or {})
-                source["refresh_mode"] = "local_authoritative_fallback"
-                source["origin_source_label"] = _normalize_text(source_label)
-                source["origin_source_kind"] = _source_kind(source_label)
-                payload["source"] = source
-                _write_source_mirror(source_mirror_path, source_payload, source_label=source_label)
-                break
-            except SystemExit as fallback_exc:
-                authoritative_fallback_errors.append(str(fallback_exc))
-        else:
-            payload = {}
+        if remote_source:
+            for candidate_source in _candidate_authoritative_fallback_sources(source_label):
+                try:
+                    source_payload, resolved_label = _load_json_source(candidate_source, bearer_token=bearer_token)
+                    payload = build_packets_payload(source_payload, resolved_label, release_channel_index=release_channel_index)
+                    source = dict(payload.get("source") or {})
+                    source["refresh_mode"] = "local_authoritative_fallback"
+                    source["origin_source_label"] = _normalize_text(source_label)
+                    source["origin_source_kind"] = _source_kind(source_label)
+                    payload["source"] = source
+                    _write_source_mirror(source_mirror_path, source_payload, source_label=source_label)
+                    break
+                except SystemExit as fallback_exc:
+                    authoritative_fallback_errors.append(str(fallback_exc))
         if payload:
-            print(f"support-case source refresh fell back to local authoritative source after auth failure: {exc}", file=sys.stderr)
+            print(f"support-case source refresh fell back to local authoritative source: {exc}", file=sys.stderr)
         else:
             if authoritative_fallback_errors:
                 print(
@@ -1694,8 +1698,7 @@ def main(argv: List[str] | None = None) -> int:
         elif not payload:
             raise
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_text_atomic(out_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
     manifest_repo_root = repo_root_for_published_path(out_path)
     if manifest_repo_root is not None:

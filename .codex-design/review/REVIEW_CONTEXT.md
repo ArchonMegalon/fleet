@@ -11,3 +11,7 @@
   - participation credit must derive from validated receipts after meaningful work events.
 - Keep Fleet scoped to execution policy, worker lifecycle, and landing control:
   - product architecture, contract canon, and consent UX truth still belong in `chummer6-design` and `chummer6-hub`.
+- Flag any change that weakens the desktop flagship review bar as P1:
+  - a real `File` menu, first-class master-index and character-roster routes, workbench-first startup instead of decorative landing or mainframe shell, and in-product installer or first-run claim handling instead of browser-only claim-code ritual are required.
+- Reject generic dashboard shell or framework-first installer choice as acceptable modernization:
+  - Fleet must fail closed until the shipped desktop proof reads like Chummer rather than a themed scaffold.

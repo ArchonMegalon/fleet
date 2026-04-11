@@ -8,6 +8,7 @@ import pathlib
 import re
 import sqlite3
 import sys
+import threading
 import traceback
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -34,6 +35,8 @@ APP_TITLE = "Codex Fleet Auditor"
 DEFAULT_SINGLETON_GROUP_ROLES = ["auditor", "healer", "project_manager"]
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 FLEET_MOUNT_ROOT = pathlib.Path(os.environ.get("FLEET_MOUNT_ROOT", "/docker/fleet"))
+_DB_WAL_READY = False
+_DB_WAL_LOCK = threading.Lock()
 
 
 def _default_config_root() -> pathlib.Path:
@@ -90,9 +93,19 @@ def db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
+    global _DB_WAL_READY
+    if not _DB_WAL_READY:
+        with _DB_WAL_LOCK:
+            if not _DB_WAL_READY:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower():
+                        raise
+                else:
+                    _DB_WAL_READY = True
     return conn
 
 

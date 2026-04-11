@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import datetime as dt
 import hashlib
@@ -13,11 +14,13 @@ import json
 import os
 import pwd
 import re
+import signal
 import socket
 import stat
 import subprocess
 import sys
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -34,6 +37,13 @@ try:
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from materialize_flagship_product_readiness import materialize_flagship_product_readiness
+
+
+def _env_float_default(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)) or str(default))
+    except (TypeError, ValueError):
+        return float(default)
 
 
 def _default_worker_timeout_seconds() -> float:
@@ -94,6 +104,7 @@ DEFAULT_ROADMAP_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "ROADMAP.md"
 DEFAULT_GOLDEN_JOURNEY_GATES_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "GOLDEN_JOURNEY_RELEASE_GATES.yaml"
 DEFAULT_WEEKLY_PULSE_PATH = DEFAULT_DESIGN_PRODUCT_ROOT / "WEEKLY_PRODUCT_PULSE.generated.json"
 DEFAULT_HANDOFF_PATH = DEFAULT_WORKSPACE_ROOT / "NEXT_SESSION_HANDOFF.md"
+DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME = "ACTIVE_RUN_HANDOFF.generated.md"
 DEFAULT_PROJECTS_DIR = DEFAULT_WORKSPACE_ROOT / "config" / "projects"
 DEFAULT_STATUS_PLANE_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEFAULT_PROGRESS_REPORT_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -157,6 +168,42 @@ CORE_BATCH_RUNTIME_MODELS = frozenset(
         "ea-coder-best",
     }
 )
+MODEL_COMPATIBILITY_FALLBACKS: Dict[str, tuple[str, ...]] = {
+    "ea-coder-hard": ("ea-coder-hard-batch",),
+}
+LANE_MODEL_COMPATIBILITY_FALLBACKS: Dict[str, Dict[str, tuple[str, ...]]] = {
+    "core": {
+        "repair": ("ea-coder-fast",),
+        "survival": ("ea-coder-survival",),
+    },
+    "core_rescue": {
+        "repair": ("ea-coder-fast",),
+        "survival": ("ea-coder-survival",),
+    },
+    "jury": {
+        "core": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "repair": ("ea-coder-fast",),
+        "survival": ("ea-coder-survival",),
+    },
+    "audit_shard": {
+        "jury": ("ea-coder-hard-batch",),
+        "review_light": ("ea-coder-hard-batch",),
+        "core": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "core_rescue": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "repair": ("ea-coder-fast",),
+        "survival": ("ea-coder-survival",),
+        "easy": ("",),
+    },
+    "review_shard": {
+        "jury": ("ea-coder-hard-batch",),
+        "review_light": ("ea-coder-hard-batch",),
+        "core": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "core_rescue": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "repair": ("ea-coder-fast",),
+        "survival": ("ea-coder-survival",),
+        "easy": ("",),
+    },
+}
 ACCOUNT_DIRECT_FALLBACK_RESCUE_MODELS = ("ea-coder-hard",)
 DEFAULT_FALLBACK_WORKER_LANES = {
     "core": ("core_rescue", "survival", "repair"),
@@ -182,6 +229,40 @@ DEFAULT_EA_PROVIDER_HEALTH_URL = os.environ.get(
 DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS = max(
     0.5,
     float(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS", "4") or "4"),
+)
+DEFAULT_MEMORY_DISPATCH_RESERVE_GIB = max(
+    0.0,
+    _env_float_default("CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB", 4.0),
+)
+DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB = max(
+    0.25,
+    _env_float_default("CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB", 1.5),
+)
+DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT = min(
+    100.0,
+    max(0.0, _env_float_default("CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT", 12.0)),
+)
+DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT = min(
+    DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT,
+    max(0.0, _env_float_default("CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT", 8.0)),
+)
+DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT = min(
+    100.0,
+    max(0.0, _env_float_default("CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT", 75.0)),
+)
+DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT = min(
+    100.0,
+    max(
+        DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT,
+        _env_float_default("CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT", 90.0),
+    ),
+)
+DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS = max(
+    DEFAULT_POLL_SECONDS,
+    _env_float_default(
+        "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_PARKED_POLL_SECONDS",
+        DEFAULT_FAILURE_BACKOFF_SECONDS,
+    ),
 )
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
@@ -256,6 +337,7 @@ ETA_EXTERNAL_BLOCKER_SIGNALS = (
     "session is expired",
     "could not be refreshed",
 )
+WORKER_STATUS_BLOCK_EXIT_CODE = 64
 OPENAI_ESCAPE_HATCH_TRIGGER_SIGNALS = (
     "upstream_timeout",
     "background_timeout",
@@ -540,6 +622,7 @@ class WorkerAccount:
     forced_chatgpt_workspace_id: str
     openai_base_url: str
     home_dir: str
+    lane: str = ""
     max_parallel_runs: int = 1
 
 
@@ -585,6 +668,9 @@ class ActiveWorkerRun:
     attempt_index: int
     total_attempts: int
     watchdog_timeout_seconds: float
+    worker_pid: int = 0
+    worker_first_output_at: str = ""
+    worker_last_output_at: str = ""
 
 
 def _runtime_env_default(name: str, default: str = "") -> str:
@@ -650,6 +736,47 @@ def _runtime_env_default_with_workspace(
             if resolved:
                 return resolved
     return default
+
+
+def _dynamic_account_routing_enabled(
+    workspace_root: Path,
+    *,
+    worker_lane: str = "",
+    worker_model: str = "",
+) -> bool:
+    pin_aliases = (
+        _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_PIN_ACCOUNT_ALIASES", workspace_root, "")
+        .strip()
+        .lower()
+    )
+    if pin_aliases in {"1", "true", "yes", "on"}:
+        return False
+    mode = (
+        _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_DYNAMIC_ACCOUNT_ROUTING", workspace_root, "auto")
+        .strip()
+        .lower()
+    )
+    if mode in {"1", "true", "yes", "on", "dynamic"}:
+        return True
+    if mode in {"0", "false", "no", "off", "pinned"}:
+        return False
+    clean_model = str(worker_model or "").strip().lower()
+    clean_lane = str(worker_lane or "").strip().lower()
+    if clean_model.startswith("ea-"):
+        return True
+    return clean_lane in {
+        "easy",
+        "repair",
+        "groundwork",
+        "review_light",
+        "core",
+        "core_authority",
+        "core_booster",
+        "core_rescue",
+        "review_shard",
+        "audit_shard",
+        "survival",
+    }
 
 
 DEFAULT_WORKER_TIMEOUT_SECONDS = _default_worker_timeout_seconds()
@@ -879,6 +1006,60 @@ def parse_args() -> argparse.Namespace:
                 f"(default: {DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS:g})."
             ),
         )
+        subparser.add_argument(
+            "--memory-dispatch-reserve-gib",
+            type=float,
+            default=DEFAULT_MEMORY_DISPATCH_RESERVE_GIB,
+            help=(
+                "Minimum host RAM headroom to keep free before idle shards are allowed to dispatch more work "
+                f"(default: {DEFAULT_MEMORY_DISPATCH_RESERVE_GIB:g} GiB)."
+            ),
+        )
+        subparser.add_argument(
+            "--memory-dispatch-shard-budget-gib",
+            type=float,
+            default=DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB,
+            help=(
+                "Approximate RAM budget reserved per concurrently dispatching shard when memory-based throttling is active "
+                f"(default: {DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB:g} GiB)."
+            ),
+        )
+        subparser.add_argument(
+            "--memory-dispatch-warning-available-percent",
+            type=float,
+            default=DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT,
+            help=(
+                "Start treating host memory as constrained when MemAvailable falls below this percent of total RAM "
+                f"(default: {DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT:g})."
+            ),
+        )
+        subparser.add_argument(
+            "--memory-dispatch-critical-available-percent",
+            type=float,
+            default=DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT,
+            help=(
+                "Enter critical memory throttling when MemAvailable falls below this percent of total RAM "
+                f"(default: {DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT:g})."
+            ),
+        )
+        subparser.add_argument(
+            "--memory-dispatch-warning-swap-used-percent",
+            type=float,
+            default=DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT,
+            help=(
+                "Start treating host memory as constrained when swap usage reaches this percent "
+                f"(default: {DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT:g})."
+            ),
+        )
+        subparser.add_argument(
+            "--memory-dispatch-critical-swap-used-percent",
+            type=float,
+            default=DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT,
+            help=(
+                "Enter critical memory throttling when swap usage reaches this percent "
+                f"(default: {DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT:g})."
+            ),
+        )
 
     once_parser = subparsers.add_parser("once", help="Launch one bounded worker run from the current design frontier.")
     add_shared_flags(once_parser)
@@ -904,6 +1085,15 @@ def parse_args() -> argparse.Namespace:
         help=f"Pause after a failed worker run before retrying (default: {DEFAULT_FAILURE_BACKOFF_SECONDS}).",
     )
     loop_parser.add_argument(
+        "--memory-dispatch-parked-poll-seconds",
+        type=float,
+        default=DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS,
+        help=(
+            "Sleep this long before rechecking a parked shard when memory throttling blocks dispatch "
+            f"(default: {DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS})."
+        ),
+    )
+    loop_parser.add_argument(
         "--max-runs",
         type=int,
         default=0,
@@ -921,6 +1111,11 @@ def parse_args() -> argparse.Namespace:
         "--json",
         action="store_true",
         help="Render status as JSON.",
+    )
+    status_parser.add_argument(
+        "--live-refresh",
+        action="store_true",
+        help="Refresh heavyweight completion/flagship audits before rendering status.",
     )
 
     eta_parser = subparsers.add_parser("eta", help="Estimate completion ETA from live design state and recent history.")
@@ -1019,6 +1214,359 @@ def _coerce_float(value: Any) -> Optional[float]:
         return None
 
 
+def _gib_to_bytes(value: Any, *, default_gib: float) -> int:
+    gib = _coerce_float(value)
+    if gib is None:
+        gib = float(default_gib)
+    return max(0, int(gib * (1024**3)))
+
+
+def _read_proc_meminfo_bytes(path: Path = Path("/proc/meminfo")) -> Dict[str, int]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    payload: Dict[str, int] = {}
+    for line in raw.splitlines():
+        if ":" not in line:
+            continue
+        key, rest = line.split(":", 1)
+        match = re.match(r"\s*(\d+)\s*kB\b", rest, flags=re.I)
+        if not match:
+            continue
+        payload[str(key).strip()] = int(match.group(1)) * 1024
+    return payload
+
+
+def _format_gib(value: Any) -> str:
+    if value in (None, ""):
+        return "unknown"
+    try:
+        return f"{float(value) / float(1024**3):.2f} GiB"
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def _active_shard_names(aggregate_root: Path) -> List[str]:
+    names: List[str] = []
+    for shard_root in _configured_shard_roots(aggregate_root):
+        state = _read_state(_state_payload_path(shard_root))
+        active_run = (state.get("active_run") or {}) if isinstance(state.get("active_run"), dict) else {}
+        if str(active_run.get("run_id") or "").strip():
+            names.append(shard_root.name)
+    return names
+
+
+def _eligible_shard_names_for_dispatch(
+    configured_shard_names: Sequence[str],
+    active_shard_names: Sequence[str],
+    *,
+    allowed_active_shards: int,
+) -> List[str]:
+    limit = max(0, int(allowed_active_shards))
+    if limit <= 0:
+        return []
+    configured = [str(item).strip() for item in configured_shard_names if str(item).strip()]
+    if not configured:
+        return []
+    active = {str(item).strip() for item in active_shard_names if str(item).strip()}
+    eligible: List[str] = []
+    for name in configured:
+        if name not in active:
+            continue
+        eligible.append(name)
+        if len(eligible) >= limit:
+            return eligible
+    for name in configured:
+        if name in active or name in eligible:
+            continue
+        eligible.append(name)
+        if len(eligible) >= limit:
+            break
+    return eligible
+
+
+def _severity_rank(level: str) -> int:
+    return {
+        "ok": 0,
+        "warning": 1,
+        "critical": 2,
+        "unknown": -1,
+    }.get(str(level or "").strip().lower(), -1)
+
+
+def _memory_dispatch_snapshot(
+    args: argparse.Namespace,
+    state_root: Path,
+    *,
+    meminfo_bytes: Optional[Dict[str, int]] = None,
+) -> Dict[str, Any]:
+    resolved_state_root = Path(state_root).resolve()
+    aggregate_root = _aggregate_state_root(resolved_state_root)
+    configured_shards = _configured_shard_roots(aggregate_root)
+    configured_shard_names = [item.name for item in configured_shards]
+    configured_shard_count = len(configured_shards)
+    current_shard_name = resolved_state_root.name if resolved_state_root.name.startswith("shard-") else ""
+    meminfo = dict(meminfo_bytes or _read_proc_meminfo_bytes())
+    snapshot: Dict[str, Any] = {
+        "updated_at": _iso_now(),
+        "status": "unknown",
+        "reason": "host memory telemetry unavailable",
+        "mem_total_bytes": 0,
+        "mem_available_bytes": 0,
+        "mem_available_percent": None,
+        "swap_total_bytes": 0,
+        "swap_free_bytes": 0,
+        "swap_used_percent": None,
+        "dispatch_reserve_bytes": _gib_to_bytes(
+            getattr(args, "memory_dispatch_reserve_gib", DEFAULT_MEMORY_DISPATCH_RESERVE_GIB),
+            default_gib=DEFAULT_MEMORY_DISPATCH_RESERVE_GIB,
+        ),
+        "per_shard_budget_bytes": _gib_to_bytes(
+            getattr(args, "memory_dispatch_shard_budget_gib", DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB),
+            default_gib=DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB,
+        ),
+        "configured_shard_count": configured_shard_count,
+        "configured_shard_names": configured_shard_names,
+        "allowed_active_shards": configured_shard_count,
+        "eligible_shard_names": list(configured_shard_names),
+        "active_shard_count": 0,
+        "active_shard_names": [],
+        "current_shard_name": current_shard_name,
+        "dispatch_allowed": True,
+        "throttled": False,
+    }
+    if not meminfo:
+        return snapshot
+
+    mem_total_bytes = max(0, _coerce_int(meminfo.get("MemTotal"), 0))
+    mem_available_bytes = max(
+        0,
+        _coerce_int(meminfo.get("MemAvailable"), 0) or _coerce_int(meminfo.get("MemFree"), 0),
+    )
+    swap_total_bytes = max(0, _coerce_int(meminfo.get("SwapTotal"), 0))
+    swap_free_bytes = max(0, _coerce_int(meminfo.get("SwapFree"), 0))
+    mem_available_percent = (
+        round((float(mem_available_bytes) / float(mem_total_bytes)) * 100.0, 2) if mem_total_bytes > 0 else None
+    )
+    swap_used_percent = None
+    if swap_total_bytes > 0:
+        swap_used_percent = round(
+            (float(max(0, swap_total_bytes - swap_free_bytes)) / float(swap_total_bytes)) * 100.0,
+            2,
+        )
+
+    reserve_bytes = max(0, _coerce_int(snapshot.get("dispatch_reserve_bytes"), 0))
+    per_shard_budget_bytes = max(1, _coerce_int(snapshot.get("per_shard_budget_bytes"), 0))
+    headroom_bytes = max(0, mem_available_bytes - reserve_bytes)
+    budget_cap = 0
+    if configured_shard_count > 0 and headroom_bytes > 0:
+        budget_cap = int((headroom_bytes + per_shard_budget_bytes - 1) // per_shard_budget_bytes)
+    budget_cap = max(0, min(configured_shard_count, budget_cap))
+
+    warning_available_percent = min(
+        100.0,
+        max(
+            0.0,
+            _coerce_float(
+                getattr(args, "memory_dispatch_warning_available_percent", DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT)
+            )
+            or DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT,
+        ),
+    )
+    critical_available_percent = min(
+        warning_available_percent,
+        max(
+            0.0,
+            _coerce_float(
+                getattr(args, "memory_dispatch_critical_available_percent", DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT)
+            )
+            or DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT,
+        ),
+    )
+    warning_swap_used_percent_raw = (
+        _coerce_float(
+            getattr(args, "memory_dispatch_warning_swap_used_percent", DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT)
+        )
+        or DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT
+    )
+    critical_swap_used_percent_raw = (
+        _coerce_float(
+            getattr(args, "memory_dispatch_critical_swap_used_percent", DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT)
+        )
+        or DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT
+    )
+    if warning_swap_used_percent_raw > 100.0 and critical_swap_used_percent_raw > 100.0:
+        warning_swap_used_percent = None
+        critical_swap_used_percent = None
+    else:
+        warning_swap_used_percent = min(100.0, max(0.0, warning_swap_used_percent_raw))
+        critical_swap_used_percent = min(
+            100.0,
+            max(
+                warning_swap_used_percent,
+                critical_swap_used_percent_raw,
+            ),
+        )
+
+    status = "ok"
+    reasons: List[str] = []
+    if configured_shard_count > 0 and budget_cap < configured_shard_count:
+        status = "warning"
+        reasons.append(
+            f"available headroom {_format_gib(mem_available_bytes)} minus reserve {_format_gib(reserve_bytes)} caps shard dispatch at {budget_cap}/{configured_shard_count}"
+        )
+    if mem_available_percent is not None and mem_available_percent <= critical_available_percent:
+        status = "critical"
+        reasons.append(
+            f"MemAvailable is {mem_available_percent:.2f}% <= critical {critical_available_percent:.2f}%"
+        )
+    elif mem_available_percent is not None and mem_available_percent <= warning_available_percent and _severity_rank(status) < 1:
+        status = "warning"
+        reasons.append(f"MemAvailable is {mem_available_percent:.2f}% <= warning {warning_available_percent:.2f}%")
+    if (
+        swap_used_percent is not None
+        and critical_swap_used_percent is not None
+        and swap_used_percent >= critical_swap_used_percent
+    ):
+        status = "critical"
+        reasons.append(f"swap used is {swap_used_percent:.2f}% >= critical {critical_swap_used_percent:.2f}%")
+    elif (
+        swap_used_percent is not None
+        and warning_swap_used_percent is not None
+        and swap_used_percent >= warning_swap_used_percent
+        and _severity_rank(status) < 1
+    ):
+        status = "warning"
+        reasons.append(f"swap used is {swap_used_percent:.2f}% >= warning {warning_swap_used_percent:.2f}%")
+
+    allowed_active_shards = configured_shard_count
+    if configured_shard_count > 0:
+        allowed_active_shards = min(configured_shard_count, budget_cap)
+        if status == "warning":
+            allowed_active_shards = min(
+                allowed_active_shards,
+                max(1, (configured_shard_count + 1) // 2),
+            )
+        elif status == "critical":
+            allowed_active_shards = min(allowed_active_shards, 1)
+    active_shard_names = _active_shard_names(aggregate_root)
+    eligible_shard_names = _eligible_shard_names_for_dispatch(
+        configured_shard_names,
+        active_shard_names,
+        allowed_active_shards=allowed_active_shards,
+    )
+    dispatch_allowed = True
+    if current_shard_name:
+        dispatch_allowed = current_shard_name in eligible_shard_names
+    throttled = configured_shard_count > 0 and allowed_active_shards < configured_shard_count
+    if throttled and current_shard_name and not dispatch_allowed:
+        reasons.append(f"{current_shard_name} is parked until host memory recovers")
+    if not reasons:
+        reasons.append("host memory headroom is healthy for the configured shard set")
+
+    snapshot.update(
+        {
+            "status": status if mem_total_bytes > 0 else "unknown",
+            "reason": "; ".join(reasons),
+            "mem_total_bytes": mem_total_bytes,
+            "mem_available_bytes": mem_available_bytes,
+            "mem_available_percent": mem_available_percent,
+            "swap_total_bytes": swap_total_bytes,
+            "swap_free_bytes": swap_free_bytes,
+            "swap_used_percent": swap_used_percent,
+            "allowed_active_shards": allowed_active_shards,
+            "eligible_shard_names": eligible_shard_names,
+            "active_shard_count": len(active_shard_names),
+            "active_shard_names": active_shard_names,
+            "dispatch_allowed": dispatch_allowed,
+            "throttled": throttled,
+        }
+    )
+    return snapshot
+
+
+def _memory_pressure_notice(host_memory_pressure: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(host_memory_pressure, dict) or not host_memory_pressure:
+        return "[fleet-supervisor] memory pressure guard active; dispatch parked"
+    status = str(host_memory_pressure.get("status") or "unknown").strip().lower() or "unknown"
+    allowed_active_shards = max(0, _coerce_int(host_memory_pressure.get("allowed_active_shards"), 0))
+    configured_shard_count = max(0, _coerce_int(host_memory_pressure.get("configured_shard_count"), 0))
+    eligible_shard_names = [
+        str(item).strip()
+        for item in (host_memory_pressure.get("eligible_shard_names") or [])
+        if str(item).strip()
+    ]
+    current_shard_name = str(host_memory_pressure.get("current_shard_name") or "").strip()
+    reason = str(host_memory_pressure.get("reason") or "").strip()
+    segments = [
+        f"[fleet-supervisor] memory pressure guard active ({status})",
+        f"dispatch budget {allowed_active_shards}/{configured_shard_count} active shards",
+    ]
+    if current_shard_name and host_memory_pressure.get("dispatch_allowed") is False:
+        segments.append(f"{current_shard_name} is parked")
+    if eligible_shard_names:
+        segments.append(f"eligible shards: {', '.join(eligible_shard_names)}")
+    if reason:
+        segments.append(reason)
+    return "; ".join(segments)
+
+
+def _memory_pressure_notice_key(host_memory_pressure: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(host_memory_pressure, dict) or not host_memory_pressure:
+        return "memory-pressure:unknown"
+    eligible_shard_names = [
+        str(item).strip()
+        for item in (host_memory_pressure.get("eligible_shard_names") or [])
+        if str(item).strip()
+    ]
+    return "|".join(
+        [
+            "memory-pressure",
+            str(host_memory_pressure.get("status") or "").strip().lower(),
+            str(max(0, _coerce_int(host_memory_pressure.get("allowed_active_shards"), 0))),
+            str(max(0, _coerce_int(host_memory_pressure.get("configured_shard_count"), 0))),
+            "allowed" if host_memory_pressure.get("dispatch_allowed") is not False else "parked",
+            str(host_memory_pressure.get("current_shard_name") or "").strip(),
+            ",".join(eligible_shard_names),
+        ]
+    )
+
+
+def _memory_pressure_parked_sleep_seconds(
+    args: argparse.Namespace,
+    host_memory_pressure: Optional[Dict[str, Any]],
+) -> float:
+    base_poll_seconds = max(
+        1.0,
+        float(_coerce_float(getattr(args, "poll_seconds", DEFAULT_POLL_SECONDS)) or DEFAULT_POLL_SECONDS),
+    )
+    if not isinstance(host_memory_pressure, dict) or host_memory_pressure.get("dispatch_allowed") is not False:
+        return base_poll_seconds
+    configured_seconds = _coerce_float(
+        getattr(args, "memory_dispatch_parked_poll_seconds", DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS)
+    )
+    return max(
+        base_poll_seconds,
+        float(configured_seconds or DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS),
+    )
+
+
+def _should_defer_dispatch_for_memory_pressure(
+    state_root: Path,
+    host_memory_pressure: Optional[Dict[str, Any]],
+) -> bool:
+    resolved_state_root = Path(state_root).resolve()
+    if resolved_state_root == _aggregate_state_root(resolved_state_root):
+        return False
+    if not resolved_state_root.name.startswith("shard-"):
+        return False
+    if not isinstance(host_memory_pressure, dict) or not host_memory_pressure:
+        return False
+    if not host_memory_pressure.get("throttled"):
+        return False
+    return host_memory_pressure.get("dispatch_allowed") is False
+
 def _worker_bin_uses_codexea(worker_bin: str) -> bool:
     token = Path(str(worker_bin or "").strip() or DEFAULT_WORKER_BIN).name.lower()
     return token == "codexea"
@@ -1056,6 +1604,7 @@ def _ea_provider_health_url(args: argparse.Namespace) -> str:
     return str(
         getattr(args, "ea_provider_health_url", "")
         or os.environ.get("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", "")
+        or _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL", "")
         or DEFAULT_EA_PROVIDER_HEALTH_URL
     ).strip()
 
@@ -1130,6 +1679,31 @@ def _ea_provider_health_candidate_urls(args: argparse.Namespace) -> List[str]:
     return urls
 
 
+def _ea_provider_health_request_url(url: str) -> str:
+    candidate = str(url or "").strip()
+    if not candidate:
+        return ""
+    try:
+        parsed = urllib.parse.urlsplit(candidate)
+    except ValueError:
+        return candidate
+    if not str(parsed.path or "").endswith("/_provider_health"):
+        return candidate
+    query_pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    if any(str(key).strip().lower() == "lightweight" for key, _ in query_pairs):
+        return candidate
+    query_pairs.append(("lightweight", "1"))
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urllib.parse.urlencode(query_pairs),
+            parsed.fragment,
+        )
+    ).strip()
+
+
 def _ea_provider_health_timeout_seconds(args: argparse.Namespace) -> float:
     raw = getattr(args, "ea_provider_health_timeout_seconds", DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS)
     try:
@@ -1140,6 +1714,86 @@ def _ea_provider_health_timeout_seconds(args: argparse.Namespace) -> float:
 
 def _ea_provider_health_retry_timeout_seconds(args: argparse.Namespace) -> float:
     return max(1.0, _ea_provider_health_timeout_seconds(args) * 2.0)
+
+
+def _ea_provider_health_cache_max_age_seconds() -> float:
+    raw = _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_CACHE_MAX_AGE_SECONDS", "300")
+    try:
+        return max(30.0, float(raw))
+    except (TypeError, ValueError):
+        return 300.0
+
+
+def _ea_provider_health_failure_cooldown_seconds() -> float:
+    raw = _runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_FAILURE_COOLDOWN_SECONDS", "60")
+    try:
+        return max(5.0, float(raw))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def _ea_provider_health_cache_path(args: argparse.Namespace) -> Path:
+    state_root_raw = str(getattr(args, "state_root", "") or "").strip()
+    state_root = Path(state_root_raw or DEFAULT_STATE_ROOT).resolve()
+    return _aggregate_state_root(state_root) / "ea_provider_health_cache.json"
+
+
+def _load_ea_provider_health_cache(args: argparse.Namespace) -> Dict[str, Any]:
+    path = _ea_provider_health_cache_path(args)
+    payload = _read_state(path)
+    if not payload:
+        return {}
+    cached_payload = dict(payload.get("payload") or {})
+    if not cached_payload:
+        return {}
+    cached_at = _parse_iso(str(payload.get("cached_at") or ""))
+    age_seconds = None
+    if cached_at is not None:
+        age_seconds = max(0.0, (_utc_now() - cached_at).total_seconds())
+    last_live_fetch_failed_at = _parse_iso(str(payload.get("last_live_fetch_failed_at") or ""))
+    last_live_fetch_failure_age_seconds = None
+    if last_live_fetch_failed_at is not None:
+        last_live_fetch_failure_age_seconds = max(0.0, (_utc_now() - last_live_fetch_failed_at).total_seconds())
+    return {
+        "path": str(path),
+        "cached_at": _iso(cached_at) if cached_at is not None else "",
+        "age_seconds": age_seconds,
+        "source_url": str(payload.get("source_url") or "").strip(),
+        "last_live_fetch_failed_at": _iso(last_live_fetch_failed_at) if last_live_fetch_failed_at is not None else "",
+        "last_live_fetch_failure_age_seconds": last_live_fetch_failure_age_seconds,
+        "last_live_fetch_error": str(payload.get("last_live_fetch_error") or "").strip(),
+        "payload": cached_payload,
+    }
+
+
+def _write_ea_provider_health_cache(
+    args: argparse.Namespace,
+    *,
+    payload: Dict[str, Any],
+    source_url: str,
+) -> None:
+    _write_json(
+        _ea_provider_health_cache_path(args),
+        {
+            "cached_at": _iso_now(),
+            "payload": dict(payload or {}),
+            "source_url": str(source_url or "").strip(),
+            # A successful refresh should clear any stale failure metadata so
+            # later status reads do not misreport a healthy probe as degraded.
+            "last_live_fetch_failed_at": "",
+            "last_live_fetch_error": "",
+        },
+    )
+
+
+def _record_ea_provider_health_live_failure(args: argparse.Namespace, *, error: str) -> None:
+    path = _ea_provider_health_cache_path(args)
+    payload = _read_state(path)
+    if not isinstance(payload, dict):
+        payload = {}
+    payload["last_live_fetch_failed_at"] = _iso_now()
+    payload["last_live_fetch_error"] = str(error or "").strip()
+    _write_json(path, payload)
 
 
 def _is_provider_health_timeout_error(exc: BaseException) -> bool:
@@ -1164,6 +1818,10 @@ def _is_provider_health_timeout_error(exc: BaseException) -> bool:
     return False
 
 
+def _running_inside_container() -> bool:
+    return Path("/.dockerenv").exists()
+
+
 def _load_sibling_module(module_name: str) -> Any:
     cached = _SIBLING_MODULE_CACHE.get(module_name)
     if cached is not None:
@@ -1174,6 +1832,64 @@ def _load_sibling_module(module_name: str) -> Any:
     module = importlib.import_module(module_name)
     _SIBLING_MODULE_CACHE[module_name] = module
     return module
+
+
+def _load_fresh_sibling_module(module_name: str) -> Any:
+    module_path = Path(__file__).resolve().parent / f"{module_name}.py"
+    if not module_path.exists():
+        return _load_sibling_module(module_name)
+    module_key = f"_fleet_fresh_{module_name}_{os.getpid()}_{time.monotonic_ns()}"
+    spec = importlib.util.spec_from_file_location(module_key, module_path)
+    if spec is None or spec.loader is None:
+        raise ModuleNotFoundError(module_name)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_key] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _with_fleet_app_modules_hidden(callback: Any) -> Dict[str, Any]:
+    fleet_root = str(DEFAULT_WORKSPACE_ROOT.resolve())
+    stashed: Dict[str, Any] = {}
+    for module_name, module in list(sys.modules.items()):
+        if module_name != "app" and not module_name.startswith("app."):
+            continue
+        module_file = str(getattr(module, "__file__", "") or "").strip()
+        if not module_file:
+            continue
+        try:
+            resolved_file = str(Path(module_file).resolve())
+        except Exception:
+            resolved_file = module_file
+        if not resolved_file.startswith(fleet_root):
+            continue
+        stashed[module_name] = module
+        sys.modules.pop(module_name, None)
+    try:
+        payload = callback()
+    finally:
+        for module_name in list(stashed.keys()):
+            sys.modules.pop(module_name, None)
+        sys.modules.update(stashed)
+    return dict(payload or {}) if isinstance(payload, dict) else {}
+
+
+def _local_ea_provider_health_payload() -> Dict[str, Any]:
+    for module_loader in (_load_sibling_module, _load_fresh_sibling_module):
+        try:
+            module = module_loader("codexea_route")
+        except Exception:
+            continue
+        loader = getattr(module, "_local_onemin_direct_payload", None)
+        if not callable(loader):
+            continue
+        try:
+            payload = _with_fleet_app_modules_hidden(lambda: loader(probe_all=False, include_reserve=True))
+        except Exception:
+            continue
+        if payload:
+            return payload
+    return {}
 
 
 def _provider_registry_lane_rows(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -1187,6 +1903,87 @@ def _provider_registry_lane_rows(payload: Dict[str, Any]) -> Dict[str, Dict[str,
         if not profile:
             continue
         lane_rows[profile] = row
+    return lane_rows
+
+
+def _synthetic_onemin_provider_registry_lane_rows(
+    payload: Dict[str, Any],
+    worker_lanes: Sequence[str],
+    *,
+    workspace_root: Path,
+) -> Dict[str, Dict[str, Any]]:
+    providers = ((payload.get("provider_health") or {}).get("providers") or {})
+    onemin = providers.get("onemin") if isinstance(providers, dict) else None
+    if not isinstance(onemin, dict) or not onemin:
+        return {}
+
+    slot_states = [
+        str(slot.get("state") or "").strip().lower() or "unknown"
+        for slot in (onemin.get("slots") or [])
+        if isinstance(slot, dict) and bool(slot.get("configured", True))
+    ]
+    ready_slots = sum(1 for state in slot_states if state in PROVIDER_HEALTH_READY_STATES)
+    degraded_slots = sum(1 for state in slot_states if state in PROVIDER_HEALTH_DEGRADED_STATES)
+    unavailable_slots = sum(
+        1 for state in slot_states if state in PROVIDER_HEALTH_UNAVAILABLE_STATES or state not in PROVIDER_HEALTH_READY_STATES | PROVIDER_HEALTH_DEGRADED_STATES
+    )
+    configured_slots = _coerce_int(onemin.get("configured_slots"))
+    if configured_slots <= 0:
+        configured_slots = len(slot_states)
+    if configured_slots <= 0:
+        return {}
+    primary_state = str(onemin.get("state") or "").strip().lower()
+    if not primary_state:
+        if ready_slots > 0:
+            primary_state = "ready"
+        elif degraded_slots > 0:
+            primary_state = "degraded"
+        elif unavailable_slots >= configured_slots:
+            primary_state = "unavailable"
+        else:
+            primary_state = "unknown"
+    detail = "; ".join(
+        part
+        for part in (
+            str(onemin.get("balance_basis_summary") or "").strip(),
+            "direct local 1min provider health",
+        )
+        if part
+    )
+    capacity_summary = {
+        "state": primary_state,
+        "configured_slots": configured_slots,
+        "ready_slots": ready_slots,
+        "degraded_slots": degraded_slots,
+        "unavailable_slots": unavailable_slots,
+        "leased_slots": _coerce_int(onemin.get("active_lease_count") or 0),
+        "remaining_percent_of_max": _coerce_float(onemin.get("remaining_percent_of_max")),
+        "estimated_remaining_credits_total": _coerce_float(onemin.get("estimated_remaining_credits_total")),
+    }
+    provider_row = {
+        "provider_key": "onemin",
+        "state": primary_state,
+        "detail": detail,
+        "enabled": configured_slots > 0,
+        "executable": configured_slots > 0,
+    }
+    lane_rows: Dict[str, Dict[str, Any]] = {}
+    for worker_lane in worker_lanes:
+        lane = str(worker_lane or "").strip().lower()
+        if lane not in _direct_codexea_stream_lanes():
+            continue
+        profile = _codexea_profile_for_lane(lane, workspace_root=workspace_root)
+        if not profile or profile in lane_rows:
+            continue
+        lane_rows[profile] = {
+            "profile": profile,
+            "primary_provider_key": "onemin",
+            "primary_state": primary_state,
+            "capacity_summary": dict(capacity_summary),
+            "providers": [dict(provider_row)],
+            "source": "direct_local_onemin",
+            "synthetic": True,
+        }
     return lane_rows
 
 
@@ -1334,34 +2131,136 @@ def _direct_worker_lane_health_snapshot(
         snapshot["reason"] = "EA provider-health preflight is disabled"
         return snapshot
     request_headers = _ea_provider_health_headers(args)
+    cached = _load_ea_provider_health_cache(args)
+    cached_payload = dict(cached.get("payload") or {})
+    cached_age_seconds = _coerce_float(cached.get("age_seconds"))
+    cached_source_url = str(cached.get("source_url") or "").strip()
+    cached_failure_age_seconds = _coerce_float(cached.get("last_live_fetch_failure_age_seconds"))
+    cached_failure_error = str(cached.get("last_live_fetch_error") or "").strip()
     payload: Dict[str, Any] | None = None
     last_error = ""
-    for candidate_url in urls:
-        timeouts = [_ea_provider_health_timeout_seconds(args), _ea_provider_health_retry_timeout_seconds(args)]
-        for attempt_index, timeout_seconds in enumerate(timeouts):
-            try:
-                request = urllib.request.Request(candidate_url, headers=request_headers)
-                with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                    payload = json.loads(response.read().decode("utf-8", errors="ignore"))
-                snapshot["source_url"] = candidate_url
+    cache_reason = ""
+    running_inside_container = _running_inside_container()
+    cached_source_hostname = ""
+    if cached_source_url:
+        try:
+            cached_source_hostname = str(urllib.parse.urlsplit(cached_source_url).hostname or "").strip().lower()
+        except ValueError:
+            cached_source_hostname = ""
+    if (
+        cached_payload
+        and cached_age_seconds is not None
+        and cached_age_seconds <= _ea_provider_health_cache_max_age_seconds()
+        and not running_inside_container
+        and cached_source_hostname == "host.docker.internal"
+    ):
+        payload = cached_payload
+        snapshot["fetched_at"] = str(cached.get("cached_at") or snapshot["fetched_at"])
+        snapshot["source_url"] = cached_source_url or snapshot["source_url"]
+        snapshot["cache_used"] = True
+        snapshot["cache_path"] = str(cached.get("path") or "")
+        snapshot["live_probe_scope"] = "container_local"
+        cache_reason = (
+            f"using cached provider-health ({cached_age_seconds:.0f}s old); "
+            "the live source is container-local from the host CLI"
+        )
+    elif (
+        cached_payload
+        and cached_age_seconds is not None
+        and cached_age_seconds <= _ea_provider_health_cache_max_age_seconds()
+        and cached_failure_age_seconds is not None
+        and cached_failure_age_seconds <= _ea_provider_health_failure_cooldown_seconds()
+    ):
+        payload = cached_payload
+        snapshot["fetched_at"] = str(cached.get("cached_at") or snapshot["fetched_at"])
+        snapshot["source_url"] = str(cached.get("source_url") or snapshot["source_url"])
+        snapshot["cache_used"] = True
+        snapshot["cache_path"] = str(cached.get("path") or "")
+        if cached_failure_error:
+            snapshot["live_fetch_error"] = cached_failure_error
+        cache_reason = (
+            f"using cached provider-health ({cached_age_seconds:.0f}s old) during "
+            f"{cached_failure_age_seconds:.0f}s live-fetch cooldown after failure: "
+            f"{cached_failure_error or 'unknown error'}"
+        )
+    else:
+        initial_timeout_seconds = _ea_provider_health_timeout_seconds(args)
+        retry_timeout_seconds = _ea_provider_health_retry_timeout_seconds(args)
+        timed_out_candidates: List[str] = []
+        for candidate_url in urls:
+            timeouts = [initial_timeout_seconds]
+            for attempt_index, timeout_seconds in enumerate(timeouts):
+                try:
+                    request = urllib.request.Request(_ea_provider_health_request_url(candidate_url), headers=request_headers)
+                    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                        payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+                    snapshot["source_url"] = candidate_url
+                    if isinstance(payload, dict) and payload:
+                        _write_ea_provider_health_cache(args, payload=payload, source_url=candidate_url)
+                    break
+                except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                    last_error = f"{candidate_url}: {exc}"
+                    if _is_provider_health_timeout_error(exc):
+                        timed_out_candidates.append(candidate_url)
+                    break
+            if payload is not None:
                 break
-            except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-                last_error = f"{candidate_url}: {exc}"
-                if (
-                    attempt_index + 1 < len(timeouts)
-                    and _is_provider_health_timeout_error(exc)
-                ):
-                    continue
-                break
-        if payload is not None:
-            break
+        if payload is None and retry_timeout_seconds > initial_timeout_seconds and timed_out_candidates:
+            retry_seen: Set[str] = set()
+            retry_urls = [candidate_url for candidate_url in timed_out_candidates if not (candidate_url in retry_seen or retry_seen.add(candidate_url))]
+            for candidate_url in retry_urls:
+                try:
+                    request = urllib.request.Request(_ea_provider_health_request_url(candidate_url), headers=request_headers)
+                    with urllib.request.urlopen(request, timeout=retry_timeout_seconds) as response:
+                        payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+                    snapshot["source_url"] = candidate_url
+                    if isinstance(payload, dict) and payload:
+                        _write_ea_provider_health_cache(args, payload=payload, source_url=candidate_url)
+                    break
+                except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+                    last_error = f"{candidate_url}: {exc}"
     if payload is None:
-        snapshot["status"] = "error"
-        snapshot["reason"] = f"provider-health fetch failed: {last_error or 'unknown error'}"
-        return snapshot
+        _record_ea_provider_health_live_failure(args, error=last_error or "unknown error")
+        if (
+            cached_payload
+            and cached_age_seconds is not None
+            and cached_age_seconds <= _ea_provider_health_cache_max_age_seconds()
+        ):
+            payload = cached_payload
+            snapshot["fetched_at"] = str(cached.get("cached_at") or snapshot["fetched_at"])
+            snapshot["source_url"] = str(cached.get("source_url") or snapshot["source_url"])
+            snapshot["cache_used"] = True
+            snapshot["cache_path"] = str(cached.get("path") or "")
+            snapshot["live_fetch_error"] = last_error or "unknown error"
+            cache_reason = (
+                f"using cached provider-health ({cached_age_seconds:.0f}s old) after live fetch failed: "
+                f"{last_error or 'unknown error'}"
+            )
+        else:
+            payload = _local_ea_provider_health_payload()
+            if payload:
+                source_url = "local://codexea_route/_local_onemin_direct_payload"
+                snapshot["source_url"] = source_url
+                snapshot["local_fallback_used"] = True
+                snapshot["live_fetch_error"] = last_error or "unknown error"
+                cache_reason = (
+                    "using local 1min provider-health fallback after live fetch failed: "
+                    f"{last_error or 'unknown error'}"
+                )
+                _write_ea_provider_health_cache(args, payload=payload, source_url=source_url)
+            else:
+                snapshot["status"] = "error"
+                snapshot["reason"] = f"provider-health fetch failed: {last_error or 'unknown error'}"
+                return snapshot
 
-    lane_rows = _provider_registry_lane_rows(dict(payload or {}))
     workspace_root = Path(getattr(args, "workspace_root", DEFAULT_WORKSPACE_ROOT)).resolve()
+    lane_rows = _provider_registry_lane_rows(dict(payload or {}))
+    for profile, row in _synthetic_onemin_provider_registry_lane_rows(
+        dict(payload or {}),
+        lanes,
+        workspace_root=workspace_root,
+    ).items():
+        lane_rows.setdefault(profile, row)
     lane_payloads: Dict[str, Dict[str, Any]] = {}
     for worker_lane in lanes:
         profile = _codexea_profile_for_lane(worker_lane, workspace_root=workspace_root)
@@ -1379,6 +2278,8 @@ def _direct_worker_lane_health_snapshot(
         snapshot["reason"] = f"provider-health preflight marked {blocked} unroutable"
     else:
         snapshot["reason"] = "all checked direct lanes are currently routable"
+    if cache_reason:
+        snapshot["reason"] = "; ".join(part for part in [cache_reason, snapshot["reason"]] if part)
     return snapshot
 
 
@@ -1737,8 +2638,8 @@ def _strict_focus_matches(
     focus_owners: Sequence[str],
     focus_texts: Sequence[str],
 ) -> List[Milestone]:
-    matched: List[tuple[int, int, Milestone]] = []
-    for index, item in enumerate(items):
+    matched: List[Milestone] = []
+    for item in items:
         owner_match, text_match = _milestone_focus_flags(item, focus_owners, focus_texts)
         if focus_owners and focus_texts:
             if not owner_match or not text_match:
@@ -1747,9 +2648,8 @@ def _strict_focus_matches(
             continue
         elif focus_texts and not text_match:
             continue
-        matched.append((_milestone_focus_score(item, focus_owners, focus_texts), index, item))
-    matched.sort(key=lambda row: (-row[0], row[1]))
-    return [item for _score, _index, item in matched]
+        matched.append(item)
+    return matched
 
 
 def _focused_frontier(args: argparse.Namespace, open_milestones: List[Milestone], frontier: List[Milestone]) -> List[Milestone]:
@@ -2115,6 +3015,8 @@ def _configured_shard_roots(aggregate_root: Path) -> List[Path]:
             if candidate.exists() and candidate.is_dir():
                 configured_roots.append(candidate)
                 seen.add(candidate.resolve())
+        if configured_roots:
+            return configured_roots
     for candidate in sorted(aggregate_root.iterdir()):
         if not candidate.is_dir() or not candidate.name.startswith("shard-"):
             continue
@@ -2706,6 +3608,9 @@ def _completion_review_frontier_payload(
             "eta_human": str(eta.get("eta_human") or "").strip(),
             "eta_confidence": str(eta.get("eta_confidence") or "").strip(),
             "basis": str(eta.get("basis") or "").strip(),
+            "scope_kind": str(eta.get("scope_kind") or "").strip(),
+            "scope_label": str(eta.get("scope_label") or "").strip(),
+            "scope_warning": str(eta.get("scope_warning") or "").strip(),
             "blocking_reason": str(eta.get("blocking_reason") or "").strip(),
             "summary": str(eta.get("summary") or "").strip(),
         }
@@ -2847,6 +3752,9 @@ def _flagship_design_source_paths(product_root: Path) -> List[Path]:
 
 def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
     audit = _full_product_readiness_audit(args)
+    queue_frontier = _queue_driven_full_product_frontier(args)
+    if queue_frontier:
+        return queue_frontier
     frontier: List[Milestone] = []
     frontier_status = _full_product_frontier_status(audit)
     missing_coverage_keys = [
@@ -2965,6 +3873,98 @@ def _full_product_frontier_paths(
     )
 
 
+def _published_queue_payload(workspace_root: Path) -> Dict[str, Any]:
+    queue_path = Path(workspace_root).resolve() / ".codex-studio" / "published" / "QUEUE.generated.yaml"
+    if not queue_path.is_file():
+        return {}
+    payload = _read_yaml(queue_path)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _published_queue_items(workspace_root: Path) -> List[Dict[str, Any]]:
+    payload = _published_queue_payload(workspace_root)
+    rows: List[Dict[str, Any]] = []
+    for raw in (payload.get("items") or []):
+        item: Any = raw
+        if isinstance(raw, str):
+            text = raw.strip()
+            if not text:
+                continue
+            try:
+                item = ast.literal_eval(text)
+            except Exception:
+                try:
+                    item = yaml.safe_load(text)
+                except Exception:
+                    item = None
+        if isinstance(item, dict):
+            rows.append(dict(item))
+    return rows
+
+
+def _queue_item_for_shard(args: argparse.Namespace, state_root: Path) -> Optional[Dict[str, Any]]:
+    resolved_state_root = Path(state_root).resolve()
+    aggregate_root = _aggregate_state_root(resolved_state_root)
+    if resolved_state_root == aggregate_root:
+        return None
+    match = re.fullmatch(r"shard-(\d+)", resolved_state_root.name)
+    if not match:
+        return None
+    shard_index = max(1, int(match.group(1)))
+    items = _published_queue_items(Path(args.workspace_root).resolve())
+    item_index = shard_index - 1
+    if item_index < 0 or item_index >= len(items):
+        return None
+    return dict(items[item_index])
+
+
+def _queue_item_exit_criteria(item: Dict[str, Any]) -> List[str]:
+    criteria: List[str] = []
+    task = str(item.get("task") or "").strip()
+    if task:
+        criteria.append(task)
+    owned_surfaces = [str(value).strip() for value in (item.get("owned_surfaces") or []) if str(value).strip()]
+    if owned_surfaces:
+        criteria.append("Own and prove the surface slice(s): " + ", ".join(owned_surfaces[:4]))
+    allowed_paths = [str(value).strip() for value in (item.get("allowed_paths") or []) if str(value).strip()]
+    if allowed_paths:
+        preview = ", ".join(allowed_paths[:4])
+        remaining = max(0, len(allowed_paths) - 4)
+        suffix = f" (+{remaining} more)" if remaining > 0 else ""
+        criteria.append("Keep implementation scoped to the allowed paths: " + preview + suffix)
+    repo = str(item.get("repo") or "").strip()
+    package_id = str(item.get("package_id") or "").strip()
+    if repo or package_id:
+        criteria.append(
+            "Refresh flagship proof and close out the queue slice honestly when this package is landed"
+            + (f" for `{repo}`" if repo else "")
+            + (f" ({package_id})" if package_id else "")
+            + "."
+        )
+    return criteria[:4]
+
+
+def _queue_driven_full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
+    queue_item = _queue_item_for_shard(args, Path(args.state_root).resolve())
+    if not queue_item:
+        return []
+    audit = _full_product_readiness_audit(args)
+    frontier_status = _full_product_frontier_status(audit)
+    repo_owner = str(queue_item.get("repo") or "").strip()
+    owners = [repo_owner] if repo_owner else []
+    title = str(queue_item.get("title") or queue_item.get("package_id") or "Flagship shard slice").strip()
+    key = str(queue_item.get("package_id") or title or "flagship_shard_slice").strip()
+    return [
+        _synthetic_full_product_milestone(
+            key=key,
+            title=title,
+            owners=owners,
+            exit_criteria=_queue_item_exit_criteria(queue_item),
+            status=frontier_status,
+        )
+    ]
+
+
 def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
     path = Path(args.flagship_product_readiness_path).resolve()
     audit: Dict[str, Any] = {
@@ -3063,7 +4063,14 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
     if Path(args.workspace_root).resolve() != DEFAULT_WORKSPACE_ROOT.resolve():
         return None
     try:
+        try:
+            from scripts.external_proof_paths import resolve_release_channel_path
+        except ModuleNotFoundError:
+            from external_proof_paths import resolve_release_channel_path
+
         workspace_root = Path(args.workspace_root).resolve()
+        resolved_release_channel_path = resolve_release_channel_path()
+        resolved_releases_json_path = resolved_release_channel_path.with_name("releases.json")
         acceptance_mirror_path = workspace_root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
         acceptance_canonical_path = Path("/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
         if acceptance_canonical_path.is_file():
@@ -3086,7 +4093,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
                     "--out",
                     str(support_packets_path),
                     "--release-channel",
-                    "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json",
+                    str(resolved_release_channel_path),
                 ],
             ),
             (
@@ -3196,8 +4203,8 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             ),
             hub_local_release_proof_path=Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json"),
             mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
-            release_channel_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"),
-            releases_json_path=Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"),
+            release_channel_path=resolved_release_channel_path,
+            releases_json_path=resolved_releases_json_path,
             ignore_nonlinux_desktop_host_proof_blockers=bool(
                 getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)
             ),
@@ -3234,6 +4241,8 @@ def _full_product_frontier_payload(
         }
         for item in frontier
     ]
+    queue_payload = _published_queue_payload(Path(args.workspace_root).resolve())
+    queue_item = _queue_item_for_shard(args, state_root)
     payload: Dict[str, Any] = {
         "contract_name": "fleet.full_product_frontier",
         "schema_version": 1,
@@ -3279,12 +4288,27 @@ def _full_product_frontier_payload(
         "frontier_ids": [item["id"] for item in frontier_rows],
         "frontier": frontier_rows,
     }
+    source_queue_fingerprint = str(queue_payload.get("source_queue_fingerprint") or "").strip()
+    if source_queue_fingerprint:
+        payload["source_queue_fingerprint"] = source_queue_fingerprint
+    if queue_item:
+        payload["queue_package"] = {
+            "repo": str(queue_item.get("repo") or "").strip(),
+            "package_id": str(queue_item.get("package_id") or "").strip(),
+            "title": str(queue_item.get("title") or "").strip(),
+            "priority": _coerce_int(queue_item.get("priority"), 0),
+            "owned_surfaces": [str(value).strip() for value in (queue_item.get("owned_surfaces") or []) if str(value).strip()],
+            "allowed_paths": [str(value).strip() for value in (queue_item.get("allowed_paths") or []) if str(value).strip()],
+        }
     if eta:
         payload["eta"] = {
             "status": str(eta.get("status") or "").strip(),
             "eta_human": str(eta.get("eta_human") or "").strip(),
             "eta_confidence": str(eta.get("eta_confidence") or "").strip(),
             "basis": str(eta.get("basis") or "").strip(),
+            "scope_kind": str(eta.get("scope_kind") or "").strip(),
+            "scope_label": str(eta.get("scope_label") or "").strip(),
+            "scope_warning": str(eta.get("scope_warning") or "").strip(),
             "blocking_reason": str(eta.get("blocking_reason") or "").strip(),
             "summary": str(eta.get("summary") or "").strip(),
         }
@@ -3334,6 +4358,7 @@ def build_worker_prompt(
     program_milestones_path: Path,
     roadmap_path: Path,
     handoff_path: Path,
+    runtime_handoff_path: Optional[Path] = None,
     open_milestones: List[Milestone],
     frontier: List[Milestone],
     scope_roots: List[Path],
@@ -3354,6 +4379,12 @@ def build_worker_prompt(
     if focus_texts:
         focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
+    runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
+    runtime_handoff_guidance = (
+        "If the shard runtime handoff disagrees with the shared NEXT_SESSION_HANDOFF, trust the shard runtime handoff first for resume context.\n\n"
+        if runtime_handoff_path is not None
+        else ""
+    )
     return (
         "Continue autonomously across all Chummer6 repos in this workspace until the product is fully finished for public release exactly as defined by "
         "/docker/chummercomplete/chummer-design. Treat the design canon, milestone files, roadmap, public guides, generated artifacts, failing tests, and live repo evidence as the sole definition of done.\n\n"
@@ -3361,13 +4392,17 @@ def build_worker_prompt(
         "When one slice lands, immediately re-derive and execute the next highest-impact unfinished work. Audit, implement, wire, regenerate, verify, test, commit, push, and refresh /docker/fleet/NEXT_SESSION_HANDOFF.md in small safe increments. "
         "Include adjacent cleanup, generated outputs, docs, mirrors, and necessary concurrent local changes to keep the whole system green.\n\n"
         "Treat concurrent work by other developers as normal. Work around it, include necessary local changes when they are understood and safe, and never revert unrelated edits.\n\n"
+        "Execution discipline: do not call supervisor status, ETA, or active-run queries from inside worker runs. Those commands are hard-blocked and return non-zero during active runs. The operator/OODA loop owns status; keep working the assigned slice.\n\n"
         "Start by reading these files directly:\n"
         f"- {registry_path}\n"
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
-        f"- {handoff_path}\n\n"
+        f"- {handoff_path}\n"
+        f"{runtime_handoff_block}\n"
+        f"{runtime_handoff_guidance}"
         f"Writable scope roots:\n{scope_text}\n\n"
         f"Current steering focus:\n{focus_text}\n\n"
+        "Assigned slice authority: if the frontier headline is broader than the steering focus above, treat the steering focus as the work boundary for this run and do not drift into sibling slices.\n\n"
         f"Current active frontier from design plus handoff:\n{frontier_text}\n\n"
         f"Current open milestone ids: {open_ids}\n"
         f"Frontier milestone ids to prioritize first: {frontier_ids}\n\n"
@@ -3386,6 +4421,7 @@ def build_completion_review_prompt(
     program_milestones_path: Path,
     roadmap_path: Path,
     handoff_path: Path,
+    runtime_handoff_path: Optional[Path] = None,
     frontier_artifact_path: Path,
     frontier: List[Milestone],
     scope_roots: List[Path],
@@ -3443,6 +4479,52 @@ def build_completion_review_prompt(
     if focus_texts:
         focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
+    runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
+    runtime_handoff_guidance = (
+        "If the shard runtime handoff disagrees with the shared NEXT_SESSION_HANDOFF, trust the shard runtime handoff first for resume context.\n\n"
+        if runtime_handoff_path is not None
+        else ""
+    )
+    normalized_focus_profiles = {str(item).strip().lower() for item in focus_profiles if str(item).strip()}
+    desktop_recovery_signal = " ".join(
+        [
+            *[str(item.title) for item in frontier if str(item.title).strip()],
+            *[
+                str(criterion)
+                for item in frontier
+                for criterion in item.exit_criteria
+                if str(criterion).strip()
+            ],
+        ]
+    ).lower()
+    desktop_recovery_non_negotiables = (
+        "Desktop recovery non-negotiables when the reopened slice touches the desktop flagship:\n"
+        "- No generic shell, decorative mainframe, or dashboard-first landing page.\n"
+        "- First useful screen must be the real workbench or restore continuation flow.\n"
+        "- Real `File` menu, first-class master index, and first-class character roster are mandatory.\n"
+        "- Claim, restore, and recovery must happen in the installer or in-app, not as a browser-only claim-code ritual.\n"
+        "- The public happy path must be one guided Chummer product installer path, not a framework-first or head-first choice.\n\n"
+    )
+    desktop_recovery_required = "desktop_client" in normalized_focus_profiles or any(
+        hint in desktop_recovery_signal
+        for hint in (
+            "desktop",
+            "workbench",
+            "file menu",
+            "master index",
+            "character roster",
+            "installer",
+            "claim",
+            "restore",
+            "avalonia",
+            "blazor",
+            "mainframe",
+            "startup",
+            "launch",
+            "shell",
+        )
+    )
+    desktop_recovery_block = desktop_recovery_non_negotiables if desktop_recovery_required else ""
     if compact_prompt:
         compact_scope_text = _compact_prompt_section_lines([str(path) for path in scope_roots], max_lines=4, max_len=120)
         compact_frontier_text = _compact_prompt_section_lines([_milestone_brief(item) for item in frontier], max_lines=2, max_len=180)
@@ -3455,10 +4537,14 @@ def build_completion_review_prompt(
             f"- {program_milestones_path}\n"
             f"- {roadmap_path}\n"
             f"- {handoff_path}\n"
+            f"{runtime_handoff_block}"
             f"- {frontier_artifact_path}\n"
             f"{compact_guidance_block}"
+            f"{desktop_recovery_block}"
+            f"{runtime_handoff_guidance}"
             f"Writable scope roots:\n{compact_scope_text}\n\n"
             f"Current steering focus:\n{focus_text}\n\n"
+            "Assigned slice authority: if the recovery frontier is broader than the steering focus above, treat the steering focus as the work boundary for this run and do not drift into sibling slices.\n\n"
             f"Recovery frontier ids: {frontier_ids}\n"
             f"Recovery frontier detail:\n{compact_frontier_text}\n\n"
             f"Latest suspicious receipts:\n{suspicious_runs}\n\n"
@@ -3482,8 +4568,11 @@ def build_completion_review_prompt(
         f"- {registry_path}\n"
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
-        f"- {handoff_path}\n\n"
+        f"- {handoff_path}\n"
+        f"{runtime_handoff_block}\n"
         f"{guidance_block}"
+        f"{desktop_recovery_block}"
+        f"{runtime_handoff_guidance}"
         "Active synthetic completion-review frontier artifact:\n"
         f"- {frontier_artifact_path}\n\n"
         f"Writable scope roots:\n{scope_text}\n\n"
@@ -3516,6 +4605,7 @@ def build_flagship_product_prompt(
     program_milestones_path: Path,
     roadmap_path: Path,
     handoff_path: Path,
+    runtime_handoff_path: Optional[Path] = None,
     readiness_path: Path,
     frontier_artifact_path: Path,
     frontier: List[Milestone],
@@ -3542,8 +4632,22 @@ def build_flagship_product_prompt(
     if focus_texts:
         focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
+    runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
+    runtime_handoff_guidance = (
+        "If the shard runtime handoff disagrees with the shared NEXT_SESSION_HANDOFF, trust the shard runtime handoff first for resume context.\n\n"
+        if runtime_handoff_path is not None
+        else ""
+    )
     source_lines = "\n".join(f"- {path}" for path in design_source_paths[:12]) or f"- {product_root}"
     missing_coverage = ", ".join(str(item) for item in (full_product_audit.get("missing_coverage_keys") or [])) or "none"
+    flagship_desktop_non_negotiables = (
+        "Desktop flagship non-negotiables:\n"
+        "- No generic shell, decorative mainframe, or dashboard-first landing page.\n"
+        "- First useful screen must be the real workbench or restore continuation flow.\n"
+        "- Real `File` menu, first-class master index, and first-class character roster are mandatory.\n"
+        "- Claim, restore, and recovery must happen in the installer or in-app, not as a browser-only claim-code ritual.\n"
+        "- The public happy path must be one guided Chummer product installer path, not a framework-first or head-first choice.\n\n"
+    )
     if compact_prompt:
         compact_scope_text = _compact_prompt_section_lines([str(path) for path in scope_roots], max_lines=4, max_len=120)
         compact_frontier_text = _compact_prompt_section_lines([_milestone_brief(item) for item in frontier], max_lines=3, max_len=180)
@@ -3559,11 +4663,15 @@ def build_flagship_product_prompt(
             f"- {program_milestones_path}\n"
             f"- {roadmap_path}\n"
             f"- {handoff_path}\n"
+            f"{runtime_handoff_block}"
             f"- {readiness_path}\n"
             f"- {frontier_artifact_path}\n"
             f"{compact_source_text}\n\n"
+            f"{flagship_desktop_non_negotiables}"
+            f"{runtime_handoff_guidance}"
             f"Writable scope roots:\n{compact_scope_text}\n\n"
             f"Current steering focus:\n{focus_text}\n\n"
+            "Assigned slice authority: if the flagship frontier is broader than the steering focus above, treat the steering focus as the work boundary for this run and do not drift into sibling slices.\n\n"
             f"Flagship frontier ids: {frontier_ids}\n"
             f"Flagship frontier detail:\n{compact_frontier_text}\n\n"
             f"Latest suspicious receipts:\n{suspicious_runs}\n\n"
@@ -3573,6 +4681,10 @@ def build_flagship_product_prompt(
             "3. Keep feedback, crash, support, and automatic bugfix routing live enough that the fleet can continue improving the product without manual babysitting.\n"
             "4. Refresh handoff, mirrors, and readiness proof only when the repos actually justify it.\n"
             "5. Do not accept completion until FLAGSHIP_PRODUCT_READINESS.generated.json is current and covers every required flagship lane with no lowered-standard shortcuts.\n\n"
+            "Execution discipline:\n"
+            "- Do not call supervisor status, ETA, or active-run queries from inside worker runs; those commands are hard-blocked and return non-zero during active runs.\n"
+            "- The operator/OODA loop owns status. Use the listed files as your local context instead.\n"
+            "- Spend the run implementing or auditing the assigned slice.\n\n"
             "If you stop, report only:\n"
             "What shipped: ...\n"
             "What remains: ...\n"
@@ -3583,6 +4695,7 @@ def build_flagship_product_prompt(
         "The current release-proof gates are green, but that only proves the loop cleared the present closeout gates. "
         "It does not prove the whole Chummer product is finished. Continue across the full design canon until the flagship product readiness proof is current and trusted.\n\n"
         "Use the hard flagship bar: the product should feel like the standard future products are measured against. Reject lowered standards, false-complete claims, narrow desktop-only closure, and proof-only wins that do not survive real product scrutiny.\n\n"
+        "Execution discipline: do not call supervisor status, ETA, or active-run queries from inside worker runs. Those commands are hard-blocked and return non-zero during active runs. The operator/OODA loop owns status; keep working the assigned slice.\n\n"
         f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n\n"
         f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
         "Start by reading these files directly:\n"
@@ -3590,9 +4703,12 @@ def build_flagship_product_prompt(
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
         f"- {handoff_path}\n"
+        f"{runtime_handoff_block}"
         f"- {readiness_path}\n"
         f"- {frontier_artifact_path}\n"
         f"{source_lines}\n\n"
+        f"{flagship_desktop_non_negotiables}"
+        f"{runtime_handoff_guidance}"
         f"Writable scope roots:\n{scope_text}\n\n"
         f"Current steering focus:\n{focus_text}\n\n"
         f"Recent suspicious receipts worth sanity-checking:\n{suspicious_runs}\n\n"
@@ -3746,6 +4862,16 @@ def _account_restore_probe_seconds() -> float:
         return 0.0
 
 
+def _runtime_handoff_heartbeat_seconds() -> float:
+    try:
+        return max(
+            0.0,
+            float(_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_RUNTIME_HANDOFF_HEARTBEAT_SECONDS", "60") or "60"),
+        )
+    except (TypeError, ValueError):
+        return 60.0
+
+
 def _account_restore_probe_due(
     last_probe_at: Optional[dt.datetime],
     *,
@@ -3760,6 +4886,41 @@ def _account_restore_probe_due(
     return (current - last_probe_at).total_seconds() >= probe_seconds
 
 
+def _source_item(payload: Dict[str, Any], account: WorkerAccount) -> Dict[str, Any]:
+    return dict((payload.get("sources") or {}).get(_credential_source_key(account)) or {})
+
+
+def _source_restore_probe_due(
+    payload: Dict[str, Any],
+    account: WorkerAccount,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> bool:
+    item = _source_item(payload, account)
+    if not item:
+        return False
+    last_probe_at = _parse_iso(str(item.get("restore_probe_at") or ""))
+    return _account_restore_probe_due(last_probe_at, now=now)
+
+
+def _mark_source_restore_probe(
+    payload: Dict[str, Any],
+    account: WorkerAccount,
+    *,
+    when: Optional[dt.datetime] = None,
+) -> None:
+    current = when or _utc_now()
+    sources = dict(payload.get("sources") or {})
+    key = _credential_source_key(account)
+    item = dict(sources.get(key) or {})
+    item["alias"] = account.alias
+    item["owner_id"] = account.owner_id
+    item["source_key"] = key
+    item["restore_probe_at"] = _iso(current)
+    sources[key] = item
+    payload["sources"] = sources
+
+
 def _account_direct_fallback_args(args: argparse.Namespace) -> argparse.Namespace:
     clone = argparse.Namespace(**vars(args))
     configured_lane = _account_direct_fallback_worker_lane() or str(args.worker_lane or "").strip()
@@ -3771,10 +4932,7 @@ def _account_direct_fallback_args(args: argparse.Namespace) -> argparse.Namespac
     else:
         fallback_lanes = [str(item or "").strip() for item in (args.fallback_worker_lane or []) if str(item or "").strip()]
     fallback_models = _account_direct_fallback_model_candidates()
-    lowered_models = {str(item or "").strip().lower() for item in fallback_models if str(item or "").strip()}
-    if fallback_models and lowered_models and lowered_models.issubset(CORE_BATCH_RUNTIME_MODELS):
-        fallback_models = [*ACCOUNT_DIRECT_FALLBACK_RESCUE_MODELS, *fallback_models]
-    elif not fallback_models:
+    if not fallback_models:
         fallback_models = list(ACCOUNT_DIRECT_FALLBACK_RESCUE_MODELS)
     clone.worker_bin = _account_direct_fallback_worker_bin() or str(args.worker_bin or "").strip()
     clone.worker_lane = configured_lane
@@ -3786,17 +4944,41 @@ def _account_direct_fallback_args(args: argparse.Namespace) -> argparse.Namespac
     return clone
 
 
+def _routed_full_lane_direct_fallback_lanes(worker_lane: str) -> List[str]:
+    lane = str(worker_lane or "").strip().lower()
+    if lane in {"core", "core_rescue"}:
+        return [lane, *[item for item in ("core", "core_rescue") if item != lane]]
+    if lane in {"jury", "audit_shard", "review_shard"}:
+        return ["core", "core_rescue"]
+    return []
+
+
+def _routed_full_lane_direct_fallback_args(args: argparse.Namespace) -> Optional[argparse.Namespace]:
+    if not _worker_bin_uses_codexea(str(args.worker_bin or "")):
+        return None
+    lanes = _routed_full_lane_direct_fallback_lanes(str(args.worker_lane or ""))
+    if not lanes:
+        return None
+    clone = argparse.Namespace(**vars(args))
+    clone.account_alias = []
+    clone.account_owner_id = []
+    clone.worker_lane = lanes[0]
+    clone.fallback_worker_lane = lanes[1:]
+    return clone
+
+
 def _worker_model_candidates(args: argparse.Namespace) -> List[str]:
     primary = str(args.worker_model or "").strip()
+    primary_lane = str(args.worker_lane or "").strip()
     configured_fallbacks = [str(item or "").strip() for item in (args.fallback_worker_model or []) if str(item or "").strip()]
     if configured_fallbacks:
         fallbacks = configured_fallbacks
     else:
         env_value = os.environ.get("CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS")
         if env_value is None:
-            fallbacks = [] if str(args.worker_lane or "").strip() else list(DEFAULT_FALLBACK_MODELS)
+            fallbacks = [] if primary_lane else list(DEFAULT_FALLBACK_MODELS)
         else:
-            fallbacks = [item.strip() for item in env_value.split(",") if item.strip()]
+            fallbacks = [] if (primary_lane and not primary) else [item.strip() for item in env_value.split(",") if item.strip()]
     models: List[str] = []
     seen: set[str] = set()
     for candidate in [primary, *fallbacks]:
@@ -4529,6 +5711,147 @@ def _write_active_run_state(state_root: Path, run: Optional[ActiveWorkerRun]) ->
     else:
         payload["active_run"] = _active_run_payload(run)
     _write_json(state_path, payload)
+    _write_runtime_handoff(state_root)
+
+
+def _update_active_run_fields(state_root: Path, run_id: str, **fields: Any) -> None:
+    if not fields:
+        return
+    state_path = _state_payload_path(state_root)
+    payload = _read_state(state_path)
+    active_run = payload.get("active_run")
+    if not isinstance(active_run, dict):
+        return
+    if str(active_run.get("run_id") or "").strip() != str(run_id or "").strip():
+        return
+    changed = False
+    active_payload = dict(active_run)
+    for key, value in fields.items():
+        if active_payload.get(key) == value:
+            continue
+        active_payload[key] = value
+        changed = True
+    if not changed:
+        return
+    payload["updated_at"] = _iso_now()
+    payload["active_run"] = active_payload
+    _write_json(state_path, payload)
+    _write_runtime_handoff(state_root)
+
+
+def _runtime_handoff_path(state_root: Path) -> Path:
+    return Path(state_root).resolve() / DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME
+
+
+def _existing_runtime_handoff_path(state_root: Path) -> Optional[Path]:
+    path = _runtime_handoff_path(state_root)
+    return path if path.is_file() else None
+
+
+def _tail_text_file(path: Path, *, max_bytes: int = 8192, max_lines: int = 40) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - max_bytes), os.SEEK_SET)
+            raw = handle.read().decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+    lines = raw.splitlines()
+    if len(lines) > max_lines:
+        lines = lines[-max_lines:]
+    return "\n".join(lines).strip()
+
+
+def _write_runtime_handoff(state_root: Path) -> None:
+    try:
+        resolved_state_root = Path(state_root).resolve()
+        state = _read_state(_state_payload_path(resolved_state_root))
+        active_run = dict(state.get("active_run") or {})
+        last_run = dict(state.get("last_run") or {})
+        focus_profiles = [str(item).strip() for item in (state.get("focus_profiles") or []) if str(item).strip()]
+        focus_owners = [str(item).strip() for item in (state.get("focus_owners") or []) if str(item).strip()]
+        focus_texts = [str(item).strip() for item in (state.get("focus_texts") or []) if str(item).strip()]
+        frontier_ids = [int(value) for value in (state.get("frontier_ids") or active_run.get("frontier_ids") or last_run.get("frontier_ids") or []) if int(value or 0) > 0]
+        open_milestone_ids = [
+            int(value)
+            for value in (state.get("open_milestone_ids") or active_run.get("open_milestone_ids") or last_run.get("open_milestone_ids") or [])
+            if int(value or 0) > 0
+        ]
+        lines = [
+            "# Shard Runtime Handoff",
+            "",
+            f"Generated at: {_iso_now()}",
+            f"Shard: {resolved_state_root.name}",
+            f"State root: {resolved_state_root}",
+            f"Mode: {str(state.get('mode') or '').strip() or 'unknown'}",
+            f"Frontier ids: {', '.join(str(value) for value in frontier_ids) or 'none'}",
+            f"Open milestone ids: {', '.join(str(value) for value in open_milestone_ids) or 'none'}",
+        ]
+        if focus_profiles:
+            lines.append(f"Focus profiles: {', '.join(focus_profiles)}")
+        if focus_owners:
+            lines.append(f"Focus owners: {', '.join(focus_owners)}")
+        if focus_texts:
+            lines.append(f"Focus texts: {', '.join(focus_texts)}")
+        if active_run:
+            prompt_path = str(active_run.get("prompt_path") or "").strip()
+            stdout_path = _resolve_run_artifact_path(str(active_run.get("stdout_path") or "").strip())
+            stderr_path = _resolve_run_artifact_path(str(active_run.get("stderr_path") or "").strip())
+            last_message_path = _resolve_run_artifact_path(str(active_run.get("last_message_path") or "").strip())
+            last_message_text = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+            parsed_last_message = _parse_final_message_sections(last_message_text) if last_message_text else {}
+            stdout_tail = _tail_text_file(stdout_path)
+            stderr_tail = _tail_text_file(stderr_path)
+            lines.extend(
+                [
+                    "",
+                    "## Active Run",
+                    "",
+                    f"- Run id: {str(active_run.get('run_id') or '').strip() or 'unknown'}",
+                    f"- Selected account: {str(active_run.get('selected_account_alias') or '').strip() or 'unknown'}",
+                    f"- Selected model: {str(active_run.get('selected_model') or '').strip() or 'default'}",
+                    f"- Started at: {str(active_run.get('started_at') or '').strip() or 'unknown'}",
+                    f"- First output at: {str(active_run.get('worker_first_output_at') or '').strip() or 'not yet'}",
+                    f"- Last output at: {str(active_run.get('worker_last_output_at') or '').strip() or 'not yet'}",
+                ]
+            )
+            if prompt_path:
+                lines.append(f"- Prompt path: {prompt_path}")
+            if parsed_last_message:
+                shipped = str(parsed_last_message.get("shipped") or "").strip()
+                remains = str(parsed_last_message.get("remains") or "").strip()
+                blocker = str(parsed_last_message.get("blocker") or "").strip()
+                if shipped:
+                    lines.append(f"- Latest shipped note: {shipped}")
+                if remains:
+                    lines.append(f"- Latest remains note: {remains}")
+                if blocker:
+                    lines.append(f"- Latest blocker: {blocker}")
+            if stdout_tail:
+                lines.extend(["", "## Recent stdout tail", "", "```text", stdout_tail, "```"])
+            if stderr_tail:
+                lines.extend(["", "## Recent stderr tail", "", "```text", stderr_tail, "```"])
+        elif last_run:
+            lines.extend(
+                [
+                    "",
+                    "## Last Run",
+                    "",
+                    f"- Run id: {str(last_run.get('run_id') or '').strip() or 'unknown'}",
+                    f"- Selected account: {str(last_run.get('selected_account_alias') or '').strip() or 'unknown'}",
+                    f"- Selected model: {str(last_run.get('selected_model') or '').strip() or 'default'}",
+                    f"- Finished at: {str(last_run.get('finished_at') or last_run.get('started_at') or '').strip() or 'unknown'}",
+                    f"- What shipped: {str(last_run.get('shipped') or '').strip() or 'none recorded'}",
+                    f"- What remains: {str(last_run.get('remains') or '').strip() or 'none recorded'}",
+                    f"- Exact blocker: {str(last_run.get('blocker') or '').strip() or 'none recorded'}",
+                ]
+            )
+        _runtime_handoff_path(resolved_state_root).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    except Exception:
+        return
 
 
 def _normalize_subprocess_output(value: Any) -> str:
@@ -4554,24 +5877,162 @@ def _run_worker_attempt(
     worker_env: Dict[str, str],
     timeout_seconds: float,
     last_message_path: Path,
+    state_root: Path,
+    run_id: str,
+    stdout_sink: Any = None,
+    stderr_sink: Any = None,
 ) -> subprocess.CompletedProcess[str]:
+    self_poll_status_marker = "status_blocked_inside_worker_run"
+    self_poll_trip_threshold = 2
     kwargs: Dict[str, Any] = {
-        "input": prompt,
+        "stdin": subprocess.PIPE,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
         "text": True,
-        "capture_output": True,
+        "bufsize": 1,
         "cwd": str(workspace_root),
         "env": worker_env,
-        "check": False,
+        "start_new_session": True,
     }
-    timeout_enabled = float(timeout_seconds or 0.0) > 0 and _subprocess_run_supports_timeout()
-    if timeout_enabled:
-        kwargs["timeout"] = float(timeout_seconds)
+    stdout_chunks: List[str] = []
+    stderr_chunks: List[str] = []
+    output_lock = threading.Lock()
+    progress_state = {
+        "first_output_recorded": False,
+        "last_progress_persisted_at": 0.0,
+    }
+    process_holder: Dict[str, Any] = {"process": None}
+    handoff_heartbeat_stop = threading.Event()
+    self_poll_state = {
+        "blocked_status_hits": 0,
+        "tripped": False,
+    }
+    handoff_heartbeat_seconds = _runtime_handoff_heartbeat_seconds()
+
+    def _stop_handoff_heartbeat(thread: Optional[threading.Thread]) -> None:
+        handoff_heartbeat_stop.set()
+        if thread is not None:
+            thread.join(timeout=2)
+
+    def _terminate_worker_process(proc: Optional[subprocess.Popen[str]]) -> None:
+        if proc is None:
+            return
+        try:
+            if int(proc.pid or 0) > 0:
+                os.killpg(int(proc.pid), signal.SIGKILL)
+                return
+        except Exception:
+            pass
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+    def _persist_output_progress(*, force: bool = False) -> None:
+        now_monotonic = time.monotonic()
+        should_write = force or not progress_state["first_output_recorded"] or (
+            now_monotonic - float(progress_state["last_progress_persisted_at"] or 0.0) >= 10.0
+        )
+        if not should_write:
+            return
+        now_iso = _iso_now()
+        fields: Dict[str, Any] = {"worker_last_output_at": now_iso}
+        if not progress_state["first_output_recorded"]:
+            fields["worker_first_output_at"] = now_iso
+            progress_state["first_output_recorded"] = True
+        progress_state["last_progress_persisted_at"] = now_monotonic
+        _update_active_run_fields(state_root, run_id, **fields)
+
+    def _consume_stream(stream: Any, sink: Any, chunks: List[str], *, stream_name: str) -> None:
+        if stream is None:
+            return
+        try:
+            while True:
+                chunk = stream.readline()
+                if chunk == "":
+                    break
+                with output_lock:
+                    chunks.append(chunk)
+                    if sink is not None:
+                        try:
+                            sink.write(chunk)
+                            sink.flush()
+                        except ValueError:
+                            sink = None
+                if stream_name == "stderr" and self_poll_status_marker in chunk:
+                    self_poll_state["blocked_status_hits"] = int(self_poll_state["blocked_status_hits"]) + 1
+                    if (
+                        not self_poll_state["tripped"]
+                        and int(self_poll_state["blocked_status_hits"]) >= self_poll_trip_threshold
+                    ):
+                        self_poll_state["tripped"] = True
+                        _terminate_worker_process(process_holder.get("process"))
+                _persist_output_progress()
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    def _handoff_heartbeat_loop() -> None:
+        if handoff_heartbeat_seconds <= 0.0:
+            return
+        while not handoff_heartbeat_stop.wait(handoff_heartbeat_seconds):
+            _write_runtime_handoff(state_root)
+
     try:
-        return subprocess.run(command, **kwargs)
-    except subprocess.TimeoutExpired as exc:
+        process = subprocess.Popen(command, **kwargs)
+    except FileNotFoundError as exc:
+        missing = str(exc.filename or command[0] if command else "command")
+        return subprocess.CompletedProcess(
+            list(command),
+            127,
+            stdout="",
+            stderr=f"{missing}: not found",
+        )
+
+    process_holder["process"] = process
+    _update_active_run_fields(state_root, run_id, worker_pid=int(process.pid))
+    handoff_heartbeat_thread: Optional[threading.Thread] = None
+    if handoff_heartbeat_seconds > 0.0:
+        handoff_heartbeat_thread = threading.Thread(
+            target=_handoff_heartbeat_loop,
+            daemon=True,
+        )
+        handoff_heartbeat_thread.start()
+    stdout_thread = threading.Thread(
+        target=_consume_stream,
+        args=(process.stdout, stdout_sink, stdout_chunks),
+        kwargs={"stream_name": "stdout"},
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_consume_stream,
+        args=(process.stderr, stderr_sink, stderr_chunks),
+        kwargs={"stream_name": "stderr"},
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+    timeout_enabled = float(timeout_seconds or 0.0) > 0 and _subprocess_run_supports_timeout()
+
+    try:
+        if process.stdin is not None:
+            process.stdin.write(prompt)
+            process.stdin.close()
+        process.wait(timeout=float(timeout_seconds) if timeout_enabled else None)
+    except subprocess.TimeoutExpired:
+        _terminate_worker_process(process)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+        _stop_handoff_heartbeat(handoff_heartbeat_thread)
         timeout_label = f"{float(timeout_seconds):g}s"
-        stderr_text = _normalize_subprocess_output(exc.stderr)
-        stdout_text = _normalize_subprocess_output(exc.stdout)
+        stdout_text = "".join(stdout_chunks)
+        stderr_text = "".join(stderr_chunks)
         timeout_message = f"Error: worker_timeout:{timeout_label}"
         if stderr_text and not stderr_text.endswith("\n"):
             stderr_text += "\n"
@@ -4580,6 +6041,13 @@ def _run_worker_attempt(
             f"[fleet-supervisor] worker attempt exceeded watchdog after {timeout_label}; "
             "killed and marked retryable\n"
         )
+        with output_lock:
+            if stderr_sink is not None:
+                stderr_sink.write(timeout_message + "\n")
+                stderr_sink.write(
+                    f"[fleet-supervisor] worker attempt exceeded watchdog after {timeout_label}; killed and marked retryable\n"
+                )
+                stderr_sink.flush()
         if not last_message_path.exists() or not _read_text(last_message_path).strip():
             last_message_path.write_text(timeout_message + "\n", encoding="utf-8")
         return subprocess.CompletedProcess(
@@ -4588,6 +6056,55 @@ def _run_worker_attempt(
             stdout=stdout_text,
             stderr=stderr_text,
         )
+    finally:
+        if process.stdin is not None and not process.stdin.closed:
+            try:
+                process.stdin.close()
+            except Exception:
+                pass
+
+    if stdout_thread.is_alive() and process.stdout is not None:
+        try:
+            process.stdout.close()
+        except Exception:
+            pass
+    if stderr_thread.is_alive() and process.stderr is not None:
+        try:
+            process.stderr.close()
+        except Exception:
+            pass
+    stdout_thread.join(timeout=5)
+    stderr_thread.join(timeout=5)
+    _stop_handoff_heartbeat(handoff_heartbeat_thread)
+    if self_poll_state["tripped"]:
+        stdout_text = "".join(stdout_chunks)
+        stderr_text = "".join(stderr_chunks)
+        violation_message = (
+            "Error: worker_self_polling:supervisor_status_loop\n"
+            "[fleet-supervisor] worker repeatedly queried supervisor status inside an active run; "
+            "killed and marked non-retryable\n"
+        )
+        if stderr_text and not stderr_text.endswith("\n"):
+            stderr_text += "\n"
+        stderr_text += violation_message
+        with output_lock:
+            if stderr_sink is not None:
+                stderr_sink.write(violation_message)
+                stderr_sink.flush()
+        if not last_message_path.exists() or not _read_text(last_message_path).strip():
+            last_message_path.write_text("Exact blocker: worker_self_polling:supervisor_status_loop\n", encoding="utf-8")
+        return subprocess.CompletedProcess(
+            list(command),
+            125,
+            stdout=stdout_text,
+            stderr=stderr_text,
+        )
+    return subprocess.CompletedProcess(
+        list(command),
+        int(process.returncode or 0),
+        stdout="".join(stdout_chunks),
+        stderr="".join(stderr_chunks),
+    )
 
 
 def _state_updated_at(state: Dict[str, Any]) -> Optional[dt.datetime]:
@@ -4742,6 +6259,7 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
     shard_eta_in_progress_sum = 0
     shard_eta_not_started_sum = 0
     has_shard_eta_counts = False
+    shard_eta_scope_kinds: Set[str] = set()
     for shard in shard_rows:
         for value in (shard.get("active_frontier_ids") or shard.get("frontier_ids") or []):
             normalized = _coerce_int(value, 0)
@@ -4750,6 +6268,9 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
         shard_eta_open = max(0, _coerce_int(shard.get("eta_remaining_open_milestones"), 0))
         shard_eta_in_progress = max(0, _coerce_int(shard.get("eta_remaining_in_progress_milestones"), 0))
         shard_eta_not_started = max(0, _coerce_int(shard.get("eta_remaining_not_started_milestones"), 0))
+        shard_eta_scope_kind = str(shard.get("eta_scope_kind") or "").strip()
+        if shard_eta_scope_kind:
+            shard_eta_scope_kinds.add(shard_eta_scope_kind)
         if shard_eta_open or shard_eta_in_progress or shard_eta_not_started:
             has_shard_eta_counts = True
             shard_eta_open = max(shard_eta_open, shard_eta_in_progress + shard_eta_not_started)
@@ -4811,15 +6332,57 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
             not_started_count = shard_eta_not_started_sum
         else:
             not_started_count = max(0, open_count - in_progress_count)
+        if used_shard_eta_totals and in_progress_count > shard_eta_in_progress_sum:
+            not_started_count = max(0, open_count - in_progress_count)
+        eta = _normalize_eta_scope_fields(eta)
+        aggregate_scope_kind = str(eta.get("scope_kind") or "").strip()
+        consistent_shard_scope_kind = next(iter(shard_eta_scope_kinds)) if len(shard_eta_scope_kinds) == 1 else ""
+        if consistent_shard_scope_kind and aggregate_scope_kind != consistent_shard_scope_kind:
+            eta.update(_eta_scope_defaults(consistent_shard_scope_kind))
+            aggregate_scope_kind = consistent_shard_scope_kind
+        mixed_eta_scopes = len(shard_eta_scope_kinds) > 1
+        if mixed_eta_scopes:
+            eta["status"] = "tracked"
+            eta["eta_human"] = "tracked"
+            eta["eta_confidence"] = ETA_STATUS_LOW_CONFIDENCE
+            eta["basis"] = "aggregate_shard_eta_scope_mismatch"
+            eta["predicted_completion_at"] = ""
+            eta.update(
+                _eta_scope_fields(
+                    scope_kind="aggregate_shard_mixed_scope",
+                    scope_label="Aggregate multi-shard ETA",
+                    scope_warning=(
+                        "Aggregate shard status currently mixes multiple ETA scopes. Use the ETA command for a fresh "
+                        "whole-fleet forecast instead of reading this as a single parity horizon."
+                    ),
+                )
+            )
+            scope_list = ", ".join(sorted(shard_eta_scope_kinds)) or aggregate_scope_kind or "unknown"
+            eta["summary"] = (
+                f"Aggregate shard state currently mixes ETA scopes ({scope_list}). "
+                f"{open_count} open milestones remain across the active frontier."
+            )
+        elif consistent_shard_scope_kind and consistent_shard_scope_kind != "open_milestone_frontier" and open_count > 0 and len(shard_rows) > 1:
+            eta["status"] = "tracked"
+            eta["eta_human"] = "tracked"
+            eta["eta_confidence"] = ETA_STATUS_LOW_CONFIDENCE
+            eta["basis"] = "aggregate_shard_parallel_scope"
+            eta["predicted_completion_at"] = ""
+            eta["summary"] = (
+                f"{open_count} open milestones remain ({in_progress_count} in progress, {not_started_count} not started). "
+                f"Aggregate shard status is parallelized across {len(shard_rows)} shards under "
+                f"{eta.get('scope_label') or consistent_shard_scope_kind}."
+            )
         eta["remaining_open_milestones"] = open_count
         eta["remaining_in_progress_milestones"] = in_progress_count
         eta["remaining_not_started_milestones"] = not_started_count
-        eta["summary"] = _rewrite_eta_progress_summary(
-            str(eta.get("summary") or ""),
-            open_count=open_count,
-            in_progress_count=in_progress_count,
-            not_started_count=not_started_count,
-        )
+        if str(eta.get("basis") or "").strip() not in {"aggregate_shard_eta_scope_mismatch", "aggregate_shard_parallel_scope"}:
+            eta["summary"] = _rewrite_eta_progress_summary(
+                str(eta.get("summary") or ""),
+                open_count=open_count,
+                in_progress_count=in_progress_count,
+                not_started_count=not_started_count,
+            )
         if shard_blockers:
             primary = dict(shard_blockers[0])
             blocker_reason = f"{primary.get('name') or 'unknown'}: {primary.get('blocker') or 'blocked'}"
@@ -4970,10 +6533,11 @@ def _effective_supervisor_state(
     state_root: Path,
     *,
     history_limit: int = 10,
+    include_history: bool = True,
 ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     _heal_state_push_blockers(state_root)
     base_state = _read_state(_state_payload_path(state_root))
-    base_history = _read_history(_history_payload_path(state_root), limit=history_limit)
+    base_history = _read_history(_history_payload_path(state_root), limit=history_limit) if include_history else []
     shard_roots = _configured_shard_roots(state_root)
     manifest_entry_map = _active_shard_manifest_entry_map(state_root)
     if not shard_roots:
@@ -4984,20 +6548,22 @@ def _effective_supervisor_state(
     for shard_root in shard_roots:
         _heal_state_push_blockers(shard_root)
         shard_state = _read_state(_state_payload_path(shard_root))
-        shard_history = _read_history(_history_payload_path(shard_root), limit=history_limit)
         manifest_entry = manifest_entry_map.get(shard_root.name, {})
         state_items.append({"name": shard_root.name, "root": shard_root, "state": shard_state})
-        for run in shard_history:
-            if not _run_matches_manifest_frontier(dict(run), manifest_entry):
-                continue
-            payload = dict(run)
-            payload["_shard"] = shard_root.name
-            combined_history.append(payload)
+        if include_history:
+            shard_history = _read_history(_history_payload_path(shard_root), limit=history_limit)
+            for run in shard_history:
+                if not _run_matches_manifest_frontier(dict(run), manifest_entry):
+                    continue
+                payload = dict(run)
+                payload["_shard"] = shard_root.name
+                combined_history.append(payload)
 
     default_time = dt.datetime.min.replace(tzinfo=dt.timezone.utc)
-    combined_history.sort(key=lambda item: _run_updated_at(item) or default_time)
-    if history_limit > 0:
-        combined_history = combined_history[-history_limit:]
+    if include_history:
+        combined_history.sort(key=lambda item: _run_updated_at(item) or default_time)
+        if history_limit > 0:
+            combined_history = combined_history[-history_limit:]
 
     populated_states = [item for item in state_items if item.get("state")]
     if not populated_states:
@@ -5043,7 +6609,7 @@ def _effective_supervisor_state(
         aggregate["mode"] = next(iter(modes))
     elif modes:
         aggregate["mode"] = "sharded"
-    latest_run = combined_history[-1] if combined_history else dict(latest_state.get("last_run") or {})
+    latest_run = combined_history[-1] if include_history and combined_history else dict(latest_state.get("last_run") or {})
     if latest_run:
         aggregate["last_run"] = dict(latest_run)
     active_runs: List[Dict[str, Any]] = []
@@ -5110,6 +6676,7 @@ def _effective_supervisor_state(
                 "active_frontier_ids": list(active_run_payload.get("frontier_ids") or []),
                 "open_milestone_ids": _state_open_milestone_ids(shard_state),
                 "eta_status": str((shard_state.get("eta") or {}).get("status") or "").strip(),
+                "eta_scope_kind": str((shard_state.get("eta") or {}).get("scope_kind") or "").strip(),
                 "eta_remaining_open_milestones": (shard_state.get("eta") or {}).get("remaining_open_milestones"),
                 "eta_remaining_in_progress_milestones": (shard_state.get("eta") or {}).get("remaining_in_progress_milestones"),
                 "eta_remaining_not_started_milestones": (shard_state.get("eta") or {}).get("remaining_not_started_milestones"),
@@ -5202,6 +6769,28 @@ def _active_account_claim_counts(state_root: Path) -> Dict[str, int]:
             continue
         counts[alias] = counts.get(alias, 0) + 1
     return counts
+
+
+def _account_selection_lock_path(state_root: Path, account_alias: str) -> Path:
+    aggregate_root = _aggregate_state_root(state_root)
+    safe_alias = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(account_alias or "").strip() or "account")
+    return aggregate_root / "locks" / f"account-select-{safe_alias}.json"
+
+
+def _stable_account_selection_rank(state_root: Path, account_alias: str) -> int:
+    shard_label = str(Path(state_root).resolve().name or "state").strip() or "state"
+    alias_label = str(account_alias or "").strip() or "account"
+    digest = hashlib.sha256(f"{shard_label}:{alias_label}".encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big", signed=False)
+
+
+def _prefer_full_ea_lanes_enabled() -> bool:
+    return str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _exclude_frontier_ids(frontier: Sequence[Milestone], excluded_ids: Sequence[int]) -> List[Milestone]:
@@ -5350,6 +6939,84 @@ def _format_eta_window(low_hours: float, high_hours: float) -> str:
     return f"{_format_eta_bound(low)}-{_format_eta_bound(high)}"
 
 
+def _eta_scope_fields(
+    *,
+    scope_kind: str,
+    scope_label: str,
+    scope_warning: str = "",
+) -> Dict[str, Any]:
+    return {
+        "scope_kind": str(scope_kind or "").strip(),
+        "scope_label": str(scope_label or "").strip(),
+        "scope_warning": str(scope_warning or "").strip(),
+    }
+
+
+def _eta_scope_defaults(scope_kind: str) -> Dict[str, Any]:
+    normalized = str(scope_kind or "").strip()
+    if normalized == "completion_review_recovery":
+        return _eta_scope_fields(
+            scope_kind="completion_review_recovery",
+            scope_label="Completion review and proof recovery",
+            scope_warning=(
+                "This ETA covers registry trust, proof, and review recovery. It is still narrower than a final "
+                "flagship parity claim unless full-product readiness is also green."
+            ),
+        )
+    if normalized == "flagship_product_readiness":
+        return _eta_scope_fields(
+            scope_kind="flagship_product_readiness",
+            scope_label="Full Chummer5A parity and flagship proof closeout",
+        )
+    if normalized == "repo_local_completion_ready":
+        return _eta_scope_fields(
+            scope_kind="repo_local_completion_ready",
+            scope_label="Repo-local completion review",
+            scope_warning=(
+                "Repo-local completion evidence is green. External release, flagship, or parity claims still "
+                "depend on the broader readiness surfaces staying green."
+            ),
+        )
+    if normalized == "open_milestone_frontier":
+        return _eta_scope_fields(
+            scope_kind="open_milestone_frontier",
+            scope_label="Current open milestone frontier",
+            scope_warning=(
+                "This is a tactical frontier ETA only. It does not cover completion-review recovery, "
+                "flagship readiness proof, or full Chummer5A parity closeout."
+            ),
+        )
+    return _eta_scope_fields(
+        scope_kind=normalized or "unknown",
+        scope_label="Unknown ETA scope",
+    )
+
+
+def _normalize_eta_scope_fields(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    eta = dict(snapshot or {})
+    scope_kind = str(eta.get("scope_kind") or "").strip()
+    if scope_kind:
+        defaults = _eta_scope_defaults(scope_kind)
+        eta["scope_kind"] = str(defaults.get("scope_kind") or scope_kind).strip()
+        eta["scope_label"] = str(eta.get("scope_label") or defaults.get("scope_label") or "").strip()
+        eta["scope_warning"] = str(eta.get("scope_warning") or defaults.get("scope_warning") or "").strip()
+        return eta
+    basis = str(eta.get("basis") or "").strip().lower()
+    status = str(eta.get("status") or "").strip().lower()
+    remaining_open = max(0, _coerce_int(eta.get("remaining_open_milestones"), 0))
+    if basis == "completion_review_recovery" or status == "recovery":
+        eta.update(_eta_scope_defaults("completion_review_recovery"))
+    elif "full_product" in basis or status == "flagship_delivery":
+        eta.update(_eta_scope_defaults("flagship_product_readiness"))
+    elif basis == "completion_audit_pass" or status == "ready":
+        eta.update(_eta_scope_defaults("repo_local_completion_ready"))
+    elif basis in {"empirical_open_milestone_burn", "heuristic_status_mix"} or remaining_open > 0:
+        eta.update(_eta_scope_defaults("open_milestone_frontier"))
+    else:
+        eta.update(_eta_scope_defaults("unknown"))
+    return eta
+
+
 def _run_open_milestone_ids(run: Dict[str, Any]) -> List[int]:
     rows: List[int] = []
     seen: set[int] = set()
@@ -5439,6 +7106,14 @@ def _estimate_open_milestone_eta(
             "history_sample_count": len(velocity_samples),
             "observed_burn_milestones_per_day": round(observed_per_day, 2),
             "blocking_reason": "",
+            **_eta_scope_fields(
+                scope_kind="open_milestone_frontier",
+                scope_label="Current open milestone frontier",
+                scope_warning=(
+                    "This is a tactical frontier ETA only. It does not cover completion-review recovery, "
+                    "flagship readiness proof, or full Chummer5A parity closeout."
+                ),
+            ),
         }
 
     low_hours = max(0.5, heuristic_low_hours)
@@ -5462,6 +7137,14 @@ def _estimate_open_milestone_eta(
         "history_sample_count": 0,
         "observed_burn_milestones_per_day": 0.0,
         "blocking_reason": "",
+        **_eta_scope_fields(
+            scope_kind="open_milestone_frontier",
+            scope_label="Current open milestone frontier",
+            scope_warning=(
+                "This is a tactical frontier ETA only. It does not cover completion-review recovery, "
+                "flagship readiness proof, or full Chummer5A parity closeout."
+            ),
+        ),
     }
 
 
@@ -5633,6 +7316,14 @@ def _estimate_completion_review_eta(
         "history_sample_count": len(history),
         "observed_burn_milestones_per_day": 0.0,
         "blocking_reason": "",
+        **_eta_scope_fields(
+            scope_kind="completion_review_recovery",
+            scope_label="Completion review and proof recovery",
+            scope_warning=(
+                "This ETA covers registry trust, proof, and review recovery. It is still narrower than a final "
+                "flagship parity claim unless full-product readiness is also green."
+            ),
+        ),
     }
 
 
@@ -5698,6 +7389,10 @@ def _estimate_full_product_eta(
         "history_sample_count": len(history),
         "observed_burn_milestones_per_day": 0.0,
         "blocking_reason": "",
+        **_eta_scope_fields(
+            scope_kind="flagship_product_readiness",
+            scope_label="Full Chummer5A parity and flagship proof closeout",
+        ),
     }
 
 
@@ -5770,6 +7465,14 @@ def _build_eta_snapshot(
             "history_sample_count": len(history),
             "observed_burn_milestones_per_day": 0.0,
             "blocking_reason": "",
+            **_eta_scope_fields(
+                scope_kind="repo_local_completion_ready",
+                scope_label="Repo-local completion review",
+                scope_warning=(
+                    "Repo-local completion evidence is green. External release, flagship, or parity claims still "
+                    "depend on the broader readiness surfaces staying green."
+                ),
+            ),
         }
     elif open_milestones:
         base_snapshot = _estimate_open_milestone_eta(open_milestones, history, current_time)
@@ -5792,6 +7495,10 @@ def _build_eta_snapshot(
             "history_sample_count": len(history),
             "observed_burn_milestones_per_day": 0.0,
             "blocking_reason": "",
+            **_eta_scope_fields(
+                scope_kind="unknown",
+                scope_label="Unknown ETA scope",
+            ),
         }
     return _apply_eta_blocker(base_snapshot, blocker_reason)
 
@@ -5799,11 +7506,14 @@ def _build_eta_snapshot(
 def _render_eta(eta: Dict[str, Any]) -> str:
     if not eta:
         return "ETA is unavailable."
+    eta = _normalize_eta_scope_fields(eta)
     lines = [
         f"status: {eta.get('status') or 'unknown'}",
         f"eta_human: {eta.get('eta_human') or 'unknown'}",
         f"eta_confidence: {eta.get('eta_confidence') or 'unknown'}",
         f"basis: {eta.get('basis') or 'unknown'}",
+        f"scope_kind: {eta.get('scope_kind') or 'unknown'}",
+        f"scope_label: {eta.get('scope_label') or 'unknown'}",
         f"summary: {eta.get('summary') or 'none'}",
         f"predicted_completion_at: {eta.get('predicted_completion_at') or 'unknown'}",
         (
@@ -5818,6 +7528,9 @@ def _render_eta(eta: Dict[str, Any]) -> str:
     blocker_reason = str(eta.get("blocking_reason") or "").strip()
     if blocker_reason:
         lines.append(f"blocking_reason: {blocker_reason}")
+    scope_warning = str(eta.get("scope_warning") or "").strip()
+    if scope_warning:
+        lines.append(f"scope_warning: {scope_warning}")
     return "\n".join(lines)
 
 
@@ -5833,7 +7546,7 @@ def derive_eta(args: argparse.Namespace) -> Dict[str, Any]:
         include_shards=True,
         refresh_flagship_readiness=False,
     )
-    live_eta = dict(live_state.get("eta") or {})
+    live_eta = _normalize_eta_scope_fields(dict(live_state.get("eta") or {}))
     if live_eta:
         return live_eta
     context = derive_context(args)
@@ -5982,6 +7695,10 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
     handoff_path = Path(args.handoff_path).resolve()
     workspace_root = Path(args.workspace_root).resolve()
     resolved_state_root = Path(state_root or args.state_root).resolve()
+    runtime_handoff_path = _existing_runtime_handoff_path(resolved_state_root)
+    if runtime_handoff_path is None:
+        _write_runtime_handoff(resolved_state_root)
+        runtime_handoff_path = _existing_runtime_handoff_path(resolved_state_root)
     scope_roots = _scope_roots(args)
     open_milestones, wave_order = _load_open_milestones(registry_path)
     handoff_text = _read_text(handoff_path) if handoff_path.exists() else ""
@@ -6011,6 +7728,7 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
         program_milestones_path=program_milestones_path,
         roadmap_path=roadmap_path,
         handoff_path=handoff_path,
+        runtime_handoff_path=runtime_handoff_path,
         open_milestones=open_milestones,
         frontier=frontier,
         scope_roots=scope_roots,
@@ -6023,6 +7741,7 @@ def derive_context(args: argparse.Namespace, *, state_root: Optional[Path] = Non
         "program_milestones_path": program_milestones_path,
         "roadmap_path": roadmap_path,
         "handoff_path": handoff_path,
+        "runtime_handoff_path": runtime_handoff_path,
         "workspace_root": workspace_root,
         "state_root": resolved_state_root,
         "scope_roots": scope_roots,
@@ -6116,6 +7835,7 @@ def derive_completion_review_context(
         program_milestones_path=context["program_milestones_path"],
         roadmap_path=context["roadmap_path"],
         handoff_path=context["handoff_path"],
+        runtime_handoff_path=context.get("runtime_handoff_path"),
         frontier_artifact_path=frontier_paths[0],
         frontier=frontier,
         scope_roots=context["scope_roots"],
@@ -6205,6 +7925,7 @@ def derive_flagship_product_context(
         program_milestones_path=context["program_milestones_path"],
         roadmap_path=context["roadmap_path"],
         handoff_path=context["handoff_path"],
+        runtime_handoff_path=context.get("runtime_handoff_path"),
         readiness_path=Path(args.flagship_product_readiness_path).resolve(),
         frontier_artifact_path=Path(frontier_paths[0]),
         frontier=frontier,
@@ -6300,7 +8021,11 @@ def _live_state_with_current_completion_audit(
         effective_args,
         _worker_lane_candidates(effective_args),
     )
+    host_memory_pressure = _memory_dispatch_snapshot(effective_args, state_root)
     updated = dict(state)
+    readiness_path = str(getattr(effective_args, "flagship_product_readiness_path", "") or "").strip()
+    if readiness_path:
+        updated["flagship_product_readiness_path"] = str(Path(readiness_path).resolve())
 
     def finalize_live_state(
         *,
@@ -6355,12 +8080,22 @@ def _live_state_with_current_completion_audit(
     if context["open_milestones"]:
         open_milestone_ids = [item.id for item in context["open_milestones"]]
         frontier_ids = [item.id for item in context["frontier"]]
+        loop_review_history = _completion_review_history(state_root, limit=ETA_HISTORY_LIMIT)
+        loop_completion_audit = dict(updated.get("completion_audit") or {})
+        if not loop_completion_audit:
+            loop_completion_audit = _design_completion_audit(
+                effective_args,
+                loop_review_history[-COMPLETION_AUDIT_HISTORY_LIMIT:],
+            )
+        loop_full_product_audit = dict(updated.get("full_product_audit") or {})
+        if not loop_full_product_audit:
+            loop_full_product_audit = _full_product_readiness_audit(effective_args)
         eta = _build_eta_snapshot(
             mode="loop",
             open_milestones=context["open_milestones"],
             frontier=context["frontier"],
             history=history,
-            completion_audit=None,
+            completion_audit=loop_completion_audit,
             worker_lane_health=worker_lane_health,
         )
         updated.update(
@@ -6373,8 +8108,9 @@ def _live_state_with_current_completion_audit(
                 "focus_texts": list(context["focus_texts"]),
                 "eta": eta,
                 "worker_lane_health": worker_lane_health,
-                "completion_audit": {},
-                "full_product_audit": {},
+                "host_memory_pressure": host_memory_pressure,
+                "completion_audit": loop_completion_audit,
+                "full_product_audit": loop_full_product_audit,
                 "completion_review_frontier_path": "",
                 "completion_review_frontier_mirror_path": "",
                 "full_product_frontier_path": "",
@@ -6433,6 +8169,7 @@ def _live_state_with_current_completion_audit(
                     "full_product_audit": full_product_audit,
                     "eta": eta,
                     "worker_lane_health": worker_lane_health,
+                    "host_memory_pressure": host_memory_pressure,
                     "completion_review_frontier_path": completion_frontier_paths["published_path"],
                     "completion_review_frontier_mirror_path": completion_frontier_paths["mirror_path"],
                     "full_product_frontier_path": frontier_paths["published_path"],
@@ -6492,6 +8229,7 @@ def _live_state_with_current_completion_audit(
                     "full_product_audit": dict(flagship_context["full_product_audit"]),
                     "eta": eta,
                     "worker_lane_health": worker_lane_health,
+                    "host_memory_pressure": host_memory_pressure,
                     "completion_review_frontier_path": completion_frontier_paths["published_path"],
                     "completion_review_frontier_mirror_path": completion_frontier_paths["mirror_path"],
                     "full_product_frontier_path": frontier_paths["published_path"],
@@ -6552,6 +8290,7 @@ def _live_state_with_current_completion_audit(
                     "full_product_audit": dict(flagship_context["full_product_audit"]),
                     "eta": eta,
                     "worker_lane_health": worker_lane_health,
+                    "host_memory_pressure": host_memory_pressure,
                     "completion_review_frontier_path": "",
                     "completion_review_frontier_mirror_path": "",
                     "full_product_frontier_path": frontier_paths["published_path"],
@@ -6607,6 +8346,7 @@ def _live_state_with_current_completion_audit(
                     "full_product_audit": dict(flagship_context["full_product_audit"]),
                     "eta": eta,
                     "worker_lane_health": worker_lane_health,
+                    "host_memory_pressure": host_memory_pressure,
                     "completion_review_frontier_path": "",
                     "completion_review_frontier_mirror_path": "",
                     "full_product_frontier_path": frontier_paths["published_path"],
@@ -6651,6 +8391,7 @@ def _live_state_with_current_completion_audit(
             "full_product_audit": full_product_audit,
             "eta": eta,
             "worker_lane_health": worker_lane_health,
+            "host_memory_pressure": host_memory_pressure,
             "completion_review_frontier_path": frontier_paths["published_path"],
             "completion_review_frontier_mirror_path": frontier_paths["mirror_path"],
             "full_product_frontier_path": "",
@@ -6663,6 +8404,124 @@ def _live_state_with_current_completion_audit(
         frontier_ids=[item.id for item in review_context["frontier"]],
     )
     return updated, review_history
+
+
+def _fast_status_state(
+    args: argparse.Namespace,
+    state_root: Path,
+    state: Dict[str, Any],
+    *,
+    include_shards: bool = True,
+) -> Dict[str, Any]:
+    updated = dict(state)
+    readiness_path = str(getattr(args, "flagship_product_readiness_path", "") or "").strip()
+    if readiness_path:
+        updated["flagship_product_readiness_path"] = str(Path(readiness_path).resolve())
+    if not include_shards:
+        return updated
+    shard_state_items: List[Dict[str, Any]] = []
+    for shard_root in _configured_shard_roots(state_root):
+        shard_state = _read_state(_state_payload_path(shard_root))
+        if not shard_state:
+            continue
+        shard_state_items.append({"name": shard_root.name, "root": shard_root, "state": shard_state})
+    updated["shards"] = _statefile_shard_summaries(state_root)
+    updated["shard_count"] = len(updated.get("shards") or [])
+    freshest_shard_updated_at = max(
+        (
+            parsed
+            for parsed in (
+                _parse_iso(str(item.get("updated_at") or "").strip())
+                for item in (updated.get("shards") or [])
+            )
+            if parsed is not None
+        ),
+        default=None,
+    )
+    if freshest_shard_updated_at is not None:
+        updated["updated_at"] = _iso(freshest_shard_updated_at)
+    updated["active_runs_count"] = sum(
+        1 for item in (updated.get("shards") or []) if str(item.get("active_run_id") or "").strip()
+    )
+    shard_frontier_ids = sorted(
+        {
+            _coerce_int(value, value)
+            for item in (updated.get("shards") or [])
+            for value in (item.get("frontier_ids") or [])
+        }
+    )
+    if shard_frontier_ids:
+        updated["frontier_ids"] = shard_frontier_ids
+    shard_open_milestone_ids = sorted(
+        {
+            _coerce_int(value, value)
+            for item in (updated.get("shards") or [])
+            for value in (item.get("open_milestone_ids") or [])
+        }
+    )
+    if shard_open_milestone_ids:
+        updated["open_milestone_ids"] = shard_open_milestone_ids
+    for key in ("focus_profiles", "focus_owners", "focus_texts"):
+        shard_values = sorted(
+            {
+                str(value).strip()
+                for item in (updated.get("shards") or [])
+                for value in (item.get(key) or [])
+                if str(value).strip()
+            }
+        )
+        if shard_values:
+            updated[key] = shard_values
+    for field in (
+        "completion_audit",
+        "full_product_audit",
+        "eta",
+        "worker_lane_health",
+        "host_memory_pressure",
+        "flagship_product_readiness_path",
+    ):
+        latest_field_value = _latest_nonempty_state_field(shard_state_items, field)
+        if latest_field_value:
+            updated[field] = latest_field_value
+    if len(updated.get("shards") or []) > 1:
+        updated["mode"] = "complete" if _has_current_flagship_pass_proof(updated) else "sharded"
+    updated.update(_reconcile_aggregate_shard_truth(updated))
+    return updated
+
+
+def _status_generated_at(payload: Any) -> Optional[dt.datetime]:
+    if not isinstance(payload, dict):
+        return None
+    return _parse_iso(str(payload.get("generated_at") or payload.get("generatedAt") or "").strip())
+
+
+def _status_json_requires_rich_refresh(state: Dict[str, Any], *, include_shards: bool) -> bool:
+    if not include_shards or not isinstance(state, dict):
+        return False
+    rich_fields = (
+        "worker_lane_health",
+        "host_memory_pressure",
+        "completion_audit",
+        "full_product_audit",
+        "eta",
+        "flagship_product_readiness_path",
+    )
+    if not any(bool(state.get(field)) for field in rich_fields):
+        return True
+
+    readiness_path_raw = str(state.get("flagship_product_readiness_path") or "").strip()
+    if readiness_path_raw:
+        readiness_path = Path(readiness_path_raw)
+        if readiness_path.is_file():
+            published_readiness = _read_state(readiness_path)
+            published_generated_at = _status_generated_at(published_readiness)
+            cached_generated_at = _status_generated_at(state.get("full_product_audit"))
+            if published_generated_at is not None and (
+                cached_generated_at is None or cached_generated_at < published_generated_at
+            ):
+                return True
+
+    return False
 
 
 def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Dict[str, Any]]:
@@ -6687,9 +8546,6 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
         shard_index = _coerce_int(manifest_entry.get("index"), 0) or _shard_index_from_root(aggregate_root, shard_root)
         if shard_index is not None and use_runtime_shard_env:
             group_index = shard_index - 1
-            shard_args.account_alias = _env_split_list(
-                _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", workspace_root, "")
-            )
             shard_args.focus_profile = _env_split_list(
                 _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE", workspace_root, "")
             )
@@ -6712,13 +8568,6 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
                 "CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL",
                 str(getattr(args, "worker_model", "") or DEFAULT_MODEL),
             )
-            shard_account_aliases = _runtime_env_group_list(
-                "CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS",
-                group_index,
-                workspace_root=workspace_root,
-            )
-            if shard_account_aliases is not None:
-                shard_args.account_alias = shard_account_aliases
             shard_focus_owners = _runtime_env_group_list(
                 "CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS",
                 group_index,
@@ -6765,6 +8614,23 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             )
             if shard_worker_model:
                 shard_args.worker_model = shard_worker_model
+            if _dynamic_account_routing_enabled(
+                workspace_root,
+                worker_lane=str(getattr(shard_args, "worker_lane", "") or ""),
+                worker_model=str(getattr(shard_args, "worker_model", "") or ""),
+            ):
+                shard_args.account_alias = []
+            else:
+                shard_args.account_alias = _env_split_list(
+                    _runtime_env_default_with_workspace("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES", workspace_root, "")
+                )
+                shard_account_aliases = _runtime_env_group_list(
+                    "CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS",
+                    group_index,
+                    workspace_root=workspace_root,
+                )
+                if shard_account_aliases is not None:
+                    shard_args.account_alias = shard_account_aliases
         if manifest_entry:
             shard_focus_profiles = _manifest_text_list(manifest_entry.get("focus_profile"))
             if shard_focus_profiles:
@@ -6793,6 +8659,12 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             manifest_worker_model = str(manifest_entry.get("worker_model") or "").strip()
             if manifest_worker_model:
                 shard_args.worker_model = manifest_worker_model
+            if _dynamic_account_routing_enabled(
+                workspace_root,
+                worker_lane=str(getattr(shard_args, "worker_lane", "") or ""),
+                worker_model=str(getattr(shard_args, "worker_model", "") or ""),
+            ):
+                shard_args.account_alias = []
         updated_shard, _ = _live_state_with_current_completion_audit(
             shard_args,
             shard_root,
@@ -6831,6 +8703,147 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
     return summaries
 
 
+def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
+    aggregate_root = _aggregate_state_root(state_root)
+    summaries: List[Dict[str, Any]] = []
+    running_inside_container = _running_inside_container()
+    for shard_root in _configured_shard_roots(aggregate_root):
+        shard_state = _read_state(_state_payload_path(shard_root))
+        state_payload_path = _state_payload_path(shard_root)
+        state_payload_updated_at = _state_updated_at(shard_state)
+        try:
+            state_file_updated_at = dt.datetime.fromtimestamp(state_payload_path.stat().st_mtime, tz=dt.timezone.utc)
+        except Exception:
+            state_file_updated_at = None
+        freshest_updated_at = state_payload_updated_at
+        if state_file_updated_at is not None and (
+            freshest_updated_at is None or state_file_updated_at > freshest_updated_at
+        ):
+            freshest_updated_at = state_file_updated_at
+        active_run = (shard_state.get("active_run") or {}) if isinstance(shard_state.get("active_run"), dict) else {}
+        last_run = (shard_state.get("last_run") or {}) if isinstance(shard_state.get("last_run"), dict) else {}
+        worker_pid = _coerce_int(active_run.get("worker_pid"), 0)
+        process_probe_scope = "local"
+        process_alive: Optional[bool] = False
+        process_state = ""
+        process_cpu_seconds = 0.0
+        if (
+            worker_pid > 0
+            and not running_inside_container
+            and any(
+                str(active_run.get(key) or "").strip().startswith("/var/lib/codex-fleet/")
+                for key in ("stderr_path", "stdout_path", "last_message_path", "prompt_path")
+            )
+        ):
+            process_probe_scope = "container_local"
+            process_alive = None
+        elif worker_pid > 0:
+            stat_path = Path("/proc") / str(worker_pid) / "stat"
+            try:
+                raw_stat = stat_path.read_text(encoding="utf-8")
+            except OSError:
+                raw_stat = ""
+            if raw_stat:
+                right_paren = raw_stat.rfind(")")
+                tail = raw_stat[right_paren + 2 :].split() if right_paren >= 0 else []
+                if len(tail) >= 13:
+                    process_alive = True
+                    process_state = str(tail[0] or "").strip()
+                    try:
+                        ticks_per_second = float(os.sysconf(os.sysconf_names.get("SC_CLK_TCK", "SC_CLK_TCK")))
+                    except (AttributeError, TypeError, ValueError):
+                        ticks_per_second = 100.0
+                    try:
+                        process_cpu_seconds = (
+                            float(int(tail[11])) + float(int(tail[12]))
+                        ) / max(1.0, ticks_per_second)
+                    except (TypeError, ValueError):
+                        process_cpu_seconds = 0.0
+        active_run_output_updated_at: Optional[dt.datetime] = None
+        active_run_output_sizes: Dict[str, int] = {}
+        for key, label in (
+            ("stderr_path", "stderr"),
+            ("stdout_path", "stdout"),
+            ("last_message_path", "last_message"),
+        ):
+            path_text = str(active_run.get(key) or "").strip()
+            if not path_text:
+                continue
+            path = _resolve_run_artifact_path(path_text)
+            if not path.exists():
+                continue
+            try:
+                stat_result = path.stat()
+            except OSError:
+                continue
+            active_run_output_sizes[label] = int(stat_result.st_size)
+            modified_at = dt.datetime.fromtimestamp(stat_result.st_mtime, tz=dt.timezone.utc)
+            if active_run_output_updated_at is None or modified_at > active_run_output_updated_at:
+                active_run_output_updated_at = modified_at
+        summaries.append(
+            {
+                "name": shard_root.name,
+                "state_root": str(shard_root),
+                "updated_at": _iso(freshest_updated_at) if freshest_updated_at is not None else "",
+                "mode": shard_state.get("mode") or "",
+                "frontier_ids": _state_frontier_ids(shard_state),
+                "active_frontier_ids": list(active_run.get("frontier_ids") or []),
+                "open_milestone_ids": _state_open_milestone_ids(shard_state),
+                "focus_profiles": list(shard_state.get("focus_profiles") or []),
+                "focus_owners": list(shard_state.get("focus_owners") or []),
+                "focus_texts": list(shard_state.get("focus_texts") or []),
+                "eta_status": str((shard_state.get("eta") or {}).get("status") or "").strip(),
+                "eta_scope_kind": str((shard_state.get("eta") or {}).get("scope_kind") or "").strip(),
+                "eta_remaining_open_milestones": (shard_state.get("eta") or {}).get("remaining_open_milestones"),
+                "eta_remaining_in_progress_milestones": (
+                    (shard_state.get("eta") or {}).get("remaining_in_progress_milestones")
+                ),
+                "eta_remaining_not_started_milestones": (
+                    (shard_state.get("eta") or {}).get("remaining_not_started_milestones")
+                ),
+                "last_run_id": str(last_run.get("run_id") or "").strip(),
+                "last_run_finished_at": str(last_run.get("finished_at") or last_run.get("started_at") or "").strip(),
+                "last_run_blocker": _normalized_blocker_text(last_run.get("blocker")),
+                "active_run_id": str(active_run.get("run_id") or "").strip(),
+                "active_run_started_at": str(active_run.get("started_at") or "").strip(),
+                "selected_account_alias": str(active_run.get("selected_account_alias") or "").strip(),
+                "selected_model": str(active_run.get("selected_model") or "").strip(),
+                "active_run_worker_pid": worker_pid,
+                "active_run_process_probe_scope": process_probe_scope,
+                "active_run_process_alive": process_alive,
+                "active_run_process_state": process_state,
+                "active_run_process_cpu_seconds": process_cpu_seconds,
+                "active_run_worker_first_output_at": str(active_run.get("worker_first_output_at") or "").strip(),
+                "active_run_worker_last_output_at": str(active_run.get("worker_last_output_at") or "").strip(),
+                "active_run_progress_state": (
+                    "closing"
+                    if (
+                        worker_pid > 0
+                        and process_probe_scope == "local"
+                        and process_alive is False
+                        and str(active_run.get("worker_last_output_at") or active_run.get("worker_first_output_at") or "").strip()
+                    )
+                    else (
+                        "streaming"
+                        if str(active_run.get("worker_last_output_at") or active_run.get("worker_first_output_at") or "").strip()
+                        else (
+                            "running_silent"
+                            if process_alive is True
+                            else (
+                                "container_scoped"
+                                if worker_pid > 0 and process_probe_scope == "container_local"
+                                else ("missing_process" if worker_pid > 0 and process_alive is False else "unknown")
+                            )
+                        )
+                    )
+                ),
+                "active_run_output_updated_at": _iso(active_run_output_updated_at) if active_run_output_updated_at else "",
+                "active_run_output_sizes": active_run_output_sizes,
+            }
+        )
+    return summaries
+
+
 def _write_run_artifacts(run_dir: Path, prompt: str) -> Path:
     _ensure_dir(run_dir)
     prompt_path = run_dir / "prompt.txt"
@@ -6839,7 +8852,7 @@ def _write_run_artifacts(run_dir: Path, prompt: str) -> Path:
 
 
 def _account_runtime_path(state_root: Path) -> Path:
-    return state_root / "account_runtime.json"
+    return _aggregate_state_root(state_root) / "account_runtime.json"
 
 
 def _read_account_runtime(path: Path) -> Dict[str, Any]:
@@ -6963,10 +8976,14 @@ def _stream_budget_timeout_seconds_for_workspace(workspace_root: Path) -> float:
         stream_idle_ms = max(
             0.0,
             float(
-                _resolve_any_env_secret(
-                    workspace_root,
+                _runtime_env_default_with_workspace(
                     "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
-                    "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+                    workspace_root,
+                    _runtime_env_default_with_workspace(
+                        "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+                        workspace_root,
+                        "",
+                    ),
                 )
                 or "0"
             ),
@@ -6978,10 +8995,14 @@ def _stream_budget_timeout_seconds_for_workspace(workspace_root: Path) -> float:
             0,
             int(
                 float(
-                    _resolve_any_env_secret(
-                        workspace_root,
+                    _runtime_env_default_with_workspace(
                         "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
-                        "CODEXEA_STREAM_MAX_RETRIES",
+                        workspace_root,
+                        _runtime_env_default_with_workspace(
+                            "CODEXEA_STREAM_MAX_RETRIES",
+                            workspace_root,
+                            "",
+                        ),
                     )
                     or "0"
                 )
@@ -7026,29 +9047,57 @@ def _prepare_direct_worker_environment(
         env["XDG_CONFIG_HOME"] = str(worker_xdg_config_home)
         env["GH_CONFIG_DIR"] = str(worker_gh_config_dir)
     clean_lane = str(worker_lane or "").strip().lower()
+    bridge_token = _ea_bridge_api_token(workspace_root)
+    if bridge_token:
+        env["EA_MCP_API_TOKEN"] = bridge_token
+        env["EA_API_TOKEN"] = bridge_token
+    if clean_lane:
+        principal_id = f"codex-fleet-lane-{re.sub(r'[^A-Za-z0-9._-]+', '-', clean_lane).strip('-._') or 'default'}"
+        env["EA_PRINCIPAL_ID"] = principal_id
+        env["EA_MCP_PRINCIPAL_ID"] = principal_id
+        env["EA_DEFAULT_PRINCIPAL_ID"] = principal_id
     if _worker_bin_uses_codexea(worker_bin) and clean_lane in _direct_codexea_stream_lanes():
-        stream_idle_ms = _resolve_any_env_secret(
-            workspace_root,
-            "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+        stream_idle_ms = _runtime_env_default_with_workspace(
             "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS",
-        )
-        stream_max_retries = _resolve_any_env_secret(
             workspace_root,
-            "CODEXEA_STREAM_MAX_RETRIES",
+            _runtime_env_default_with_workspace(
+                "CODEXEA_STREAM_IDLE_TIMEOUT_MS",
+                workspace_root,
+                "",
+            ),
+        )
+        stream_max_retries = _runtime_env_default_with_workspace(
             "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES",
+            workspace_root,
+            _runtime_env_default_with_workspace(
+                "CODEXEA_STREAM_MAX_RETRIES",
+                workspace_root,
+                "",
+            ),
         )
         if stream_idle_ms:
-            env.setdefault("CODEXEA_STREAM_IDLE_TIMEOUT_MS", stream_idle_ms)
+            env["CODEXEA_STREAM_IDLE_TIMEOUT_MS"] = stream_idle_ms
         if stream_max_retries:
-            env.setdefault("CODEXEA_STREAM_MAX_RETRIES", stream_max_retries)
+            env["CODEXEA_STREAM_MAX_RETRIES"] = stream_max_retries
         if clean_lane == "core":
-            core_profile = _resolve_any_env_secret(
-                workspace_root,
-                "CODEXEA_CORE_RESPONSES_PROFILE",
+            core_profile = _runtime_env_default_with_workspace(
                 "CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE",
+                workspace_root,
+                _runtime_env_default_with_workspace(
+                    "CODEXEA_CORE_RESPONSES_PROFILE",
+                    workspace_root,
+                    "",
+                ),
             )
             if core_profile:
-                env.setdefault("CODEXEA_CORE_RESPONSES_PROFILE", core_profile)
+                env["CODEXEA_CORE_RESPONSES_PROFILE"] = core_profile
+    return env
+
+
+def _stamp_worker_supervisor_guard(env: Dict[str, str], *, run_id: str, run_dir: Path) -> Dict[str, str]:
+    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID"] = str(run_id or "").strip()
+    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] = str(run_dir)
+    env.setdefault("CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET", "0")
     return env
 
 
@@ -7269,6 +9318,14 @@ def _read_api_key(account: WorkerAccount, workspace_root: Path) -> str:
     raise RuntimeError(f"no API key source configured for {account.alias}")
 
 
+def _ea_bridge_api_token(workspace_root: Path) -> str:
+    for env_name in ("EA_MCP_API_TOKEN", "EA_API_TOKEN", "FLEET_INTERNAL_API_TOKEN"):
+        resolved = _resolve_env_secret(env_name, workspace_root)
+        if resolved:
+            return resolved
+    return ""
+
+
 def _prepare_account_environment(state_root: Path, workspace_root: Path, account: WorkerAccount) -> Dict[str, str]:
     home = _account_home(state_root, account)
     config_lines = ['cli_auth_credentials_store = "file"']
@@ -7307,6 +9364,20 @@ def _prepare_account_environment(state_root: Path, workspace_root: Path, account
         _seed_auth_json(home, _fallback_auth_json_path(Path(account.auth_json_file).expanduser(), workspace_root))
     elif account.auth_kind == "api_key":
         env["CODEX_API_KEY"] = _read_api_key(account, workspace_root)
+    elif account.auth_kind == "ea":
+        bridge_token = _ea_bridge_api_token(workspace_root)
+        if not bridge_token:
+            raise RuntimeError("missing EA bridge API token (EA_MCP_API_TOKEN / EA_API_TOKEN / FLEET_INTERNAL_API_TOKEN)")
+        env["EA_MCP_API_TOKEN"] = bridge_token
+        env["EA_API_TOKEN"] = bridge_token
+        principal_alias = re.sub(r"[^A-Za-z0-9._-]+", "-", str(account.alias or "")).strip("-._") or "ea-account"
+        principal_id = f"codex-fleet-{principal_alias}"
+        env["EA_PRINCIPAL_ID"] = principal_id
+        env["EA_MCP_PRINCIPAL_ID"] = principal_id
+        env["EA_DEFAULT_PRINCIPAL_ID"] = principal_id
+        if account.api_key_env:
+            env["EA_ONEMIN_ACCOUNT_ENV_NAME"] = account.api_key_env
+        env["EA_ONEMIN_ACCOUNT_ALIAS"] = account.alias
     else:
         raise RuntimeError(f"unsupported auth_kind for {account.alias}: {account.auth_kind}")
     if account.openai_base_url:
@@ -7340,12 +9411,13 @@ def _load_worker_accounts(args: argparse.Namespace) -> List[WorkerAccount]:
             continue
         if alias_filter and clean_alias not in alias_filter:
             continue
+        auth_kind = str(raw.get("auth_kind") or "api_key").strip()
+        if auth_kind not in CHATGPT_AUTH_KINDS and auth_kind not in {"api_key", "ea"}:
+            continue
         owner_id = str(raw.get("owner_id") or "").strip()
         if owner_filter and owner_id not in owner_order:
-            continue
-        auth_kind = str(raw.get("auth_kind") or "api_key").strip()
-        if auth_kind not in CHATGPT_AUTH_KINDS and auth_kind != "api_key":
-            continue
+            if not (auth_kind == "ea" and not explicit_owner_filter and not alias_filter):
+                continue
         health_state = str(raw.get("health_state") or "").strip().lower()
         if health_state not in READY_ACCOUNT_STATES:
             continue
@@ -7354,6 +9426,7 @@ def _load_worker_accounts(args: argparse.Namespace) -> List[WorkerAccount]:
                 alias=clean_alias,
                 owner_id=owner_id,
                 auth_kind=auth_kind,
+                lane=str(raw.get("lane") or "").strip(),
                 auth_json_file=str(raw.get("auth_json_file") or "").strip(),
                 api_key_env=str(raw.get("api_key_env") or "").strip(),
                 api_key_file=str(raw.get("api_key_file") or "").strip(),
@@ -7440,7 +9513,13 @@ def _parse_backend_unavailable_message(text: str) -> Optional[str]:
 def _parse_usage_limit_reset_at(text: str) -> Optional[dt.datetime]:
     raw = str(text or "")
     lower = raw.lower()
-    if "usage limit" not in lower and "send a request to your admin" not in lower:
+    if (
+        "usage limit" not in lower
+        and "send a request to your admin" not in lower
+        and "insufficient_credits" not in lower
+        and "insufficient credits" not in lower
+        and "credit balance" not in lower
+    ):
         return None
     match = re.search(
         r"try again at\s+([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,\s+\d{4}\s+\d{1,2}:\d{2}\s+[AP]M)",
@@ -7461,7 +9540,13 @@ def _parse_usage_limit_reset_at(text: str) -> Optional[dt.datetime]:
 def _parse_usage_limit_backoff_seconds(text: str, default_seconds: int, *, now: Optional[dt.datetime] = None) -> Optional[int]:
     raw = str(text or "")
     lower = raw.lower()
-    if "usage limit" not in lower and "send a request to your admin" not in lower:
+    if (
+        "usage limit" not in lower
+        and "send a request to your admin" not in lower
+        and "insufficient_credits" not in lower
+        and "insufficient credits" not in lower
+        and "credit balance" not in lower
+    ):
         return None
     current = now or _utc_now()
     reset_at = _parse_usage_limit_reset_at(raw)
@@ -7516,6 +9601,7 @@ def _clear_source_backoff(payload: Dict[str, Any], account: WorkerAccount) -> No
     item["backoff_until"] = ""
     item["spark_backoff_until"] = ""
     item["last_error"] = ""
+    item["restore_probe_at"] = ""
     sources[key] = item
     payload["sources"] = sources
 
@@ -7541,26 +9627,143 @@ def _active_source_backoff(
     return None, ""
 
 
+def _is_usage_limit_backoff_reason(reason: str) -> bool:
+    lower = str(reason or "").strip().lower()
+    if not lower:
+        return False
+    return (
+        "usage-limited" in lower
+        or "usage limit" in lower
+        or "insufficient credits" in lower
+        or "credit balance" in lower
+        or "send a request to your admin" in lower
+    )
+
+
+def _lane_health_report(
+    worker_lane_health: Optional[Dict[str, Any]],
+    *,
+    requested_worker_lane: str = "",
+    account_lane: str = "",
+) -> Dict[str, Any]:
+    if not isinstance(worker_lane_health, dict):
+        return {}
+    lanes = dict(worker_lane_health.get("lanes") or {})
+    requested = str(requested_worker_lane or "").strip()
+    account_lane_text = str(account_lane or "").strip()
+    for key in (requested, account_lane_text):
+        if key and isinstance(lanes.get(key), dict):
+            return dict(lanes.get(key) or {})
+    return {}
+
+
+def _eligible_routed_account_restore_probe(
+    payload: Dict[str, Any],
+    account: WorkerAccount,
+    *,
+    requested_worker_lane: str = "",
+    worker_lane_health: Optional[Dict[str, Any]] = None,
+    now: Optional[dt.datetime] = None,
+) -> bool:
+    if account.auth_kind != "ea":
+        return False
+    account_lane = str(account.lane or "").strip().lower()
+    if not account_lane or account_lane in {"repair", "survival"}:
+        return False
+    backoff_until, backoff_reason = _active_source_backoff(payload, account, now=now)
+    if backoff_until is None or not _is_usage_limit_backoff_reason(backoff_reason):
+        return False
+    if not _source_restore_probe_due(payload, account, now=now):
+        return False
+    lane_report = _lane_health_report(
+        worker_lane_health,
+        requested_worker_lane=requested_worker_lane,
+        account_lane=account_lane,
+    )
+    if lane_report and lane_report.get("routable") is False:
+        return False
+    state = str(lane_report.get("state") or "").strip().lower()
+    ready_slots = _coerce_int(lane_report.get("ready_slots"), 0)
+    if not lane_report:
+        return True
+    if state in {"ready", "degraded"} or ready_slots > 0:
+        return True
+    if lane_report.get("known") is False and str((worker_lane_health or {}).get("status") or "").strip().lower() == "pass":
+        return True
+    return False
+
+
 def _candidate_models_for_account(
     account: WorkerAccount,
     model_candidates: Sequence[str],
     account_runtime: Dict[str, Any],
     *,
+    requested_worker_lane: str = "",
+    ignore_active_backoff: bool = False,
     now: Optional[dt.datetime] = None,
 ) -> List[str]:
     current = now or _utc_now()
     rows: List[str] = []
+    seen: set[str] = set()
+    requested_lane = str(requested_worker_lane or "").strip().lower()
+    account_lane = str(account.lane or "").strip().lower()
     allowed_models = {str(item or "").strip() for item in (account.allowed_models or []) if str(item or "").strip()}
     for candidate in model_candidates:
-        if allowed_models and candidate and candidate not in allowed_models:
-            continue
-        if candidate == SPARK_MODEL and not account.spark_enabled:
-            continue
-        backoff_until, _ = _active_source_backoff(account_runtime, account, model=candidate, now=current)
-        if backoff_until is not None:
-            continue
-        rows.append(candidate)
+        variants = [str(candidate or "").strip()]
+        variants.extend(
+            fallback
+            for fallback in MODEL_COMPATIBILITY_FALLBACKS.get(str(candidate or "").strip(), ())
+            if str(fallback or "").strip()
+        )
+        variants.extend(
+            fallback
+            for fallback in (LANE_MODEL_COMPATIBILITY_FALLBACKS.get(requested_lane, {}).get(account_lane, ()) or ())
+        )
+        for variant in variants:
+            clean_variant = str(variant or "").strip()
+            if clean_variant in seen:
+                continue
+            if allowed_models and clean_variant and clean_variant not in allowed_models:
+                continue
+            if clean_variant == SPARK_MODEL and not account.spark_enabled:
+                continue
+            backoff_until, _ = _active_source_backoff(account_runtime, account, model=clean_variant, now=current)
+            if not ignore_active_backoff and backoff_until is not None:
+                continue
+            rows.append(clean_variant)
+            seen.add(clean_variant)
+            break
     return rows
+
+
+def _account_has_runnable_candidate_models(
+    account: WorkerAccount,
+    model_candidates: Sequence[str],
+    account_runtime: Dict[str, Any],
+    *,
+    requested_worker_lane: str = "",
+    ignore_active_backoff: bool = False,
+    active_account_claims: Optional[Dict[str, int]] = None,
+    now: Optional[dt.datetime] = None,
+) -> bool:
+    current = now or _utc_now()
+    claims = active_account_claims or {}
+    claimed_account_count = int(claims.get(account.alias, 0))
+    if account.max_parallel_runs > 0 and claimed_account_count >= account.max_parallel_runs:
+        return False
+    backoff_until, _ = _active_source_backoff(account_runtime, account, now=current)
+    if not ignore_active_backoff and backoff_until is not None:
+        return False
+    return bool(
+        _candidate_models_for_account(
+            account,
+            model_candidates,
+            account_runtime,
+            requested_worker_lane=requested_worker_lane,
+            ignore_active_backoff=ignore_active_backoff,
+            now=current,
+        )
+    )
 
 
 def launch_worker(
@@ -7637,8 +9840,106 @@ def launch_worker(
     preflight_failure_reason = ""
     direct_worker_lane = worker_lane_candidates[0]
     last_account_restore_probe_at: Optional[dt.datetime] = None
-    if direct_worker_lane:
-        account_candidates = []
+    rescue_account_candidates: List[WorkerAccount] = []
+    routed_full_lane_fallback_args: Optional[argparse.Namespace] = None
+    restore_probe_account_aliases: Set[str] = set()
+    explicit_account_targets = bool(_text_list(args.account_alias or []) or _text_list(args.account_owner_id or []))
+    has_routed_ea_accounts = any(account.auth_kind == "ea" for account in account_candidates)
+    routed_account_required = bool(
+        direct_worker_lane
+        and not explicit_account_targets
+        and _worker_bin_uses_codexea(str(args.worker_bin or ""))
+        and has_routed_ea_accounts
+    )
+    if direct_worker_lane and not explicit_account_targets:
+        requested_models = [candidate for candidate in model_candidates if str(candidate or "").strip()]
+        active_account_claims = _active_account_claim_counts(state_root)
+        prefer_full_ea_lanes = _prefer_full_ea_lanes_enabled()
+        current = _utc_now()
+        preferred_routed_accounts: List[tuple[int, int, int, str, WorkerAccount]] = []
+        rescue_routed_accounts: List[tuple[int, int, int, str, WorkerAccount]] = []
+        preferred_runnable_account_found = False
+        restore_probe_candidates: List[tuple[dt.datetime, int, int, str, WorkerAccount]] = []
+        for account in account_candidates:
+            if account.auth_kind != "ea":
+                continue
+            account_lane = str(account.lane or "").strip().lower()
+            allowed_models = {str(item or "").strip() for item in (account.allowed_models or []) if str(item or "").strip()}
+            requested_or_compatible_models: set[str] = set(requested_models)
+            for model in requested_models:
+                requested_or_compatible_models.update(
+                    item
+                    for item in MODEL_COMPATIBILITY_FALLBACKS.get(str(model or "").strip(), ())
+                    if str(item or "").strip()
+                )
+                requested_or_compatible_models.update(
+                    item
+                    for item in (LANE_MODEL_COMPATIBILITY_FALLBACKS.get(str(direct_worker_lane or "").strip().lower(), {}).get(account_lane, ()) or ())
+                    if str(item or "").strip()
+                )
+            if (
+                requested_or_compatible_models
+                and allowed_models
+                and not any(model in allowed_models for model in requested_or_compatible_models)
+            ):
+                continue
+            priority = 0 if account_lane == str(direct_worker_lane or "").strip().lower() else 1
+            if priority and account_lane not in {"jury", "review_light"}:
+                priority = 2
+            routing_row = (
+                priority,
+                int(active_account_claims.get(account.alias, 0)),
+                _stable_account_selection_rank(state_root, account.alias),
+                account.alias,
+                account,
+            )
+            is_rescue_lane = account_lane in {"repair", "survival"}
+            if prefer_full_ea_lanes and is_rescue_lane:
+                rescue_routed_accounts.append(routing_row)
+                continue
+            preferred_routed_accounts.append(routing_row)
+            restore_probe_eligible = _eligible_routed_account_restore_probe(
+                account_runtime,
+                account,
+                requested_worker_lane=direct_worker_lane,
+                worker_lane_health=worker_lane_health,
+                now=current,
+            )
+            if restore_probe_eligible:
+                backoff_until, _ = _active_source_backoff(account_runtime, account, now=current)
+                restore_probe_candidates.append(
+                    (
+                        backoff_until or current,
+                        int(active_account_claims.get(account.alias, 0)),
+                        _stable_account_selection_rank(state_root, account.alias),
+                        account.alias,
+                        account,
+                    )
+                )
+            preferred_runnable_account_found = preferred_runnable_account_found or _account_has_runnable_candidate_models(
+                account,
+                model_candidates,
+                account_runtime,
+                requested_worker_lane=direct_worker_lane,
+                active_account_claims=active_account_claims,
+                now=current,
+            )
+        if not preferred_runnable_account_found and restore_probe_candidates:
+            restore_probe_account_aliases.add(sorted(restore_probe_candidates)[0][3])
+        routed_accounts: List[tuple[int, int, int, str, WorkerAccount]] = list(preferred_routed_accounts)
+        preferred_account_candidates = [account for _priority, _claims, _rank, _alias, account in sorted(routed_accounts)]
+        if rescue_routed_accounts and (not prefer_full_ea_lanes or not preferred_runnable_account_found):
+            rescue_account_candidates = [account for _priority, _claims, _rank, _alias, account in sorted(rescue_routed_accounts)]
+        if prefer_full_ea_lanes:
+            account_candidates = list(preferred_account_candidates)
+        else:
+            account_candidates = list(preferred_account_candidates) + list(rescue_account_candidates)
+            rescue_account_candidates = []
+        routed_full_lane_fallback_args = (
+            _routed_full_lane_direct_fallback_args(args)
+            if prefer_full_ea_lanes and routed_account_required
+            else None
+        )
 
     def mark_active_run(
         *,
@@ -7691,168 +9992,230 @@ def launch_worker(
                     _write_account_runtime(account_runtime_path, account_runtime)
                 attempt_offset = len(attempted_accounts)
                 phase_total_attempts = sum(
-                    max(1, len(_candidate_models_for_account(account, phase_models, account_runtime)))
+                    max(1, len(_candidate_models_for_account(account, phase_models, account_runtime, requested_worker_lane=worker_lane)))
                     for account in accounts
                 )
                 display_total_attempts = max(attempt_offset + max(1, phase_total_attempts), attempt_offset + 1)
                 phase_attempt_index = 0
                 stop_retrying = False
                 for account in accounts:
-                    claimed_account_count = _active_account_claim_counts(state_root).get(account.alias, 0)
-                    if account.max_parallel_runs > 0 and claimed_account_count >= account.max_parallel_runs:
-                        stderr_handle.write(
-                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
-                            f"reason=max_parallel_runs {claimed_account_count}/{account.max_parallel_runs}\n"
-                        )
-                        stderr_handle.flush()
-                        continue
-                    source_backoff_until, source_backoff_reason = _active_source_backoff(account_runtime, account, now=_utc_now())
-                    if source_backoff_until is not None:
-                        stderr_handle.write(
-                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
-                            f"until={_iso(source_backoff_until)} reason={source_backoff_reason or 'backoff'}\n"
-                        )
-                        stderr_handle.flush()
-                        continue
-                    candidate_models = _candidate_models_for_account(account, phase_models, account_runtime)
-                    if not candidate_models:
-                        stderr_handle.write(
-                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} no_models_available\n"
-                        )
-                        stderr_handle.flush()
-                        continue
+                    selection_lock_path = _account_selection_lock_path(state_root, account.alias)
                     try:
-                        worker_env = _prepare_account_environment(state_root, workspace_root, account)
-                    except Exception as exc:
-                        message = f"account bootstrap failed: {exc}"
-                        until = _utc_now() + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
-                        _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
-                        _write_account_runtime(account_runtime_path, account_runtime)
+                        _acquire_lock(selection_lock_path, ttl_seconds=max(60.0, LOCK_TTL_SECONDS / 4))
+                    except RuntimeError:
                         stderr_handle.write(
-                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
-                            f"until={_iso(until)} reason={message}\n"
+                            f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} reason=account_selection_busy\n"
                         )
                         stderr_handle.flush()
                         continue
-                    for candidate_model in candidate_models:
-                        phase_attempt_index += 1
-                        display_attempt_index = attempt_offset + phase_attempt_index
-                        worker_command = _default_worker_command(
-                            worker_bin=worker_bin,
-                            worker_lane=worker_lane,
-                            workspace_root=workspace_root,
-                            scope_roots=context["scope_roots"],
-                            run_dir=run_dir,
-                            worker_model=candidate_model,
-                        )
-                        attempted_accounts.append(account.alias)
-                        attempted_models.append(candidate_model or "default")
-                        selected_account_alias = account.alias
-                        mark_active_run(
-                            command=worker_command,
-                            account_alias=account.alias,
-                            model_label=candidate_model or "default",
-                            attempt_index=display_attempt_index,
-                            total_attempts=display_total_attempts,
-                        )
-                        stderr_handle.write(
-                            f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
-                            f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
-                        )
-                        stderr_handle.flush()
-                        completed = _run_worker_attempt(
-                            worker_command,
-                            prompt=prompt,
-                            workspace_root=workspace_root,
-                            worker_env=worker_env,
-                            timeout_seconds=worker_timeout_seconds,
-                            last_message_path=last_message_path,
-                        )
-                        if completed.stdout:
-                            stdout_handle.write(completed.stdout)
-                        if completed.stderr:
-                            stderr_handle.write(completed.stderr)
-                        stdout_handle.flush()
-                        stderr_handle.flush()
-                        final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
-                        parsed = _parse_final_message_sections(final_message)
-                        accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
-                        if completed.returncode == 0 and accepted:
-                            _clear_source_backoff(account_runtime, account)
-                            _write_account_runtime(account_runtime_path, account_runtime)
-                            return True
-                        if completed.returncode == 0:
+                    worker_env: Optional[Dict[str, str]] = None
+                    candidate_models: List[str] = []
+                    try:
+                        claimed_account_count = _active_account_claim_counts(state_root).get(account.alias, 0)
+                        if account.max_parallel_runs > 0 and claimed_account_count >= account.max_parallel_runs:
                             stderr_handle.write(
-                                f"[fleet-supervisor] rejected result account={account.alias} "
-                                f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                                f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                                f"reason=max_parallel_runs {claimed_account_count}/{account.max_parallel_runs}\n"
                             )
                             stderr_handle.flush()
                             continue
                         now = _utc_now()
-                        auth_failure = _parse_auth_failure_message(completed.stderr)
-                        if auth_failure:
-                            until = now + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
-                            _set_source_backoff(account_runtime, account, backoff_until=until, last_error=auth_failure)
-                            _write_account_runtime(account_runtime_path, account_runtime)
-                            break
-                        usage_limit_backoff = _parse_usage_limit_backoff_seconds(
-                            completed.stderr,
-                            DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS,
-                            now=now,
-                        )
-                        if usage_limit_backoff is not None:
-                            until = now + dt.timedelta(seconds=usage_limit_backoff)
-                            reset_at = _parse_usage_limit_reset_at(completed.stderr)
-                            message = (
-                                f"usage-limited until {_iso(reset_at)}"
-                                if reset_at is not None
-                                else f"usage-limited; recheck at {_iso(until)}"
+                        allow_restore_probe = (
+                            account.alias in restore_probe_account_aliases
+                            and _eligible_routed_account_restore_probe(
+                                account_runtime,
+                                account,
+                                requested_worker_lane=worker_lane,
+                                worker_lane_health=worker_lane_health,
+                                now=now,
                             )
+                        )
+                        source_backoff_until, source_backoff_reason = _active_source_backoff(account_runtime, account, now=now)
+                        if source_backoff_until is not None and not allow_restore_probe:
+                            stderr_handle.write(
+                                f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                                f"until={_iso(source_backoff_until)} reason={source_backoff_reason or 'backoff'}\n"
+                            )
+                            stderr_handle.flush()
+                            continue
+                        if allow_restore_probe:
+                            _mark_source_restore_probe(account_runtime, account, when=now)
+                            _write_account_runtime(account_runtime_path, account_runtime)
+                            stderr_handle.write(
+                                f"[fleet-supervisor] restore probe account={account.alias} owner={account.owner_id} "
+                                f"despite active backoff until={_iso(source_backoff_until)} "
+                                f"reason={source_backoff_reason or 'backoff'}\n"
+                            )
+                            stderr_handle.flush()
+                        candidate_models = _candidate_models_for_account(
+                            account,
+                            phase_models,
+                            account_runtime,
+                            requested_worker_lane=worker_lane,
+                            ignore_active_backoff=allow_restore_probe,
+                        )
+                        if not candidate_models:
+                            stderr_handle.write(
+                                f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} no_models_available\n"
+                            )
+                            stderr_handle.flush()
+                            continue
+                        try:
+                            worker_env = _prepare_account_environment(state_root, workspace_root, account)
+                        except Exception as exc:
+                            message = f"account bootstrap failed: {exc}"
+                            until = _utc_now() + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
                             _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
                             _write_account_runtime(account_runtime_path, account_runtime)
-                            break
-                        backend_unavailable = _parse_backend_unavailable_message(completed.stderr)
-                        if backend_unavailable is not None:
-                            until = now + dt.timedelta(seconds=DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS)
-                            _set_source_backoff(account_runtime, account, backoff_until=until, last_error=backend_unavailable)
-                            _write_account_runtime(account_runtime_path, account_runtime)
-                            break
-                        spark_backoff = (
-                            _parse_spark_pool_backoff_seconds(completed.stderr, DEFAULT_SPARK_BACKOFF_SECONDS)
-                            if candidate_model == SPARK_MODEL
-                            else None
-                        )
-                        if spark_backoff is not None:
-                            until = now + dt.timedelta(seconds=spark_backoff)
-                            _set_source_backoff(
-                                account_runtime,
-                                account,
-                                spark_backoff_until=until,
-                                last_error=f"spark pool unavailable for {spark_backoff}s",
+                            stderr_handle.write(
+                                f"[fleet-supervisor] skip account={account.alias} owner={account.owner_id} "
+                                f"until={_iso(until)} reason={message}\n"
                             )
-                            _write_account_runtime(account_runtime_path, account_runtime)
+                            stderr_handle.flush()
                             continue
-                        unsupported_model = _parse_unsupported_chatgpt_model(completed.stderr)
-                        if unsupported_model is not None:
-                            continue
-                        rate_limit_backoff = _parse_backoff_seconds(completed.stderr, DEFAULT_RATE_LIMIT_BACKOFF_SECONDS)
-                        if rate_limit_backoff is not None:
-                            until = now + dt.timedelta(seconds=rate_limit_backoff)
-                            _set_source_backoff(
-                                account_runtime,
-                                account,
-                                backoff_until=until,
-                                last_error=f"rate limited for {rate_limit_backoff}s",
+                        worker_env = _stamp_worker_supervisor_guard(worker_env, run_id=run_id, run_dir=run_dir)
+                        lock_released = False
+                        for candidate_model in candidate_models:
+                            phase_attempt_index += 1
+                            display_attempt_index = attempt_offset + phase_attempt_index
+                            requested_worker_lane = str(worker_lane or "").strip()
+                            account_worker_lane = str(account.lane or "").strip()
+                            lane_fallback = bool(
+                                requested_worker_lane
+                                and account_worker_lane
+                                and account_worker_lane != requested_worker_lane
                             )
-                            _write_account_runtime(account_runtime_path, account_runtime)
-                            break
-                        if not _retryable_worker_error(completed.stderr):
-                            stop_retrying = True
-                            break
-                        if completed is not None and completed.returncode == 0 and accepted:
-                            return True
-                        if stop_retrying:
-                            break
+                            effective_worker_lane = (
+                                account_worker_lane
+                                if lane_fallback
+                                else (requested_worker_lane or account_worker_lane)
+                            )
+                            worker_command = _default_worker_command(
+                                worker_bin=worker_bin,
+                                worker_lane=effective_worker_lane,
+                                workspace_root=workspace_root,
+                                scope_roots=context["scope_roots"],
+                                run_dir=run_dir,
+                                worker_model=candidate_model,
+                            )
+                            attempted_accounts.append(account.alias)
+                            attempted_models.append(candidate_model or "default")
+                            selected_account_alias = account.alias
+                            mark_active_run(
+                                command=worker_command,
+                                account_alias=account.alias,
+                                model_label=candidate_model or "default",
+                                attempt_index=display_attempt_index,
+                                total_attempts=display_total_attempts,
+                            )
+                            stderr_handle.write(
+                                f"[fleet-supervisor] {phase_label} {display_attempt_index}/{display_total_attempts} "
+                                f"account={account.alias} owner={account.owner_id} model={candidate_model or 'default'}\n"
+                            )
+                            if lane_fallback:
+                                stderr_handle.write(
+                                    f"[fleet-supervisor] lane fallback requested={requested_worker_lane} "
+                                    f"using account lane={account_worker_lane} account={account.alias} "
+                                    f"model={candidate_model or 'default'}\n"
+                                )
+                            stderr_handle.flush()
+                            _release_lock(selection_lock_path)
+                            lock_released = True
+                            completed = _run_worker_attempt(
+                                worker_command,
+                                prompt=prompt,
+                                workspace_root=workspace_root,
+                                worker_env=worker_env,
+                                timeout_seconds=worker_timeout_seconds,
+                                last_message_path=last_message_path,
+                                state_root=state_root,
+                                run_id=run_id,
+                                stdout_sink=stdout_handle,
+                                stderr_sink=stderr_handle,
+                            )
+                            stdout_handle.flush()
+                            stderr_handle.flush()
+                            final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
+                            parsed = _parse_final_message_sections(final_message)
+                            accepted, acceptance_reason = _assess_worker_result(completed.returncode, final_message, parsed)
+                            if completed.returncode == 0 and accepted:
+                                _clear_source_backoff(account_runtime, account)
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                return True
+                            if completed.returncode == 0:
+                                stderr_handle.write(
+                                    f"[fleet-supervisor] rejected result account={account.alias} "
+                                    f"model={candidate_model or 'default'} reason={acceptance_reason}\n"
+                                )
+                                stderr_handle.flush()
+                                continue
+                            now = _utc_now()
+                            auth_failure = _parse_auth_failure_message(completed.stderr)
+                            if auth_failure:
+                                until = now + dt.timedelta(seconds=DEFAULT_AUTH_FAILURE_BACKOFF_SECONDS)
+                                _set_source_backoff(account_runtime, account, backoff_until=until, last_error=auth_failure)
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                break
+                            usage_limit_backoff = _parse_usage_limit_backoff_seconds(
+                                completed.stderr,
+                                DEFAULT_USAGE_LIMIT_BACKOFF_SECONDS,
+                                now=now,
+                            )
+                            if usage_limit_backoff is not None:
+                                until = now + dt.timedelta(seconds=usage_limit_backoff)
+                                reset_at = _parse_usage_limit_reset_at(completed.stderr)
+                                message = (
+                                    f"usage-limited until {_iso(reset_at)}"
+                                    if reset_at is not None
+                                    else f"usage-limited; recheck at {_iso(until)}"
+                                )
+                                _set_source_backoff(account_runtime, account, backoff_until=until, last_error=message)
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                break
+                            backend_unavailable = _parse_backend_unavailable_message(completed.stderr)
+                            if backend_unavailable is not None:
+                                until = now + dt.timedelta(seconds=DEFAULT_BACKEND_UNAVAILABLE_BACKOFF_SECONDS)
+                                _set_source_backoff(account_runtime, account, backoff_until=until, last_error=backend_unavailable)
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                break
+                            spark_backoff = (
+                                _parse_spark_pool_backoff_seconds(completed.stderr, DEFAULT_SPARK_BACKOFF_SECONDS)
+                                if candidate_model == SPARK_MODEL
+                                else None
+                            )
+                            if spark_backoff is not None:
+                                until = now + dt.timedelta(seconds=spark_backoff)
+                                _set_source_backoff(
+                                    account_runtime,
+                                    account,
+                                    spark_backoff_until=until,
+                                    last_error=f"spark pool unavailable for {spark_backoff}s",
+                                )
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                continue
+                            unsupported_model = _parse_unsupported_chatgpt_model(completed.stderr)
+                            if unsupported_model is not None:
+                                continue
+                            rate_limit_backoff = _parse_backoff_seconds(completed.stderr, DEFAULT_RATE_LIMIT_BACKOFF_SECONDS)
+                            if rate_limit_backoff is not None:
+                                until = now + dt.timedelta(seconds=rate_limit_backoff)
+                                _set_source_backoff(
+                                    account_runtime,
+                                    account,
+                                    backoff_until=until,
+                                    last_error=f"rate limited for {rate_limit_backoff}s",
+                                )
+                                _write_account_runtime(account_runtime_path, account_runtime)
+                                break
+                            if not _retryable_worker_error(completed.stderr):
+                                stop_retrying = True
+                                break
+                            if completed is not None and completed.returncode == 0 and accepted:
+                                return True
+                            if stop_retrying:
+                                break
+                    finally:
+                        _release_lock(selection_lock_path)
                 return completed is not None and completed.returncode == 0 and accepted
 
             def run_direct_attempts(
@@ -7911,6 +10274,7 @@ def launch_worker(
                         workspace_root=workspace_root,
                         worker_bin=phase_args.worker_bin,
                     )
+                    worker_env = _stamp_worker_supervisor_guard(worker_env, run_id=run_id, run_dir=run_dir)
                     lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
                     for candidate_model in phase_model_candidates:
                         if account_candidates:
@@ -7922,7 +10286,13 @@ def launch_worker(
                                 for account in account_candidates:
                                     if _refresh_source_credential_state(account_runtime, account, workspace_root, now=now):
                                         account_runtime_dirty = True
-                                    if _candidate_models_for_account(account, model_candidates, account_runtime, now=now):
+                                    if _candidate_models_for_account(
+                                        account,
+                                        model_candidates,
+                                        account_runtime,
+                                        requested_worker_lane=direct_worker_lane,
+                                        now=now,
+                                    ):
                                         restore_accounts.append(account)
                                 if account_runtime_dirty:
                                     _write_account_runtime(account_runtime_path, account_runtime)
@@ -7974,11 +10344,11 @@ def launch_worker(
                             worker_env=worker_env,
                             timeout_seconds=phase_worker_timeout_seconds,
                             last_message_path=last_message_path,
+                            state_root=state_root,
+                            run_id=run_id,
+                            stdout_sink=stdout_handle,
+                            stderr_sink=stderr_handle,
                         )
-                        if completed.stdout:
-                            stdout_handle.write(completed.stdout)
-                        if completed.stderr:
-                            stderr_handle.write(completed.stderr)
                         stdout_handle.flush()
                         stderr_handle.flush()
                         final_message = _read_text(last_message_path).strip() if last_message_path.exists() else ""
@@ -8017,6 +10387,39 @@ def launch_worker(
                 )
                 if (
                     not account_phase_succeeded
+                    and routed_full_lane_fallback_args is not None
+                ):
+                    stderr_handle.write(
+                        "[fleet-supervisor] escalating routed-account exhaustion to anonymous full-lane fallback "
+                        f"lane={str(routed_full_lane_fallback_args.worker_lane or '').strip() or 'default'} "
+                        f"fallback_lanes={','.join(_worker_lane_candidates(routed_full_lane_fallback_args)) or 'default'} "
+                        f"models={','.join(_worker_model_candidates(routed_full_lane_fallback_args)) or 'default'}\n"
+                    )
+                    stderr_handle.flush()
+                    if run_direct_attempts(
+                        routed_full_lane_fallback_args,
+                        phase_label="full-fallback",
+                    ):
+                        account_phase_succeeded = True
+                if (
+                    not account_phase_succeeded
+                    and rescue_account_candidates
+                ):
+                    stderr_handle.write(
+                        "[fleet-supervisor] falling back to rescue-routed accounts after full-lane recovery path stayed blocked\n"
+                    )
+                    stderr_handle.flush()
+                    if run_account_attempts(
+                        rescue_account_candidates,
+                        worker_bin=args.worker_bin,
+                        worker_lane=direct_worker_lane,
+                        phase_models=model_candidates,
+                        phase_label="rescue",
+                    ):
+                        account_phase_succeeded = True
+                if (
+                    not account_phase_succeeded
+                    and not routed_account_required
                     and _should_attempt_account_direct_fallback(
                         completed,
                         stderr_text=(completed.stderr if completed is not None else ""),
@@ -8035,44 +10438,90 @@ def launch_worker(
                         fallback_args,
                         phase_label="fallback",
                     )
-            else:
-                run_direct_attempts(
-                    args,
-                    phase_label="attempt",
-                    direct_lane_health_override=worker_lane_health,
-                )
-                if (
-                    not accepted
-                    and (
-                        (
-                            completed is not None
-                            and _should_attempt_openai_escape_hatch(
-                                acceptance_reason,
-                                final_message,
-                                completed.stderr,
-                            )
-                        )
-                        or (completed is None and bool(preflight_failure_reason) and _openai_escape_hatch_enabled())
-                    )
+                elif (
+                    not account_phase_succeeded
+                    and routed_account_required
+                    and routed_full_lane_fallback_args is None
+                    and not rescue_account_candidates
                 ):
-                    escape_args = _openai_escape_hatch_args(args)
-                    escape_accounts = _load_worker_accounts(escape_args)
-                    if escape_accounts:
+                    stderr_handle.write(
+                        "[fleet-supervisor] routed-account lane failure will not fall back to anonymous direct lane\n"
+                    )
+                    stderr_handle.flush()
+            else:
+                if routed_account_required:
+                    if routed_full_lane_fallback_args is not None:
                         stderr_handle.write(
-                            "[fleet-supervisor] escalating retryable direct-lane failure to openai escape hatch "
-                            f"aliases={','.join(account.alias for account in escape_accounts)} "
-                            f"models={','.join(_worker_model_candidates(escape_args))}\n"
+                            "[fleet-supervisor] no runnable full routed accounts; trying anonymous full-lane fallback first\n"
                         )
                         stderr_handle.flush()
+                        if not run_direct_attempts(
+                            routed_full_lane_fallback_args,
+                            phase_label="full-fallback",
+                        ) and rescue_account_candidates:
+                            stderr_handle.write(
+                                "[fleet-supervisor] anonymous full-lane fallback stayed blocked; trying rescue-routed accounts\n"
+                            )
+                            stderr_handle.flush()
+                            run_account_attempts(
+                                rescue_account_candidates,
+                                worker_bin=args.worker_bin,
+                                worker_lane=direct_worker_lane,
+                                phase_models=model_candidates,
+                                phase_label="rescue",
+                            )
+                    elif rescue_account_candidates:
                         run_account_attempts(
-                            escape_accounts,
-                            worker_bin=escape_args.worker_bin,
-                            worker_lane=escape_args.worker_lane,
-                            phase_models=_worker_model_candidates(escape_args),
-                            phase_label=("escape-preflight" if completed is None and preflight_failure_reason else "escape"),
+                            rescue_account_candidates,
+                            worker_bin=args.worker_bin,
+                            worker_lane=direct_worker_lane,
+                            phase_models=model_candidates,
+                            phase_label="rescue",
                         )
+                    else:
+                        preflight_failure_reason = "no runnable routed accounts for CodexEA lane; anonymous direct fallback disabled"
+                        stderr_handle.write(f"[fleet-supervisor] {preflight_failure_reason}\n")
+                        stderr_handle.flush()
+                else:
+                    run_direct_attempts(
+                        args,
+                        phase_label="attempt",
+                        direct_lane_health_override=worker_lane_health,
+                    )
+                    if (
+                        not accepted
+                        and (
+                            (
+                                completed is not None
+                                and _should_attempt_openai_escape_hatch(
+                                    acceptance_reason,
+                                    final_message,
+                                    completed.stderr,
+                                )
+                            )
+                            or (completed is None and bool(preflight_failure_reason) and _openai_escape_hatch_enabled())
+                        )
+                    ):
+                        escape_args = _openai_escape_hatch_args(args)
+                        escape_accounts = _load_worker_accounts(escape_args)
+                        if escape_accounts:
+                            stderr_handle.write(
+                                "[fleet-supervisor] escalating retryable direct-lane failure to openai escape hatch "
+                                f"aliases={','.join(account.alias for account in escape_accounts)} "
+                                f"models={','.join(_worker_model_candidates(escape_args))}\n"
+                            )
+                            stderr_handle.flush()
+                            run_account_attempts(
+                                escape_accounts,
+                                worker_bin=escape_args.worker_bin,
+                                worker_lane=escape_args.worker_lane,
+                                phase_models=_worker_model_candidates(escape_args),
+                                phase_label=("escape-preflight" if completed is None and preflight_failure_reason else "escape"),
+                            )
             if completed is None:
-                stderr_handle.write("[fleet-supervisor] no eligible worker account/model attempts were runnable\n")
+                if not preflight_failure_reason:
+                    preflight_failure_reason = "no eligible worker account/model attempts were runnable"
+                stderr_handle.write(f"[fleet-supervisor] {preflight_failure_reason}\n")
                 stderr_handle.flush()
     finally:
         _write_active_run_state(state_root, None)
@@ -8099,11 +10548,24 @@ def launch_worker(
                 )
                 final_message = _compose_final_message_sections(parsed)
                 last_message_path.write_text(final_message, encoding="utf-8")
+        if not accepted and not str(parsed.get("blocker") or "").strip():
+            blocker_fallback = str(acceptance_reason or preflight_failure_reason or "").strip()
+            if not blocker_fallback:
+                blocker_fallback = _summarize_trace_value(
+                    completed.stderr or final_message or "worker failed without an explicit blocker",
+                    max_len=180,
+                )
+            parsed["blocker"] = blocker_fallback
+            final_message = _compose_final_message_sections(parsed)
+            last_message_path.write_text(final_message, encoding="utf-8")
     elif preflight_failure_reason:
         if not final_message:
             final_message = preflight_failure_reason
         accepted = False
         acceptance_reason = preflight_failure_reason
+        parsed["blocker"] = str(parsed.get("blocker") or preflight_failure_reason or "").strip()
+        final_message = _compose_final_message_sections(parsed)
+        last_message_path.write_text(final_message, encoding="utf-8")
     finished_at = _iso_now()
     exit_code = int(completed.returncode) if completed is not None else 1
     return WorkerRun(
@@ -8149,6 +10611,7 @@ def _write_state(
     full_product_audit: Optional[Dict[str, Any]] = None,
     eta: Optional[Dict[str, Any]] = None,
     worker_lane_health: Optional[Dict[str, Any]] = None,
+    host_memory_pressure: Optional[Dict[str, Any]] = None,
     completion_review_frontier_path: str = "",
     completion_review_frontier_mirror_path: str = "",
     full_product_frontier_path: str = "",
@@ -8165,6 +10628,14 @@ def _write_state(
     }
     if run is not None:
         payload["last_run"] = _run_payload(run)
+        payload["selected_account_alias"] = str(run.selected_account_alias or "").strip()
+        failure_reason = str(run.acceptance_reason or run.blocker or "").strip()
+        if run.worker_exit_code != 0 and not failure_reason:
+            failure_reason = f"worker exit {run.worker_exit_code}"
+        if failure_reason:
+            payload["last_failure_reason"] = failure_reason
+            if not run.accepted and run.worker_exit_code == 1:
+                payload["preflight_failure_reason"] = failure_reason
     if completion_audit:
         payload["completion_audit"] = dict(completion_audit)
     if full_product_audit:
@@ -8173,6 +10644,8 @@ def _write_state(
         payload["eta"] = dict(eta)
     if worker_lane_health:
         payload["worker_lane_health"] = dict(worker_lane_health)
+    if host_memory_pressure:
+        payload["host_memory_pressure"] = dict(host_memory_pressure)
     if completion_review_frontier_path:
         payload["completion_review_frontier_path"] = str(completion_review_frontier_path)
     if completion_review_frontier_mirror_path:
@@ -8183,6 +10656,7 @@ def _write_state(
         payload["full_product_frontier_mirror_path"] = str(full_product_frontier_mirror_path)
     _merge_matching_live_active_run(state_root, payload)
     _write_json(_state_payload_path(state_root), payload)
+    _write_runtime_handoff(state_root)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
 
@@ -8259,7 +10733,7 @@ def _render_status(state: Dict[str, Any]) -> str:
     full_product_frontier_mirror_path = str(state.get("full_product_frontier_mirror_path") or "").strip()
     if full_product_frontier_mirror_path:
         lines.append(f"full_product_frontier.mirror_path: {full_product_frontier_mirror_path}")
-    eta = state.get("eta") or {}
+    eta = _normalize_eta_scope_fields(dict(state.get("eta") or {}))
     if isinstance(eta, dict) and eta:
         lines.extend(
             [
@@ -8267,10 +10741,15 @@ def _render_status(state: Dict[str, Any]) -> str:
                 f"eta.human: {eta.get('eta_human') or 'unknown'}",
                 f"eta.confidence: {eta.get('eta_confidence') or 'unknown'}",
                 f"eta.basis: {eta.get('basis') or 'unknown'}",
+                f"eta.scope_kind: {eta.get('scope_kind') or 'unknown'}",
+                f"eta.scope_label: {eta.get('scope_label') or 'unknown'}",
                 f"eta.summary: {eta.get('summary') or 'none'}",
                 f"eta.predicted_completion_at: {eta.get('predicted_completion_at') or 'unknown'}",
             ]
         )
+        scope_warning = str(eta.get("scope_warning") or "").strip()
+        if scope_warning:
+            lines.append(f"eta.scope_warning: {scope_warning}")
         blocker_reason = str(eta.get("blocking_reason") or "").strip()
         if blocker_reason:
             lines.append(f"eta.blocking_reason: {blocker_reason}")
@@ -8373,6 +10852,41 @@ def _render_status(state: Dict[str, Any]) -> str:
                         ]
                     )
                 )
+    host_memory_pressure = state.get("host_memory_pressure") or {}
+    if isinstance(host_memory_pressure, dict) and host_memory_pressure:
+        mem_available_percent = _coerce_float(host_memory_pressure.get("mem_available_percent"))
+        mem_available_percent_text = f"{mem_available_percent:.2f}" if mem_available_percent is not None else "unknown"
+        swap_used_percent = _coerce_float(host_memory_pressure.get("swap_used_percent"))
+        swap_used_percent_text = f"{swap_used_percent:.2f}" if swap_used_percent is not None else "unknown"
+        lines.extend(
+            [
+                f"host_memory_pressure.status: {host_memory_pressure.get('status') or 'unknown'}",
+                f"host_memory_pressure.reason: {host_memory_pressure.get('reason') or 'none'}",
+                (
+                    "host_memory_pressure.mem_available: "
+                    f"{_format_gib(host_memory_pressure.get('mem_available_bytes'))} / "
+                    f"{_format_gib(host_memory_pressure.get('mem_total_bytes'))} "
+                    f"({mem_available_percent_text}%)"
+                ),
+                (
+                    "host_memory_pressure.swap: "
+                    f"free={_format_gib(host_memory_pressure.get('swap_free_bytes'))} / "
+                    f"{_format_gib(host_memory_pressure.get('swap_total_bytes'))} "
+                    f"(used={swap_used_percent_text}%)"
+                ),
+                (
+                    "host_memory_pressure.dispatch_budget: "
+                    f"allowed={host_memory_pressure.get('allowed_active_shards', 0)}/"
+                    f"{host_memory_pressure.get('configured_shard_count', 0)} "
+                    f"active={host_memory_pressure.get('active_shard_count', 0)} "
+                    f"dispatch_allowed={'yes' if host_memory_pressure.get('dispatch_allowed') is not False else 'no'}"
+                ),
+                (
+                    "host_memory_pressure.eligible_shards: "
+                    f"{', '.join(str(item) for item in (host_memory_pressure.get('eligible_shard_names') or [])) or 'none'}"
+                ),
+            ]
+        )
     completion_audit = state.get("completion_audit") or {}
     if isinstance(completion_audit, dict) and completion_audit:
         lines.extend(
@@ -8534,6 +11048,177 @@ def _resolve_run_artifact_path(raw_path: str) -> Path:
     except ValueError:
         return path
     return (DEFAULT_WORKSPACE_ROOT / "state" / relative).resolve()
+
+
+def _enforce_worker_status_budget() -> tuple[bool, str]:
+    run_dir_raw = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", "") or "").strip()
+    if not run_dir_raw:
+        return True, ""
+    run_dir = Path(run_dir_raw).expanduser()
+    try:
+        budget = max(0, int(float(str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET", "1") or "1"))))
+    except (TypeError, ValueError):
+        budget = 1
+    if budget <= 0:
+        return False, "worker_status_budget_exhausted: status access disabled inside active worker runs"
+    budget_path = run_dir / ".status_budget.json"
+    payload: Dict[str, Any] = {}
+    if budget_path.exists():
+        try:
+            payload = json.loads(_read_text(budget_path))
+        except Exception:
+            payload = {}
+    count = max(0, _coerce_int(payload.get("count"), 0))
+    if count >= budget:
+        return (
+            False,
+            "worker_status_budget_exhausted: "
+            f"status polling budget {count}/{budget} already consumed for active run "
+            f"{str(os.environ.get('CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID', '') or '').strip() or 'unknown'}",
+        )
+    payload["count"] = count + 1
+    payload["budget"] = budget
+    payload["updated_at"] = _iso_now()
+    payload["run_id"] = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "") or "").strip()
+    try:
+        budget_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+    return True, ""
+
+
+def _worker_status_block_message(args: argparse.Namespace, blocked_reason: str) -> str:
+    state_root = Path(str(getattr(args, "state_root", "") or "")).resolve()
+    state = _read_state(_state_payload_path(state_root))
+    run_id = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "") or "").strip()
+    run_dir_raw = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", "") or "").strip()
+    run_dir = Path(run_dir_raw).expanduser() if run_dir_raw else None
+    prompt_path = run_dir / "prompt.txt" if run_dir is not None else None
+    lines = [
+        "status_blocked_inside_worker_run",
+        str(blocked_reason or "").strip() or "worker_status_budget_exhausted",
+        "read the task-local prompt and frontier artifacts directly instead of polling supervisor status from inside the active worker run.",
+    ]
+    if run_id:
+        lines.append(f"run_id: {run_id}")
+    if prompt_path is not None:
+        lines.append(f"prompt_path: {prompt_path}")
+    full_product_frontier_path = str(state.get("full_product_frontier_path") or "").strip()
+    if full_product_frontier_path:
+        lines.append(f"full_product_frontier_path: {full_product_frontier_path}")
+    completion_review_frontier_path = str(state.get("completion_review_frontier_path") or "").strip()
+    if completion_review_frontier_path:
+        lines.append(f"completion_review_frontier_path: {completion_review_frontier_path}")
+    handoff_path = str(getattr(args, "handoff_path", "") or "").strip()
+    if handoff_path:
+        lines.append(f"handoff_path: {Path(handoff_path).resolve()}")
+    readiness_path = str(getattr(args, "flagship_product_readiness_path", "") or "").strip()
+    if readiness_path:
+        lines.append(f"flagship_product_readiness_path: {Path(readiness_path).resolve()}")
+    return "\n".join(lines)
+
+
+def _worker_status_task_local_payload(args: argparse.Namespace, blocked_reason: str) -> Dict[str, Any]:
+    state_root = Path(str(getattr(args, "state_root", "") or "")).resolve()
+    state = _read_state(_state_payload_path(state_root))
+    run_id = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "") or "").strip()
+    run_dir_raw = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", "") or "").strip()
+    run_dir = Path(run_dir_raw).expanduser() if run_dir_raw else None
+    prompt_path = run_dir / "prompt.txt" if run_dir is not None else None
+    full_product_frontier_path = str(state.get("full_product_frontier_path") or "").strip()
+    completion_review_frontier_path = str(state.get("completion_review_frontier_path") or "").strip()
+    handoff_path = str(getattr(args, "handoff_path", "") or "").strip()
+    readiness_path = str(getattr(args, "flagship_product_readiness_path", "") or "").strip()
+    guidance = (
+        "polling disabled inside active worker run; continue the assigned slice using the prompt, handoff, "
+        "and frontier artifacts instead of querying supervisor status again"
+    )
+    frontier_ids = sorted({_coerce_int(value, 0) for value in _state_frontier_ids(state) if _coerce_int(value, 0) > 0})
+    open_milestone_ids = sorted(
+        {_coerce_int(value, 0) for value in _state_open_milestone_ids(state) if _coerce_int(value, 0) > 0}
+    )
+    eta_snapshot = _normalize_eta_scope_fields(dict(state.get("eta") or {}))
+    remaining_in_progress = max(
+        len(frontier_ids),
+        max(0, _coerce_int(eta_snapshot.get("remaining_in_progress_milestones"), 0)),
+    )
+    remaining_open = max(
+        len(open_milestone_ids),
+        remaining_in_progress,
+        max(0, _coerce_int(eta_snapshot.get("remaining_open_milestones"), 0)),
+    )
+    remaining_not_started = max(
+        max(0, remaining_open - remaining_in_progress),
+        max(0, _coerce_int(eta_snapshot.get("remaining_not_started_milestones"), 0)),
+    )
+    eta_human = str(eta_snapshot.get("eta_human") or "").strip() or "task-local-only"
+    eta_summary = str(eta_snapshot.get("summary") or "").strip() or guidance
+    payload: Dict[str, Any] = {
+        "mode": "task_local_only",
+        "polling_disabled": True,
+        "active_runs_count": max(1 if run_id else 0, _coerce_int(state.get("active_runs_count"), 0)),
+        "eta": {
+            "status": str(eta_snapshot.get("status") or "task_local_only").strip(),
+            "scope_kind": str(eta_snapshot.get("scope_kind") or "").strip(),
+            "predicted_completion_at": str(eta_snapshot.get("predicted_completion_at") or "").strip(),
+            "remaining_open_milestones": remaining_open,
+            "remaining_not_started_milestones": remaining_not_started,
+            "remaining_in_progress_milestones": remaining_in_progress,
+            "eta_human": eta_human,
+            "summary": eta_summary,
+        },
+        "warning": str(blocked_reason or "").strip() or "worker_status_budget_exhausted",
+        "guidance": guidance,
+    }
+    if run_id:
+        payload["run_id"] = run_id
+    if frontier_ids:
+        payload["frontier_ids"] = frontier_ids
+    if open_milestone_ids:
+        payload["open_milestone_ids"] = open_milestone_ids
+    if prompt_path is not None:
+        payload["prompt_path"] = str(prompt_path)
+    if full_product_frontier_path:
+        payload["full_product_frontier_path"] = full_product_frontier_path
+    if completion_review_frontier_path:
+        payload["completion_review_frontier_path"] = completion_review_frontier_path
+    if handoff_path:
+        payload["handoff_path"] = str(Path(handoff_path).resolve())
+    if readiness_path:
+        payload["flagship_product_readiness_path"] = str(Path(readiness_path).resolve())
+    return payload
+
+
+def _render_worker_status_task_local_payload(payload: Dict[str, Any]) -> str:
+    eta = dict(payload.get("eta") or {})
+    lines = [
+        "task-local-only",
+        str(payload.get("warning") or "").strip() or "worker_status_budget_exhausted",
+        str(payload.get("guidance") or "").strip(),
+    ]
+    run_id = str(payload.get("run_id") or "").strip()
+    if run_id:
+        lines.append(f"run_id: {run_id}")
+    lines.append(
+        "eta: "
+        + (
+            f"{str(eta.get('eta_human') or 'task-local-only').strip()} "
+            f"(open={max(0, _coerce_int(eta.get('remaining_open_milestones'), 0))}, "
+            f"in_progress={max(0, _coerce_int(eta.get('remaining_in_progress_milestones'), 0))}, "
+            f"not_started={max(0, _coerce_int(eta.get('remaining_not_started_milestones'), 0))})"
+        )
+    )
+    for key in (
+        "prompt_path",
+        "full_product_frontier_path",
+        "completion_review_frontier_path",
+        "handoff_path",
+        "flagship_product_readiness_path",
+    ):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            lines.append(f"{key}: {value}")
+    return "\n".join(lines)
 
 
 def _run_final_message(run: Dict[str, Any]) -> str:
@@ -10361,6 +13046,7 @@ def run_once(args: argparse.Namespace) -> int:
     if forced_flagship_context is not None:
         context = forced_flagship_context
     worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
+    host_memory_pressure = _memory_dispatch_snapshot(args, state_root)
     audit: Optional[Dict[str, Any]] = None
     full_product_audit: Optional[Dict[str, Any]] = None
     history = _read_history(_history_payload_path(state_root), limit=ETA_HISTORY_LIMIT)
@@ -10425,6 +13111,7 @@ def run_once(args: argparse.Namespace) -> int:
             focus_texts=context["focus_texts"],
             eta=eta,
             worker_lane_health=worker_lane_health,
+            host_memory_pressure=host_memory_pressure,
             completion_review_frontier_path="",
             completion_review_frontier_mirror_path="",
             full_product_frontier_path="",
@@ -10473,6 +13160,7 @@ def run_once(args: argparse.Namespace) -> int:
                 completion_audit=review_audit,
                 eta=eta,
                 worker_lane_health=worker_lane_health,
+                host_memory_pressure=host_memory_pressure,
                 completion_review_frontier_path=frontier_paths["published_path"],
                 completion_review_frontier_mirror_path=frontier_paths["mirror_path"],
                 full_product_frontier_path="",
@@ -10515,6 +13203,7 @@ def run_once(args: argparse.Namespace) -> int:
                 full_product_audit=current_full_product_audit,
                 eta=eta,
                 worker_lane_health=worker_lane_health,
+                host_memory_pressure=host_memory_pressure,
                 completion_review_frontier_path="",
                 completion_review_frontier_mirror_path="",
                 full_product_frontier_path=frontier_paths["published_path"],
@@ -10567,12 +13256,47 @@ def run_once(args: argparse.Namespace) -> int:
             full_product_audit=current_full_product_audit,
             eta=eta,
             worker_lane_health=worker_lane_health,
+            host_memory_pressure=host_memory_pressure,
             completion_review_frontier_path=completion_frontier_paths["published_path"],
             completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
             full_product_frontier_path=frontier_paths["published_path"],
             full_product_frontier_mirror_path=frontier_paths["mirror_path"],
         )
         print("No unfinished flagship product frontier remains in the active design canon.")
+        return 0
+    if _should_defer_dispatch_for_memory_pressure(state_root, host_memory_pressure):
+        run_mode = "loop" if context["open_milestones"] else (
+            "flagship_product" if context.get("full_product_audit") else "completion_review"
+        )
+        eta = _build_eta_snapshot(
+            mode=run_mode,
+            open_milestones=context["open_milestones"],
+            frontier=context["frontier"],
+            history=history,
+            completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
+            full_product_audit=(context.get("full_product_audit") if not context["open_milestones"] else None),
+            worker_lane_health=worker_lane_health,
+        )
+        _write_state(
+            state_root,
+            mode=run_mode,
+            run=None,
+            open_milestones=context["open_milestones"],
+            frontier=context["frontier"],
+            focus_profiles=context["focus_profiles"],
+            focus_owners=context["focus_owners"],
+            focus_texts=context["focus_texts"],
+            completion_audit=(context.get("completion_audit") if not context["open_milestones"] else None),
+            full_product_audit=(context.get("full_product_audit") if not context["open_milestones"] else None),
+            eta=eta,
+            worker_lane_health=worker_lane_health,
+            host_memory_pressure=host_memory_pressure,
+            completion_review_frontier_path="",
+            completion_review_frontier_mirror_path="",
+            full_product_frontier_path="",
+            full_product_frontier_mirror_path="",
+        )
+        print(_memory_pressure_notice(host_memory_pressure))
         return 0
     run = launch_worker(args, context, state_root, worker_lane_health=worker_lane_health)
     run_mode = "once"
@@ -10633,6 +13357,7 @@ def run_once(args: argparse.Namespace) -> int:
         full_product_audit=(context.get("full_product_audit") if not context["open_milestones"] else None),
         eta=eta,
         worker_lane_health=worker_lane_health,
+        host_memory_pressure=host_memory_pressure,
         completion_review_frontier_path=completion_frontier_paths["published_path"],
         completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
         full_product_frontier_path=full_frontier_paths["published_path"],
@@ -10660,6 +13385,7 @@ def run_loop(args: argparse.Namespace) -> int:
         while True:
             context = derive_context(args)
             worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
+            host_memory_pressure = _memory_dispatch_snapshot(args, state_root)
             forced_flagship_context = _hard_flagship_context_if_needed(args, state_root, context)
             if forced_flagship_context is not None:
                 context = forced_flagship_context
@@ -10721,6 +13447,7 @@ def run_loop(args: argparse.Namespace) -> int:
                             full_product_audit=full_product_audit,
                             eta=eta,
                             worker_lane_health=worker_lane_health,
+                            host_memory_pressure=host_memory_pressure,
                             completion_review_frontier_path="",
                             completion_review_frontier_mirror_path="",
                             full_product_frontier_path=frontier_paths["published_path"],
@@ -10809,6 +13536,7 @@ def run_loop(args: argparse.Namespace) -> int:
                         full_product_audit=context.get("full_product_audit"),
                         eta=eta,
                         worker_lane_health=worker_lane_health,
+                        host_memory_pressure=host_memory_pressure,
                         completion_review_frontier_path=completion_frontier_paths["published_path"],
                         completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
                         full_product_frontier_path=full_frontier_paths["published_path"],
@@ -10848,6 +13576,7 @@ def run_loop(args: argparse.Namespace) -> int:
                     focus_texts=context["focus_texts"],
                     eta=eta,
                     worker_lane_health=worker_lane_health,
+                    host_memory_pressure=host_memory_pressure,
                     completion_review_frontier_path="",
                     completion_review_frontier_mirror_path="",
                     full_product_frontier_path="",
@@ -10910,6 +13639,7 @@ def run_loop(args: argparse.Namespace) -> int:
                     full_product_audit=context.get("full_product_audit"),
                     eta=eta,
                     worker_lane_health=worker_lane_health,
+                    host_memory_pressure=host_memory_pressure,
                     completion_review_frontier_path=completion_frontier_paths["published_path"],
                     completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
                     full_product_frontier_path=full_frontier_paths["published_path"],
@@ -10924,6 +13654,45 @@ def run_loop(args: argparse.Namespace) -> int:
                     print(notice, flush=True)
                     last_idle_notice = notice
                 time.sleep(max(1.0, float(args.poll_seconds)))
+                continue
+            if _should_defer_dispatch_for_memory_pressure(state_root, host_memory_pressure):
+                run_mode = "loop" if open_milestones else (
+                    "flagship_product" if context.get("full_product_audit") else "completion_review"
+                )
+                eta = _build_eta_snapshot(
+                    mode=run_mode,
+                    open_milestones=context["open_milestones"],
+                    frontier=frontier,
+                    history=history,
+                    completion_audit=(context.get("completion_audit") if not open_milestones else None),
+                    full_product_audit=(context.get("full_product_audit") if not open_milestones else None),
+                    worker_lane_health=worker_lane_health,
+                )
+                _write_state(
+                    state_root,
+                    mode=run_mode,
+                    run=None,
+                    open_milestones=context["open_milestones"],
+                    frontier=frontier,
+                    focus_profiles=context["focus_profiles"],
+                    focus_owners=context["focus_owners"],
+                    focus_texts=context["focus_texts"],
+                    completion_audit=(context.get("completion_audit") if not open_milestones else None),
+                    full_product_audit=(context.get("full_product_audit") if not open_milestones else None),
+                    eta=eta,
+                    worker_lane_health=worker_lane_health,
+                    host_memory_pressure=host_memory_pressure,
+                    completion_review_frontier_path=str(context.get("completion_review_frontier_path") or ""),
+                    completion_review_frontier_mirror_path=str(context.get("completion_review_frontier_mirror_path") or ""),
+                    full_product_frontier_path=str(context.get("full_product_frontier_path") or ""),
+                    full_product_frontier_mirror_path=str(context.get("full_product_frontier_mirror_path") or ""),
+                )
+                notice = _memory_pressure_notice(host_memory_pressure)
+                notice_key = _memory_pressure_notice_key(host_memory_pressure)
+                if notice_key != last_idle_notice:
+                    print(notice, flush=True)
+                    last_idle_notice = notice_key
+                time.sleep(_memory_pressure_parked_sleep_seconds(args, host_memory_pressure))
                 continue
             last_idle_notice = ""
             run = launch_worker(args, context, state_root, worker_lane_health=worker_lane_health)
@@ -10985,6 +13754,7 @@ def run_loop(args: argparse.Namespace) -> int:
                 full_product_audit=(context.get("full_product_audit") if not open_milestones else None),
                 eta=eta,
                 worker_lane_health=worker_lane_health,
+                host_memory_pressure=host_memory_pressure,
                 completion_review_frontier_path=completion_frontier_paths["published_path"],
                 completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
                 full_product_frontier_path=full_frontier_paths["published_path"],
@@ -11023,23 +13793,64 @@ def main() -> None:
     args = parse_args()
     if bool(getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)):
         os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = "1"
+    if args.command in {"status", "eta"}:
+        allowed, blocked_reason = _enforce_worker_status_budget()
+        if not allowed:
+            payload = _worker_status_task_local_payload(args, blocked_reason)
+            payload["command"] = str(args.command)
+            if args.json:
+                print(json.dumps(payload, indent=2, sort_keys=True))
+            else:
+                print(_render_worker_status_task_local_payload(payload))
+            return
     if args.command == "status":
         state_root = Path(args.state_root).resolve()
-        state, history = _effective_supervisor_state(state_root, history_limit=ETA_HISTORY_LIMIT)
         include_shards = not state_root.name.startswith("shard-")
-        state, history = _live_state_with_current_completion_audit(
-            args,
-            state_root,
-            state,
-            history,
-            include_shards=include_shards,
-        )
-        if not _eta_snapshot_has_progress_fields(state.get("eta")):
-            eta_args = argparse.Namespace(**vars(args))
-            eta_args.command = "eta"
-            fallback_eta = derive_eta(eta_args)
-            if _eta_snapshot_has_progress_fields(fallback_eta):
-                state["eta"] = dict(fallback_eta)
+        if args.live_refresh:
+            state, history = _effective_supervisor_state(
+                state_root,
+                history_limit=ETA_HISTORY_LIMIT,
+                include_history=True,
+            )
+            state, history = _live_state_with_current_completion_audit(
+                args,
+                state_root,
+                state,
+                history,
+                include_shards=include_shards,
+            )
+            if not _eta_snapshot_has_progress_fields(state.get("eta")):
+                eta_args = argparse.Namespace(**vars(args))
+                eta_args.command = "eta"
+                fallback_eta = derive_eta(eta_args)
+                if _eta_snapshot_has_progress_fields(fallback_eta):
+                    state["eta"] = dict(fallback_eta)
+        else:
+            state, history = _effective_supervisor_state(
+                state_root,
+                history_limit=0,
+                include_history=False,
+            )
+            state = _fast_status_state(
+                args,
+                state_root,
+                state,
+                include_shards=include_shards,
+            )
+            if args.json and _status_json_requires_rich_refresh(state, include_shards=include_shards):
+                state, history = _effective_supervisor_state(
+                    state_root,
+                    history_limit=ETA_HISTORY_LIMIT,
+                    include_history=True,
+                )
+                state, history = _live_state_with_current_completion_audit(
+                    args,
+                    state_root,
+                    state,
+                    history,
+                    include_shards=include_shards,
+                    refresh_flagship_readiness=False,
+                )
         _persist_live_state_snapshot(state_root, state)
         if args.json:
             print(json.dumps(state, indent=2, sort_keys=True))

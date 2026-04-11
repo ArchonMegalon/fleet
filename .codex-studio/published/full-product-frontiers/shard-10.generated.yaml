@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-07T17:30:26Z'
+generated_at: '2026-04-11T08:53:52Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-10
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -30,43 +30,34 @@ focus:
   - whole_project_frontier
   owners:
   - chummer6-ui
-  - chummer6-ui-kit
-  - chummer6-core
+  - chummer6-design
   - chummer6-hub
   - chummer6-hub-registry
-  - chummer6-mobile
-  - chummer6-media-factory
-  - chummer6-design
-  - fleet
-  - executive-assistant
   texts:
+  - desktop-exit-gate
+  - platform-gates
+  - startup-smoke
+  - proof
+  - release-gates
   - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
-  - operator
-  - ooda
-  - autofix
-  - governor
-  - dashboard
-  - canaries
-  - horizons
-  - public surface
   - whole-project frontier
   - no lowered standards
   - feedback loop
+  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
   - performance
   - proof shelf
+  - fit and finish
   - desktop client
+  - rules engine and import
+  - ui kit and flagship polish
+  - media artifacts
+  - horizons and public surface
   - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
@@ -76,19 +67,53 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260407T115442Z is not trusted: worker exit 2'
+  reason: 'latest worker receipt 20260410T135011Z is not trusted: worker exit 1'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-07T15:08:39Z'
+  generated_at: '2026-04-11T08:53:41Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
+  - rules_engine_and_import
+  - ui_kit_and_flagship_polish
+  - media_artifacts
+  - horizons_and_public_surface
   - fleet_and_operator_loop
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
+frontier_count: 1
+frontier_ids:
+- 2541792707
+frontier:
+- id: 2541792707
+  title: Hub, registry, and public front door flagship finish
+  wave: flagship_product
+  status: not_started
+  owners:
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-design
+  dependencies: []
+  exit_criteria:
+  - Deliver the relationship/orchestration, publication, downloads, account, install,
+    update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`,
+    and the product front door canon.
+  - Keep public landing, signed-in overlays, release heads, install guidance, and
+    support/control truth aligned with design-owned manifests instead of repo-local
+    improvisation.
+source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+eta:
+  status: flagship_delivery
+  eta_human: 8h-20h
+  eta_confidence: low
+  basis: full_product_frontier_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Current closeout gates are green, but flagship product work still remains
+    across 1 synthetic slices. Outstanding readiness coverage: desktop_client, rules_engine_and_import,
+    ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop.'

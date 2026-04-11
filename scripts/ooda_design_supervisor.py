@@ -20,6 +20,8 @@ DEFAULT_DURATION_SECONDS = 8 * 60 * 60
 DEFAULT_REPAIR_COOLDOWN_SECONDS = 1800
 DEFAULT_SERVICE_RESTART_COOLDOWN_SECONDS = 1800
 DEFAULT_STALE_SECONDS = 900
+DEFAULT_ACTIVE_OUTPUT_FRESH_SECONDS = 180
+DEFAULT_SUPERVISOR_STATUS_TIMEOUT_SECONDS = 30
 DOCKER_SOCKET_PATH = "/var/run/docker.sock"
 DOCKER_API_VERSION = "v1.44"
 SERVICE_CONTAINER_NAMES = {
@@ -70,6 +72,83 @@ def parse_iso(value: str) -> Optional[dt.datetime]:
         return None
 
 
+def path_modified_at(path: Path) -> Optional[dt.datetime]:
+    try:
+        return dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc)
+    except Exception:
+        return None
+
+
+def active_process_snapshot(pid_value: Any, *, active_run_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    try:
+        pid = int(str(pid_value or "").strip())
+    except (TypeError, ValueError):
+        pid = 0
+    running_inside_container = Path("/.dockerenv").exists()
+    active_run_payload = dict(active_run_payload or {})
+    process_probe_scope = "local"
+    if pid <= 0:
+        return {
+            "active_run_worker_pid": 0,
+            "active_run_process_probe_scope": process_probe_scope,
+            "active_run_process_alive": False,
+            "active_run_process_state": "",
+            "active_run_process_cpu_seconds": 0.0,
+        }
+    if (
+        not running_inside_container
+        and any(
+            str(active_run_payload.get(key) or "").strip().startswith("/var/lib/codex-fleet/")
+            for key in ("stderr_path", "stdout_path", "last_message_path", "prompt_path")
+        )
+    ):
+        return {
+            "active_run_worker_pid": pid,
+            "active_run_process_probe_scope": "container_local",
+            "active_run_process_alive": None,
+            "active_run_process_state": "",
+            "active_run_process_cpu_seconds": 0.0,
+        }
+    stat_path = Path("/proc") / str(pid) / "stat"
+    try:
+        raw_stat = stat_path.read_text(encoding="utf-8")
+    except OSError:
+        raw_stat = ""
+    if not raw_stat:
+        return {
+            "active_run_worker_pid": pid,
+            "active_run_process_probe_scope": process_probe_scope,
+            "active_run_process_alive": False,
+            "active_run_process_state": "",
+            "active_run_process_cpu_seconds": 0.0,
+        }
+    right_paren = raw_stat.rfind(")")
+    tail = raw_stat[right_paren + 2 :].split() if right_paren >= 0 else []
+    if len(tail) < 13:
+        return {
+            "active_run_worker_pid": pid,
+            "active_run_process_probe_scope": process_probe_scope,
+            "active_run_process_alive": False,
+            "active_run_process_state": "",
+            "active_run_process_cpu_seconds": 0.0,
+        }
+    try:
+        ticks_per_second = float(os.sysconf(os.sysconf_names.get("SC_CLK_TCK", "SC_CLK_TCK")))
+    except (AttributeError, TypeError, ValueError):
+        ticks_per_second = 100.0
+    try:
+        cpu_seconds = (float(int(tail[11])) + float(int(tail[12]))) / max(1.0, ticks_per_second)
+    except (TypeError, ValueError):
+        cpu_seconds = 0.0
+    return {
+        "active_run_worker_pid": pid,
+        "active_run_process_probe_scope": process_probe_scope,
+        "active_run_process_alive": True,
+        "active_run_process_state": str(tail[0] or "").strip(),
+        "active_run_process_cpu_seconds": cpu_seconds,
+    }
+
+
 def freshest_updated_at(
     aggregate_updated_at: Optional[dt.datetime],
     shard_payloads: List[Dict[str, Any]],
@@ -111,10 +190,17 @@ def parse_supervisor_status_text(text: str) -> Dict[str, Any]:
 
 
 def read_supervisor_status(workspace_root: Path) -> Dict[str, Any]:
-    completed = run_command(
-        ["python3", "scripts/chummer_design_supervisor.py", "status"],
-        cwd=workspace_root,
-    )
+    try:
+        completed = run_command(
+            ["python3", "scripts/chummer_design_supervisor.py", "status"],
+            cwd=workspace_root,
+            timeout_seconds=DEFAULT_SUPERVISOR_STATUS_TIMEOUT_SECONDS,
+        )
+    except TypeError:
+        completed = run_command(
+            ["python3", "scripts/chummer_design_supervisor.py", "status"],
+            cwd=workspace_root,
+        )
     if completed.returncode != 0:
         return {}
     stdout = str(completed.stdout or "").strip()
@@ -148,14 +234,164 @@ def observed_shard_state(
     supervisor_shards: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
     name = str(shard_payload.get("name") or "unknown")
+    shard_root = Path(str(shard_payload.get("path") or "")).resolve() if str(shard_payload.get("path") or "").strip() else None
     raw_state = dict(shard_payload.get("state") or {})
     supervisor_state = dict(supervisor_shards.get(name) or {})
     active_run = bool(raw_state.get("active_run")) or bool(supervisor_state.get("active_run"))
+    active_run_payload = (raw_state.get("active_run") or {}) if isinstance(raw_state.get("active_run"), dict) else {}
+    last_run_payload = (raw_state.get("last_run") or {}) if isinstance(raw_state.get("last_run"), dict) else {}
+    updated_at = str(supervisor_state.get("updated_at") or raw_state.get("updated_at") or "")
+    parsed_updated_at = parse_iso(updated_at)
+    if shard_root is not None:
+        state_mtime = path_modified_at(shard_root / "state.json")
+        if state_mtime is not None and parsed_updated_at is None:
+            updated_at = state_mtime.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    output_updated_at = str(supervisor_state.get("active_run_output_updated_at") or "").strip()
+    output_sizes = dict(supervisor_state.get("active_run_output_sizes") or {})
+    process_snapshot = active_process_snapshot(
+        supervisor_state.get("active_run_worker_pid")
+        or active_run_payload.get("worker_pid")
+        or 0,
+        active_run_payload=active_run_payload,
+    )
+    if not output_updated_at and active_run_payload:
+        freshest_output: Optional[dt.datetime] = None
+        computed_sizes: Dict[str, int] = {}
+        for key, label in (
+            ("stderr_path", "stderr"),
+            ("stdout_path", "stdout"),
+            ("last_message_path", "last_message"),
+        ):
+            path_text = str(active_run_payload.get(key) or "").strip()
+            if not path_text:
+                continue
+            path = Path(path_text)
+            if not path.exists():
+                try:
+                    relative = path.relative_to(Path("/var/lib/codex-fleet"))
+                except ValueError:
+                    relative = None
+                if relative is not None:
+                    path = (DEFAULT_WORKSPACE_ROOT / "state" / relative).resolve()
+            if not path.exists():
+                continue
+            try:
+                stat_result = path.stat()
+            except OSError:
+                continue
+            computed_sizes[label] = int(stat_result.st_size)
+            modified_at = dt.datetime.fromtimestamp(stat_result.st_mtime, tz=dt.timezone.utc)
+            if freshest_output is None or modified_at > freshest_output:
+                freshest_output = modified_at
+        if freshest_output is not None:
+            output_updated_at = freshest_output.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        output_sizes = computed_sizes
+    output_updated_dt = parse_iso(output_updated_at)
+    if (
+        active_run
+        and output_updated_dt is not None
+        and (utc_now() - output_updated_dt).total_seconds() <= DEFAULT_ACTIVE_OUTPUT_FRESH_SECONDS
+        and process_snapshot.get("active_run_process_alive") is False
+    ):
+        process_snapshot["active_run_process_alive"] = None
+        if str(process_snapshot.get("active_run_process_probe_scope") or "local") == "local":
+            process_snapshot["active_run_process_probe_scope"] = "container_local"
+    last_failure_reason = ""
+    preflight_failure_reason = ""
+    if not active_run:
+        last_failure_reason = str(
+            supervisor_state.get("last_failure_reason")
+            or raw_state.get("last_failure_reason")
+            or last_run_payload.get("acceptance_reason")
+            or last_run_payload.get("blocker")
+            or ""
+        ).strip()
+        preflight_failure_reason = str(
+            supervisor_state.get("preflight_failure_reason")
+            or raw_state.get("preflight_failure_reason")
+            or (
+                last_failure_reason
+                if int(last_run_payload.get("worker_exit_code") or 0) != 0
+                else ""
+            )
+            or ""
+        ).strip()
     return {
         "name": name,
-        "updated_at": str(supervisor_state.get("updated_at") or raw_state.get("updated_at") or ""),
+        "updated_at": updated_at,
         "mode": str(supervisor_state.get("mode") or raw_state.get("mode") or ""),
         "active_run": active_run,
+        "active_run_id": str(
+            supervisor_state.get("active_run_id")
+            or active_run_payload.get("run_id")
+            or ""
+        ).strip(),
+        "selected_account_alias": str(
+            supervisor_state.get("selected_account_alias")
+            or active_run_payload.get("selected_account_alias")
+            or raw_state.get("selected_account_alias")
+            or last_run_payload.get("selected_account_alias")
+            or ""
+        ).strip(),
+        "last_failure_reason": last_failure_reason,
+        "preflight_failure_reason": preflight_failure_reason,
+        "active_run_output_updated_at": output_updated_at,
+        "active_run_output_sizes": output_sizes,
+        "active_run_worker_first_output_at": str(
+            supervisor_state.get("active_run_worker_first_output_at")
+            or active_run_payload.get("worker_first_output_at")
+            or ""
+        ).strip(),
+        "active_run_worker_last_output_at": str(
+            supervisor_state.get("active_run_worker_last_output_at")
+            or active_run_payload.get("worker_last_output_at")
+            or ""
+        ).strip(),
+        "active_run_progress_state": str(
+            supervisor_state.get("active_run_progress_state")
+            or (
+                "closing"
+                if (
+                    int(process_snapshot.get("active_run_worker_pid") or 0) > 0
+                    and str(process_snapshot.get("active_run_process_probe_scope") or "local") == "local"
+                    and process_snapshot.get("active_run_process_alive") is False
+                    and str(
+                        supervisor_state.get("active_run_worker_last_output_at")
+                        or active_run_payload.get("worker_last_output_at")
+                        or supervisor_state.get("active_run_worker_first_output_at")
+                        or active_run_payload.get("worker_first_output_at")
+                        or ""
+                    ).strip()
+                )
+                else (
+                    "streaming"
+                    if str(
+                        supervisor_state.get("active_run_worker_last_output_at")
+                        or active_run_payload.get("worker_last_output_at")
+                        or supervisor_state.get("active_run_worker_first_output_at")
+                        or active_run_payload.get("worker_first_output_at")
+                        or ""
+                    ).strip()
+                    else (
+                        "running_silent"
+                        if process_snapshot.get("active_run_process_alive") is True
+                        else (
+                            "container_scoped"
+                            if (
+                                int(process_snapshot.get("active_run_worker_pid") or 0) > 0
+                                and str(process_snapshot.get("active_run_process_probe_scope") or "local") == "container_local"
+                            )
+                            else (
+                                "missing_process"
+                                if int(process_snapshot.get("active_run_worker_pid") or 0) > 0 and process_snapshot.get("active_run_process_alive") is False
+                                else "unknown"
+                            )
+                        )
+                    )
+                )
+            )
+        ).strip(),
+        **process_snapshot,
     }
 
 
@@ -177,9 +413,23 @@ def log(log_path: Path, message: str) -> None:
         handle.write(line + "\n")
 
 
-def run_command(command: list[str], *, cwd: Path, env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: Optional[Dict[str, str]] = None,
+    timeout_seconds: Optional[float] = None,
+) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(command, cwd=str(cwd), env=env, capture_output=True, text=True, check=False)
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
     except FileNotFoundError as exc:
         missing = str(exc.filename or command[0] if command else "command")
         return subprocess.CompletedProcess(
@@ -187,6 +437,14 @@ def run_command(command: list[str], *, cwd: Path, env: Optional[Dict[str, str]] 
             127,
             stdout="",
             stderr=f"{missing}: not found",
+        )
+    except subprocess.TimeoutExpired:
+        timeout_label = int(timeout_seconds) if timeout_seconds else 0
+        return subprocess.CompletedProcess(
+            command,
+            124,
+            stdout="",
+            stderr=f"timed out after {timeout_label}s",
         )
 
 
@@ -407,13 +665,11 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
 
     state_payload = read_json(state_root / "state.json")
     account_runtime = read_json(state_root / "account_runtime.json")
-    supervisor_status = read_supervisor_status(workspace_root)
-    supervisor_fields = dict(supervisor_status.get("fields") or {})
-    supervisor_shards = {
-        str(item.get("name") or "unknown"): dict(item)
-        for item in (supervisor_status.get("shards") or [])
-        if isinstance(item, dict)
+    supervisor_fields = {
+        "mode": str(state_payload.get("mode") or "").strip(),
+        "updated_at": str(state_payload.get("updated_at") or "").strip(),
     }
+    supervisor_shards: Dict[str, Dict[str, Any]] = {}
     shard_payloads = [
         {
             "name": shard_root.name,
@@ -426,6 +682,18 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     previous_supervisor_state = str(monitor_state.get("supervisor") or "").strip().lower()
     controller_state = service_status(workspace_root, "fleet-controller")
     supervisor_state = service_status(workspace_root, "fleet-design-supervisor")
+    supervisor_status = read_supervisor_status(workspace_root)
+    if isinstance(supervisor_status, dict):
+        fields = dict(supervisor_status.get("fields") or {})
+        if str(fields.get("mode") or "").strip():
+            supervisor_fields["mode"] = str(fields.get("mode") or "").strip()
+        if str(fields.get("updated_at") or "").strip():
+            supervisor_fields["updated_at"] = str(fields.get("updated_at") or "").strip()
+        supervisor_shards = {
+            str(item.get("name") or "").strip(): dict(item)
+            for item in (supervisor_status.get("shards") or [])
+            if isinstance(item, dict) and str(item.get("name") or "").strip()
+        }
     if controller_state == "unknown" and previous_controller_state in {"up", "restarting", "exited"}:
         controller_state = previous_controller_state
     if supervisor_state == "unknown" and previous_supervisor_state in {"up", "restarting", "exited"}:
@@ -449,7 +717,7 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
         parse_iso(str(supervisor_fields.get("updated_at") or state_payload.get("updated_at") or "")),
         [{"state": {"updated_at": item.get("updated_at") or ""}} for item in observed_shards],
     )
-    aggregate_timestamp_stale = updated_at is None or (now - updated_at).total_seconds() > max(60, int(args.stale_seconds))
+    aggregate_timestamp_stale_raw = updated_at is None or (now - updated_at).total_seconds() > max(60, int(args.stale_seconds))
     stale_shards: List[str] = []
     inactive_shards: List[str] = []
     for shard_payload, observed in zip(shard_payloads, observed_shards):
@@ -468,8 +736,9 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
         shard_mode = str(observed.get("mode") or "").strip().lower()
         if shard_mode not in {"complete", "idle"} and not bool(observed.get("active_run")):
             inactive_shards.append(str(observed.get("name") or shard_payload.get("name") or "unknown"))
+    aggregate_timestamp_stale = aggregate_timestamp_stale_raw
     stale = (
-        aggregate_timestamp_stale
+        aggregate_timestamp_stale_raw
         and (not shard_payloads or len(stale_shards) == len(shard_payloads))
         and not steady_complete_quiet
     )

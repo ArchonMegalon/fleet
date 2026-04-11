@@ -24,6 +24,12 @@ if (!fs.existsSync(packetPath)) {
 const packet = JSON.parse(fs.readFileSync(packetPath, 'utf8'));
 const resolvedWorkflowName = workflowName || String(packet.workflow_name || 'browseract_architect').trim() || 'browseract_architect';
 const workflowDescription = String(packet.description || '').trim();
+const ADD_NODE_BUTTON_SELECTOR = [
+  'button[data-sentry-element="ButtonAddNode"]',
+  '[data-sentry-component="ButtonAddNode"] button',
+  '[data-testid="rf__node--1"] button',
+  '.react-flow__node-ADD_NODE_BUTTON button',
+].join(', ');
 fs.mkdirSync(stateDir, { recursive: true });
 
 function actionLabelForPacketNode(node) {
@@ -39,7 +45,7 @@ function actionLabelForPacketNode(node) {
     case 'extract':
       return 'Extract Data';
     case 'output':
-      return 'Output Data';
+      return null;
     case 'repeat':
       return 'Loop List';
     default:
@@ -722,7 +728,7 @@ async function workflowExists(page) {
 
 async function builderLooksReady(page) {
   const selectors = [
-    'button[data-sentry-element="ButtonAddNode"]',
+    ADD_NODE_BUTTON_SELECTOR,
     '[data-testid^="rf__node-"]',
     '.react-flow',
   ];
@@ -784,7 +790,7 @@ async function openBuilderSurface(page) {
       })
       .catch(() => null),
     page
-      .waitForSelector('button[data-sentry-element="ButtonAddNode"], [data-testid^="rf__node-"], .react-flow', { timeout: 10000 })
+      .waitForSelector(`${ADD_NODE_BUTTON_SELECTOR}, [data-testid^="rf__node-"], .react-flow`, { timeout: 10000 })
       .then(async () => {
         await safeWait(page, 1500);
         return page;
@@ -818,7 +824,7 @@ async function openBuilderSurface(page) {
         })
         .catch(() => null),
       page
-        .waitForSelector('button[data-sentry-element="ButtonAddNode"], [data-testid^="rf__node-"], .react-flow', { timeout: 10000 })
+        .waitForSelector(`${ADD_NODE_BUTTON_SELECTOR}, [data-testid^="rf__node-"], .react-flow`, { timeout: 10000 })
         .then(async () => {
           await safeWait(page, 1500);
           return page;
@@ -1622,7 +1628,7 @@ async function configureNodeInline(popup, expectedLabel, packetNode, stepIndex) 
     const fieldName = String(packetNode && packetNode.config && packetNode.config.field_name ? packetNode.config.field_name : '').trim() || 'generated_prompt';
     const nodeText = await node.innerText().catch(() => '');
     if (extractCount > 0) {
-      const wroteFieldName = await writeFieldByLabel('Field Name', fieldName);
+      const wroteFieldName = (await writeFieldByLabel('Field Name', fieldName)) || (await writeFieldByLabel('Data Field', fieldName));
       appendConfigLog({
         step: stepIndex,
         expectedLabel,
@@ -1949,7 +1955,7 @@ async function configureStartCredentials(popup) {
 async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
   const beforeLabels = await listCurrentNodeLabels(popup);
   const beforeCount = beforeLabels.length;
-  const addButton = popup.locator('button[data-sentry-element="ButtonAddNode"]').last();
+  const resolveAddButton = async () => await firstVisibleLocator(popup, [ADD_NODE_BUTTON_SELECTOR]);
 
   const locateLibraryItem = async (drawerScope) => {
     const candidates = [];
@@ -2019,10 +2025,28 @@ async function addActionNode(popup, actionLabel, expectedLabel, stepIndex) {
   let lastError = '';
   for (const method of insertionMethods) {
     await closeActionDrawer(popup);
-    await addButton.waitFor({ state: 'visible', timeout: 10000 });
+    const addButton = await resolveAddButton();
+    if (!addButton) {
+      lastError = `Could not locate BrowserAct add-node button for ${actionLabel}`;
+      appendConfigLog({
+        step: stepIndex,
+        expectedLabel,
+        phase: 'add_action_missing_button',
+        action_label: actionLabel,
+        method,
+        error: lastError,
+      });
+      continue;
+    }
+    await addButton.scrollIntoViewIfNeeded().catch(() => {});
     await addButton.click({ timeout: 10000, force: true }).catch(async () => {
       await popup.evaluate(() => {
-        const button = Array.from(document.querySelectorAll('button[data-sentry-element="ButtonAddNode"]')).pop();
+        const button = [
+          ...Array.from(document.querySelectorAll('button[data-sentry-element="ButtonAddNode"]')),
+          ...Array.from(document.querySelectorAll('[data-sentry-component="ButtonAddNode"] button')),
+          ...Array.from(document.querySelectorAll('[data-testid="rf__node--1"] button')),
+          ...Array.from(document.querySelectorAll('.react-flow__node-ADD_NODE_BUTTON button')),
+        ].pop();
         if (button instanceof HTMLElement) {
           button.click();
           return true;
@@ -2200,7 +2224,7 @@ async function main() {
           })
           .catch(() => null),
         page
-          .waitForSelector('button[data-sentry-element="ButtonAddNode"], [data-testid^="rf__node-"], .react-flow', { timeout: 10000 })
+          .waitForSelector(`${ADD_NODE_BUTTON_SELECTOR}, [data-testid^="rf__node-"], .react-flow`, { timeout: 10000 })
           .then(async () => {
             await safeWait(page, 1500);
             return page;

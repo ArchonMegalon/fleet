@@ -1,9 +1,14 @@
 #!/bin/sh
 set -eu
 
-compose_file="${FLEET_REBUILD_COMPOSE_FILE:-/workspace/docker-compose.yml}"
+default_workspace_root="/docker/fleet"
+if [ ! -d "$default_workspace_root" ] && [ -d /workspace ]; then
+  default_workspace_root="/workspace"
+fi
+workspace_root="${FLEET_REBUILD_WORKSPACE_ROOT:-$default_workspace_root}"
+compose_file="${FLEET_REBUILD_COMPOSE_FILE:-$workspace_root/docker-compose.yml}"
 compose_project_name="${FLEET_COMPOSE_PROJECT_NAME:-fleet}"
-state_dir="${FLEET_REBUILD_STATE_DIR:-/workspace/state/rebuilder}"
+state_dir="${FLEET_REBUILD_STATE_DIR:-$workspace_root/state/rebuilder}"
 enabled="$(printf '%s' "${FLEET_REBUILD_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
 target_hour="$(printf '%02d' "${FLEET_REBUILD_HOUR_UTC:-04}")"
 target_minute="$(printf '%02d' "${FLEET_REBUILD_MINUTE_UTC:-15}")"

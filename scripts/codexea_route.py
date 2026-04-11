@@ -450,7 +450,7 @@ def _onemin_billing_timeout_seconds() -> float:
 
 
 def _onemin_live_status_timeout_seconds() -> float:
-    return max(_env_float("CODEXEA_ONEMIN_STATUS_TIMEOUT_SECONDS", 10.0), 1.0)
+    return max(_env_float("CODEXEA_ONEMIN_STATUS_TIMEOUT_SECONDS", 30.0), 1.0)
 
 
 def _onemin_billing_include_members() -> bool:
@@ -504,6 +504,7 @@ def _ea_http_payload(
     api_token = _ea_api_token()
     if api_token:
         headers["Authorization"] = f"Bearer {api_token}"
+        headers["X-EA-Api-Token"] = api_token
         headers["X-API-Token"] = api_token
     data = None
     request_method = str(method or "GET").upper()
@@ -1342,6 +1343,38 @@ def _onemin_aggregate_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
         aggregate["incoming_topups_excluded"] = True
     if (_coerce_int(aggregate.get("unknown_unprobed_slot_count")) or 0) <= 0:
         aggregate["probe_note"] = ""
+    effective_current_pace = _coerce_float(aggregate.get("current_pace_burn_credits_per_hour"))
+    observed_usage_burn = _coerce_float(aggregate.get("observed_usage_burn_credits_per_hour"))
+    avg_daily_burn_7d = _coerce_float(aggregate.get("avg_daily_burn_credits_7d"))
+    avg_hourly_burn_7d = round(float(avg_daily_burn_7d) / 24.0, 2) if avg_daily_burn_7d not in (None, 0) else None
+    burn_basis = str(aggregate.get("burn_basis") or "").strip()
+    if effective_current_pace in (None, 0):
+        if observed_usage_burn not in (None, 0):
+            effective_current_pace = observed_usage_burn
+            if not burn_basis or burn_basis == "unknown":
+                burn_basis = "observed_usage"
+        elif avg_hourly_burn_7d not in (None, 0):
+            effective_current_pace = avg_hourly_burn_7d
+            if not burn_basis or burn_basis == "unknown":
+                burn_basis = "7d_average"
+        else:
+            effective_current_pace = None
+            if not burn_basis:
+                burn_basis = "unknown"
+    elif not burn_basis or burn_basis == "unknown":
+        if observed_usage_burn not in (None, 0) and abs(float(effective_current_pace) - float(observed_usage_burn)) < 0.01:
+            burn_basis = "observed_usage"
+        elif avg_hourly_burn_7d not in (None, 0) and abs(float(effective_current_pace) - float(avg_hourly_burn_7d)) < 0.01:
+            burn_basis = "7d_average"
+        else:
+            burn_basis = "estimated_pool"
+    aggregate["current_pace_burn_credits_per_hour"] = effective_current_pace
+    aggregate["burn_basis"] = burn_basis or "unknown"
+    sum_free_total = _coerce_float(aggregate.get("sum_free_credits"))
+    if _coerce_float(aggregate.get("hours_remaining_at_current_pace")) is None and sum_free_total not in (None, 0) and effective_current_pace not in (None, 0):
+        aggregate["hours_remaining_at_current_pace"] = round(float(sum_free_total) / float(effective_current_pace), 2)
+    if _coerce_float(aggregate.get("hours_remaining_at_current_pace_no_topup")) is None and sum_free_total not in (None, 0) and effective_current_pace not in (None, 0):
+        aggregate["hours_remaining_at_current_pace_no_topup"] = round(float(sum_free_total) / float(effective_current_pace), 2)
     aggregate["days_left_at_7d_avg_burn"] = aggregate.get("days_remaining_at_7d_avg_burn")
     aggregate["used_precomputed_aggregate"] = True
     return aggregate

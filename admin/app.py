@@ -15,6 +15,7 @@ import sys
 import tempfile
 import textwrap
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -138,9 +139,17 @@ PROJECTS_DIR = CONFIG_PATH.parent / "projects"
 PROJECT_INDEX_PATH = PROJECTS_DIR / "_index.yaml"
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", str(DB_PATH.parent / "state")))
+DESIGN_SUPERVISOR_STATE_ROOT = pathlib.Path(
+    os.environ.get(
+        "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT",
+        str(FLEET_MOUNT_ROOT / "state" / "chummer_design_supervisor"),
+    )
+)
 DESIGN_MIRROR_STATUS_PATH = STATE_ROOT / "design_mirror_status.json"
 RUNTIME_CACHE_WRITE_ATTEMPTS = int(os.environ.get("FLEET_RUNTIME_CACHE_WRITE_ATTEMPTS", "4"))
 RUNTIME_CACHE_WRITE_RETRY_SECONDS = float(os.environ.get("FLEET_RUNTIME_CACHE_WRITE_RETRY_SECONDS", "0.15"))
+_DB_WAL_READY = False
+_DB_WAL_LOCK = threading.Lock()
 REBUILDER_STATE_DIR = pathlib.Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(FLEET_MOUNT_ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
@@ -696,9 +705,19 @@ def project_review_policy(project_cfg: Dict[str, Any]) -> Dict[str, Any]:
 def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=30000")
+    global _DB_WAL_READY
+    if not _DB_WAL_READY:
+        with _DB_WAL_LOCK:
+            if not _DB_WAL_READY:
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower():
+                        raise
+                else:
+                    _DB_WAL_READY = True
     return conn
 
 
@@ -4796,13 +4815,24 @@ def resolved_ea_status_settings() -> Dict[str, str]:
     }
 
 
-def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
+def ea_codex_profiles(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_PROFILE_CACHE.get("payload")
     fetched_at = float(_EA_PROFILE_CACHE.get("fetched_at") or 0.0)
+    cached_payload = cached if isinstance(cached, dict) else {}
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
-        return cached if isinstance(cached, dict) else {}
+        return cached_payload
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_PROFILES)
+    if cache_only:
+        payload = dict(persisted_payload or cached_payload)
+        if not payload:
+            return {}
+        cache_now = fetched_at if fetched_at > 0 else now
+        if persisted_fetched_at is not None:
+            cache_now = max(0.0, persisted_fetched_at.timestamp())
+        _EA_PROFILE_CACHE["fetched_at"] = cache_now
+        _EA_PROFILE_CACHE["payload"] = payload
+        return payload
     status_settings = resolved_ea_status_settings()
     status_base_url = str(status_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
     status_api_token = str(status_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
@@ -4840,14 +4870,26 @@ def ea_codex_profiles(force: bool = False) -> Dict[str, Any]:
     return _EA_PROFILE_CACHE["payload"]
 
 
-def ea_codex_status(force: bool = False, *, window: str = "7d") -> Dict[str, Any]:
+def ea_codex_status(force: bool = False, *, window: str = "7d", cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_STATUS_CACHE.get("payload")
     fetched_at = float(_EA_STATUS_CACHE.get("fetched_at") or 0.0)
     cached_window = str(_EA_STATUS_CACHE.get("window") or "7d")
+    cached_payload = cached if isinstance(cached, dict) else {}
     if not force and cached and cached_window == window and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
-        return cached if isinstance(cached, dict) else {}
+        return cached_payload
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_CODEX_STATUS)
+    if cache_only:
+        payload = dict(persisted_payload or cached_payload)
+        if not payload:
+            return {}
+        cache_now = fetched_at if fetched_at > 0 else now
+        if persisted_fetched_at is not None:
+            cache_now = max(0.0, persisted_fetched_at.timestamp())
+        _EA_STATUS_CACHE["fetched_at"] = cache_now
+        _EA_STATUS_CACHE["payload"] = payload
+        _EA_STATUS_CACHE["window"] = window
+        return payload
     status_settings = resolved_ea_status_settings()
     status_base_url = str(status_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
     status_api_token = str(status_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
@@ -4901,13 +4943,24 @@ def _latest_iso_value(values: Sequence[Any]) -> Optional[str]:
     return latest_text or None
 
 
-def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
+def ea_onemin_manager_status(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
     now = time.time()
     cached = _EA_ONEMIN_MANAGER_CACHE.get("payload")
     fetched_at = float(_EA_ONEMIN_MANAGER_CACHE.get("fetched_at") or 0.0)
+    cached_payload = cached if isinstance(cached, dict) else {}
     if not force and cached and (now - fetched_at) < EA_STATUS_CACHE_SECONDS:
-        return cached if isinstance(cached, dict) else {}
+        return cached_payload
     persisted_payload, persisted_fetched_at = load_runtime_cache(RUNTIME_CACHE_KEY_EA_ONEMIN_MANAGER_STATUS)
+    if cache_only:
+        payload = dict(persisted_payload or cached_payload)
+        if not payload:
+            return {}
+        cache_now = fetched_at if fetched_at > 0 else now
+        if persisted_fetched_at is not None:
+            cache_now = max(0.0, persisted_fetched_at.timestamp())
+        _EA_ONEMIN_MANAGER_CACHE["fetched_at"] = cache_now
+        _EA_ONEMIN_MANAGER_CACHE["payload"] = payload
+        return dict(payload)
     status_settings = resolved_ea_status_settings()
     status_base_url = str(status_settings.get("base_url") or EA_STATUS_BASE_URL).strip()
     status_api_token = str(status_settings.get("api_token") or EA_STATUS_API_TOKEN).strip()
@@ -4961,13 +5014,13 @@ def ea_onemin_manager_status(force: bool = False) -> Dict[str, Any]:
     return dict(payload)
 
 
-def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
-    manager_payload = ea_onemin_manager_status(force=force)
+def ea_onemin_manager_billing_aggregate(force: bool = False, *, cache_only: bool = False) -> Dict[str, Any]:
+    manager_payload = ea_onemin_manager_status(force=force, cache_only=cache_only)
     aggregate = dict(manager_payload.get("aggregate") or {})
     runway = dict(manager_payload.get("runway") or {})
     accounts = [dict(item) for item in aggregate.get("accounts") or [] if isinstance(item, dict)]
     if not aggregate:
-        legacy_payload = ea_codex_status(window="7d")
+        legacy_payload = ea_codex_status(window="7d", cache_only=cache_only)
         legacy_aggregate = dict(legacy_payload.get("onemin_billing_aggregate") or {})
         last_actual_balance = str(((legacy_payload.get("topup_summary") or {}).get("last_actual_balance_check_at")) or "").strip()
         if last_actual_balance and not str(legacy_aggregate.get("last_actual_balance_check_at") or "").strip():
@@ -4976,7 +5029,7 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
 
     sum_free_credits = aggregate.get("sum_free_credits")
     sum_max_credits = aggregate.get("sum_max_credits")
-    runtime_lease_payload = onemin_codexer_runtime_payload()
+    runtime_lease_payload = onemin_codexer_runtime_payload(cache_only=cache_only)
     reported_active_lease_count = max(0, int(aggregate.get("active_lease_count") or 0))
     runtime_active_lease_count = max(0, int(runtime_lease_payload.get("active_onemin_codexers") or 0))
     effective_active_lease_count = max(reported_active_lease_count, runtime_active_lease_count)
@@ -5075,8 +5128,8 @@ def ea_onemin_manager_billing_aggregate(force: bool = False) -> Dict[str, Any]:
     }
 
 
-def ea_lane_capacity_snapshot(lanes: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    payload = ea_codex_profiles()
+def ea_lane_capacity_snapshot(lanes: Dict[str, Any], *, cache_only: bool = False) -> Dict[str, Dict[str, Any]]:
+    payload = ea_codex_profiles(cache_only=cache_only)
     provider_registry = dict(payload.get("provider_registry") or {})
     registry_profiles = {
         str(item.get("profile") or "").strip(): dict(item)
@@ -5585,6 +5638,117 @@ def audit_task_candidate_meta(candidate: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+AUDIT_QUEUE_OVERLAY_META_KEYS = {
+    "acceptance_level",
+    "allow_core_rescue",
+    "allow_credit_burn",
+    "allow_paid_fast_lane",
+    "allowed_lanes",
+    "allowed_paths",
+    "architecture_sensitive",
+    "audit_lane",
+    "base_ref",
+    "branch_name",
+    "branch_policy",
+    "budget_class",
+    "core_rescue_after_round",
+    "dependencies",
+    "denied_paths",
+    "design_owner",
+    "design_sensitive",
+    "difficulty",
+    "dispatchability_state",
+    "final_reviewer_lane",
+    "first_review_required",
+    "groundwork_required",
+    "horizon_family",
+    "jury_acceptance_required",
+    "jury_required",
+    "landing_lane",
+    "latency_class",
+    "max_review_rounds",
+    "max_touched_files",
+    "merge_owner_lane",
+    "operator_override_required",
+    "owned_surfaces",
+    "package_id",
+    "package_kind",
+    "participant_eligible",
+    "premium_beneficial",
+    "premium_required",
+    "priority",
+    "protected_runtime",
+    "publish_truth_sources",
+    "required_reviewer_lane",
+    "review_lane",
+    "risk_level",
+    "signoff_requirements",
+    "source_items",
+    "sponsor_source",
+    "task",
+    "title",
+    "ttl_seconds",
+    "workflow_kind",
+}
+
+
+def audit_candidate_queue_overlay_item(candidate: Any, task_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    meta = dict(task_meta or audit_task_candidate_meta(candidate) or {})
+    queue_item = dict(meta.get("queue_item") or {}) if isinstance(meta.get("queue_item"), dict) else {}
+    if isinstance(candidate, sqlite3.Row):
+        keys = set(candidate.keys())
+        candidate_id = int(candidate["id"]) if "id" in keys and candidate["id"] is not None else 0
+        title = str(candidate["title"] if "title" in keys else "")
+        detail = str(candidate["detail"] if "detail" in keys else "")
+        finding_key = str(candidate["finding_key"] if "finding_key" in keys else "")
+        scope_id = str(candidate["scope_id"] if "scope_id" in keys else "")
+    elif isinstance(candidate, dict):
+        candidate_id = int(candidate.get("id") or 0)
+        title = str(candidate.get("title") or "")
+        detail = str(candidate.get("detail") or "")
+        finding_key = str(candidate.get("finding_key") or "")
+        scope_id = str(candidate.get("scope_id") or "")
+    else:
+        candidate_id = 0
+        title = ""
+        detail = ""
+        finding_key = ""
+        scope_id = ""
+
+    preferred_title = str(detail or title).strip() or str(title or detail).strip()
+    detail_text = str(detail).strip() or preferred_title
+    if preferred_title:
+        queue_item.setdefault("title", preferred_title)
+    if detail_text:
+        queue_item.setdefault("task", detail_text)
+    if candidate_id:
+        queue_item.setdefault("package_id", f"audit-task-{candidate_id}")
+        queue_item.setdefault("source_ref", f"audit_task_candidates[{candidate_id}]")
+    elif preferred_title:
+        queue_item.setdefault("package_id", f"audit-task-{package_safe_token(preferred_title)[:48]}")
+    if finding_key:
+        queue_item.setdefault("audit_finding_key", finding_key)
+    if scope_id:
+        queue_item.setdefault("audit_scope_id", scope_id)
+
+    for key in AUDIT_QUEUE_OVERLAY_META_KEYS:
+        value = meta.get(key)
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, dict):
+            queue_item.setdefault(key, dict(value))
+        elif isinstance(value, list):
+            queue_item.setdefault(key, list(value))
+        else:
+            queue_item.setdefault(key, value)
+
+    if finding_key == "project.design_mirror_missing_or_stale":
+        queue_item.setdefault("allowed_paths", [".codex-design"])
+        if scope_id:
+            queue_item.setdefault("owned_surfaces", [f"design_mirror:{scope_id}"])
+    return queue_item
+
+
 def audit_finding_is_recommended(finding_key: Any) -> bool:
     key = str(finding_key or "").strip().lower()
     return key.endswith("_recommended")
@@ -5615,32 +5779,63 @@ def queue_overlay_path(project: Dict[str, Any]) -> pathlib.Path:
     return pathlib.Path(project["path"]) / STUDIO_PUBLISHED_DIR / QUEUE_OVERLAY_FILENAME
 
 
-def merge_queue_overlay_item(project: Dict[str, Any], item_text: str, *, mode: str = "append") -> pathlib.Path:
-    path = queue_overlay_path(project)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = load_yaml(path)
+def normalize_queue_overlay_item(item: Any) -> Optional[Any]:
+    if isinstance(item, dict):
+        return dict(item)
+    if isinstance(item, list):
+        return list(item)
+    if isinstance(item, (str, int, float)):
+        text = str(item).strip()
+        if text:
+            return text
+    return None
+
+
+def queue_overlay_payload_items(data: Any) -> List[Any]:
     if isinstance(data, list):
-        items = [str(item).strip() for item in data if str(item).strip()]
-        existing_mode = "append"
+        raw_items = data
     elif isinstance(data, dict):
-        existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
         raw_items = data.get("items")
         if raw_items is None:
             raw_items = data.get("queue")
-        items = [str(item).strip() for item in (raw_items or []) if str(item).strip()]
     else:
-        existing_mode = "append"
-        items = []
-    text = str(item_text).strip()
+        raw_items = []
+    items: List[Any] = []
+    for item in raw_items or []:
+        normalized = normalize_queue_overlay_item(item)
+        if normalized is not None:
+            items.append(normalized)
+    return items
+
+
+def queue_overlay_item_identity(item: Any) -> str:
+    normalized = normalize_queue_overlay_item(item)
+    if normalized is None:
+        return ""
+    if isinstance(normalized, (dict, list)):
+        return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return f"text:{normalized}"
+
+
+def merge_queue_overlay_item(project: Dict[str, Any], item: Any, *, mode: str = "append") -> pathlib.Path:
+    path = queue_overlay_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_yaml(path)
+    existing_mode = "append"
+    if isinstance(data, dict):
+        existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
+    items = queue_overlay_payload_items(data)
+    normalized_item = normalize_queue_overlay_item(item)
     queue_mode = str(mode or existing_mode or "append").strip().lower() or "append"
-    if text:
-        items = [item for item in items if item != text]
+    if normalized_item is not None:
+        item_key = queue_overlay_item_identity(normalized_item)
+        items = [existing for existing in items if queue_overlay_item_identity(existing) != item_key]
         if queue_mode == "replace":
-            items = [text]
+            items = [normalized_item]
         elif queue_mode == "prepend":
-            items = [text] + items
+            items = [normalized_item] + items
         else:
-            items.append(text)
+            items.append(normalized_item)
     save_yaml(
         path,
         {
@@ -5768,7 +5963,7 @@ def publish_project_audit_candidate(candidate_id: int, *, queue_mode: str = "app
 
     finding = audit_finding_row(candidate["scope_type"], candidate["scope_id"], candidate["finding_key"])
     task_meta = audit_task_candidate_meta(candidate)
-    overlay_path = merge_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip(), mode=queue_mode)
+    overlay_path = merge_queue_overlay_item(project, audit_candidate_queue_overlay_item(candidate, task_meta), mode=queue_mode)
 
     feedback_dir = pathlib.Path(project["path"]) / project.get("feedback_dir", "feedback")
     feedback_dir.mkdir(parents=True, exist_ok=True)
@@ -5913,7 +6108,7 @@ def publish_group_audit_candidate(candidate_id: int, *, source: str = "manual") 
     elif len(member_projects) == 1:
         project_id = member_projects[0]
         project = project_cfg(config, project_id)
-        overlay_path = merge_queue_overlay_item(project, str(candidate["detail"] or candidate["title"] or "").strip(), mode="append")
+        overlay_path = merge_queue_overlay_item(project, audit_candidate_queue_overlay_item(candidate, task_meta), mode="append")
         published_targets.append(
             {
                 "target_type": "project",
@@ -6173,7 +6368,7 @@ def publish_group_approved_tasks(group_id: str, *, queue_mode: str = "append") -
     return published
 
 
-def merged_projects() -> List[Dict[str, Any]]:
+def merged_projects(*, cache_only: bool = False) -> List[Dict[str, Any]]:
     config = normalize_config()
     registry = load_program_registry(config)
     boundary_registry = boundary_purity_registry_from_config(config)
@@ -6191,7 +6386,7 @@ def merged_projects() -> List[Dict[str, Any]]:
     usage_start = usage_window_start(config)
     latest_completed_runs = latest_completed_run_by_project(limit=200)
     latest_decisions = latest_spider_decision_by_project()
-    lane_capacities = ea_lane_capacity_snapshot(config.get("lanes") or {})
+    lane_capacities = ea_lane_capacity_snapshot(config.get("lanes") or {}, cache_only=cache_only)
     items: List[Dict[str, Any]] = []
     for project in config.get("projects", []):
         row = dict(project)
@@ -6763,17 +6958,46 @@ def active_run_rows(limit: int = 100) -> List[Dict[str, Any]]:
     if not DB_PATH.exists():
         return []
     with db() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM runs
-            WHERE status IN ('starting', 'running', 'verifying', 'requested', 'awaiting_review')
-              AND finished_at IS NULL
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        if table_exists("projects"):
+            rows = conn.execute(
+                """
+                SELECT r.*
+                FROM runs r
+                WHERE r.status IN ('starting', 'running', 'verifying', 'requested', 'awaiting_review')
+                  AND r.finished_at IS NULL
+                  AND (
+                        COALESCE(NULLIF(TRIM(r.project_id), ''), '') = ''
+                        OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = r.project_id)
+                        OR EXISTS (
+                            SELECT 1
+                            FROM projects p
+                            WHERE p.id = r.project_id
+                              AND (
+                                    CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = r.id
+                                    OR (
+                                        CAST(COALESCE(p.active_run_id, 0) AS INTEGER) = 0
+                                        AND COALESCE(NULLIF(TRIM(p.status), ''), '') IN ('starting', 'running', 'verifying')
+                                    )
+                              )
+                        )
+                  )
+                ORDER BY r.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM runs
+                WHERE status IN ('starting', 'running', 'verifying', 'requested', 'awaiting_review')
+                  AND finished_at IS NULL
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -7893,11 +8117,11 @@ def top_consumers_for_account(alias: str, groups_by_project: Dict[str, str], sta
     return labels
 
 
-def build_runway_model(status: Dict[str, Any]) -> Dict[str, Any]:
+def build_runway_model(status: Dict[str, Any], *, cache_only: bool = False) -> Dict[str, Any]:
     groups = status.get("groups") or status["config"].get("groups", [])
     projects = status.get("projects") or status["config"].get("projects", [])
     account_pools = status.get("account_pools") or []
-    lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {})
+    lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {}, cache_only=cache_only)
     occupied_run_counts: Dict[str, int] = {}
     for row in active_run_rows():
         alias = str(row.get("account_alias") or "").strip()
@@ -9113,11 +9337,16 @@ def _participant_credit_guard_status(
     return result
 
 
-def booster_runtime_card_payload(jury_telemetry: Dict[str, Any], provider_credit: Dict[str, Any]) -> Dict[str, Any]:
+def booster_runtime_card_payload(
+    jury_telemetry: Dict[str, Any],
+    provider_credit: Dict[str, Any],
+    *,
+    cache_only: bool = False,
+) -> Dict[str, Any]:
     participant = dict((jury_telemetry or {}).get("participant_burst") or {})
     active_participant_boosters = max(0, int(participant.get("active_lanes") or 0))
     sponsor_ready_boosters = max(0, int(participant.get("sponsor_ready_lanes") or 0))
-    onemin_runtime = onemin_codexer_runtime_payload()
+    onemin_runtime = onemin_codexer_runtime_payload(cache_only=cache_only)
     active_onemin_codexers = max(0, int(onemin_runtime.get("active_onemin_codexers") or 0))
     active_onemin_booster_codexers = max(0, int(onemin_runtime.get("active_onemin_booster_codexers") or 0))
     active_boosters = active_participant_boosters + active_onemin_booster_codexers
@@ -9156,8 +9385,8 @@ def booster_runtime_card_payload(jury_telemetry: Dict[str, Any], provider_credit
     }
 
 
-def onemin_profile_models() -> set[str]:
-    payload = ea_codex_profiles()
+def onemin_profile_models(*, cache_only: bool = False) -> set[str]:
+    payload = ea_codex_profiles(cache_only=cache_only)
     models: set[str] = set()
     for item in payload.get("profiles") or []:
         provider_hints = {
@@ -9216,20 +9445,95 @@ def resolve_onemin_topup_window(
     }
 
 
-def onemin_codexer_runtime_payload() -> Dict[str, Any]:
+def _normalized_design_supervisor_state_root() -> pathlib.Path:
+    root = DESIGN_SUPERVISOR_STATE_ROOT
+    return root.parent if root.name == "state.json" else root
+
+
+def _configured_account_auth_kind_map() -> Dict[str, str]:
+    accounts_cfg = dict((load_yaml(ACCOUNTS_PATH).get("accounts")) or {})
+    return {
+        str(alias).strip(): str((account or {}).get("auth_kind") or "").strip()
+        for alias, account in accounts_cfg.items()
+        if str(alias).strip()
+    }
+
+
+def _configured_account_model_map() -> Dict[str, List[str]]:
+    accounts_cfg = dict((load_yaml(ACCOUNTS_PATH).get("accounts")) or {})
+    resolved: Dict[str, List[str]] = {}
+    for alias, account in accounts_cfg.items():
+        clean_alias = str(alias).strip()
+        if not clean_alias:
+            continue
+        account_cfg = dict(account or {})
+        models = [
+            str(item).strip()
+            for item in (account_cfg.get("allowed_models") or account_cfg.get("codex_model_aliases") or [])
+            if str(item).strip()
+        ]
+        resolved[clean_alias] = models
+    return resolved
+
+
+def _active_design_supervisor_onemin_rows(
+    *,
+    onemin_models: set[str],
+    auth_kind_by_alias: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    state_root = _normalized_design_supervisor_state_root()
+    if not state_root.exists() or not state_root.is_dir():
+        return []
+    auth_kind_map = dict(auth_kind_by_alias or {})
+    for alias, auth_kind in _configured_account_auth_kind_map().items():
+        auth_kind_map.setdefault(alias, auth_kind)
+    configured_models_by_alias = _configured_account_model_map()
+    manifest_rows = _load_json_mapping(state_root / "active_shards.json").get("active_shards") or []
+    lane_by_shard = {
+        str(row.get("name") or "").strip(): str(row.get("worker_lane") or "").strip().lower()
+        for row in manifest_rows
+        if isinstance(row, dict) and str(row.get("name") or "").strip()
+    }
+    active_rows: List[Dict[str, Any]] = []
+    for shard_dir in sorted(candidate for candidate in state_root.iterdir() if candidate.is_dir() and candidate.name.startswith("shard-")):
+        state = _load_json_mapping(shard_dir / "state.json")
+        active_run = state.get("active_run") or {}
+        if not isinstance(active_run, dict):
+            continue
+        run_id = str(active_run.get("run_id") or "").strip()
+        account_alias = str(active_run.get("selected_account_alias") or "").strip()
+        if not run_id or not account_alias:
+            continue
+        auth_kind = str(auth_kind_map.get(account_alias) or "").strip().lower()
+        if auth_kind != "ea":
+            continue
+        selected_model = str(active_run.get("selected_model") or "").strip()
+        if selected_model.lower() in {"", "default"}:
+            configured_models = [model for model in (configured_models_by_alias.get(account_alias) or []) if model]
+            if len(configured_models) == 1:
+                selected_model = configured_models[0]
+        if selected_model not in onemin_models:
+            continue
+        target_lane = str(lane_by_shard.get(shard_dir.name) or "").strip().lower()
+        active_rows.append(
+            {
+                "project_id": "chummer_design_supervisor",
+                "account_alias": account_alias,
+                "target_lane": target_lane,
+                "shard": shard_dir.name,
+                "run_id": run_id,
+            }
+        )
+    return active_rows
+
+
+def onemin_codexer_runtime_payload(*, cache_only: bool = False) -> Dict[str, Any]:
     has_runtime_tasks = table_exists("runtime_tasks")
     has_runs = table_exists("runs")
-    if not has_runtime_tasks and not has_runs:
-        return {
-            "active_onemin_codexers": 0,
-            "active_onemin_booster_codexers": 0,
-            "active_onemin_projects": [],
-            "active_onemin_accounts": [],
-            "active_onemin_lane_usage": {},
-        }
-    onemin_models = onemin_profile_models()
+    onemin_models = onemin_profile_models(cache_only=cache_only)
     active_rows: List[Dict[str, Any]] = []
     lane_usage: Dict[str, int] = {}
+    auth_kind_by_alias: Dict[str, str] = {}
     if has_runtime_tasks:
         with db() as conn:
             runtime_rows = conn.execute(
@@ -9299,6 +9603,12 @@ def onemin_codexer_runtime_payload() -> Dict[str, Any]:
                     "target_lane": "",
                 }
             )
+    if not active_rows:
+        for row in _active_design_supervisor_onemin_rows(onemin_models=onemin_models, auth_kind_by_alias=auth_kind_by_alias):
+            target_lane = str(row.get("target_lane") or "").strip().lower()
+            if target_lane:
+                lane_usage[target_lane] = int(lane_usage.get(target_lane) or 0) + 1
+            active_rows.append(dict(row))
     return {
         "active_onemin_codexers": len(active_rows),
         "active_onemin_booster_codexers": sum(1 for row in active_rows if str(row.get("target_lane") or "").strip() == "core_booster"),
@@ -9374,10 +9684,11 @@ def jury_telemetry_payload(
     status: Dict[str, Any],
     *,
     lane_capacities: Dict[str, Dict[str, Any]],
+    cache_only: bool = False,
 ) -> Dict[str, Any]:
     now = utc_now()
     config = dict(status.get("config") or {})
-    provider_credit = provider_credit_card_payload()
+    provider_credit = provider_credit_card_payload(cache_only=cache_only)
     projects = list(status.get("projects") or [])
     active_jury_runs = jury_review_run_rows(config, active_only=True)
     last_24h_jury_runs = [
@@ -9706,6 +10017,88 @@ def artifact_freshness_payload(*, at: Optional[str], stale_after_hours: int = 24
     }
 
 
+PUBLISHED_ARTIFACT_SOURCE_DRIFT_TOLERANCE_SECONDS = max(
+    1,
+    int(os.environ.get("FLEET_PUBLISHED_ARTIFACT_SOURCE_DRIFT_TOLERANCE_SECONDS", "300")),
+)
+
+
+def _path_mtime(path: pathlib.Path) -> Optional[dt.datetime]:
+    try:
+        return dt.datetime.fromtimestamp(path.stat().st_mtime, UTC)
+    except OSError:
+        return None
+
+
+def _latest_path_mtime(paths: Sequence[pathlib.Path]) -> Optional[dt.datetime]:
+    latest: Optional[dt.datetime] = None
+    for path in paths:
+        timestamp = _path_mtime(path)
+        if timestamp is None:
+            continue
+        if latest is None or timestamp > latest:
+            latest = timestamp
+    return latest
+
+
+def _progress_artifact_source_paths() -> List[pathlib.Path]:
+    state_root = _normalized_design_supervisor_state_root()
+    paths: List[pathlib.Path] = [
+        DB_PATH,
+        CONFIG_PATH.parent / "public_progress_parts.yaml",
+        CONFIG_PATH.parent / "program_milestones.yaml",
+        state_root / "active_shards.json",
+    ]
+    if PROJECTS_DIR.exists():
+        paths.extend(sorted(PROJECTS_DIR.glob("*.yaml")))
+    if state_root.exists():
+        paths.extend(sorted(state_root.glob("shard-*/state.json")))
+    return paths
+
+
+def _status_plane_source_paths() -> List[pathlib.Path]:
+    state_root = _normalized_design_supervisor_state_root()
+    paths: List[pathlib.Path] = [
+        DB_PATH,
+        DESIGN_MIRROR_STATUS_PATH,
+        RUNTIME_HEALING_EVENTS_PATH,
+        state_root / "active_shards.json",
+    ]
+    if REBUILDER_AUTOHEAL_STATE_DIR.exists():
+        paths.extend(sorted(REBUILDER_AUTOHEAL_STATE_DIR.glob("*.json")))
+    if state_root.exists():
+        paths.extend(sorted(state_root.glob("shard-*/state.json")))
+    return paths
+
+
+def _apply_source_drift_freshness(
+    freshness: Dict[str, Any],
+    *,
+    source_paths: Sequence[pathlib.Path],
+    artifact_label: str,
+) -> Dict[str, Any]:
+    payload = dict(freshness or {})
+    artifact_at = parse_iso(str(payload.get("at") or "").strip())
+    if artifact_at is None:
+        return payload
+    source_updated_at = _latest_path_mtime(source_paths)
+    if source_updated_at is None:
+        return payload
+    raw_drift_seconds = (source_updated_at - artifact_at).total_seconds()
+    if raw_drift_seconds <= PUBLISHED_ARTIFACT_SOURCE_DRIFT_TOLERANCE_SECONDS:
+        return payload
+    drift_seconds = max(1, int(math.ceil(raw_drift_seconds)))
+    return {
+        **payload,
+        "state": "stale",
+        "label": "stale",
+        "reason": f"Live source state is {human_duration(drift_seconds)} newer than the published {artifact_label}.",
+        "source_updated_at": iso(source_updated_at),
+        "source_drift_seconds": drift_seconds,
+        "source_drift_human": human_duration(drift_seconds),
+    }
+
+
 def compile_manifest_surface_payload() -> Dict[str, Any]:
     payload = load_published_json_payload(COMPILE_MANIFEST_FILENAME)
     stages = dict(payload.get("stages") or {})
@@ -9847,17 +10240,37 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
     support_packets = support_case_surface_payload()
     journey_gates = journey_gates_surface_payload()
     release_channel = release_channel_surface_payload()
+    progress_source_paths = _progress_artifact_source_paths()
+    status_plane_source_paths = _status_plane_source_paths()
     return {
         "compile_manifest": compile_manifest.get("freshness") or artifact_freshness_payload(at=""),
         "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
         "journey_gates": journey_gates.get("freshness") or artifact_freshness_payload(at=""),
         "release_channel": release_channel.get("freshness") or artifact_freshness_payload(at=""),
-        "progress_report": artifact_freshness_payload(
-            at=str(progress_report.get("generated_at") or progress_report.get("as_of") or "").strip(),
-            stale_after_hours=24 * 7,
+        "progress_report": _apply_source_drift_freshness(
+            artifact_freshness_payload(
+                at=str(progress_report.get("generated_at") or progress_report.get("as_of") or "").strip(),
+                stale_after_hours=24 * 7,
+            ),
+            source_paths=progress_source_paths,
+            artifact_label="progress report",
         ),
-        "progress_history": artifact_freshness_payload(at=str(progress_history.get("generated_at") or "").strip(), stale_after_hours=24 * 7),
-        "status_plane": artifact_freshness_payload(at=str(status_plane.get("generated_at") or "").strip(), stale_after_hours=24),
+        "progress_history": _apply_source_drift_freshness(
+            artifact_freshness_payload(
+                at=str(progress_history.get("generated_at") or "").strip(),
+                stale_after_hours=24 * 7,
+            ),
+            source_paths=progress_source_paths,
+            artifact_label="progress history",
+        ),
+        "status_plane": _apply_source_drift_freshness(
+            artifact_freshness_payload(
+                at=str(status_plane.get("generated_at") or "").strip(),
+                stale_after_hours=24,
+            ),
+            source_paths=status_plane_source_paths,
+            artifact_label="status plane",
+        ),
     }
 
 
@@ -10404,9 +10817,9 @@ def maybe_refresh_published_artifacts(*, status_payload: Optional[Dict[str, Any]
     return refresh_published_artifacts(force=False, status_payload=status_payload)
 
 
-def provider_route_summary_payload(status: Dict[str, Any]) -> List[Dict[str, Any]]:
+def provider_route_summary_payload(status: Dict[str, Any], *, cache_only: bool = False) -> List[Dict[str, Any]]:
     normalized_lanes = normalize_lanes_config(((status.get("config") or {}).get("lanes")) or {})
-    lane_snapshots = ea_lane_capacity_snapshot(normalized_lanes) if normalized_lanes else {}
+    lane_snapshots = ea_lane_capacity_snapshot(normalized_lanes, cache_only=cache_only) if normalized_lanes else {}
     capacity_map = {
         str(item.get("lane") or "").strip().lower(): dict(item)
         for item in ((status.get("capacity_forecast") or {}).get("lanes") or [])
@@ -10509,6 +10922,7 @@ def execution_loop_payload(
     queue_forecast: Dict[str, Any],
     blocker_forecast: Dict[str, Any],
     lane_capacities: Optional[Dict[str, Dict[str, Any]]] = None,
+    cache_only: bool = False,
 ) -> Dict[str, Any]:
     telemetry = load_latest_telemetry_payload(status)
     telemetry_review_loop = dict(telemetry.get("review_loop") or {})
@@ -10517,10 +10931,11 @@ def execution_loop_payload(
     resolved_lane_capacities = lane_capacities
     if resolved_lane_capacities is None:
         configured_lanes = ((status.get("config") or {}).get("lanes") or {})
-        resolved_lane_capacities = ea_lane_capacity_snapshot(configured_lanes) if configured_lanes else {}
+        resolved_lane_capacities = ea_lane_capacity_snapshot(configured_lanes, cache_only=cache_only) if configured_lanes else {}
     jury_telemetry = jury_telemetry_payload(
         status,
         lane_capacities=resolved_lane_capacities,
+        cache_only=cache_only,
     )
     project = mission_active_project(status, queue_forecast)
     if not project:
@@ -10819,8 +11234,8 @@ def mission_blockers_payload(
     }
 
 
-def provider_credit_card_payload() -> Dict[str, Any]:
-    aggregate = dict(ea_onemin_manager_billing_aggregate() or {})
+def provider_credit_card_payload(*, cache_only: bool = False) -> Dict[str, Any]:
+    aggregate = dict(ea_onemin_manager_billing_aggregate(cache_only=cache_only) or {})
     if not aggregate:
         return {}
     basis_counts = dict(aggregate.get("basis_counts") or {})
@@ -10877,23 +11292,29 @@ def mission_board_payload(
     attention: List[Dict[str, Any]],
     worker_posture: Dict[str, Any] | None = None,
     lane_capacities: Optional[Dict[str, Dict[str, Any]]] = None,
+    cache_only: bool = False,
 ) -> Dict[str, Any]:
     truth_freshness = truth_freshness_payload(status)
     runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     resolved_lane_capacities = lane_capacities
     if resolved_lane_capacities is None:
         configured_lanes = ((status.get("config") or {}).get("lanes") or {})
-        resolved_lane_capacities = ea_lane_capacity_snapshot(configured_lanes) if configured_lanes else {}
+        resolved_lane_capacities = ea_lane_capacity_snapshot(configured_lanes, cache_only=cache_only) if configured_lanes else {}
     execution_loop = execution_loop_payload(
         status,
         queue_forecast=queue_forecast,
         blocker_forecast=blocker_forecast,
         lane_capacities=resolved_lane_capacities,
+        cache_only=cache_only,
     )
     lane_runway = lane_runway_payload(status, capacity_forecast=capacity_forecast, execution_loop=execution_loop)
     blockers = mission_blockers_payload(status, blocker_forecast=blocker_forecast, attention=attention, execution_loop=execution_loop)
-    provider_credit = provider_credit_card_payload()
-    booster_runtime = booster_runtime_card_payload(execution_loop.get("jury_telemetry") or {}, provider_credit)
+    provider_credit = provider_credit_card_payload(cache_only=cache_only)
+    booster_runtime = booster_runtime_card_payload(
+        execution_loop.get("jury_telemetry") or {},
+        provider_credit,
+        cache_only=cache_only,
+    )
     review_gate = build_review_gate_bridge_items(status)
     healer_activity = build_healer_activity_items(status)
     current_slice = {
@@ -11096,7 +11517,7 @@ def dispatch_policy_payload(projects: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
+def canonical_public_status_payload(status: Dict[str, Any], *, cache_only: bool = False) -> Dict[str, Any]:
     cockpit = status.get("cockpit") or {}
     summary = cockpit.get("summary") or {}
     projects = status.get("projects", [])
@@ -11107,7 +11528,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     release_channel = release_channel_surface_payload()
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     artifact_freshness = published_artifact_freshness_payload()
-    provider_routes = provider_route_summary_payload(status)
+    provider_routes = provider_route_summary_payload(status, cache_only=cache_only)
     publish_readiness = publish_readiness_payload(
         status,
         runtime_healing=runtime_healing,
@@ -11240,7 +11661,7 @@ def canonical_public_status_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
+def cockpit_payload_from_status(status: Dict[str, Any], *, cache_only: bool = False) -> Dict[str, Any]:
     projects = status.get("projects") or status["config"].get("projects", [])
     groups = status.get("groups") or status["config"].get("groups", [])
     account_pools = status.get("account_pools") or []
@@ -11249,12 +11670,12 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     auditor = status.get("auditor") or {}
     attention = build_attention_items(status)
     workers = build_worker_cards(status)
-    runway = build_runway_model(status)
+    runway = build_runway_model(status, cache_only=cache_only)
     operators = build_operator_cards(status, workers=workers, runway=runway)
     approvals = build_approval_center(status)
     lamps = build_lamp_items(status)
     worker_posture = build_worker_posture_payload(status, workers=workers)
-    lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {})
+    lane_capacities = ea_lane_capacity_snapshot((status.get("config") or {}).get("lanes") or {}, cache_only=cache_only)
     queue_forecast = queue_forecast_payload(status, workers=workers)
     mission_snapshot = mission_forecast_payload(status, queue_forecast=queue_forecast, lane_capacities=lane_capacities)
     vision_forecast = vision_forecast_payload(status, queue_forecast=queue_forecast)
@@ -11270,6 +11691,7 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
         attention=attention,
         worker_posture=worker_posture,
         lane_capacities=lane_capacities,
+        cache_only=cache_only,
     )
     worker_breakdown = build_worker_breakdown(status)
     posture = scheduler_posture(ops, groups, account_pools)
@@ -11365,12 +11787,17 @@ def cockpit_payload_from_status(status: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def admin_status_payload() -> Dict[str, Any]:
+def admin_status_payload(*, public_mode: bool = False) -> Dict[str, Any]:
     config = normalize_config()
     consistency_warnings = config_consistency_warnings(config)
-    projects = merged_projects()
+    projects = merged_projects(cache_only=public_mode)
     runtime_healing = runtime_healing_payload()
-    sync_runtime_healing_incidents(runtime_healing)
+    if not public_mode:
+        try:
+            sync_runtime_healing_incidents(runtime_healing)
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).lower():
+                raise
     registry = load_program_registry(config)
     group_runtime = group_runtime_rows()
     project_map = {project["id"]: project for project in projects}
@@ -11433,7 +11860,18 @@ def admin_status_payload() -> Dict[str, Any]:
             int((project.get("review_findings") or {}).get("blocking_count") or 0) for project in group_projects
         )
         group_row["allowance_usage"] = recent_usage_for_scope([project["id"] for project in group_projects], usage_start)
-        group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
+        if public_mode:
+            group_row["pool_sufficiency"] = {
+                "level": "unknown",
+                "basis": "public_fast_path",
+                "eligible_accounts": [],
+                "eligible_account_count": 0,
+                "eligible_parallel_slots": 0,
+                "required_slots": 0,
+                "remaining_slices": 0,
+            }
+        else:
+            group_row["pool_sufficiency"] = group_pool_sufficiency(config, group_cfg, group_projects, now)
         group_row["bottleneck"] = "; ".join((group_row.get("contract_blockers") or [])[:1] + (group_row.get("dispatch_blockers") or [])[:1]) or str(group_row.get("dispatch_basis") or "")
         group_row["remaining_slices"] = int(((group_row.get("pool_sufficiency") or {}).get("remaining_slices") or 0))
         group_row["pressure_state"] = group_pressure_state(group_row, group_projects)
@@ -11444,11 +11882,18 @@ def admin_status_payload() -> Dict[str, Any]:
             int((group_row["auditor_task_counts"] or {}).get("open") or 0)
             or int((group_row["auditor_task_counts"] or {}).get("approved") or 0)
         )
-        group_row["incidents"] = group_open_incidents(group_row, group_projects)
-        group_row["open_incident_count"] = len(group_row["incidents"])
-        group_row["operator_question"] = group_operator_question(group_row, group_projects)
-        group_row["notification"] = group_notification_payload(group_row, group_projects)
-        group_row["notification_needed"] = bool((group_row.get("notification") or {}).get("needed"))
+        if public_mode:
+            group_row["incidents"] = []
+            group_row["open_incident_count"] = 0
+            group_row["operator_question"] = ""
+            group_row["notification"] = {}
+            group_row["notification_needed"] = False
+        else:
+            group_row["incidents"] = group_open_incidents(group_row, group_projects)
+            group_row["open_incident_count"] = len(group_row["incidents"])
+            group_row["operator_question"] = group_operator_question(group_row, group_projects)
+            group_row["notification"] = group_notification_payload(group_row, group_projects)
+            group_row["notification_needed"] = bool((group_row.get("notification") or {}).get("needed"))
         group_row["milestone_eta"] = estimate_registry_eta(
             group_meta,
             now,
@@ -11484,28 +11929,36 @@ def admin_status_payload() -> Dict[str, Any]:
             group_row["delivery_progress"]["percent_blocked"] = int(group_row["delivery_progress"].get("percent_inflight") or 0)
             group_row["delivery_progress"]["percent_inflight"] = 0
         groups.append(group_row)
-    notifications = sorted(
-        [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
-        key=lambda item: (
-            0 if str(item.get("severity") or "") in {"critical", "high"} else 1,
-            -int(item.get("incident_count") or 0),
-            -int(item.get("ready_project_count") or 0),
-            str(item.get("group_id") or ""),
-        ),
+    notifications = (
+        []
+        if public_mode
+        else sorted(
+            [dict(group.get("notification") or {}, group_id=group.get("id")) for group in groups if group.get("notification_needed")],
+            key=lambda item: (
+                0 if str(item.get("severity") or "") in {"critical", "high"} else 1,
+                -int(item.get("incident_count") or 0),
+                -int(item.get("ready_project_count") or 0),
+                str(item.get("group_id") or ""),
+            ),
+        )
     )
-    account_pools = account_pool_rows(config)
-    findings = audit_findings()
-    task_candidates = audit_task_candidates()
+    account_pools = [] if public_mode else account_pool_rows(config)
+    findings = [] if public_mode else audit_findings()
+    task_candidates = [] if public_mode else audit_task_candidates()
     config = normalize_config()
     project_map = {str(project.get("id") or ""): project for project in (config.get("projects") or [])}
-    pr_rows = [
-        normalized_pull_request_row(project_map.get(str(row.get("project_id") or ""), {}), row)
-        for row in pull_request_rows().values()
-    ]
-    github_review_rows = review_findings()
+    pr_rows = (
+        []
+        if public_mode
+        else [
+            normalized_pull_request_row(project_map.get(str(row.get("project_id") or ""), {}), row)
+            for row in pull_request_rows().values()
+        ]
+    )
+    github_review_rows = [] if public_mode else review_findings()
     recent_run_rows = recent_runs()
-    recent_decision_rows = recent_decisions()
-    open_incident_rows = filter_runtime_relevant_incidents(incidents(status="open", limit=400), projects)
+    recent_decision_rows = [] if public_mode else recent_decisions()
+    open_incident_rows = [] if public_mode else filter_runtime_relevant_incidents(incidents(status="open", limit=400), projects)
     work_packages = work_package_summary_payload(config)
     payload = {
         "projects": projects,
@@ -11537,14 +11990,14 @@ def admin_status_payload() -> Dict[str, Any]:
         "design_mirror_status": load_design_mirror_status(),
         "recent_runs": recent_run_rows,
         "recent_decisions": recent_decision_rows,
-        "ops_summary": summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
+        "ops_summary": {} if public_mode else summarize_ops(projects, groups, account_pools, findings, recent_run_rows),
         "work_packages": work_packages,
         "runtime_healing": runtime_healing,
         "generated_at": iso(utc_now()),
         "participant_lanes": participant_lane_rows_for_admin(),
     }
-    payload["cockpit"] = cockpit_payload_from_status(payload)
-    payload["public_status"] = canonical_public_status_payload(payload)
+    payload["cockpit"] = cockpit_payload_from_status(payload, cache_only=public_mode)
+    payload["public_status"] = canonical_public_status_payload(payload, cache_only=public_mode)
     payload["summary"] = payload["cockpit"].get("summary", {})
     payload["fleet_health"] = payload["summary"].get("fleet_health")
     payload["lamps"] = payload["cockpit"].get("lamps", [])
@@ -11557,6 +12010,27 @@ def admin_status_payload() -> Dict[str, Any]:
 @app.get("/health", response_class=PlainTextResponse)
 def health() -> str:
     return "ok"
+
+
+@app.get("/api/capacity/status")
+def api_capacity_status() -> Dict[str, Any]:
+    status = admin_status_payload()
+    config = dict(status.get("config") or {})
+    return {
+        "generated_at": status.get("generated_at"),
+        "cockpit": status.get("cockpit", {}),
+        "projects": status.get("projects", []),
+        "groups": status.get("groups", []),
+        "work_packages": status.get("work_packages", {}),
+        "account_pools": status.get("account_pools", []),
+        "participant_lanes": status.get("participant_lanes", []),
+        "config": {
+            "policies": config.get("policies", {}),
+            "account_policy": config.get("account_policy", {}),
+            "projects": config.get("projects", []),
+            "accounts": config.get("accounts", {}),
+        },
+    }
 
 
 @app.get("/admin/login", response_class=HTMLResponse)
@@ -11672,11 +12146,24 @@ def status_surface_payload(status: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def public_dashboard_status_payload() -> Dict[str, Any]:
-    return status_surface_payload(admin_status_payload()).get("public_status", {})
+    return status_surface_payload(admin_status_payload(public_mode=True)).get("public_status", {})
 
 
 def public_progress_report_payload() -> Dict[str, Any]:
-    return load_progress_report_payload(repo_root=FLEET_MOUNT_ROOT)
+    freshness = published_artifact_freshness_payload()
+    report_needs_refresh = _artifact_refresh_needed(dict(freshness.get("progress_report") or {}))
+    history_needs_refresh = _artifact_refresh_needed(dict(freshness.get("progress_history") or {}))
+    if report_needs_refresh or history_needs_refresh:
+        try:
+            maybe_refresh_published_artifacts()
+        except Exception:
+            pass
+        freshness = published_artifact_freshness_payload()
+        report_needs_refresh = _artifact_refresh_needed(dict(freshness.get("progress_report") or {}))
+    return load_progress_report_payload(
+        repo_root=FLEET_MOUNT_ROOT,
+        prefer_generated=not report_needs_refresh,
+    )
 
 
 @app.get("/api/admin/status")

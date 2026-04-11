@@ -57,6 +57,12 @@ def main() -> int:
     )
     timeout_seconds = float(os.environ.get("FLEET_CONTROLLER_HEALTH_TIMEOUT_SECONDS", "3") or "3")
     max_age_seconds = int(os.environ.get("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS", "45") or "45")
+    allow_heartbeat_only = str(os.environ.get("FLEET_CONTROLLER_HEALTH_ALLOW_HEARTBEAT_ONLY", "0") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     http_ok, http_reason = _http_health_ok(health_url, timeout_seconds)
     if http_ok:
@@ -64,7 +70,7 @@ def main() -> int:
         return 0
 
     heartbeat_ok, heartbeat_reason = _heartbeat_fresh(heartbeat_path, max_age_seconds)
-    if heartbeat_ok:
+    if heartbeat_ok and allow_heartbeat_only:
         print(f"ok ({http_reason}; {heartbeat_reason})")
         return 0
 

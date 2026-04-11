@@ -47,6 +47,7 @@ CONFIG_PATH = pathlib.Path(os.environ.get("FLEET_CONFIG_PATH", str(CONFIG_ROOT /
 STATE_ROOT = pathlib.Path(os.environ.get("FLEET_STATE_ROOT", "/var/lib/codex-fleet/state"))
 ADMIN_URL = str(os.environ.get("FLEET_ADMIN_URL", "http://fleet-admin:8092") or "http://fleet-admin:8092").rstrip("/")
 OPERATOR_PASSWORD = str(os.environ.get("FLEET_OPERATOR_PASSWORD", "") or "").strip()
+ADMIN_STATUS_TIMEOUT_SECONDS = max(10, int(os.environ.get("FLEET_ADMIN_STATUS_TIMEOUT_SECONDS", "60") or "60"))
 PLAN_CACHE_PATH = STATE_ROOT / "quartermaster" / "latest_capacity_plan.json"
 TELEMETRY_LOG_PATH = STATE_ROOT / "quartermaster" / "telemetry.jsonl"
 DEFAULT_TELEMETRY_LOG_ENTRIES = max(
@@ -65,6 +66,18 @@ def iso(value: Optional[dt.datetime]) -> str:
     if value is None:
         return ""
     return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_iso(value: Any) -> Optional[dt.datetime]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        return dt.datetime.fromisoformat(raw).astimezone(UTC)
+    except ValueError:
+        return None
 
 
 def load_cached_plan() -> Dict[str, Any]:
@@ -209,8 +222,8 @@ def admin_cockpit_status() -> Dict[str, Any]:
     headers = {"User-Agent": "codex-fleet-quartermaster"}
     if OPERATOR_PASSWORD:
         headers["X-Fleet-Operator-Password"] = OPERATOR_PASSWORD
-    request = urllib.request.Request(f"{ADMIN_URL}/api/cockpit/status", headers=headers, method="GET")
-    with urllib.request.urlopen(request, timeout=10) as response:
+    request = urllib.request.Request(f"{ADMIN_URL}/api/capacity/status", headers=headers, method="GET")
+    with urllib.request.urlopen(request, timeout=ADMIN_STATUS_TIMEOUT_SECONDS) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload if isinstance(payload, dict) else {}
 
@@ -218,9 +231,21 @@ def admin_cockpit_status() -> Dict[str, Any]:
 def build_plan_payload(*, source: str, degraded: bool, source_status: Dict[str, Any], tick_reason: str = "") -> Dict[str, Any]:
     config_root = CONFIG_PATH.parent
     configs = load_capacity_plane_configs(config_root)
-    plan = build_capacity_plan_payload(source_status, capacity_configs=configs)
+    plan_reference_now = parse_iso(source_status.get("generated_at")) or utc_now()
+    plan = build_capacity_plan_payload(source_status, capacity_configs=configs, now=plan_reference_now)
+    generated_at = iso(utc_now())
+    status = {
+        "generated_at": generated_at,
+        "source_generated_at": str(source_status.get("generated_at") or ""),
+        "source": source,
+        "degraded": degraded,
+        "cache_state": "fresh",
+        "tick_reason": str(tick_reason or "").strip(),
+        "error": "",
+    }
+    plan["_quartermaster_status"] = status
     return {
-        "generated_at": iso(utc_now()),
+        "generated_at": generated_at,
         "source_generated_at": str(source_status.get("generated_at") or ""),
         "source": source,
         "degraded": degraded,

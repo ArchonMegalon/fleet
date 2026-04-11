@@ -541,8 +541,8 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertEqual(response["exit_code"], 0)
         self.assertEqual(response["data"]["slot_count"], 1)
         self.assertEqual(response["data"]["sum_free_credits"], 400_000)
-        self.assertEqual(status_mock.call_args.kwargs["timeout_seconds"], 10.0)
-        self.assertEqual(profiles_mock.call_args.kwargs["timeout_seconds"], 10.0)
+        self.assertEqual(status_mock.call_args.kwargs["timeout_seconds"], 30.0)
+        self.assertEqual(profiles_mock.call_args.kwargs["timeout_seconds"], 30.0)
 
     def test_ea_status_payload_reads_runtime_env_file_for_auth(self) -> None:
         observed: dict[str, str] = {}

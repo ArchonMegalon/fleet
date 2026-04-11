@@ -1,11 +1,14 @@
 product: chummer
 version: 1
-last_reviewed: 2026-04-01
+last_reviewed: 2026-04-10
 purpose: Machine-readable flagship-grade acceptance matrix for whole-product public-release readiness.
 source_documents:
   - FLAGSHIP_PRODUCT_BAR.md
+  - DESKTOP_CLIENT_PRODUCT_CUT.md
+  - DESKTOP_PLATFORM_ACCEPTANCE_MATRIX.yaml
   - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
   - FLAGSHIP_UI_RELEASE_GATE.md
+  - DESKTOP_EXECUTABLE_EXIT_GATES.md
   - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
   - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
   - PUBLIC_RELEASE_EXPERIENCE.yaml
@@ -13,6 +16,10 @@ source_documents:
 acceptance_axes:
   - id: primary_path_clarity
     rule: Each major user job exposes one obvious primary path and one bounded fallback story.
+  - id: desktop_familiarity_and_install_continuity
+    rule: Desktop install, claim, restore, and workbench continuation preserve Chummer5a familiarity and avoid browser-ritual or dashboard-first detours on the promoted path.
+  - id: desktop_head_authority_and_fallback_honesty
+    rule: Avalonia is the default primary desktop head; preview may still label Blazor Desktop as bounded fallback when the release shelf, platform matrix, and public copy explicitly say so, but any gold claim requires every shipped desktop head to independently meet the flagship bar for its promised scope.
   - id: authored_ruleset_experience
     rule: SR4, SR5, and SR6 preserve edition-specific terminology, effect semantics, and workflow cues where the editions materially diverge.
   - id: dense_data_expert_speed
@@ -36,18 +43,20 @@ surfaces:
       - chummer6-core
     must_prove:
       - One obvious flagship desktop head and install path per promoted platform.
-      - The opening desktop surface reads like a Chummer5a-successor workbench, not decorative shell theater.
-      - The desktop shell preserves Chummer5a-like visual similarity in density, layout, and navigation rhythm.
-      - Opening posture release blocker: the first visible state must be a familiar Chummer5a-like workbench and load/section rhythm.
-      - The `File` menu is a real desktop menu with visible working actions, not a cosmetic label.
-      - Hard parity gate: `File` menu, master index, and character roster are mandatory runtime-backed routes in shell launch and must remain active at readiness time.
-      - Master index and character roster are first-class runtime-backed routes from the desktop shell.
+      - Avalonia is the primary promoted desktop head unless the release matrix explicitly elevates Blazor Desktop to flagship for that lane.
+      - Blazor Desktop only counts as fallback when the shelf labels it compatibility or fallback and Avalonia remains the primary public route.
+      - If Blazor Desktop is the only user-facing desktop head or the recommended download, it must satisfy the same desktop flagship proof lanes as Avalonia for the workflows it promises.
+      - A gold desktop claim is only true when every shipped desktop head independently satisfies startup, install, update, crash-recovery, feedback, workflow, and visual-familiarity proof.
+      - The promoted desktop path starts with a guided product installer path instead of a framework chooser or browser ritual.
+      - Install, claim, and restore land in the installer or app and open a workbench or restore continuation flow without a dashboard-first detour.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
+      - The desktop shell keeps a real `File` menu, first-class master index and character roster routes, roster-first orientation, and other veteran Chummer5a familiarity anchors on the flagship path.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
       - SR4, SR5, and SR6 use authored labels, prompts, and interaction cues where the rules differ in meaning.
       - The active ruleset, preset, and amend-package set stay visible and previewable before a user trusts a build or explain result.
       - Light and dark themes, focus, warning, stale, preview, and recovery states are screenshot-proven against the shared surface-design contract.
       - No in-scope legacy or adjacent desktop feature family is stranded behind a missing action or support-only fallback; the parity registry must name the modern successor or bounded replacement.
+      - No head may inherit the other head's workflow receipts, public-route honesty, or artifact availability.
     evidence_sources:
       - DESKTOP_CLIENT_PRODUCT_CUT.md
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
@@ -135,14 +144,15 @@ surfaces:
       - Whole-product completion is derived from flagship acceptance and lived journey proof, not only empty milestone rows or green repo tests.
       - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
       - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
-      - Desktop completion cannot be claimed while Chummer5a-familiar opening posture, real `File` menu behavior, or first-class master-index and character-roster routes remain missing.
     evidence_sources:
       - FLAGSHIP_PRODUCT_BAR.md
       - PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md
       - PRODUCT_HEALTH_SCORECARD.yaml
 
 whole_product_release_rules:
-  - Desktop completeness cannot be satisfied by deferred non-linux evidence-only status; Chummer5a-anchored visual and shell-route blockers must be resolved in proof, not deferred.
   - Public release claims must stay within the surfaces that pass this matrix or carry an explicit, bounded preview explanation.
+  - A desktop release claim is incomplete if it names Blazor Desktop as available without also stating whether it is fallback or flagship for that lane.
+  - A fallback head does not satisfy flagship readiness by association; if it is the only user-facing desktop route or the recommended public route, it must pass the flagship bar directly.
+  - A gold claim cannot ship a secondary desktop head on shell-only, visual-only, or borrowed proof; every shipped head must independently clear the flagship bar.
   - Empty backlog views, green repo tests, or clean worktrees are not sufficient proof of flagship-grade completion by themselves.
   - Flagship release cannot claim no-step-back parity while any in-scope family marked `missing` or unbounded `partial` remains unresolved in `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`; a `partial` family is only bounded when Fleet's flagship-readiness parity audit records a proof-backed successor route for that family, and families listed under `scope.excluded` there, including `plugin-framework`, do not block the claim.

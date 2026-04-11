@@ -9,6 +9,7 @@ This file defines the current-target bridge between flagship polish and legacy f
 ## Core promise
 
 On the promoted desktop head, a Chummer5a user should feel "at home" within the first minute.
+Install and first-run continuity must not break veteran orientation.
 
 That means Chummer6 may modernize:
 
@@ -25,20 +26,6 @@ It must not casually discard the old workbench grammar.
 
 The flagship desktop shell must preserve these Chummer5a cues in recognizable form:
 
-These are hard release gates, not optional polish: if any anchor is missing at production-readiness time, desktop flagship readiness must remain non-green.
-
-### 0. Opening workbench must read like Chummer, not a generic shell
-
-The first thing a paying desktop user sees must feel like a Chummer5a successor mainframe.
-
-Required:
-
-* the opening surface reads as a serious character-work mainframe, not a marketing dashboard, launch pad, or shell theater
-* a veteran user can immediately orient to the workbench without hunting for the actual character tools
-* the shell keeps visual similarity to Chummer5a in density, chrome posture, and "where do I start working" clarity
-* "modern shell" copy or decorative flagship messaging must not displace the familiar workbench landmarks
-* missing this anchor fails release-readiness for desktop flagship regardless of non-Linux blocker status
-
 ### 1. Classic top-level menu posture
 
 The desktop shell keeps a real top menu with familiar desktop semantics.
@@ -51,7 +38,6 @@ Required:
 * `Help`
 
 When the active workspace exposes edit or character-special actions, `Edit` and `Special` may appear between `File` and `Tools`, but they must behave like desktop menus rather than web nav tabs.
-* missing a functional `File` menu is a blocker for flagship desktop acceptance
 
 ### 2. Immediate toolstrip under the menu
 
@@ -146,8 +132,6 @@ The flagship client must also preserve modern equivalents for the legacy utility
 
 These do not need to keep old window names or old layout quirks.
 
-The master-index and character-roster lanes are explicit flagship blockers; they must be reachable from the opening workbench and have verified, runtime-backed routes.
-
 They do need one obvious, first-class modern route in the promoted client.
 
 ### 8. No MDI obligation
@@ -217,6 +201,8 @@ The flagship desktop shell must not:
 * hide essential state in overflow drawers or hover-only affordances
 * turn dense builder work into oversized card stacks that waste vertical space
 * remove the bottom status posture that veteran users rely on to stay oriented
+* treat a framework-first installer choice as acceptable modernization on the promoted path
+* force a decorative landing page before the workbench when a veteran expects to continue work immediately
 * claim Chummer5a familiarity while leaving legacy workflow families stranded behind missing actions, shallow section placeholders, or inspection-only stubs
 
 ## Release implication

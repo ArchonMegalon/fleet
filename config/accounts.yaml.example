@@ -33,9 +33,9 @@ accounts:
     health_state: ready
     daily_budget_usd: 20
     monthly_budget_usd: 200
-    max_parallel_runs: 1
+    max_parallel_runs: 2
     bridge_name: EA Fleet Worker
-    bridge_fallback_accounts: [acct-ea-groundwork, acct-ea-repair, acct-ea-review-light, acct-ea-jury, acct-ea-core, acct-ea-survival]
+    bridge_fallback_accounts: [acct-ea-groundwork, acct-ea-review-light, acct-ea-jury, acct-ea-core]
     lane: easy
     codex_model_aliases: [ea-gemini-flash]
 
@@ -45,7 +45,7 @@ accounts:
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
-    max_parallel_runs: 1
+    max_parallel_runs: 2
     lane: groundwork
     codex_model_aliases: [ea-groundwork-gemini]
 
@@ -55,7 +55,7 @@ accounts:
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
-    max_parallel_runs: 1
+    max_parallel_runs: 2
     bridge_name: EA Groundwork Shadow
     lane: groundwork
     codex_model_aliases: [ea-groundwork-gemini]
@@ -66,7 +66,7 @@ accounts:
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
-    max_parallel_runs: 1
+    max_parallel_runs: 3
     lane: review_light
     codex_model_aliases: [ea-review-light, ea-coder-hard-batch]
 
@@ -76,7 +76,7 @@ accounts:
     health_state: ready
     daily_budget_usd: 10
     monthly_budget_usd: 100
-    max_parallel_runs: 1
+    max_parallel_runs: 3
     lane: jury
     codex_model_aliases: [ea-audit-jury, ea-coder-hard-batch]
 

@@ -1,0 +1,214 @@
+contract_name: fleet.completion_review_frontier
+schema_version: 1
+generated_at: '2026-04-10T07:59:54Z'
+mode: completion_review
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-13
+source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
+handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
+projects_dir: /docker/fleet/config/projects
+primary_probe_shard: shard-1
+focus:
+  profiles:
+  - top_flagship_grade
+  - whole_project_frontier
+  owners:
+  - fleet
+  - chummer6-design
+  - chummer6-ui
+  texts:
+  - flagship-readiness
+  - desktop-client
+  - release-proof
+  - grade-bar
+  - materializer
+completion_audit:
+  status: fail
+  reason: 'latest worker receipt 20260409T072222Z is not trusted: worker exit 125'
+receipt_audit:
+  status: fail
+  reason: 'latest worker receipt 20260409T072222Z is not trusted: worker exit 125'
+  latest_run_id: 20260409T072222Z
+  latest_run_reason: worker exit 125
+journey_gate_audit:
+  status: pass
+  reason: golden journey release proof is ready on current repo-local evidence
+  blocked_journey_count: 0
+  warning_journey_count: 0
+linux_desktop_exit_gate_audit:
+  status: pass
+  reason: linux desktop binary build/start/test proof is ready on current repo-local
+    evidence
+  path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+  generated_at: '2026-04-09T13:22:56Z'
+weekly_pulse_audit:
+  status: fail
+  reason: weekly product pulse still reports the active wave as active
+  path: /docker/chummercomplete/chummer-design/products/chummer/WEEKLY_PRODUCT_PULSE.generated.json
+  generated_at: '2026-04-05T07:12:26Z'
+repo_backlog_audit:
+  status: fail
+  reason: 'active repo-local backlog remains outside the closed design registry: core,
+    fleet, hub, mobile, ui-kit'
+  open_item_count: 18
+  open_project_count: 6
+  open_items:
+  - project_id: core
+    repo_slug: chummer6-core
+    task: Improve campaign logic failure UX by adding deterministic, user-actionable
+      recovery surfaces for SR rule execution failures and fallback transitions across
+      engine host lanes.
+    queue_source_path: WORKLIST.md
+  - project_id: core
+    repo_slug: chummer6-core
+    task: Add campaign-engine responsiveness and throughput guardrails for high-volume
+      SR6/legacy batch operations before final release freeze.
+    queue_source_path: WORKLIST.md
+  - project_id: core
+    repo_slug: chummer6-core
+    task: Publish deterministic engine error-class and retry-class contracts so UI
+      surfaces can show why an operation failed and the safest safe action (retry,
+      fallback, or continue).
+    queue_source_path: WORKLIST.md
+  - project_id: core
+    repo_slug: chummer6-core
+    task: Standardize long-running operation cancellation and resumability semantics
+      for async/snapshot flows to prevent ambiguous mid-run states.
+    queue_source_path: WORKLIST.md
+  - project_id: fleet
+    repo_slug: fleet
+    task: '{''package_id'': ''fleet-postclient-trust-status'', ''title'': ''Make fleet
+      trust and status publication strictly live-truth so stale aggregate snapshots,
+      poisoned completion receipts, and misleading ETA/currentness states cannot survive
+      into post-client operations.'', ''package_kind'': ''implementation'', ''design_owner'':
+      ''fleet-platform'', ''architecture_sensitive'': True, ''premium_required'':
+      True, ''allow_credit_burn'': True, ''allowed_lanes'': [''core_booster'']}'
+    queue_source_path: WORKLIST.md
+  - project_id: fleet
+    repo_slug: fleet
+    task: '{''package_id'': ''fleet-postclient-project-config-extraction'', ''title'':
+      ''Extract Chummer-specific shard topology, focus heuristics, proof paths, and
+      owner-group routing out of launcher logic into explicit project configuration
+      contracts.'', ''package_kind'': ''implementation'', ''design_owner'': ''fleet-platform'',
+      ''architecture_sensitive'': True, ''premium_required'': True, ''allow_credit_burn'':
+      True, ''allowed_lanes'': [''core_booster''], ''dependencies'': [''fleet-postclient-trust-status'']}'
+    queue_source_path: WORKLIST.md
+  - project_id: fleet
+    repo_slug: fleet
+    task: '{''package_id'': ''fleet-postclient-operating-profiles'', ''title'': ''Add
+      steady-state fleet operating profiles (`maintenance`, `standard`, `burst`) with
+      explicit shard caps, resource budgets, and safe promotion-demotion rules.'',
+      ''package_kind'': ''implementation'', ''design_owner'': ''fleet-platform'',
+      ''architecture_sensitive'': True, ''premium_required'': True, ''allow_credit_burn'':
+      True, ''allowed_lanes'': [''core_booster''], ''dependencies'': [''fleet-postclient-trust-status'']}'
+    queue_source_path: WORKLIST.md
+  - project_id: fleet
+    repo_slug: fleet
+    task: '{''package_id'': ''fleet-postclient-proof-orchestration'', ''title'': ''Promote
+      executable gates, parity proofs, and flagship-readiness materializers into first-class
+      orchestrated jobs with freshness windows, retries, and dependency edges.'',
+      ''package_kind'': ''implementation'', ''design_owner'': ''fleet-platform'',
+      ''architecture_sensitive'': True, ''premium_required'': True, ''allow_credit_burn'':
+      True, ''allowed_lanes'': [''core_booster''], ''dependencies'': [''fleet-postclient-project-config-extraction'']}'
+    queue_source_path: WORKLIST.md
+  - project_id: fleet
+    repo_slug: fleet
+    task: '{''package_id'': ''fleet-postclient-operator-surface'', ''title'': ''Build
+      a compact operator surface for shard mix, queue health, proof freshness, account
+      health, resource pressure, and blocked milestones.'', ''package_kind'': ''implementation'',
+      ''design_owner'': ''fleet-operator-loop'', ''architecture_sensitive'': False,
+      ''premium_required'': True, ''allow_credit_burn'': True, ''allowed_lanes'':
+      [''core_booster''], ''dependencies'': [''fleet-postclient-trust-status'']}'
+    queue_source_path: WORKLIST.md
+  - project_id: fleet
+    repo_slug: fleet
+    task: '{''package_id'': ''fleet-postclient-restart-safe-config'', ''title'': ''Consolidate
+      restart-safe fleet runtime configuration and validate reboot recovery behavior
+      so policy survives supervisor restarts and host reboots without tribal knowledge.'',
+      ''package_kind'': ''implementation'', ''design_owner'': ''fleet-platform'',
+      ''architecture_sensitive'': True, ''premium_required'': True, ''allow_credit_burn'':
+      True, ''allowed_lanes'': [''core_booster''], ''dependencies'': [''fleet-postclient-project-config-extraction'',
+      ''fleet-postclient-operating-profiles'']}'
+    queue_source_path: WORKLIST.md
+  - project_id: hub
+    repo_slug: chummer6-hub
+    task: Add no-content and empty-state onboarding guidance for hosted workspace
+      entrypoints, especially for new org/creators with no active campaigns.
+    queue_source_path: WORKLIST.md
+  - project_id: mobile
+    repo_slug: chummer6-mobile
+    task: Improve mobile UX continuity by adding explicit reconnect-and-recover state
+      copy for disconnect, role change, and observer transitions.
+    queue_source_path: WORKLIST.md
+  - project_id: mobile
+    repo_slug: chummer6-mobile
+    task: Add decision receipts for long-running shell actions (rejoin, quick actions,
+      resume) so users can understand what was retried, skipped, or deferred.
+    queue_source_path: WORKLIST.md
+  - project_id: ui-kit
+    repo_slug: chummer6-ui-kit
+    task: 'ui-kit`: Add canonical UX pattern definitions for onboarding, error, and
+      empty states in `TokenCanon` so app consumers can render consistent user guidance.'
+    queue_source_path: WORKLIST.md
+  - project_id: ui
+    repo_slug: chummer6-ui
+    task: Improve flagship desktop onboarding, discoverability, and trust for campaign
+      workflows by adding guided first-run flows, persistent help anchors, and clearer
+      workflow status copy across launch, import, and rule-priority paths.
+    queue_source_path: WORKLIST.md, /docker/chummercomplete/chummer-presentation/WORKLIST.md
+  - project_id: ui
+    repo_slug: chummer6-ui
+    task: Add post-closure accessibility, localization, and error-copy UX gates for
+      flagship desktop surfaces so usability regressions are blocked in the release
+      path instead of surfacing after launch.
+    queue_source_path: WORKLIST.md, /docker/chummercomplete/chummer-presentation/WORKLIST.md
+  - project_id: ui
+    repo_slug: chummer6-ui
+    task: Add empty-state/onboarding micro-copies and one-click continuation pathways
+      across flagship desktop onboarding, run, and publication surfaces.
+    queue_source_path: WORKLIST.md, /docker/chummercomplete/chummer-presentation/WORKLIST.md
+  - project_id: ui
+    repo_slug: chummer6-ui
+    task: Improve first-class discoverability of support next-steps and rollback recovery
+      within desktop moderation/review and media-linked flows.
+    queue_source_path: WORKLIST.md, /docker/chummercomplete/chummer-presentation/WORKLIST.md
+frontier_count: 1
+frontier_ids:
+- 4530284504
+frontier:
+- id: 4530284504
+  title: 'Repo backlog: fleet: {''package_id'': ''fleet-postclient-proof-orchestration'',
+    ''title'': ''Promote executable gates, parity proofs, and flagship-readiness materializers
+    into first-class orchestrated jobs with freshness windows, retries, and dependency
+    edges.'', ''package_kind'': ''implementation'', ''design_owner'': ''fleet-platform'',
+    ''architecture_sensitive'': True, ''premium_required'': True, ''allow_credit_burn'':
+    True, ''allowed_lanes'': [''core_booster''], ''dependencies'': [''fleet-postclient-project-config-extraction'']}'
+  wave: completion_review
+  status: review_required
+  owners:
+  - fleet
+  dependencies: []
+  exit_criteria:
+  - 'Close or materially implement the active repo-local backlog item: {''package_id'':
+    ''fleet-postclient-proof-orchestration'', ''title'': ''Promote executable gates,
+    parity proofs, and flagship-readiness materializers into first-class orchestrated
+    jobs with freshness windows, retries, and dependency edges.'', ''package_kind'':
+    ''implementation'', ''design_owner'': ''fleet-platform'', ''architecture_sensitive'':
+    True, ''premium_required'': True, ''allow_credit_burn'': True, ''allowed_lanes'':
+    [''core_booster''], ''dependencies'': [''fleet-postclient-project-config-extraction'']}.'
+  - Refresh queue/workpackage truth so completion no longer depends on stale or unresolved
+    repo-local backlog evidence.
+  - 'Current backlog source: WORKLIST.md.'
+eta:
+  status: recovery
+  eta_human: 3h-9h
+  eta_confidence: medium
+  basis: completion_review_recovery
+  scope_kind: completion_review_recovery
+  scope_label: Completion review and proof recovery
+  scope_warning: This ETA covers registry trust, proof, and review recovery. It is
+    still narrower than a final flagship parity claim unless full-product readiness
+    is also green.
+  blocking_reason: ''
+  summary: Registry closure is not yet trustworthy; recovery still needs trusted completion
+    receipt, repo-local backlog milestones. Blocked journeys=0, warning journeys=0,
+    review frontier=1, decomposed_frontier=1, backlog_tail=17.

@@ -5,15 +5,16 @@ import argparse
 import datetime as dt
 import json
 import sys
+import time
 from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List
 
 import yaml
 try:
-    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 except ModuleNotFoundError:
-    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 
 try:
     from scripts.verify_status_plane_semantics import (
@@ -110,11 +111,18 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 def _load_json_file(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return dict(payload) if isinstance(payload, dict) else {}
+    for attempt in range(3):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            if attempt >= 2:
+                return {}
+            time.sleep(0.05 * (attempt + 1))
+            continue
+        except Exception:
+            return {}
+        return dict(payload) if isinstance(payload, dict) else {}
+    return {}
 
 
 def _fleet_boundary_proof_passed(published_dir: Path) -> bool:
@@ -503,10 +511,9 @@ def main(argv: List[str] | None = None) -> int:
     payload["generated_at"] = iso_now()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    write_text_atomic(output_path, yaml.safe_dump(payload, sort_keys=False))
     if status_json_out_path is not None:
-        status_json_out_path.parent.mkdir(parents=True, exist_ok=True)
-        status_json_out_path.write_text(json.dumps(admin_status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        write_text_atomic(status_json_out_path, json.dumps(admin_status, indent=2, sort_keys=True) + "\n")
     manifest_repo_root = repo_root_for_published_path(output_path)
     if manifest_repo_root is not None:
         write_compile_manifest(manifest_repo_root)

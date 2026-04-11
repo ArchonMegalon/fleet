@@ -353,6 +353,82 @@ def test_materialize_support_case_packets_reads_source_from_runtime_env_file(tmp
     assert rendered["summary"]["open_case_count"] == 1
 
 
+def test_materialize_support_case_packets_falls_back_to_cached_snapshot_when_remote_source_is_unavailable(tmp_path: Path) -> None:
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    out_path.write_text(
+        json.dumps(
+            {
+                "contract_name": "fleet.support_case_packets",
+                "schema_version": 1,
+                "generated_at": "2026-04-08T00:00:00Z",
+                "source": {
+                    "source_kind": "remote_url",
+                    "reported_count": 1,
+                    "materialized_count": 1,
+                    "case_materialized_count": 1,
+                    "operator_packet_count": 0,
+                },
+                "summary": {
+                    "open_case_count": 1,
+                    "open_packet_count": 1,
+                    "operator_packet_count": 0,
+                    "design_impact_count": 0,
+                    "owner_repo_counts": {"chummer6-ui": 1},
+                    "lane_counts": {"code": 1},
+                    "status_counts": {"new": 1},
+                },
+                "unresolved_external_proof": {
+                    "count": 0,
+                    "host_counts": {},
+                    "tuple_counts": {},
+                    "hosts": [],
+                    "tuples": [],
+                    "specs": {},
+                },
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 0,
+                    "hosts": [],
+                    "host_groups": {},
+                    "capture_deadline_hours": 24,
+                    "generated_at": "2026-04-08T00:00:00Z",
+                },
+                "packets": [
+                    {
+                        "support_case_backed": True,
+                        "target_repo": "chummer6-ui",
+                        "primary_lane": "code",
+                        "status": "new",
+                        "design_impact_suspected": False,
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--source",
+            "http://127.0.0.1:9/api/v1/support/cases/triage",
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(out_path.read_text(encoding="utf-8"))
+    assert rendered["source"]["refresh_mode"] in {"source_mirror_fallback", "cached_packets_fallback"}
+    assert rendered["source"]["refresh_error"]
+    assert rendered["summary"]["open_case_count"] == 1
+
+
 def test_materialize_support_case_packets_enriches_install_truth_from_release_channel(tmp_path: Path) -> None:
     source = tmp_path / "support_cases.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"

@@ -33,6 +33,7 @@ from chummer6_design_canon import (
     readme_hero_after_current_posture,
     readme_updates_teaser_enabled,
 )
+from external_proof_paths import resolve_release_channel_path
 
 
 OWNER = "ArchonMegalon"
@@ -45,8 +46,8 @@ EA_OVERRIDE_PATH = Path("/docker/fleet/state/chummer6/ea_overrides.json")
 STATUS_PLANE_PATH = Path("/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml")
 EA_MEDIA_MANIFEST_PATH = Path("/docker/fleet/state/chummer6/ea_media_manifest.json")
 EA_RELEASE_MATRIX_PATH = Path("/docker/fleet/state/chummer6/chummer6_release_matrix.json")
-REGISTRY_RELEASE_CHANNEL_PATH = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
-REGISTRY_COMPAT_RELEASES_PATH = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json")
+REGISTRY_RELEASE_CHANNEL_PATH = resolve_release_channel_path()
+REGISTRY_COMPAT_RELEASES_PATH = REGISTRY_RELEASE_CHANNEL_PATH.with_name("releases.json")
 RELEASE_CONTROL_SCRIPT = Path("/docker/fleet/scripts/materialize_chummer_release_registry_projection.py")
 TODAY = date.today().isoformat()
 POLICY_PATH = Path("/docker/fleet/.chummer6_local_policy.json")

@@ -4,8 +4,18 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import PurePosixPath
 from pathlib import Path
+
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+try:
+    from scripts.external_proof_paths import resolve_release_channel_path
+except ModuleNotFoundError:
+    from external_proof_paths import resolve_release_channel_path
 
 
 DEFAULT_REPO = "ArchonMegalon/Chummer6"
@@ -19,13 +29,14 @@ TARGET_COMMITISH = (
     or "main"
 )
 RELEASE_CONTROL_SCRIPT = Path("/docker/fleet/scripts/materialize_chummer_release_registry_projection.py")
+DEFAULT_RELEASE_CHANNEL_PATH = resolve_release_channel_path()
 DOWNLOADS_MANIFEST = Path(
     os.environ.get("CHUMMER6_RELEASE_CHANNEL_PATH")
-    or "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json"
+    or str(DEFAULT_RELEASE_CHANNEL_PATH)
 )
 COMPAT_DOWNLOADS_MANIFEST = Path(
     os.environ.get("CHUMMER6_RELEASE_COMPAT_PATH")
-    or "/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json"
+    or str(DEFAULT_RELEASE_CHANNEL_PATH.with_name("releases.json"))
 )
 DOWNLOADS_FILES_DIR = Path(
     os.environ.get("CHUMMER6_RELEASE_FILES_DIR")

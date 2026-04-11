@@ -16,6 +16,8 @@ Current user-reported failures are exactly the class this gate must catch:
 - missing or undiscoverable demo-runner load path
 - Blazor Desktop installing without a useful app-launch posture
 - feedback/support opening internal `chummer-api` links instead of public web routes
+- browser-only claim-code entry instead of installer or in-app continuation
+- landing-page/mainframe/dashboard-first startup instead of the real workbench
 
 ## Hard release rule
 
@@ -26,6 +28,8 @@ Desktop release truth is `not ready` until all of these receipts exist and pass:
 - `DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json`
 
 `CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json`, `SR4_DESKTOP_WORKFLOW_PARITY.generated.json`, and `SR6_DESKTOP_WORKFLOW_PARITY.generated.json` remain necessary, but they are no longer sufficient on their own.
+
+Product-installer coherence is part of the hard gate: the promoted installer, first launch, claim/recovery path, and resulting workbench shell must read like one product instead of stitched-together handoff steps.
 
 ## Gate A: Desktop executable exit gate
 
@@ -69,8 +73,10 @@ Required proof areas:
      - visible checkpoints observed
      - save/reload or recovery checkpoint
 2. Cross-head execution
+   - Avalonia is the default flagship head for the promoted desktop wave.
    - Avalonia and Blazor Desktop must each prove the workflow families they promise.
-   - If one head is intentionally narrower, the release gate must state that explicitly instead of silently inheriting Avalonia proof.
+   - Blazor Desktop may be narrower only when the desktop product cut and platform matrix explicitly say it is a bounded fallback lane.
+   - If Blazor Desktop is the only exposed desktop head or the recommended public route, it must prove the same workflow-family scope as Avalonia for the promised lane.
 3. High-friction audit cases
    - Cyberware/bioware with nested or modular state
    - weapons/accessories
@@ -158,11 +164,6 @@ Required proof areas:
    - initial shell, menu open, settings open, loaded runner, dense light, dense dark
    - loaded-runner tab posture
    - cyberware/cyberlimb dialog posture
-5. Hard anchors
-   - opening desktop posture must read as Chummer5a successor workbench (no launch/dashboard substitution)
-   - real functional `File` menu with open/save/import command surfaces
-   - master-index route is first-class from the shell and actionable
-   - character roster route is first-class from the shell and actionable
 
 ## Failure policy
 
@@ -174,11 +175,10 @@ The desktop gate fails if any of the following are true:
 - the installed desktop head cannot be launched as an app
 - a workflow family has catalog proof but no executable UI receipt
 - Blazor Desktop is promoted without a real launchable user-facing surface
+- Blazor Desktop is treated as fallback in copy but not in the release matrix
+- Blazor Desktop is the only desktop route and is missing full flagship workflow proof
+- a workflow family inherits proof from the other head without an explicit bounded replacement story
 - the shell no longer feels recognizably close to Chummer5a in theme, layout, loaded-runner tabs, or dense builder-dialog posture
-- the opening workbench does not read as a Chummer5a successor
-- `File` menu is not real (menu roots or commands are inert)
-- master-index is not a first-class runtime-backed route
-- character roster is not a first-class runtime-backed route
 
 ## Fleet handoff
 

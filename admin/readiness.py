@@ -148,6 +148,28 @@ def latest_design_compile_mtime(repo_root: pathlib.Path, design_doc: str = "") -
     return max(times)
 
 
+def _latest_compile_evidence_mtime(
+    repo_root: pathlib.Path,
+    artifacts: List[Any],
+    design_doc: str = "",
+) -> Optional[float]:
+    published_dir = repo_root / STUDIO_PUBLISHED_DIR
+    times: List[float] = []
+    for artifact in artifacts:
+        name = str(artifact or "").strip()
+        if not name:
+            continue
+        path = published_dir / name
+        if path.exists() and path.is_file():
+            times.append(path.stat().st_mtime)
+    mirror_mtime = latest_design_compile_mtime(repo_root, design_doc)
+    if mirror_mtime is not None:
+        times.append(mirror_mtime)
+    if not times:
+        return None
+    return max(times)
+
+
 def _work_package_source_queue_fingerprint(items: List[Any]) -> str:
     payload = json.dumps(list(items or []), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
@@ -447,6 +469,12 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
                 stages = dict(payload.get("stages") or {})
                 artifacts = list(payload.get("artifacts") or [])
                 dispatchable_truth_ready = _dispatchable_truth_ready(repo_root, artifacts)
+                published_at = _parse_iso(str(payload.get("published_at") or ""))
+                evidence_mtime = _latest_compile_evidence_mtime(repo_root, artifacts, design_doc)
+                if evidence_mtime is not None:
+                    evidence_time = dt.datetime.fromtimestamp(evidence_mtime, UTC)
+                    if published_at is None or evidence_time > published_at:
+                        published_at = evidence_time
                 stages["design_compile"] = bool(stages.get("design_compile")) or design_compiled
                 stages["policy_compile"] = bool(stages.get("policy_compile")) or any(
                     path in {
@@ -469,7 +497,7 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
                     for path in artifacts
                 )
                 return {
-                    "published_at": str(payload.get("published_at") or ""),
+                    "published_at": _iso(published_at),
                     "stages": stages,
                     "dispatchable_truth_ready": dispatchable_truth_ready,
                     "artifacts": artifacts,
@@ -492,10 +520,10 @@ def studio_compile_summary(repo_root: pathlib.Path, design_doc: str = "") -> Dic
         "CONTRACT_SETS.yaml",
         "GROUP_BLOCKERS.md",
     }
-    mtimes = [(published_dir / name).stat().st_mtime for name in files if (published_dir / name).exists()]
-    mirror_mtime = latest_design_compile_mtime(repo_root, design_doc)
-    if mirror_mtime is not None:
-        mtimes.append(mirror_mtime)
+    mtimes = []
+    evidence_mtime = _latest_compile_evidence_mtime(repo_root, files, design_doc)
+    if evidence_mtime is not None:
+        mtimes.append(evidence_mtime)
     latest_mtime = max(mtimes) if mtimes else dt.datetime.now(tz=UTC).timestamp()
     return {
         "published_at": _iso(dt.datetime.fromtimestamp(latest_mtime, UTC)),

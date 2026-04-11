@@ -35,6 +35,31 @@ Every major user intent must have one clear primary route:
 Fallback paths may exist.
 They must not read like the real product while the primary path still feels provisional.
 
+### 1b. Desktop familiarity must still read as Chummer5a
+
+Desktop flagship quality is not satisfied by feature coverage alone.
+The promoted desktop head must still read like Chummer to a veteran user:
+
+* a real desktop menu
+* first-class master index and character roster routes
+* workbench-first startup instead of decorative landing chrome
+* dense builder posture that feels like an instrument rather than a dashboard
+
+### 1c. Install and first-run experience must feel like one product
+
+The promoted desktop path must behave like one coherent Chummer experience:
+
+* guided product installer path first
+* installer or in-app claim and recovery handling
+* no browser ritual to copy or paste a claim code by hand
+* first launch opens the real workbench or restore continuation flow
+
+### 1a. Desktop head authority is explicit
+
+`Chummer.Avalonia` is the default flagship desktop head for the current delivery wave.
+`Chummer.Blazor.Desktop` is only a bounded fallback when the public shelf, platform matrix, and release evidence say so.
+If Blazor is the only shipped desktop head for a lane or the recommended public route, it must meet the flagship bar directly instead of borrowing Avalonia proof.
+
 ### 2. Explainability and trust stay first-class
 
 Flagship grade requires:
@@ -64,19 +89,6 @@ Flagship grade therefore requires:
 * fast compare and scan behavior
 * cancel-safe editing for high-risk multistep flows
 * visible timelines where training, downtime, travel, or temporary effects matter
-
-### 4b. Desktop familiarity must still read as Chummer5a, not a generic shell
-
-The promoted desktop workbench must keep a legacy user oriented from the first glance.
-
-Flagship grade therefore requires:
-
-* the opening mainframe reads like a Chummer5a-successor workbench, not a launch page or dashboard
-* the shell keeps recognizable visual similarity to Chummer5a in density, layout, and navigation rhythm
-* the `File` menu is a real desktop menu with visible working actions
-* master index and character roster are first-class routes from the desktop shell, not buried utilities
-* decorative shell theater must never replace the actual workbench on startup
-* these are release blockers: a missing real `File` menu, missing master-index route, or missing character-roster route fails flagship desktop completion.
 
 ### 5. Recovery must be boring
 
@@ -181,6 +193,5 @@ Public release is not truly complete until flagship bar evidence exists for:
 * public/download/help honesty
 * artifact and publication credibility
 * operator and support loop trust
-* Chummer5a-familiar desktop opening posture, real `File` menu, and first-class master-index and character-roster routes
 
 That evidence must compile into `FLAGSHIP_RELEASE_ACCEPTANCE.yaml` rather than remaining only prose or operator intuition.
