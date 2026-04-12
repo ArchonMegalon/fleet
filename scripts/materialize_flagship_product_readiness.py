@@ -54,20 +54,36 @@ DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNA
 DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state.json"
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
 
-DEFAULT_UI_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json")
-DEFAULT_UI_LINUX_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
-DEFAULT_UI_WINDOWS_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json")
-DEFAULT_UI_WORKFLOW_PARITY_PROOF = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json")
-DEFAULT_UI_EXECUTABLE_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json")
-DEFAULT_UI_WORKFLOW_EXECUTION_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json")
-DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json")
-DEFAULT_UI_LOCALIZATION_RELEASE_GATE = Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json")
+def _preferred_ui_repo_root() -> Path:
+    override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
+    if override:
+        return Path(override)
+    for candidate in (
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+    ):
+        if candidate.exists():
+            return candidate
+    return Path("/docker/chummercomplete/chummer6-ui")
+
+
+PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
+DEFAULT_UI_LOCAL_RELEASE_PROOF = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+DEFAULT_UI_LINUX_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+DEFAULT_UI_WINDOWS_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+DEFAULT_UI_WORKFLOW_PARITY_PROOF = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+DEFAULT_UI_EXECUTABLE_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+DEFAULT_UI_WORKFLOW_EXECUTION_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+DEFAULT_UI_VISUAL_FAMILIARITY_EXIT_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+DEFAULT_UI_LOCALIZATION_RELEASE_GATE = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json"
 DEFAULT_HUB_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_MOBILE_LOCAL_RELEASE_PROOF = Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json")
 DEFAULT_RELEASE_CHANNEL = resolve_release_channel_path()
 DEFAULT_RELEASES_JSON = DEFAULT_RELEASE_CHANNEL.with_name("releases.json")
 DEFAULT_SHARD_SUPERVISOR_ROOT = DEFAULT_SUPERVISOR_STATE.parent
 UI_REPO_CANONICAL_ALIAS_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+UI_REPO_FINISH_REAL_ROOT = Path("/docker/chummercomplete/chummer6-ui-finish")
 UI_REPO_LEGACY_REAL_ROOT = Path("/docker/chummercomplete/chummer-presentation")
 RUNTIME_ENV_CANDIDATES = (
     ROOT / "runtime.env",
@@ -491,13 +507,14 @@ def report_path(path: Path) -> str:
     except OSError:
         return raw
     resolved_raw = str(resolved)
-    legacy_prefix = str(UI_REPO_LEGACY_REAL_ROOT)
     canonical_prefix = str(UI_REPO_CANONICAL_ALIAS_ROOT)
-    if resolved_raw == legacy_prefix:
-        return canonical_prefix
-    if resolved_raw.startswith(legacy_prefix + "/"):
-        suffix = resolved_raw[len(legacy_prefix) :]
-        return canonical_prefix + suffix
+    for real_root in (UI_REPO_FINISH_REAL_ROOT, UI_REPO_LEGACY_REAL_ROOT):
+        real_prefix = str(real_root)
+        if resolved_raw == real_prefix:
+            return canonical_prefix
+        if resolved_raw.startswith(real_prefix + "/"):
+            suffix = resolved_raw[len(real_prefix) :]
+            return canonical_prefix + suffix
     return raw
 
 
@@ -1546,10 +1563,39 @@ def build_flagship_product_readiness_payload(
         "CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE",
         repo_root=repo_root,
     )
+    configured_shards_rows = (
+        active_shards_payload.get("configured_shards") if isinstance(active_shards_payload, dict) else []
+    )
+    if not isinstance(configured_shards_rows, list):
+        configured_shards_rows = []
     active_shards_rows = active_shards_payload.get("active_shards") if isinstance(active_shards_payload, dict) else []
-    active_shards_count = len(active_shards_rows) if isinstance(active_shards_rows, list) else 0
+    if not isinstance(active_shards_rows, list):
+        active_shards_rows = []
+    if not configured_shards_rows:
+        configured_shards_rows = list(active_shards_rows)
+    try:
+        active_shards_count = int(
+            (active_shards_payload.get("active_run_count") if isinstance(active_shards_payload, dict) else 0) or 0
+        )
+    except (TypeError, ValueError):
+        active_shards_count = 0
+    if active_shards_count <= 0:
+        active_shards_count = sum(
+            1
+            for item in active_shards_rows
+            if isinstance(item, dict)
+            and (
+                str(item.get("active_run_id") or "").strip()
+                or bool(item.get("active"))
+            )
+        )
+    configured_shards_count = len(configured_shards_rows)
     active_shards_generated_at = str(
         (active_shards_payload.get("generated_at") if isinstance(active_shards_payload, dict) else "")
+        or ""
+    ).strip()
+    active_shards_manifest_kind = str(
+        (active_shards_payload.get("manifest_kind") if isinstance(active_shards_payload, dict) else "")
         or ""
     ).strip()
     active_shards_generated_dt = parse_iso(active_shards_generated_at)
@@ -3639,7 +3685,9 @@ def build_flagship_product_readiness_payload(
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
             "active_shards_path": str(effective_active_shards_path or ""),
             "active_shards_generated_at": active_shards_generated_at,
+            "active_shards_manifest_kind": active_shards_manifest_kind,
             "active_shards_count": active_shards_count,
+            "configured_shards_count": configured_shards_count,
             "active_shards_recent": active_shards_recent,
             "supervisor_mode": supervisor_mode,
             "supervisor_completion_status": supervisor_completion_status,

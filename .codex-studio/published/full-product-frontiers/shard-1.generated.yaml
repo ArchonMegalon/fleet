@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-11T08:53:44Z'
+generated_at: '2026-04-12T09:07:28Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -31,7 +31,6 @@ focus:
   owners:
   - chummer6-ui
   - chummer6-ui-kit
-  - chummer6-core
   texts:
   - avalonia
   - shell
@@ -54,11 +53,6 @@ focus:
   - proof shelf
   - fit and finish
   - desktop client
-  - rules engine and import
-  - ui kit and flagship polish
-  - media artifacts
-  - horizons and public surface
-  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -67,48 +61,50 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260410T134942Z is not trusted: worker exit 1'
+  reason: 'latest worker receipt 20260412T072358Z is not trusted: worker exit 125'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-11T08:53:41Z'
+  generated_at: '2026-04-12T09:07:20Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
-  - rules_engine_and_import
-  - ui_kit_and_flagship_polish
-  - media_artifacts
-  - horizons_and_public_surface
-  - fleet_and_operator_loop
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4066417069
+- 2299644700
 frontier:
-- id: 4066417069
-  title: Flagship desktop client and workbench finish
+- id: 2299644700
+  title: Sync the approved Chummer design bundle into `fleet` under `.codex-design/`
+    and refresh repo-local review context.
   wave: flagship_product
   status: not_started
-  owners:
-  - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
+  owners: []
   dependencies: []
   exit_criteria:
-  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
-    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
-    inspection, conditional toggles, desktop packaging, updater, and in-app support
-    polish.
-  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
-    packaging, and support evidence rather than treating Linux exit-gate closure as
-    the whole product.
+  - Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and
+    refresh repo-local review context.
+  - 'Own and prove the surface slice(s): design_mirror:fleet'
+  - 'Keep implementation scoped to the allowed paths: .codex-design'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed (audit-task-3226027).
 source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+queue_package:
+  repo: ''
+  package_id: audit-task-3226027
+  title: Sync the approved Chummer design bundle into `fleet` under `.codex-design/`
+    and refresh repo-local review context.
+  priority: 0
+  owned_surfaces:
+  - design_mirror:fleet
+  allowed_paths:
+  - .codex-design
 eta:
   status: flagship_delivery
-  eta_human: 8h-20h
+  eta_human: 6h-14h
   eta_confidence: low
   basis: full_product_frontier_heuristic
   scope_kind: flagship_product_readiness
@@ -116,5 +112,4 @@ eta:
   scope_warning: ''
   blocking_reason: ''
   summary: 'Current closeout gates are green, but flagship product work still remains
-    across 1 synthetic slices. Outstanding readiness coverage: desktop_client, rules_engine_and_import,
-    ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop.'
+    across 1 synthetic slices. Outstanding readiness coverage: desktop_client.'

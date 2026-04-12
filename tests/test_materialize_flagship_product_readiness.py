@@ -5628,6 +5628,10 @@ def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_
         active_shards_path,
         {
             "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 2,
+            "configured_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
+            "active_run_count": 2,
             "active_shards": [{"name": "shard-1"}, {"name": "shard-2"}],
         },
     )
@@ -5717,6 +5721,8 @@ def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_
     assert evidence["supervisor_focus_profiles_recovered_from_runtime_env"] is True
     assert evidence["supervisor_focus_profiles"] == ["top_flagship_grade", "whole_project_frontier"]
     assert evidence["active_shards_recent"] is True
+    assert evidence["active_shards_manifest_kind"] == "configured_shard_topology"
+    assert evidence["configured_shards_count"] == 2
     assert payload["evidence_sources"]["active_shards"].endswith("/active_shards.json")
 
 

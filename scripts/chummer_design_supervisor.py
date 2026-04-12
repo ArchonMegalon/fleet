@@ -15,6 +15,7 @@ import os
 import pwd
 import re
 import signal
+import shutil
 import socket
 import stat
 import subprocess
@@ -42,6 +43,13 @@ except ModuleNotFoundError:
 def _env_float_default(name: str, default: float) -> float:
     try:
         return float(os.environ.get(name, str(default)) or str(default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _runtime_env_float_default(name: str, default: float) -> float:
+    try:
+        return float(_runtime_env_default(name, str(default)) or str(default))
     except (TypeError, ValueError):
         return float(default)
 
@@ -115,33 +123,46 @@ DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH = (
     DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 )
 DEFAULT_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH = (
-    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 )
 DEFAULT_JOURNEY_GATES_PUBLISHED_PATH = DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
 DEFAULT_COMPLETION_REVIEW_FRONTIER_PUBLISHED_PATH = (
     DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
 )
 DEFAULT_COMPLETION_REVIEW_FRONTIER_MIRROR_PATH = (
-    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
+    DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "COMPLETION_REVIEW_FRONTIER.generated.yaml"
 )
 DEFAULT_FULL_PRODUCT_FRONTIER_PUBLISHED_PATH = (
     DEFAULT_WORKSPACE_ROOT / ".codex-studio" / "published" / "FULL_PRODUCT_FRONTIER.generated.yaml"
 )
 DEFAULT_FULL_PRODUCT_FRONTIER_MIRROR_PATH = (
-    DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "FULL_PRODUCT_FRONTIER.generated.yaml"
+    DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "FULL_PRODUCT_FRONTIER.generated.yaml"
 )
 DEFAULT_CHUMMER5A_FAMILIARITY_BRIDGE_PATH = DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "CHUMMER5A_FAMILIARITY_BRIDGE.md"
 DEFAULT_DESKTOP_EXECUTABLE_EXIT_GATES_PATH = DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "DESKTOP_EXECUTABLE_EXIT_GATES.md"
 DEFAULT_DESKTOP_VISUAL_FAMILIARITY_GATE_PATH = (
     DEFAULT_FLEET_PRODUCT_MIRROR_ROOT / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.md"
 )
-DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = Path("/docker/chummercomplete/chummer6-ui")
+def _preferred_ui_repo_root() -> Path:
+    override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
+    if override:
+        return Path(override)
+    for candidate in (
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer-presentation"),
+    ):
+        if candidate.exists():
+            return candidate
+    return Path("/docker/chummercomplete/chummer6-ui")
+
+
+PREFERRED_UI_REPO_ROOT = _preferred_ui_repo_root()
+DEFAULT_UI_LINUX_DESKTOP_REPO_ROOT = PREFERRED_UI_REPO_ROOT
 DEFAULT_UI_LINUX_DESKTOP_EXIT_GATE_PATH = (
-    Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json")
+    PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
 )
-DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH = Path(
-    "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
-)
+DEFAULT_UI_EXECUTABLE_EXIT_GATE_PATH = PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
 DEFAULT_STATE_ROOT = DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor"
 DEFAULT_STATE_PATH = DEFAULT_STATE_ROOT / "state.json"
 DEFAULT_HISTORY_PATH = DEFAULT_STATE_ROOT / "history.jsonl"
@@ -264,6 +285,7 @@ DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS = max(
         DEFAULT_FAILURE_BACKOFF_SECONDS,
     ),
 )
+SUPERVISOR_CONTAINER_NAME = "fleet-design-supervisor"
 COMPLETION_AUDIT_HISTORY_LIMIT = 10
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 3600
 LINUX_DESKTOP_EXIT_GATE_MAX_AGE_SECONDS = 24 * 3600
@@ -477,6 +499,10 @@ FOCUS_PROFILES: Dict[str, Dict[str, Any]] = {
 SYNTHETIC_COMPLETION_REVIEW_ID_BASE = 900_000_000
 SYNTHETIC_FULL_PRODUCT_ID_BASE = 950_000_000
 _SIBLING_MODULE_CACHE: Dict[str, Any] = {}
+_CONTAINER_LOCAL_ACTIVE_RUN_CACHE: Dict[str, Any] = {
+    "generated_at_monotonic": 0.0,
+    "records": {},
+}
 _RUNTIME_ENV_CANDIDATES = (
     DEFAULT_WORKSPACE_ROOT / "runtime.env",
     DEFAULT_WORKSPACE_ROOT / "runtime.ea.env",
@@ -1009,7 +1035,10 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--memory-dispatch-reserve-gib",
             type=float,
-            default=DEFAULT_MEMORY_DISPATCH_RESERVE_GIB,
+            default=_runtime_env_float_default(
+                "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB",
+                DEFAULT_MEMORY_DISPATCH_RESERVE_GIB,
+            ),
             help=(
                 "Minimum host RAM headroom to keep free before idle shards are allowed to dispatch more work "
                 f"(default: {DEFAULT_MEMORY_DISPATCH_RESERVE_GIB:g} GiB)."
@@ -1018,7 +1047,10 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--memory-dispatch-shard-budget-gib",
             type=float,
-            default=DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB,
+            default=_runtime_env_float_default(
+                "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB",
+                DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB,
+            ),
             help=(
                 "Approximate RAM budget reserved per concurrently dispatching shard when memory-based throttling is active "
                 f"(default: {DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB:g} GiB)."
@@ -1027,7 +1059,10 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--memory-dispatch-warning-available-percent",
             type=float,
-            default=DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT,
+            default=_runtime_env_float_default(
+                "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT",
+                DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT,
+            ),
             help=(
                 "Start treating host memory as constrained when MemAvailable falls below this percent of total RAM "
                 f"(default: {DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT:g})."
@@ -1036,7 +1071,10 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--memory-dispatch-critical-available-percent",
             type=float,
-            default=DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT,
+            default=_runtime_env_float_default(
+                "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT",
+                DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT,
+            ),
             help=(
                 "Enter critical memory throttling when MemAvailable falls below this percent of total RAM "
                 f"(default: {DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT:g})."
@@ -1045,7 +1083,10 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--memory-dispatch-warning-swap-used-percent",
             type=float,
-            default=DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT,
+            default=_runtime_env_float_default(
+                "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT",
+                DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT,
+            ),
             help=(
                 "Start treating host memory as constrained when swap usage reaches this percent "
                 f"(default: {DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT:g})."
@@ -1054,7 +1095,10 @@ def parse_args() -> argparse.Namespace:
         subparser.add_argument(
             "--memory-dispatch-critical-swap-used-percent",
             type=float,
-            default=DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT,
+            default=_runtime_env_float_default(
+                "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT",
+                DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT,
+            ),
             help=(
                 "Enter critical memory throttling when swap usage reaches this percent "
                 f"(default: {DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT:g})."
@@ -1087,7 +1131,10 @@ def parse_args() -> argparse.Namespace:
     loop_parser.add_argument(
         "--memory-dispatch-parked-poll-seconds",
         type=float,
-        default=DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS,
+        default=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_PARKED_POLL_SECONDS",
+            DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS,
+        ),
         help=(
             "Sleep this long before rechecking a parked shard when memory throttling blocks dispatch "
             f"(default: {DEFAULT_MEMORY_DISPATCH_PARKED_POLL_SECONDS})."
@@ -1252,6 +1299,14 @@ def _active_shard_names(aggregate_root: Path) -> List[str]:
     for shard_root in _configured_shard_roots(aggregate_root):
         state = _read_state(_state_payload_path(shard_root))
         active_run = (state.get("active_run") or {}) if isinstance(state.get("active_run"), dict) else {}
+        if not active_run:
+            recovered_active_run = _recover_matching_live_active_run(
+                shard_root,
+                frontier_ids=_state_frontier_ids(state),
+                open_milestone_ids=_state_open_milestone_ids(state),
+            )
+            if recovered_active_run is not None:
+                active_run = dict(recovered_active_run)
         if str(active_run.get("run_id") or "").strip():
             names.append(shard_root.name)
     return names
@@ -3498,18 +3553,20 @@ def _completion_review_frontier_paths(
     state_root: Optional[Path] = None,
 ) -> tuple[Path, Path]:
     workspace = Path(workspace_root).resolve()
+    runtime_root = DEFAULT_STATE_ROOT
     if state_root is not None:
         resolved_state_root = Path(state_root).resolve()
         aggregate_root = _aggregate_state_root(resolved_state_root)
+        runtime_root = aggregate_root
         if resolved_state_root != aggregate_root and resolved_state_root.name.startswith("shard-"):
             shard_name = resolved_state_root.name
             return (
                 workspace / ".codex-studio" / "published" / "completion-review-frontiers" / f"{shard_name}.generated.yaml",
-                workspace / ".codex-design" / "product" / "completion-review-frontiers" / f"{shard_name}.generated.yaml",
+                aggregate_root / "artifacts" / "completion-review-frontiers" / f"{shard_name}.generated.yaml",
             )
     return (
         workspace / ".codex-studio" / "published" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
-        workspace / ".codex-design" / "product" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
+        runtime_root / "artifacts" / "COMPLETION_REVIEW_FRONTIER.generated.yaml",
     )
 
 
@@ -3858,18 +3915,20 @@ def _full_product_frontier_paths(
     state_root: Optional[Path] = None,
 ) -> tuple[Path, Path]:
     workspace = Path(workspace_root).resolve()
+    runtime_root = DEFAULT_STATE_ROOT
     if state_root is not None:
         resolved_state_root = Path(state_root).resolve()
         aggregate_root = _aggregate_state_root(resolved_state_root)
+        runtime_root = aggregate_root
         if resolved_state_root != aggregate_root and resolved_state_root.name.startswith("shard-"):
             shard_name = resolved_state_root.name
             return (
                 workspace / ".codex-studio" / "published" / "full-product-frontiers" / f"{shard_name}.generated.yaml",
-                workspace / ".codex-design" / "product" / "full-product-frontiers" / f"{shard_name}.generated.yaml",
+                aggregate_root / "artifacts" / "full-product-frontiers" / f"{shard_name}.generated.yaml",
             )
     return (
         workspace / ".codex-studio" / "published" / "FULL_PRODUCT_FRONTIER.generated.yaml",
-        workspace / ".codex-design" / "product" / "FULL_PRODUCT_FRONTIER.generated.yaml",
+        runtime_root / "artifacts" / "FULL_PRODUCT_FRONTIER.generated.yaml",
     )
 
 
@@ -4143,13 +4202,15 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
                     flush=True,
                 )
         aggregate_state_root = workspace_root / "state" / "chummer_design_supervisor"
+        readiness_mirror_path = aggregate_state_root / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
         supervisor_state_path = _state_payload_path(aggregate_state_root)
         candidate_state_root_raw = str(getattr(args, "state_root", "") or "").strip()
         if candidate_state_root_raw:
             candidate_state_root = Path(candidate_state_root_raw).resolve()
             candidate_state_path = _state_payload_path(candidate_state_root)
+            candidate_aggregate_root = _aggregate_state_root(candidate_state_root)
+            readiness_mirror_path = candidate_aggregate_root / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
             if candidate_state_path.is_file():
-                candidate_aggregate_root = _aggregate_state_root(candidate_state_root)
                 aggregate_candidate_path = _state_payload_path(candidate_aggregate_root)
                 # Flagship readiness is whole-product proof; prefer aggregate supervisor state
                 # when a shard-local invocation is rematerializing evidence.
@@ -4163,7 +4224,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
                     supervisor_state_path = candidate_state_path
         return materialize_flagship_product_readiness(
             out_path=Path(args.flagship_product_readiness_path).resolve(),
-            mirror_path=workspace_root / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json",
+            mirror_path=readiness_mirror_path,
             acceptance_path=acceptance_mirror_path,
             parity_registry_path=workspace_root / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
             status_plane_path=Path(args.status_plane_path).resolve(),
@@ -4174,33 +4235,17 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             external_proof_runbook_path=external_proof_runbook_path,
             supervisor_state_path=supervisor_state_path,
             ooda_state_path=workspace_root / "state" / "design_supervisor_ooda" / "current_8h" / "state.json",
-            ui_local_release_proof_path=Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json"),
+            ui_local_release_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCAL_RELEASE_PROOF.generated.json",
             ui_linux_exit_gate_path=Path(args.ui_linux_desktop_exit_gate_path).resolve(),
-            ui_windows_exit_gate_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
-            ),
-            ui_workflow_parity_proof_path=Path("/docker/chummercomplete/chummer6-ui/.codex-studio/published/CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"),
-            ui_executable_exit_gate_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
-            ),
-            ui_workflow_execution_gate_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
-            ),
-            ui_visual_familiarity_exit_gate_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
-            ),
-            ui_localization_release_gate_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json"
-            ),
-            sr4_workflow_parity_proof_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
-            ),
-            sr6_workflow_parity_proof_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
-            ),
-            sr4_sr6_frontier_receipt_path=Path(
-                "/docker/chummercomplete/chummer6-ui/.codex-studio/published/SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
-            ),
+            ui_windows_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json",
+            ui_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json",
+            ui_executable_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+            ui_workflow_execution_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json",
+            ui_visual_familiarity_exit_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json",
+            ui_localization_release_gate_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "UI_LOCALIZATION_RELEASE_GATE.generated.json",
+            sr4_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json",
+            sr6_workflow_parity_proof_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json",
+            sr4_sr6_frontier_receipt_path=PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json",
             hub_local_release_proof_path=Path("/docker/chummercomplete/chummer6-hub/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json"),
             mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
             release_channel_path=resolved_release_channel_path,
@@ -5805,6 +5850,7 @@ def _write_runtime_handoff(state_root: Path) -> None:
             parsed_last_message = _parse_final_message_sections(last_message_text) if last_message_text else {}
             stdout_tail = _tail_text_file(stdout_path)
             stderr_tail = _tail_text_file(stderr_path)
+            self_polling_blocker = "worker_self_polling:supervisor_status_loop"
             lines.extend(
                 [
                     "",
@@ -5828,13 +5874,33 @@ def _write_runtime_handoff(state_root: Path) -> None:
                     lines.append(f"- Latest shipped note: {shipped}")
                 if remains:
                     lines.append(f"- Latest remains note: {remains}")
-                if blocker:
+                if blocker and self_polling_blocker not in blocker:
                     lines.append(f"- Latest blocker: {blocker}")
+                elif blocker and self_polling_blocker in blocker:
+                    lines.append(
+                        "- Latest blocker: previous run was killed for querying supervisor status inside an active worker run"
+                    )
             if stdout_tail:
                 lines.extend(["", "## Recent stdout tail", "", "```text", stdout_tail, "```"])
             if stderr_tail:
-                lines.extend(["", "## Recent stderr tail", "", "```text", stderr_tail, "```"])
+                if self_polling_blocker in stderr_tail or self_polling_blocker in last_message_text:
+                    lines.extend(
+                        [
+                            "",
+                            "## Recent stderr tail",
+                            "",
+                            "```text",
+                            "Previous run was killed for querying supervisor status from inside an active worker run.",
+                            "Do not repeat that pattern; keep working from the prompt, handoff, and frontier artifacts only.",
+                            "```",
+                        ]
+                    )
+                else:
+                    lines.extend(["", "## Recent stderr tail", "", "```text", stderr_tail, "```"])
         elif last_run:
+            last_run_blocker = str(last_run.get("blocker") or "").strip()
+            if "worker_self_polling:supervisor_status_loop" in last_run_blocker:
+                last_run_blocker = "previous run was killed for querying supervisor status inside an active worker run"
             lines.extend(
                 [
                     "",
@@ -5846,7 +5912,7 @@ def _write_runtime_handoff(state_root: Path) -> None:
                     f"- Finished at: {str(last_run.get('finished_at') or last_run.get('started_at') or '').strip() or 'unknown'}",
                     f"- What shipped: {str(last_run.get('shipped') or '').strip() or 'none recorded'}",
                     f"- What remains: {str(last_run.get('remains') or '').strip() or 'none recorded'}",
-                    f"- Exact blocker: {str(last_run.get('blocker') or '').strip() or 'none recorded'}",
+                    f"- Exact blocker: {last_run_blocker or 'none recorded'}",
                 ]
             )
         _runtime_handoff_path(resolved_state_root).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -5948,7 +6014,11 @@ def _run_worker_attempt(
             return
         try:
             while True:
-                chunk = stream.readline()
+                try:
+                    chunk = stream.readline()
+                except ValueError:
+                    # The parent thread may close the stream while the reader thread is still unwinding.
+                    break
                 if chunk == "":
                     break
                 with output_lock:
@@ -6243,6 +6313,10 @@ def _reason_targets_ignored_nonlinux_desktop_host_platform(text: str) -> bool:
             "startup-smoke receipt",
             "promoted installer",
             "external host-proof gaps remain",
+            "requires a windows-capable host",
+            "requires a macos host",
+            "missing_windows_host_capability",
+            "missing_macos_host_capability",
         )
     )
 
@@ -6391,6 +6465,25 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
                 blocker_reason = f"{blocker_reason} (+{extra} more shard blocker{'s' if extra != 1 else ''})"
             eta = _apply_eta_blocker(eta, blocker_reason)
         updated["eta"] = eta
+    return _apply_status_alias_fields(updated)
+
+
+def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
+    updated = dict(state or {})
+    host_memory_pressure = dict(updated.get("host_memory_pressure") or {})
+    if host_memory_pressure:
+        updated["allowed_active_shards"] = max(
+            0,
+            _coerce_int(host_memory_pressure.get("allowed_active_shards"), 0),
+        )
+        status = str(host_memory_pressure.get("status") or "").strip()
+        if status:
+            updated["host_memory_status"] = status
+        else:
+            updated.pop("host_memory_status", None)
+    else:
+        updated.pop("allowed_active_shards", None)
+        updated.pop("host_memory_status", None)
     return updated
 
 
@@ -6476,21 +6569,27 @@ def _active_run_matches_live_frontier(
         return False
     last_message_path = str(active_run.get("last_message_path") or "").strip()
     if last_message_path:
-        proc_root = Path("/proc")
-        try:
-            proc_entries = list(proc_root.iterdir())
-        except OSError:
-            proc_entries = []
-        for entry in proc_entries:
-            if not entry.name.isdigit():
-                continue
+        running_inside_container = _running_inside_container()
+        container_local_artifact = last_message_path.startswith("/var/lib/codex-fleet/")
+        if not (container_local_artifact and not running_inside_container):
+            proc_root = Path("/proc")
             try:
-                cmdline = (entry / "cmdline").read_bytes().decode("utf-8", errors="ignore").replace("\x00", " ").strip()
+                proc_entries = list(proc_root.iterdir())
             except OSError:
-                continue
-            if cmdline and last_message_path in cmdline:
-                return True
-        return False
+                proc_entries = []
+            for entry in proc_entries:
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    cmdline = (entry / "cmdline").read_bytes().decode("utf-8", errors="ignore").replace("\x00", " ").strip()
+                except OSError:
+                    continue
+                if cmdline and last_message_path in cmdline:
+                    return True
+            return False
+        resolved_last_message = _resolve_run_artifact_path(last_message_path)
+        if not resolved_last_message.exists() and not resolved_last_message.parent.exists():
+            return False
     active_frontier_ids = set(_ids_as_text(active_run.get("frontier_ids") or []))
     active_open_milestone_ids = set(_ids_as_text(active_run.get("open_milestone_ids") or []))
     current_frontier_ids = set(_ids_as_text(frontier_ids))
@@ -6504,6 +6603,160 @@ def _active_run_matches_live_frontier(
     if current_frontier_ids:
         return bool(active_frontier_ids) and active_frontier_ids.issubset(current_frontier_ids)
     return False
+
+
+def _active_run_started_at_from_run_id(run_id: str) -> str:
+    text = str(run_id or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = dt.datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    except ValueError:
+        return ""
+    return _iso(parsed)
+
+
+def _container_local_active_run_records() -> Dict[str, Dict[str, Any]]:
+    if _running_inside_container():
+        return {}
+    now_monotonic = time.monotonic()
+    cached_generated_at = _coerce_float(_CONTAINER_LOCAL_ACTIVE_RUN_CACHE.get("generated_at_monotonic")) or 0.0
+    if cached_generated_at > 0.0 and now_monotonic - cached_generated_at <= 1.0:
+        return {str(key): dict(value or {}) for key, value in dict(_CONTAINER_LOCAL_ACTIVE_RUN_CACHE.get("records") or {}).items()}
+    docker_bin = shutil.which("docker")
+    if not docker_bin:
+        _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["generated_at_monotonic"] = now_monotonic
+        _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["records"] = {}
+        return {}
+    records: Dict[str, Dict[str, Any]] = {}
+    try:
+        completed = subprocess.run(
+            [docker_bin, "exec", SUPERVISOR_CONTAINER_NAME, "ps", "-eo", "pid,args"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        completed = None
+    if completed and completed.returncode == 0:
+        for raw_line in str(completed.stdout or "").splitlines():
+            line = raw_line.strip()
+            if not line or line.lower().startswith("pid "):
+                continue
+            parts = line.split(None, 1)
+            if len(parts) < 2 or not parts[0].isdigit():
+                continue
+            pid = int(parts[0])
+            command = parts[1].strip()
+            if "/docker/fleet/scripts/codex-shims/codexea" not in command:
+                continue
+            match = re.search(
+                r"/var/lib/codex-fleet/chummer_design_supervisor/(shard-[0-9]+)/runs/([0-9TZ]+)/last_message\.txt",
+                command,
+            )
+            if not match:
+                continue
+            shard_name = str(match.group(1) or "").strip()
+            run_id = str(match.group(2) or "").strip()
+            if not shard_name or not run_id:
+                continue
+            run_dir = Path("/var/lib/codex-fleet/chummer_design_supervisor") / shard_name / "runs" / run_id
+            model_match = re.search(r"\bexec\s+-m\s+(\S+)", command)
+            selected_model = str(model_match.group(1) or "").strip() if model_match else ""
+            records[shard_name] = {
+                "run_id": run_id,
+                "started_at": _active_run_started_at_from_run_id(run_id),
+                "prompt_path": str(run_dir / "prompt.txt"),
+                "stdout_path": str(run_dir / "worker.stdout.log"),
+                "stderr_path": str(run_dir / "worker.stderr.log"),
+                "last_message_path": str(run_dir / "last_message.txt"),
+                "frontier_ids": [],
+                "open_milestone_ids": [],
+                "primary_milestone_id": None,
+                "worker_command": [command],
+                "selected_account_alias": "",
+                "selected_model": selected_model,
+                "attempt_index": 1,
+                "total_attempts": 20,
+                "watchdog_timeout_seconds": 0.0,
+                "worker_pid": pid,
+                "worker_first_output_at": "",
+                "worker_last_output_at": "",
+            }
+    _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["generated_at_monotonic"] = now_monotonic
+    _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["records"] = records
+    return {str(key): dict(value or {}) for key, value in records.items()}
+
+
+def _container_local_recovery_supported(state_root: Path) -> bool:
+    resolved_state_root = Path(state_root).resolve()
+    workspace_state_root = (DEFAULT_WORKSPACE_ROOT / "state" / "chummer_design_supervisor").resolve()
+    container_state_root = Path("/var/lib/codex-fleet/chummer_design_supervisor").resolve()
+    for candidate_root in (workspace_state_root, container_state_root):
+        try:
+            resolved_state_root.relative_to(candidate_root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _recover_container_local_active_run(
+    state_root: Path,
+    *,
+    frontier_ids: Sequence[Any],
+    open_milestone_ids: Sequence[Any],
+) -> Optional[Dict[str, Any]]:
+    if not _container_local_recovery_supported(state_root):
+        return None
+    shard_name = Path(state_root).resolve().name
+    if not shard_name.startswith("shard-"):
+        return None
+    recovered = dict(_container_local_active_run_records().get(shard_name) or {})
+    if not recovered:
+        return None
+    recovered["frontier_ids"] = [_coerce_int(value, 0) for value in frontier_ids if _coerce_int(value, 0) > 0]
+    recovered["open_milestone_ids"] = [
+        _coerce_int(value, 0) for value in open_milestone_ids if _coerce_int(value, 0) > 0
+    ]
+    recovered["primary_milestone_id"] = recovered["frontier_ids"][0] if recovered["frontier_ids"] else None
+    freshest_output: Optional[dt.datetime] = None
+    for key in ("stderr_path", "stdout_path", "last_message_path"):
+        resolved_path = _resolve_run_artifact_path(str(recovered.get(key) or ""))
+        if not resolved_path.exists():
+            continue
+        try:
+            stat_result = resolved_path.stat()
+        except OSError:
+            continue
+        modified_at = dt.datetime.fromtimestamp(stat_result.st_mtime, tz=dt.timezone.utc)
+        if freshest_output is None or modified_at > freshest_output:
+            freshest_output = modified_at
+    if freshest_output is not None:
+        recovered["worker_last_output_at"] = _iso(freshest_output)
+        recovered["worker_first_output_at"] = str(recovered.get("worker_first_output_at") or recovered.get("started_at") or "").strip()
+    return recovered
+
+
+def _recover_matching_live_active_run(
+    state_root: Path,
+    *,
+    frontier_ids: Sequence[Any],
+    open_milestone_ids: Sequence[Any],
+) -> Optional[Dict[str, Any]]:
+    recovered = _recover_container_local_active_run(
+        state_root,
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+    )
+    if _active_run_matches_live_frontier(
+        recovered,
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+    ):
+        return recovered
+    return None
 
 
 def _active_run_matches_frontier_shape(
@@ -8038,7 +8291,15 @@ def _live_state_with_current_completion_audit(
             frontier_ids=frontier_ids,
             open_milestone_ids=open_milestone_ids,
         ):
-            updated.pop("active_run", None)
+            recovered_active_run = _recover_matching_live_active_run(
+                state_root,
+                frontier_ids=frontier_ids,
+                open_milestone_ids=open_milestone_ids,
+            )
+            if recovered_active_run is not None:
+                updated["active_run"] = dict(recovered_active_run)
+            else:
+                updated.pop("active_run", None)
         if include_shards:
             updated["shards"] = _live_shard_summaries(effective_args, state_root)
             updated["shard_count"] = len(updated.get("shards") or [])
@@ -8477,12 +8738,12 @@ def _fast_status_state(
         "full_product_audit",
         "eta",
         "worker_lane_health",
-        "host_memory_pressure",
         "flagship_product_readiness_path",
     ):
         latest_field_value = _latest_nonempty_state_field(shard_state_items, field)
         if latest_field_value:
             updated[field] = latest_field_value
+    updated["host_memory_pressure"] = _memory_dispatch_snapshot(args, state_root)
     if len(updated.get("shards") or []) > 1:
         updated["mode"] = "complete" if _has_current_flagship_pass_proof(updated) else "sharded"
     updated.update(_reconcile_aggregate_shard_truth(updated))
@@ -8722,6 +8983,14 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             freshest_updated_at = state_file_updated_at
         active_run = (shard_state.get("active_run") or {}) if isinstance(shard_state.get("active_run"), dict) else {}
         last_run = (shard_state.get("last_run") or {}) if isinstance(shard_state.get("last_run"), dict) else {}
+        if not active_run:
+            recovered_active_run = _recover_matching_live_active_run(
+                shard_root,
+                frontier_ids=_state_frontier_ids(shard_state),
+                open_milestone_ids=_state_open_milestone_ids(shard_state),
+            )
+            if recovered_active_run is not None:
+                active_run = dict(recovered_active_run)
         worker_pid = _coerce_int(active_run.get("worker_pid"), 0)
         process_probe_scope = "local"
         process_alive: Optional[bool] = False
@@ -9971,6 +10240,12 @@ def launch_worker(
             ),
         )
 
+    def reset_last_message_attempt_marker() -> None:
+        try:
+            last_message_path.write_text("", encoding="utf-8")
+        except OSError:
+            pass
+
     try:
         with stdout_path.open("w", encoding="utf-8") as stdout_handle, stderr_path.open("w", encoding="utf-8") as stderr_handle:
             def run_account_attempts(
@@ -10101,6 +10376,7 @@ def launch_worker(
                             attempted_accounts.append(account.alias)
                             attempted_models.append(candidate_model or "default")
                             selected_account_alias = account.alias
+                            reset_last_message_attempt_marker()
                             mark_active_run(
                                 command=worker_command,
                                 account_alias=account.alias,
@@ -10324,6 +10600,7 @@ def launch_worker(
                         attempted_accounts.append(lane_alias)
                         attempted_models.append(candidate_model or "default")
                         selected_account_alias = lane_alias if candidate_lane else ""
+                        reset_last_message_attempt_marker()
                         mark_active_run(
                             command=worker_command,
                             account_alias=lane_alias if candidate_lane else "default",
@@ -10654,6 +10931,7 @@ def _write_state(
         payload["full_product_frontier_path"] = str(full_product_frontier_path)
     if full_product_frontier_mirror_path:
         payload["full_product_frontier_mirror_path"] = str(full_product_frontier_mirror_path)
+    payload = _apply_status_alias_fields(payload)
     _merge_matching_live_active_run(state_root, payload)
     _write_json(_state_payload_path(state_root), payload)
     _write_runtime_handoff(state_root)
@@ -10697,11 +10975,19 @@ def _merge_matching_live_active_run(state_root: Path, payload: Dict[str, Any]) -
     ):
         payload["active_run"] = dict(persisted_active_run)
         return
+    recovered_active_run = _recover_matching_live_active_run(
+        state_root,
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+    )
+    if recovered_active_run is not None:
+        payload["active_run"] = dict(recovered_active_run)
+        return
     payload.pop("active_run", None)
 
 
 def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> None:
-    payload = dict(state)
+    payload = _apply_status_alias_fields(dict(state))
     payload.pop("state_root", None)
     payload.pop("shard_count", None)
     payload.pop("shards", None)
@@ -11137,35 +11423,19 @@ def _worker_status_task_local_payload(args: argparse.Namespace, blocked_reason: 
     open_milestone_ids = sorted(
         {_coerce_int(value, 0) for value in _state_open_milestone_ids(state) if _coerce_int(value, 0) > 0}
     )
-    eta_snapshot = _normalize_eta_scope_fields(dict(state.get("eta") or {}))
-    remaining_in_progress = max(
-        len(frontier_ids),
-        max(0, _coerce_int(eta_snapshot.get("remaining_in_progress_milestones"), 0)),
-    )
-    remaining_open = max(
-        len(open_milestone_ids),
-        remaining_in_progress,
-        max(0, _coerce_int(eta_snapshot.get("remaining_open_milestones"), 0)),
-    )
-    remaining_not_started = max(
-        max(0, remaining_open - remaining_in_progress),
-        max(0, _coerce_int(eta_snapshot.get("remaining_not_started_milestones"), 0)),
-    )
-    eta_human = str(eta_snapshot.get("eta_human") or "").strip() or "task-local-only"
-    eta_summary = str(eta_snapshot.get("summary") or "").strip() or guidance
     payload: Dict[str, Any] = {
         "mode": "task_local_only",
         "polling_disabled": True,
-        "active_runs_count": max(1 if run_id else 0, _coerce_int(state.get("active_runs_count"), 0)),
+        "status_query_supported": False,
         "eta": {
-            "status": str(eta_snapshot.get("status") or "task_local_only").strip(),
-            "scope_kind": str(eta_snapshot.get("scope_kind") or "").strip(),
-            "predicted_completion_at": str(eta_snapshot.get("predicted_completion_at") or "").strip(),
-            "remaining_open_milestones": remaining_open,
-            "remaining_not_started_milestones": remaining_not_started,
-            "remaining_in_progress_milestones": remaining_in_progress,
-            "eta_human": eta_human,
-            "summary": eta_summary,
+            "status": "polling_disabled",
+            "scope_kind": "task_local_only",
+            "predicted_completion_at": "",
+            "remaining_open_milestones": None,
+            "remaining_not_started_milestones": None,
+            "remaining_in_progress_milestones": None,
+            "eta_human": "polling_disabled",
+            "summary": guidance,
         },
         "warning": str(blocked_reason or "").strip() or "worker_status_budget_exhausted",
         "guidance": guidance,
@@ -12872,6 +13142,18 @@ def _desktop_executable_exit_gate_audit(args: argparse.Namespace) -> Dict[str, A
         audit["reason"] = "desktop executable exit gate external blocking findings count does not match finding rows"
         return audit
 
+    deferred_nonlinux_host_proof_only = (
+        blocked_external_only
+        and _ignore_nonlinux_desktop_host_proof_blockers_enabled()
+        and bool(external_findings)
+        and all(_reason_targets_ignored_nonlinux_desktop_host_platform(item) for item in external_findings)
+    )
+    audit["deferred_nonlinux_host_proof_only"] = deferred_nonlinux_host_proof_only
+    if deferred_nonlinux_host_proof_only:
+        audit["status"] = "pass"
+        audit["reason"] = "desktop executable exit gate is externally blocked only by deferred non-Linux host-proof gaps"
+        return audit
+
     if not proof_is_ready:
         audit["status"] = "fail"
         audit["reason"] = str(payload.get("reason") or "desktop executable exit gate proof did not pass")
@@ -13798,6 +14080,7 @@ def main() -> None:
         if not allowed:
             payload = _worker_status_task_local_payload(args, blocked_reason)
             payload["command"] = str(args.command)
+            payload["nonfatal_fallback"] = True
             if args.json:
                 print(json.dumps(payload, indent=2, sort_keys=True))
             else:

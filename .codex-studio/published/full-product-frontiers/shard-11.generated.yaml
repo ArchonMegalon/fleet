@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-11T08:53:53Z'
+generated_at: '2026-04-12T09:07:42Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,8 @@ focus:
   - chummer6-design
   - fleet
   - chummer6-ui
-  - chummer6-core
+  - chummer6-hub
+  - chummer6-hub-registry
   texts:
   - chummer5a
   - visual-similarity
@@ -55,11 +56,6 @@ focus:
   - proof shelf
   - fit and finish
   - desktop client
-  - rules engine and import
-  - ui kit and flagship polish
-  - media artifacts
-  - horizons and public surface
-  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -68,41 +64,38 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260410T135015Z is not trusted: worker exit 1'
+  reason: 'latest worker receipt 20260412T072416Z is not trusted: worker exit 125'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-11T08:53:41Z'
+  generated_at: '2026-04-12T09:07:20Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
-  - rules_engine_and_import
-  - ui_kit_and_flagship_polish
-  - media_artifacts
-  - horizons_and_public_surface
-  - fleet_and_operator_loop
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 3449507998
+- 2541792707
 frontier:
-- id: 3449507998
-  title: Rules engine parity, explain trust, and import certification
+- id: 2541792707
+  title: Hub, registry, and public front door flagship finish
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-core
-  - chummer6-ui
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-design
   dependencies: []
   exit_criteria:
-  - Close SR4, SR5, and SR6 character-build parity gaps using deterministic engine
-    truth, explain receipts, and legacy/import oracle evidence described in `projects/core.md`
-    and the roadmap.
-  - Make ruleset import, migration, and explain certification boring enough that flagship
-    desktop and mobile surfaces consume one grounded engine truth.
+  - Deliver the relationship/orchestration, publication, downloads, account, install,
+    update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`,
+    and the product front door canon.
+  - Keep public landing, signed-in overlays, release heads, install guidance, and
+    support/control truth aligned with design-owned manifests instead of repo-local
+    improvisation.
 source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
 eta:
   status: flagship_delivery
@@ -114,5 +107,4 @@ eta:
   scope_warning: ''
   blocking_reason: ''
   summary: 'Current closeout gates are green, but flagship product work still remains
-    across 1 synthetic slices. Outstanding readiness coverage: desktop_client, rules_engine_and_import,
-    ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop.'
+    across 1 synthetic slices. Outstanding readiness coverage: desktop_client.'

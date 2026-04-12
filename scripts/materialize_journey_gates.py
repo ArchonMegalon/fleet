@@ -64,7 +64,10 @@ REPO_ROOT_CANDIDATES = {
         Path("/docker/chummercomplete/chummer6-hub"),
     ),
     "chummer6-hub-registry": (Path("/docker/chummercomplete/chummer-hub-registry"),),
-    "chummer6-ui": (Path("/docker/chummercomplete/chummer6-ui"),),
+    "chummer6-ui": (
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
+        Path("/docker/chummercomplete/chummer6-ui"),
+    ),
     "chummer6-mobile": (Path("/docker/chummercomplete/chummer6-mobile"),),
     "chummer6-media-factory": (
         Path("/docker/fleet/repos/chummer-media-factory"),

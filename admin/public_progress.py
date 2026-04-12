@@ -34,8 +34,25 @@ PUBLIC_PROGRESS_HISTORY_CONTRACT_VERSION = "2026-03-23"
 CHUMMER_DESIGN_ROOT = pathlib.Path("/docker/chummercomplete/chummer-design")
 CHUMMER_PRODUCT_CANON_DIR = CHUMMER_DESIGN_ROOT / "products" / "chummer"
 CHUMMER_HUB_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-hub")
-CHUMMER_UI_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-ui")
 CHUMMER_CORE_ROOT = pathlib.Path("/docker/chummercomplete/chummer6-core")
+
+
+def _preferred_chummer_ui_root() -> pathlib.Path:
+    override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
+    if override:
+        return pathlib.Path(override)
+    for candidate in (
+        pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
+        pathlib.Path("/docker/chummercomplete/chummer6-ui"),
+        pathlib.Path("/docker/chummercomplete/chummer-presentation"),
+    ):
+        if candidate.exists():
+            return candidate
+    return pathlib.Path("/docker/chummercomplete/chummer6-ui")
+
+
+CHUMMER_UI_ROOT = _preferred_chummer_ui_root()
+
 DEFAULT_PROGRESS_CONFIG_PATH = FLEET_ROOT / "config" / "public_progress_parts.yaml"
 DEFAULT_PROGRAM_MILESTONES_PATH = FLEET_ROOT / "config" / "program_milestones.yaml"
 DEFAULT_PROJECTS_DIR = FLEET_ROOT / "config" / "projects"

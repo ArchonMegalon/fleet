@@ -290,7 +290,11 @@ topology_fingerprint = hashlib.sha256(
 ).hexdigest()
 payload = {
     "generated_at": datetime.now(timezone.utc).isoformat(),
+    "manifest_kind": "configured_shard_topology",
     "topology_fingerprint": topology_fingerprint,
+    "configured_shard_count": len(rows),
+    "configured_shards": rows,
+    "active_run_count": None,
     "active_shards": rows,
 }
 path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
