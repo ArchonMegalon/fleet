@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.flagship_product_readiness",
   "schema_version": 1,
-  "generated_at": "2026-04-12T09:07:20Z",
+  "generated_at": "2026-04-14T05:37:02Z",
   "status": "fail",
   "scoped_status": "fail",
   "ready_keys": [],
@@ -110,8 +110,8 @@
       "blazor-desktop:win-x64:windows"
     ],
     "runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "runbook_generated_at": "2026-04-12T09:07:20Z",
-    "runbook_plan_generated_at": "2026-04-12T09:07:20Z",
+    "runbook_generated_at": "2026-04-14T05:37:02Z",
+    "runbook_plan_generated_at": "2026-04-14T05:37:01Z",
     "runbook_release_channel_generated_at": "2026-04-11T20:20:13Z",
     "runbook_synced": true,
     "runbook_sync_reasons": []
@@ -123,16 +123,256 @@
     "scoped_warning_count": 7,
     "scoped_missing_count": 1,
     "deferred_warning_count": 0,
-    "history_snapshot_count": 13
+    "history_snapshot_count": 14
   },
   "quality_policy": {
     "bar": "top_flagship_grade",
     "whole_project_frontier_required": true,
     "feedback_autofix_loop_required": true,
+    "feedback_loop_release_gate_required": true,
     "accept_lowered_standards": false
+  },
+  "readiness_planes": {
+    "structural_ready": {
+      "status": "warning",
+      "summary": "Structural delivery truth is still incomplete or stale.",
+      "reasons": [
+        "Golden journey overall state is not ready."
+      ],
+      "evidence": {
+        "dispatchable_truth_ready": true,
+        "journey_overall_state": "blocked",
+        "supervisor_recent_enough": true,
+        "runtime_healing_alert_state": "healthy"
+      }
+    },
+    "flagship_ready": {
+      "status": "missing",
+      "summary": "Flagship replacement truth is still stricter than the current structural closure.",
+      "reasons": [
+        "Whole-product coverage still has open flagship gaps: rules_engine_and_import, hub_and_registry, mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, horizons_and_public_surface, fleet_and_operator_loop, desktop_client.",
+        "Flagship parity families are still below gold-ready: custom_data_xml_and_translator_bridge, dense_builder_and_career_workflows, dice_initiative_and_table_utilities, identity_contacts_lifestyles_history, +7 more.",
+        "Structural readiness plane is not ready.",
+        "Veteran readiness plane is not ready.",
+        "Primary-route readiness plane is not ready.",
+        "Dense-workbench readiness plane is not ready."
+      ],
+      "evidence": {
+        "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
+        "registry_present": true,
+        "status_counts": {
+          "documented": 1,
+          "implemented": 7,
+          "task_proven": 3,
+          "veteran_approved": 0,
+          "gold_ready": 0,
+          "unknown": 0
+        },
+        "families_below_task_proven": [
+          "custom_data_xml_and_translator_bridge",
+          "identity_contacts_lifestyles_history",
+          "legacy_and_adjacent_import_oracles",
+          "roster_dashboards_and_multi_character_ops",
+          "settings_and_rules_environment_authoring",
+          "sheet_export_print_viewer_and_exchange",
+          "sourcebooks_reference_and_master_index",
+          "sr6_supplements_designers_and_house_rules"
+        ],
+        "families_below_veteran_approved": [
+          "custom_data_xml_and_translator_bridge",
+          "dense_builder_and_career_workflows",
+          "dice_initiative_and_table_utilities",
+          "identity_contacts_lifestyles_history",
+          "legacy_and_adjacent_import_oracles",
+          "roster_dashboards_and_multi_character_ops",
+          "settings_and_rules_environment_authoring",
+          "sheet_export_print_viewer_and_exchange",
+          "shell_workbench_orientation",
+          "sourcebooks_reference_and_master_index",
+          "sr6_supplements_designers_and_house_rules"
+        ],
+        "families_below_gold_ready": [
+          "custom_data_xml_and_translator_bridge",
+          "dense_builder_and_career_workflows",
+          "dice_initiative_and_table_utilities",
+          "identity_contacts_lifestyles_history",
+          "legacy_and_adjacent_import_oracles",
+          "roster_dashboards_and_multi_character_ops",
+          "settings_and_rules_environment_authoring",
+          "sheet_export_print_viewer_and_exchange",
+          "shell_workbench_orientation",
+          "sourcebooks_reference_and_master_index",
+          "sr6_supplements_designers_and_house_rules"
+        ],
+        "coverage_gap_keys": [
+          "rules_engine_and_import",
+          "hub_and_registry",
+          "mobile_play_shell",
+          "ui_kit_and_flagship_polish",
+          "media_artifacts",
+          "horizons_and_public_surface",
+          "fleet_and_operator_loop",
+          "desktop_client"
+        ],
+        "structural_ready": false,
+        "veteran_ready": false,
+        "primary_route_ready": false,
+        "dense_workbench_ready": false,
+        "feedback_loop_ready": true
+      }
+    },
+    "veteran_ready": {
+      "status": "warning",
+      "summary": "Veteran-orientation proof is still incomplete.",
+      "reasons": [
+        "Flagship parity families are still below veteran-approved: custom_data_xml_and_translator_bridge, dense_builder_and_career_workflows, dice_initiative_and_table_utilities, identity_contacts_lifestyles_history, +7 more."
+      ],
+      "evidence": {
+        "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/VETERAN_FIRST_MINUTE_GATE.yaml",
+        "registry_present": true,
+        "required_landmark_count": 11,
+        "task_count": 4,
+        "visual_gate_ready": true,
+        "families_below_task_proven": [
+          "custom_data_xml_and_translator_bridge",
+          "identity_contacts_lifestyles_history",
+          "legacy_and_adjacent_import_oracles",
+          "roster_dashboards_and_multi_character_ops",
+          "settings_and_rules_environment_authoring",
+          "sheet_export_print_viewer_and_exchange",
+          "sourcebooks_reference_and_master_index",
+          "sr6_supplements_designers_and_house_rules"
+        ],
+        "families_below_veteran_approved": [
+          "custom_data_xml_and_translator_bridge",
+          "dense_builder_and_career_workflows",
+          "dice_initiative_and_table_utilities",
+          "identity_contacts_lifestyles_history",
+          "legacy_and_adjacent_import_oracles",
+          "roster_dashboards_and_multi_character_ops",
+          "settings_and_rules_environment_authoring",
+          "sheet_export_print_viewer_and_exchange",
+          "shell_workbench_orientation",
+          "sourcebooks_reference_and_master_index",
+          "sr6_supplements_designers_and_house_rules"
+        ]
+      }
+    },
+    "primary_route_ready": {
+      "status": "warning",
+      "summary": "Primary-route truth is still incomplete or ambiguous.",
+      "reasons": [
+        "Release channel is still missing required desktop platform/head pairs."
+      ],
+      "evidence": {
+        "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/PRIMARY_ROUTE_REGISTRY.yaml",
+        "registry_present": true,
+        "job_count": 6,
+        "jobs_missing_primary_route": [],
+        "jobs_with_unbounded_fallback": [],
+        "release_channel_missing_required_head_tuples": [],
+        "release_channel_missing_required_platform_head_pairs": [
+          "avalonia:linux",
+          "blazor-desktop:linux"
+        ]
+      }
+    },
+    "dense_workbench_ready": {
+      "status": "warning",
+      "summary": "Dense-workbench proof is still incomplete.",
+      "reasons": [
+        "Desktop flagship coverage is not ready yet."
+      ],
+      "evidence": {
+        "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/DENSE_WORKBENCH_BUDGET.yaml",
+        "registry_present": true,
+        "release_blocking": true,
+        "metric_group_count": 4,
+        "visual_gate_ready": true,
+        "desktop_ready": false,
+        "missing_required_milestone2_test_inventory_count": 0,
+        "reported_missing_required_milestone2_test_count": 0
+      }
+    },
+    "feedback_loop_ready": {
+      "status": "ready",
+      "summary": "Feedback, bug, and crash loops are closure-honest and release-truth-backed.",
+      "reasons": [],
+      "evidence": {
+        "registry_path": "/docker/fleet/.codex-design/product/FEEDBACK_LOOP_RELEASE_GATE.yaml",
+        "registry_present": true,
+        "release_blocking": true,
+        "feedback_progress_email_workflow_path": "/docker/fleet/.codex-design/product/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml",
+        "feedback_progress_email_workflow_present": true,
+        "feedback_progress_email_sender": "wageslave@chummer.run",
+        "feedback_progress_email_stage_ids": [
+          "audited_decision",
+          "fix_available",
+          "request_received"
+        ],
+        "feedback_progress_email_award_keys": [
+          "accepted",
+          "denied"
+        ],
+        "feedback_progress_email_dispatch_tool": "connector.dispatch",
+        "feedback_progress_email_dispatch_action_kind": "delivery.send",
+        "feedback_progress_email_dispatch_channel": "email",
+        "feedback_progress_email_dispatch_provider": "emailit",
+        "feedback_progress_email_required_receipt_state": "sent",
+        "feedback_progress_email_required_receipt_transport": "emailit",
+        "feedback_progress_email_required_receipt_fields": [
+          "case_id",
+          "delivery_id",
+          "from_email",
+          "provider",
+          "recipient",
+          "stage_id",
+          "subject"
+        ],
+        "feedback_progress_email_e2e_gate_present": true,
+        "support_generated_at": "2026-04-14T05:37:01Z",
+        "support_generated_age_seconds": 1,
+        "support_source_refresh_mode": "",
+        "support_open_packet_count": 4,
+        "support_open_non_external_packet_count": 0,
+        "closure_waiting_on_release_truth": 0,
+        "update_required_misrouted_case_count": 0,
+        "non_external_needs_human_response": 0,
+        "non_external_packets_without_named_owner": 0,
+        "non_external_packets_without_lane": 0,
+        "unresolved_external_proof_request_count": 4,
+        "external_proof_runbook_synced": true,
+        "thresholds": {
+          "max_support_packet_age_hours": 24,
+          "max_open_non_external_packets": 0,
+          "max_closure_waiting_on_release_truth": 0,
+          "max_update_required_misrouted_cases": 0,
+          "max_non_external_needs_human_response": 0,
+          "require_named_owner_on_non_external_packets": true,
+          "require_named_lane_on_non_external_packets": true,
+          "allow_cached_packet_refresh_for_gold": false,
+          "allow_external_backlog_only_with_synced_runbook": true,
+          "require_feedback_progress_email_workflow": true,
+          "require_feedback_progress_email_e2e_gate": true,
+          "require_feedback_progress_email_decision_awards": true,
+          "required_feedback_progress_sender_email": "wageslave@chummer.run"
+        }
+      }
+    }
+  },
+  "readiness_plane_summary": {
+    "ready_count": 1,
+    "warning_count": 4,
+    "missing_count": 1
   },
   "source_documents": [
     "FLAGSHIP_PRODUCT_BAR.md",
+    "FLAGSHIP_PARITY_REGISTRY.yaml",
+    "DENSE_WORKBENCH_BUDGET.yaml",
+    "VETERAN_FIRST_MINUTE_GATE.yaml",
+    "PRIMARY_ROUTE_REGISTRY.yaml",
+    "FEEDBACK_LOOP_RELEASE_GATE.yaml",
+    "FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml",
     "DESKTOP_CLIENT_PRODUCT_CUT.md",
     "DESKTOP_PLATFORM_ACCEPTANCE_MATRIX.yaml",
     "SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md",
@@ -145,15 +385,18 @@
   ],
   "acceptance_axes": [
     "primary_path_clarity",
+    "veteran_first_minute_orientation",
     "desktop_familiarity_and_install_continuity",
     "desktop_head_authority_and_fallback_honesty",
+    "dense_workbench_budget",
     "authored_ruleset_experience",
     "dense_data_expert_speed",
     "rule_environment_honesty",
     "trust_and_recovery",
     "premium_public_coherence",
     "cross_surface_design_authorship",
-    "no_step_back_client_parity"
+    "no_step_back_client_parity",
+    "flagship_release_parity_truth"
   ],
   "coverage": {
     "desktop_client": "missing",
@@ -179,6 +422,8 @@
         "Executable gate blocker: Linux gate reason (blazor-desktop): stage promoted_installer_proof_integrity failed",
         "Executable gate blocker: Linux gate reason (blazor-desktop): Linux release-channel proof status is not published.",
         "Linux desktop exit gate proof is missing or not passed.",
+        "Release channel receipt is stale (206209s old; max 86400s).",
+        "Release channel is not simultaneously published, release-proven, and Avalonia-desktop-backed.",
         "Release channel publishes Linux installer media with artifact channel metadata that does not match top-level channelId.",
         "Release channel desktop tuple coverage missingRequiredPlatforms inventory does not match promoted installer tuple reality.",
         "Release channel is missing required desktop platform/head installer tuple pair(s): avalonia:linux, blazor-desktop:linux.",
@@ -242,14 +487,14 @@
         ],
         "ui_executable_gate_freshness_max_age_seconds": 86400,
         "ui_executable_gate_freshness_proof_age_seconds": {
-          "flagship UI release gate proof_age_seconds": 165,
-          "desktop workflow execution gate proof_age_seconds": 164,
-          "desktop visual familiarity gate proof_age_seconds": 164
+          "flagship UI release gate proof_age_seconds": 212,
+          "desktop workflow execution gate proof_age_seconds": 212,
+          "desktop visual familiarity gate proof_age_seconds": 212
         },
         "ui_executable_gate_freshness_issue_count": 0,
         "ui_executable_gate_freshness_issues": [],
-        "ui_executable_gate_generated_at": "2026-04-11T19:52:08.872315Z",
-        "ui_executable_gate_age_seconds": 47711,
+        "ui_executable_gate_generated_at": "2026-04-12T15:52:40.844326Z",
+        "ui_executable_gate_age_seconds": 135861,
         "ui_linux_exit_gate_status": "failed",
         "ui_windows_exit_gate_status": "failed",
         "ui_windows_exit_gate_payload_marker_present": false,
@@ -366,9 +611,9 @@
         "release_channel_status": "published",
         "release_channel_release_proof_status": "passed",
         "release_channel_generated_at": "2026-04-11T20:20:13Z",
-        "release_channel_age_seconds": 46027,
+        "release_channel_age_seconds": 206209,
         "release_channel_freshness_max_age_seconds": 86400,
-        "release_channel_freshness_ok": true,
+        "release_channel_freshness_ok": false,
         "release_channel_id": "preview",
         "release_channel_heads": [
           "avalonia",
@@ -525,7 +770,7 @@
         "install_claim_restore_continue": "blocked",
         "build_explain_publish": "blocked",
         "install_claim_restore_continue_external_blocking_reason_count": 7,
-        "install_claim_restore_continue_local_blocking_reason_count": 13,
+        "install_claim_restore_continue_local_blocking_reason_count": 14,
         "install_claim_restore_continue_external_proof_request_count": 4,
         "install_claim_restore_continue_external_proof_request_hosts": [
           "macos",
@@ -705,7 +950,7 @@
         "ui_executable_exit_gate_local_blocking_findings_count": 10,
         "install_claim_restore_continue_blocked_by_external_constraints_only": false,
         "build_explain_publish_external_blocking_reason_count": 0,
-        "build_explain_publish_local_blocking_reason_count": 9,
+        "build_explain_publish_local_blocking_reason_count": 10,
         "build_explain_publish_blocked_by_external_constraints_only": false
       }
     },
@@ -751,7 +996,7 @@
         "report_cluster_release_notify": "blocked",
         "report_cluster_release_notify_blocked_by_external_constraints_only": false,
         "report_cluster_release_notify_external_blocking_reason_count": 4,
-        "report_cluster_release_notify_local_blocking_reason_count": 15,
+        "report_cluster_release_notify_local_blocking_reason_count": 18,
         "report_cluster_release_notify_external_proof_request_count": 4
       }
     },
@@ -759,14 +1004,15 @@
       "status": "warning",
       "summary": "Mobile and live-play flagship proof is still incomplete.",
       "reasons": [
-        "Campaign/recover/recap journey is blocked, not ready."
+        "Campaign/recover/recap journey is blocked, not ready.",
+        "Recover-from-sync-conflict journey is blocked, not ready."
       ],
       "evidence": {
         "mobile_stage": "publicly_promoted",
         "mobile_promotion": "public",
         "mobile_local_release_status": "passed",
         "campaign_session_recover_recap": "blocked",
-        "recover_from_sync_conflict": "ready"
+        "recover_from_sync_conflict": "blocked"
       }
     },
     "ui_kit_and_flagship_polish": {
@@ -802,17 +1048,16 @@
       "summary": "Horizons and public-surface flagship proof is still incomplete.",
       "reasons": [
         "Install/claim/restore journey is blocked, not ready.",
-        "Report/cluster/release/notify journey is blocked, not ready.",
-        "Fleet design mirror is missing horizon canon files: FOUNDATIONS.md, edition-studio.md, onramp.md, quicksilver.md, run-control.md."
+        "Report/cluster/release/notify journey is blocked, not ready."
       ],
       "evidence": {
         "public_group_deployment_status": "public",
-        "progress_report_generated_at": "2026-04-12T08:31:09Z",
+        "progress_report_generated_at": "2026-04-13T20:25:51Z",
         "install_claim_restore_continue": "blocked",
         "report_cluster_release_notify": "blocked",
         "report_cluster_release_notify_blocked_by_external_constraints_only": false,
         "report_cluster_release_notify_external_blocking_reason_count": 4,
-        "report_cluster_release_notify_local_blocking_reason_count": 15,
+        "report_cluster_release_notify_local_blocking_reason_count": 18,
         "report_cluster_release_notify_external_proof_request_count": 4,
         "acceptance_path": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
         "flagship_bar_mirror_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_BAR.md",
@@ -821,14 +1066,8 @@
         "horizons_overview_mirror_exists": true,
         "required_desktop_canon_missing_names": [],
         "canonical_horizon_doc_count": 16,
-        "mirror_horizon_doc_count": 11,
-        "missing_mirror_horizon_doc_names": [
-          "FOUNDATIONS.md",
-          "edition-studio.md",
-          "onramp.md",
-          "quicksilver.md",
-          "run-control.md"
-        ],
+        "mirror_horizon_doc_count": 16,
+        "missing_mirror_horizon_doc_names": [],
         "surface_design_review_loop_path": "/docker/fleet/.codex-design/product/SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md",
         "chummer5a_familiarity_bridge_path": "/docker/fleet/.codex-design/product/CHUMMER5A_FAMILIARITY_BRIDGE.md",
         "desktop_executable_exit_gates_path": "/docker/fleet/.codex-design/product/DESKTOP_EXECUTABLE_EXIT_GATES.md",
@@ -854,31 +1093,38 @@
         "runtime_healing_override_stale_incident": false,
         "journey_overall_state": "blocked",
         "journey_blocked_external_only_count": 0,
-        "journey_blocked_with_local_count": 4,
-        "history_snapshot_count": 13,
-        "support_packets_generated_at": "2026-04-12T09:07:20Z",
+        "journey_blocked_with_local_count": 6,
+        "history_snapshot_count": 14,
+        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "support_packets_generated_age_seconds": 1,
+        "support_packets_refresh_mode": "",
         "support_open_packet_count": 4,
         "support_open_non_external_packet_count": 0,
+        "support_closure_waiting_on_release_truth": 0,
+        "support_update_required_misrouted_case_count": 0,
+        "support_non_external_needs_human_response_count": 0,
+        "support_non_external_packets_without_named_owner": 0,
+        "support_non_external_packets_without_lane": 0,
         "external_proof_backlog_request_count": 4,
         "external_proof_backlog_request_observation_count": 8,
         "external_proof_backlog_duplicate_observation_count": 4,
         "external_proof_runbook_path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        "external_proof_runbook_generated_at": "2026-04-12T09:07:20Z",
-        "external_proof_runbook_plan_generated_at": "2026-04-12T09:07:20Z",
+        "external_proof_runbook_generated_at": "2026-04-14T05:37:02Z",
+        "external_proof_runbook_plan_generated_at": "2026-04-14T05:37:01Z",
         "external_proof_runbook_release_channel_generated_at": "2026-04-11T20:20:13Z",
         "external_proof_runbook_synced": true,
         "external_proof_runbook_sync_issue_count": 0,
         "dispatchable_truth_ready": true,
-        "active_shards_path": "/docker/fleet/state/chummer_design_supervisor/active_shards.json",
-        "active_shards_generated_at": "2026-04-12T09:06:43.068425+00:00",
+        "active_shards_path": "/var/lib/codex-fleet/chummer_design_supervisor/active_shards.json",
+        "active_shards_generated_at": "2026-04-14T05:37:00Z",
         "active_shards_manifest_kind": "configured_shard_topology",
-        "active_shards_count": 0,
+        "active_shards_count": 7,
         "configured_shards_count": 13,
         "active_shards_recent": true,
         "supervisor_mode": "sharded",
         "supervisor_completion_status": "fail",
         "supervisor_completion_external_only": false,
-        "supervisor_updated_at": "2026-04-12T09:07:05Z",
+        "supervisor_updated_at": "2026-04-14T05:36:50Z",
         "supervisor_recent_enough": true,
         "supervisor_focus_profiles": [
           "top_flagship_grade",
@@ -915,17 +1161,70 @@
     "unresolved_family_ids": [],
     "unresolved_families": []
   },
+  "flagship_parity_registry": {
+    "path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
+    "status_counts": {
+      "documented": 1,
+      "implemented": 7,
+      "task_proven": 3,
+      "veteran_approved": 0,
+      "gold_ready": 0,
+      "unknown": 0
+    },
+    "family_count": 11,
+    "families_below_task_proven": [
+      "custom_data_xml_and_translator_bridge",
+      "identity_contacts_lifestyles_history",
+      "legacy_and_adjacent_import_oracles",
+      "roster_dashboards_and_multi_character_ops",
+      "settings_and_rules_environment_authoring",
+      "sheet_export_print_viewer_and_exchange",
+      "sourcebooks_reference_and_master_index",
+      "sr6_supplements_designers_and_house_rules"
+    ],
+    "families_below_veteran_approved": [
+      "custom_data_xml_and_translator_bridge",
+      "dense_builder_and_career_workflows",
+      "dice_initiative_and_table_utilities",
+      "identity_contacts_lifestyles_history",
+      "legacy_and_adjacent_import_oracles",
+      "roster_dashboards_and_multi_character_ops",
+      "settings_and_rules_environment_authoring",
+      "sheet_export_print_viewer_and_exchange",
+      "shell_workbench_orientation",
+      "sourcebooks_reference_and_master_index",
+      "sr6_supplements_designers_and_house_rules"
+    ],
+    "families_below_gold_ready": [
+      "custom_data_xml_and_translator_bridge",
+      "dense_builder_and_career_workflows",
+      "dice_initiative_and_table_utilities",
+      "identity_contacts_lifestyles_history",
+      "legacy_and_adjacent_import_oracles",
+      "roster_dashboards_and_multi_character_ops",
+      "settings_and_rules_environment_authoring",
+      "sheet_export_print_viewer_and_exchange",
+      "shell_workbench_orientation",
+      "sourcebooks_reference_and_master_index",
+      "sr6_supplements_designers_and_house_rules"
+    ]
+  },
   "evidence_sources": {
     "acceptance": "/docker/fleet/.codex-design/product/FLAGSHIP_RELEASE_ACCEPTANCE.yaml",
     "parity_registry": "/docker/fleet/.codex-design/product/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
+    "flagship_parity_registry": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
+    "dense_workbench_budget": "/docker/chummercomplete/chummer-design/products/chummer/DENSE_WORKBENCH_BUDGET.yaml",
+    "veteran_first_minute_gate": "/docker/chummercomplete/chummer-design/products/chummer/VETERAN_FIRST_MINUTE_GATE.yaml",
+    "primary_route_registry": "/docker/chummercomplete/chummer-design/products/chummer/PRIMARY_ROUTE_REGISTRY.yaml",
+    "feedback_loop_release_gate": "/docker/fleet/.codex-design/product/FEEDBACK_LOOP_RELEASE_GATE.yaml",
     "status_plane": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
     "progress_report": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
     "progress_history": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "external_proof_runbook": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-    "supervisor_state": "/docker/fleet/state/chummer_design_supervisor/state.json",
-    "active_shards": "/docker/fleet/state/chummer_design_supervisor/active_shards.json",
+    "supervisor_state": "/var/lib/codex-fleet/chummer_design_supervisor/state.json",
+    "active_shards": "/var/lib/codex-fleet/chummer_design_supervisor/active_shards.json",
     "ooda_state": "/docker/fleet/state/design_supervisor_ooda/current_8h/state.json",
     "ui_local_release_proof": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json",
     "ui_executable_exit_gate": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",

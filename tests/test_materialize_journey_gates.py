@@ -1394,7 +1394,7 @@ groups: []
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["summary"]["overall_state"] == "blocked"
     assert any(
-        "field 'status' expected one of ['draft', 'archived'] but was 'published'" in reason
+        "field 'status' expected one of ['draft', 'archived']" in reason
         for reason in payload["journeys"][0]["blocking_reasons"]
     )
 

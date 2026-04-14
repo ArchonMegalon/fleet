@@ -1799,27 +1799,23 @@ def has_ea_runtime_credentials(_: Any) -> bool:
 
 
 def resolved_ea_runtime_settings() -> Dict[str, str]:
-    base_url = str(os.environ.get("EA_BASE_URL") or os.environ.get("EA_MCP_BASE_URL") or "").strip()
-    api_token = str(os.environ.get("EA_API_TOKEN") or os.environ.get("EA_MCP_API_TOKEN") or "").strip()
-    principal_id = str(os.environ.get("EA_PRINCIPAL_ID") or os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+    base_url = str(os.environ.get("EA_MCP_BASE_URL") or "").strip()
+    api_token = str(os.environ.get("EA_MCP_API_TOKEN") or "").strip()
+    principal_id = str(os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
     if not base_url:
-        base_url, _ = runtime_env_value("EA_BASE_URL", "EA_MCP_BASE_URL")
+        base_url, _ = runtime_env_value("EA_MCP_BASE_URL", "EA_BASE_URL")
     if not api_token:
-        api_token, _ = runtime_env_value("EA_API_TOKEN", "EA_MCP_API_TOKEN")
+        api_token, _ = runtime_env_value("EA_MCP_API_TOKEN", "EA_API_TOKEN")
     if not principal_id:
-        principal_id, _ = runtime_env_value("EA_PRINCIPAL_ID", "EA_MCP_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID")
+        principal_id, _ = runtime_env_value("EA_MCP_PRINCIPAL_ID", "EA_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID")
     runtime_ea_env_candidates = []
     if "FLEET_RUNTIME_EA_ENV_PATH" in os.environ:
         runtime_ea_env_candidates.append(os.environ.get("FLEET_RUNTIME_EA_ENV_PATH", "").strip())
     if "CODEXEA_RUNTIME_EA_ENV_PATH" in os.environ:
         runtime_ea_env_candidates.append(os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH", "").strip())
-    if not runtime_ea_env_candidates:
-        runtime_ea_env_candidates = ["/docker/fleet/runtime.ea.env"]
     runtime_env_candidates = []
     if "FLEET_RUNTIME_ENV_PATH" in os.environ:
         runtime_env_candidates.append(os.environ.get("FLEET_RUNTIME_ENV_PATH", "").strip())
-    if not runtime_env_candidates:
-        runtime_env_candidates = ["/docker/fleet/runtime.env"]
     runtime_ea_env_path = str(next((path for path in runtime_ea_env_candidates if path.strip()), "/docker/fleet/runtime.ea.env"))
     runtime_env_path = str(next((path for path in runtime_env_candidates if path.strip()), "/docker/fleet/runtime.env"))
     if not principal_id:
@@ -1838,10 +1834,6 @@ def runtime_env_value(*names: str) -> Tuple[str, Optional[pathlib.Path]]:
     runtime_candidates = [
         os.environ.get("FLEET_RUNTIME_EA_ENV_PATH"),
         os.environ.get("CODEXEA_RUNTIME_EA_ENV_PATH"),
-        "/docker/fleet/runtime.ea.env",
-        "/docker/fleet/runtime.env",
-        "/docker/fleet/.env",
-        "/docker/.env",
     ]
     runtime_candidates = [path for path in runtime_candidates if str(path or "").strip()]
     unique = []

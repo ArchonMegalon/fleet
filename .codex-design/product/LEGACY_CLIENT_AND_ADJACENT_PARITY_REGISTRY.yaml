@@ -25,6 +25,10 @@ policy:
     - Modern successors may consolidate or improve legacy forms when the same user job stays first-class, faster, and more explainable.
     - No in-scope feature family may be stranded behind a missing action, support-only workaround, or operator ritual.
     - A family may be marked covered when Fleet records a proof-backed successor route that keeps the user job first-class even if the modern surface is consolidated.
+  release_truth_rule:
+    - "`covered` is a structural parity state, not a flagship release state."
+    - Release-facing parity truth is tracked in `FLAGSHIP_PARITY_REGISTRY.yaml` using the stricter `documented` -> `implemented` -> `task_proven` -> `veteran_approved` -> `gold_ready` ladder.
+    - A flagship replacement claim must clear the release-facing registry even when every family here is marked `covered`.
 families:
   - id: shell_workbench_orientation
     sources:

@@ -75,6 +75,9 @@ But every feature family that remains in product scope must satisfy one of these
 * `partial`: a modern equivalent exists in fragments, but the family is not yet explicit, complete, or release-gated
 * `missing`: current canon does not yet name the family strongly enough for a no-step-back claim
 
+Those states are structural parity truth, not release truth.
+Flagship replacement readiness now lives in `FLAGSHIP_PARITY_REGISTRY.yaml`, which uses the stricter release-facing ladder `documented` -> `implemented` -> `task_proven` -> `veteran_approved` -> `gold_ready`.
+
 ## Family matrix
 
 | Family | Legacy / adjacent expectation | Current Chummer6 design equivalent | Status | Active milestone closure |
@@ -92,7 +95,7 @@ But every feature family that remains in product scope must satisfy one of these
 | SR6 supplement coverage, designer tools, online storage, house-rule support, metaindex | Genesis/CommLink6 supplement matrix, spell/vehicle/cyberdeck/drug/quality designers, online storage, better house rules | SR6 successor posture now has explicit tool-catalog projection for supplement/designer/house-rule lanes, online-storage continuity receipt posture/coverage, and unified SR6 successor lane receipts from Hub/mobile release-proof artifacts; the desktop `master_index` dialog now surfaces online-storage lane posture plus explicit coverage, SR6 supplement posture, designer tool-lane posture, designer family coverage, house-rule posture plus overlay counts, and successor receipts directly on the flagship desktop lane; full authored-designer and storage UX closure are now additive rather than parity-blocking | covered | `18` |
 
 Rows marked `covered` can still have additive expansion work.
-That no longer blocks the no-step-back parity claim because the current successor routes are explicit and proof-backed in Fleet's flagship readiness audit.
+They can also still be release-blocking for flagship replacement if the harder release-facing registry has not yet reached `veteran_approved` or `gold_ready`.
 
 ## New canon decisions
 

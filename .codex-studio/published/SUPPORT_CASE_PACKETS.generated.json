@@ -1,6 +1,6 @@
 {
   "contract_name": "fleet.support_case_packets",
-  "generated_at": "2026-04-12T09:07:20Z",
+  "generated_at": "2026-04-14T05:37:01Z",
   "packets": [
     {
       "affected_canon_files": [],
@@ -376,7 +376,11 @@
       "ops": 4
     },
     "needs_human_response": 4,
+    "non_external_needs_human_response": 0,
+    "non_external_packets_without_lane": 0,
+    "non_external_packets_without_named_owner": 0,
     "open_case_count": 0,
+    "open_non_external_packet_count": 0,
     "open_packet_count": 4,
     "operator_packet_count": 4,
     "owner_repo_counts": {
@@ -385,6 +389,7 @@
     "status_counts": {
       "awaiting_evidence": 4
     },
+    "support_case_backed_open_count": 0,
     "unresolved_external_proof_request_count": 4,
     "unresolved_external_proof_request_host_counts": {
       "linux": 2,
@@ -688,7 +693,7 @@
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-04-12T20:20:13Z",
-    "generated_at": "2026-04-12T09:07:20Z",
+    "generated_at": "2026-04-14T05:37:01Z",
     "host_groups": {
       "linux": {
         "request_count": 2,

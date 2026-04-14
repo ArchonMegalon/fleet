@@ -33,7 +33,7 @@ UTC = dt.timezone.utc
 ROOT = Path("/docker/fleet")
 
 DEFAULT_OUT = ROOT / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
-DEFAULT_MIRROR_OUT = ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+DEFAULT_MIRROR_OUT = ROOT / "state" / "chummer_design_supervisor" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 DEFAULT_ACCEPTANCE = ROOT / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
 DEFAULT_FLAGSHIP_BAR = ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_BAR.md"
 DEFAULT_HORIZONS_OVERVIEW = ROOT / ".codex-design" / "product" / "HORIZONS.md"
@@ -44,6 +44,30 @@ CANONICAL_HORIZONS_DIR = Path("/docker/chummercomplete/chummer-design/products/c
 DEFAULT_PARITY_REGISTRY = ROOT / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
 CANONICAL_PARITY_REGISTRY = Path(
     "/docker/chummercomplete/chummer-design/products/chummer/LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml"
+)
+DEFAULT_FLAGSHIP_PARITY_REGISTRY = ROOT / ".codex-design" / "product" / "FLAGSHIP_PARITY_REGISTRY.yaml"
+CANONICAL_FLAGSHIP_PARITY_REGISTRY = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml"
+)
+DEFAULT_FEEDBACK_LOOP_RELEASE_GATE = ROOT / ".codex-design" / "product" / "FEEDBACK_LOOP_RELEASE_GATE.yaml"
+CANONICAL_FEEDBACK_LOOP_RELEASE_GATE = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_LOOP_RELEASE_GATE.yaml"
+)
+DEFAULT_FEEDBACK_PROGRESS_EMAIL_WORKFLOW = ROOT / ".codex-design" / "product" / "FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"
+CANONICAL_FEEDBACK_PROGRESS_EMAIL_WORKFLOW = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"
+)
+DEFAULT_DENSE_WORKBENCH_BUDGET = ROOT / ".codex-design" / "product" / "DENSE_WORKBENCH_BUDGET.yaml"
+CANONICAL_DENSE_WORKBENCH_BUDGET = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/DENSE_WORKBENCH_BUDGET.yaml"
+)
+DEFAULT_VETERAN_FIRST_MINUTE_GATE = ROOT / ".codex-design" / "product" / "VETERAN_FIRST_MINUTE_GATE.yaml"
+CANONICAL_VETERAN_FIRST_MINUTE_GATE = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/VETERAN_FIRST_MINUTE_GATE.yaml"
+)
+DEFAULT_PRIMARY_ROUTE_REGISTRY = ROOT / ".codex-design" / "product" / "PRIMARY_ROUTE_REGISTRY.yaml"
+CANONICAL_PRIMARY_ROUTE_REGISTRY = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/PRIMARY_ROUTE_REGISTRY.yaml"
 )
 DEFAULT_STATUS_PLANE = ROOT / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
 DEFAULT_PROGRESS_REPORT = ROOT / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
@@ -157,10 +181,32 @@ def _runtime_env_list(key: str, *, repo_root: Path | None = None) -> List[str]:
 
 
 def _ignore_nonlinux_desktop_host_proof_blockers_enabled(*, repo_root: Path | None = None) -> bool:
-    direct = _runtime_env_value(
-        "CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS",
-        repo_root=repo_root,
-    )
+    env_key = "CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"
+    if repo_root is None or repo_root.resolve() == ROOT.resolve():
+        direct = str(os.environ.get(env_key, "") or "").strip()
+        if direct:
+            return direct.lower() in {"1", "true", "yes", "on"}
+    direct = ""
+    for candidate in _runtime_env_candidates(repo_root):
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            lines = candidate.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[7:].strip()
+            current_key, value = line.split("=", 1)
+            if current_key.strip() != env_key:
+                continue
+            direct = value.strip().strip("'").strip('"')
+            break
+        if direct:
+            break
     return direct.lower() in {"1", "true", "yes", "on"}
 RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS = 24 * 3600
 DESKTOP_EXECUTABLE_GATE_REQUIRED_PROOF_AGE_KEYS = (
@@ -232,6 +278,7 @@ DESKTOP_VISUAL_FAMILIARITY_SEMANTIC_KEY_ALIASES = {
         "runtime_backed_legacy_workbench",
     ),
 }
+SUPPORT_NEEDS_HUMAN_RESPONSE_STATUSES = {"new", "clustered", "awaiting_evidence"}
 DESKTOP_VISUAL_FAMILIARITY_HARD_BAR_SEMANTIC_REQUIREMENTS = {
     "Opening_mainframe_preserves_chummer5a_successor_workbench_posture": (
         "runtimeBackedLegacyWorkbench",
@@ -267,6 +314,13 @@ MEDIA_PROOF_CANDIDATES = (
     Path("/docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_CAMPAIGN_OS_LOCAL_PROOF.generated.json"),
 )
 PARITY_BLOCKING_STATUSES = {"missing", "partial", "warning", "blocked", "fail", "failed"}
+FLAGSHIP_PARITY_RELEASE_STATUS_ORDER = {
+    "documented": 0,
+    "implemented": 1,
+    "task_proven": 2,
+    "veteran_approved": 3,
+    "gold_ready": 4,
+}
 PARITY_DESKTOP_FAMILY_IDS = {
     "shell_workbench_orientation",
     "dense_builder_and_career_workflows",
@@ -309,6 +363,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--parity-registry",
         default=str(DEFAULT_PARITY_REGISTRY),
         help="path to LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
+    )
+    parser.add_argument(
+        "--feedback-loop-gate",
+        default=str(DEFAULT_FEEDBACK_LOOP_RELEASE_GATE),
+        help="path to FEEDBACK_LOOP_RELEASE_GATE.yaml",
     )
     parser.add_argument("--status-plane", default=str(DEFAULT_STATUS_PLANE), help="path to STATUS_PLANE.generated.yaml")
     parser.add_argument("--progress-report", default=str(DEFAULT_PROGRESS_REPORT), help="path to PROGRESS_REPORT.generated.json")
@@ -474,7 +533,10 @@ def load_json(path: Path) -> Dict[str, Any]:
 def load_yaml(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         return {}
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
     return payload if isinstance(payload, dict) else {}
 
 
@@ -485,6 +547,43 @@ def load_text(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except OSError:
         return ""
+
+
+def _boolish(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    raw = str(value).strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _nonnegative_int(value: Any, default: int = 0) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
+def _support_packet_is_non_external(packet: Dict[str, Any]) -> bool:
+    install_diagnosis = packet.get("install_diagnosis")
+    if isinstance(install_diagnosis, dict) and bool(install_diagnosis.get("external_proof_required")):
+        return False
+    packet_kind = str(packet.get("packet_kind") or packet.get("kind") or "").strip().lower()
+    return packet_kind != "external_proof_request"
+
+
+def _support_packet_needs_human_response(packet: Dict[str, Any]) -> bool:
+    return str(packet.get("status") or "").strip().lower() in SUPPORT_NEEDS_HUMAN_RESPONSE_STATUSES
 
 
 def extract_runbook_field(markdown: str, key: str) -> str:
@@ -533,6 +632,291 @@ def _path_is_within(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _feedback_loop_readiness_plane(
+    *,
+    feedback_loop_gate: Dict[str, Any],
+    gate_path: Path,
+    feedback_progress_email_workflow: Dict[str, Any],
+    feedback_progress_email_workflow_path: Path,
+    support_packets: Dict[str, Any],
+    support_open_packet_count: int,
+    support_open_non_external_packet_count: int,
+    support_generated_at: str,
+    support_generated_age_seconds: int | None,
+    support_source_refresh_mode: str,
+    support_closure_waiting_on_release_truth: int,
+    support_update_required_misrouted_case_count: int,
+    support_non_external_needs_human_response_count: int,
+    support_non_external_packets_without_named_owner: int,
+    support_non_external_packets_without_lane: int,
+    unresolved_external_requests: int,
+    external_runbook_synced: bool,
+) -> tuple[str, Dict[str, Any]]:
+    thresholds = (
+        feedback_loop_gate.get("thresholds")
+        if isinstance(feedback_loop_gate.get("thresholds"), dict)
+        else {}
+    )
+    max_support_packet_age_hours = _nonnegative_int(thresholds.get("max_support_packet_age_hours"), 24)
+    max_open_non_external_packets = _nonnegative_int(thresholds.get("max_open_non_external_packets"), 0)
+    max_closure_waiting_on_release_truth = _nonnegative_int(
+        thresholds.get("max_closure_waiting_on_release_truth"), 0
+    )
+    max_update_required_misrouted_cases = _nonnegative_int(
+        thresholds.get("max_update_required_misrouted_cases"), 0
+    )
+    max_non_external_needs_human_response = _nonnegative_int(
+        thresholds.get("max_non_external_needs_human_response"), 0
+    )
+    require_named_owner_on_non_external_packets = _boolish(
+        thresholds.get("require_named_owner_on_non_external_packets"), default=True
+    )
+    require_named_lane_on_non_external_packets = _boolish(
+        thresholds.get("require_named_lane_on_non_external_packets"), default=True
+    )
+    allow_cached_packet_refresh_for_gold = _boolish(
+        thresholds.get("allow_cached_packet_refresh_for_gold"), default=False
+    )
+    allow_external_backlog_only_with_synced_runbook = _boolish(
+        thresholds.get("allow_external_backlog_only_with_synced_runbook"), default=True
+    )
+    require_feedback_progress_email_workflow = _boolish(
+        thresholds.get("require_feedback_progress_email_workflow"), default=True
+    )
+    require_feedback_progress_email_e2e_gate = _boolish(
+        thresholds.get("require_feedback_progress_email_e2e_gate"), default=True
+    )
+    require_feedback_progress_email_decision_awards = _boolish(
+        thresholds.get("require_feedback_progress_email_decision_awards"), default=True
+    )
+    required_feedback_progress_sender_email = str(
+        thresholds.get("required_feedback_progress_sender_email") or "wageslave@chummer.run"
+    ).strip().lower()
+    release_blocking = _boolish(feedback_loop_gate.get("release_blocking"), default=False)
+
+    workflow_sender_email = str(
+        (((feedback_progress_email_workflow.get("delivery_plane") or {}).get("sender_identity") or {}).get("from_email") or "")
+    ).strip().lower()
+    workflow_stages = {
+        str(item.get("id") or "").strip().lower(): dict(item)
+        for item in _dict_rows(feedback_progress_email_workflow.get("stages"))
+        if str(item.get("id") or "").strip()
+    }
+    workflow_awards = (
+        feedback_progress_email_workflow.get("decision_awards")
+        if isinstance(feedback_progress_email_workflow.get("decision_awards"), dict)
+        else {}
+    )
+    workflow_dispatch_contract = (
+        (feedback_progress_email_workflow.get("delivery_plane") or {}).get("dispatch_contract")
+        if isinstance((feedback_progress_email_workflow.get("delivery_plane") or {}).get("dispatch_contract"), dict)
+        else {}
+    )
+    workflow_e2e_gate = (
+        feedback_progress_email_workflow.get("e2e_gate")
+        if isinstance(feedback_progress_email_workflow.get("e2e_gate"), dict)
+        else {}
+    )
+
+    reasons: List[str] = []
+    if not feedback_loop_gate:
+        reasons.append("Feedback loop release gate registry is missing.")
+    elif not release_blocking:
+        reasons.append("Feedback loop release gate is not marked release-blocking.")
+    if not support_generated_at:
+        reasons.append("Support-case packets are missing a generated_at timestamp.")
+    elif support_generated_age_seconds is None:
+        reasons.append("Support-case packets generated_at is unreadable.")
+    elif support_generated_age_seconds > max_support_packet_age_hours * 3600:
+        reasons.append(
+            f"Support-case packets are older than {max_support_packet_age_hours}h; closure truth is stale."
+        )
+    if support_source_refresh_mode and not allow_cached_packet_refresh_for_gold:
+        reasons.append(
+            f"Support-case packets are running in {support_source_refresh_mode} mode instead of fresh source truth."
+        )
+    if support_open_non_external_packet_count > max_open_non_external_packets:
+        reasons.append(
+            "Non-external open packets still exceed the gold closure budget: "
+            f"{support_open_non_external_packet_count} > {max_open_non_external_packets}."
+        )
+    if support_closure_waiting_on_release_truth > max_closure_waiting_on_release_truth:
+        reasons.append(
+            "Cases are still waiting on release-truth-backed closure: "
+            f"{support_closure_waiting_on_release_truth} > {max_closure_waiting_on_release_truth}."
+        )
+    if support_update_required_misrouted_case_count > max_update_required_misrouted_cases:
+        reasons.append(
+            "Update-required cases are still misrouted away from downloads or updater recovery: "
+            f"{support_update_required_misrouted_case_count} > {max_update_required_misrouted_cases}."
+        )
+    if support_non_external_needs_human_response_count > max_non_external_needs_human_response:
+        reasons.append(
+            "Non-external support backlog still needs a human or grounded response: "
+            f"{support_non_external_needs_human_response_count} > {max_non_external_needs_human_response}."
+        )
+    if require_named_owner_on_non_external_packets and support_non_external_packets_without_named_owner > 0:
+        reasons.append(
+            f"{support_non_external_packets_without_named_owner} non-external open packets still lack a named owner repo."
+        )
+    if require_named_lane_on_non_external_packets and support_non_external_packets_without_lane > 0:
+        reasons.append(
+            f"{support_non_external_packets_without_lane} non-external open packets still lack a concrete next lane."
+        )
+    if (
+        unresolved_external_requests > 0
+        and allow_external_backlog_only_with_synced_runbook
+        and not external_runbook_synced
+    ):
+        reasons.append("External-host proof backlog is still open without a synced runbook.")
+    if require_feedback_progress_email_workflow and not feedback_progress_email_workflow:
+        reasons.append("Feedback progress email workflow registry is missing.")
+    if feedback_progress_email_workflow:
+        for stage_id in ("request_received", "audited_decision", "fix_available"):
+            if stage_id not in workflow_stages:
+                reasons.append(f"Feedback progress email workflow is missing the `{stage_id}` stage.")
+    if required_feedback_progress_sender_email and workflow_sender_email != required_feedback_progress_sender_email:
+        reasons.append(
+            "Feedback progress email workflow sender drifted away from the required identity: "
+            f"{workflow_sender_email or '(missing)'} != {required_feedback_progress_sender_email}."
+        )
+    if require_feedback_progress_email_decision_awards and (
+        "accepted" not in workflow_awards or "denied" not in workflow_awards
+    ):
+        reasons.append("Feedback progress email workflow is missing the accepted or denied decision awards.")
+    dispatch_required_receipt_fields = {
+        str(item or "").strip()
+        for item in _as_string_list(workflow_dispatch_contract.get("required_receipt_fields"))
+        if str(item or "").strip()
+    }
+    if feedback_progress_email_workflow:
+        if str(workflow_dispatch_contract.get("tool_name") or "").strip() != "connector.dispatch":
+            reasons.append("Feedback progress email workflow does not require EA connector.dispatch.")
+        if str(workflow_dispatch_contract.get("action_kind") or "").strip() != "delivery.send":
+            reasons.append("Feedback progress email workflow does not require delivery.send action kind.")
+        if str(workflow_dispatch_contract.get("channel") or "").strip().lower() != "email":
+            reasons.append("Feedback progress email workflow does not lock the channel to email.")
+        if str(workflow_dispatch_contract.get("preferred_provider") or "").strip().lower() != "emailit":
+            reasons.append("Feedback progress email workflow does not require Emailit as the preferred provider.")
+        if str(workflow_dispatch_contract.get("required_receipt_state") or "").strip().lower() != "sent":
+            reasons.append("Feedback progress email workflow does not require sent receipts.")
+        if str(workflow_dispatch_contract.get("required_receipt_transport") or "").strip().lower() != "emailit":
+            reasons.append("Feedback progress email workflow does not require Emailit transport receipts.")
+        if not {"delivery_id", "stage_id", "case_id", "recipient", "from_email", "subject", "provider"}.issubset(
+            dispatch_required_receipt_fields
+        ):
+            reasons.append("Feedback progress email workflow does not require the full sent-receipt metadata set.")
+    if require_feedback_progress_email_e2e_gate:
+        if not workflow_e2e_gate:
+            reasons.append("Feedback progress email workflow E2E gate is missing.")
+        else:
+            required_sequence = [
+                str(item or "").strip().lower()
+                for item in _as_string_list(workflow_e2e_gate.get("required_stage_sequence"))
+                if str(item or "").strip()
+            ]
+            if required_sequence != ["request_received", "audited_decision", "fix_available"]:
+                reasons.append("Feedback progress email workflow E2E gate does not require the full staged send sequence.")
+            if not _boolish(workflow_e2e_gate.get("fail_closed"), default=False):
+                reasons.append("Feedback progress email workflow E2E gate is not fail-closed.")
+
+    positives = (
+        int(bool(feedback_loop_gate))
+        + int(release_blocking)
+        + int((not require_feedback_progress_email_workflow) or bool(feedback_progress_email_workflow))
+        + int(all(stage_id in workflow_stages for stage_id in ("request_received", "audited_decision", "fix_available")))
+        + int(not required_feedback_progress_sender_email or workflow_sender_email == required_feedback_progress_sender_email)
+        + int((not require_feedback_progress_email_decision_awards) or ("accepted" in workflow_awards and "denied" in workflow_awards))
+        + int(bool(feedback_progress_email_workflow) and str(workflow_dispatch_contract.get("tool_name") or "").strip() == "connector.dispatch")
+        + int(bool(feedback_progress_email_workflow) and str(workflow_dispatch_contract.get("action_kind") or "").strip() == "delivery.send")
+        + int(bool(feedback_progress_email_workflow) and str(workflow_dispatch_contract.get("channel") or "").strip().lower() == "email")
+        + int(bool(feedback_progress_email_workflow) and str(workflow_dispatch_contract.get("preferred_provider") or "").strip().lower() == "emailit")
+        + int(bool(feedback_progress_email_workflow) and str(workflow_dispatch_contract.get("required_receipt_state") or "").strip().lower() == "sent")
+        + int(bool(feedback_progress_email_workflow) and str(workflow_dispatch_contract.get("required_receipt_transport") or "").strip().lower() == "emailit")
+        + int(
+            bool(feedback_progress_email_workflow)
+            and {"delivery_id", "stage_id", "case_id", "recipient", "from_email", "subject", "provider"}.issubset(
+                dispatch_required_receipt_fields
+            )
+        )
+        + int(
+            (not require_feedback_progress_email_e2e_gate)
+            or (
+                bool(workflow_e2e_gate)
+                and _boolish(workflow_e2e_gate.get("fail_closed"), default=False)
+                and [
+                    str(item or "").strip().lower()
+                    for item in _as_string_list(workflow_e2e_gate.get("required_stage_sequence"))
+                    if str(item or "").strip()
+                ]
+                == ["request_received", "audited_decision", "fix_available"]
+            )
+        )
+        + int(bool(support_generated_at) and support_generated_age_seconds is not None and support_generated_age_seconds <= max_support_packet_age_hours * 3600)
+        + int(not support_source_refresh_mode or allow_cached_packet_refresh_for_gold)
+        + int(support_open_non_external_packet_count <= max_open_non_external_packets)
+        + int(support_closure_waiting_on_release_truth <= max_closure_waiting_on_release_truth)
+        + int(support_update_required_misrouted_case_count <= max_update_required_misrouted_cases)
+        + int(support_non_external_needs_human_response_count <= max_non_external_needs_human_response)
+        + int((not require_named_owner_on_non_external_packets) or support_non_external_packets_without_named_owner == 0)
+        + int((not require_named_lane_on_non_external_packets) or support_non_external_packets_without_lane == 0)
+        + int(unresolved_external_requests == 0 or not allow_external_backlog_only_with_synced_runbook or external_runbook_synced)
+    )
+    status, plane = _coverage_entry(
+        positives=positives,
+        reasons=reasons,
+        summary_ready="Feedback, bug, and crash loops are closure-honest and release-truth-backed.",
+        summary_missing="Feedback and support closure proof is still incomplete.",
+        evidence={
+            "registry_path": str(gate_path),
+            "registry_present": bool(feedback_loop_gate),
+            "release_blocking": release_blocking,
+            "feedback_progress_email_workflow_path": str(feedback_progress_email_workflow_path),
+            "feedback_progress_email_workflow_present": bool(feedback_progress_email_workflow),
+            "feedback_progress_email_sender": workflow_sender_email,
+            "feedback_progress_email_stage_ids": sorted(workflow_stages.keys()),
+            "feedback_progress_email_award_keys": sorted(str(key).strip().lower() for key in workflow_awards.keys() if str(key).strip()),
+            "feedback_progress_email_dispatch_tool": str(workflow_dispatch_contract.get("tool_name") or "").strip(),
+            "feedback_progress_email_dispatch_action_kind": str(workflow_dispatch_contract.get("action_kind") or "").strip(),
+            "feedback_progress_email_dispatch_channel": str(workflow_dispatch_contract.get("channel") or "").strip(),
+            "feedback_progress_email_dispatch_provider": str(workflow_dispatch_contract.get("preferred_provider") or "").strip(),
+            "feedback_progress_email_required_receipt_state": str(workflow_dispatch_contract.get("required_receipt_state") or "").strip(),
+            "feedback_progress_email_required_receipt_transport": str(workflow_dispatch_contract.get("required_receipt_transport") or "").strip(),
+            "feedback_progress_email_required_receipt_fields": sorted(dispatch_required_receipt_fields),
+            "feedback_progress_email_e2e_gate_present": bool(workflow_e2e_gate),
+            "support_generated_at": support_generated_at,
+            "support_generated_age_seconds": support_generated_age_seconds,
+            "support_source_refresh_mode": support_source_refresh_mode,
+            "support_open_packet_count": support_open_packet_count,
+            "support_open_non_external_packet_count": support_open_non_external_packet_count,
+            "closure_waiting_on_release_truth": support_closure_waiting_on_release_truth,
+            "update_required_misrouted_case_count": support_update_required_misrouted_case_count,
+            "non_external_needs_human_response": support_non_external_needs_human_response_count,
+            "non_external_packets_without_named_owner": support_non_external_packets_without_named_owner,
+            "non_external_packets_without_lane": support_non_external_packets_without_lane,
+            "unresolved_external_proof_request_count": unresolved_external_requests,
+            "external_proof_runbook_synced": external_runbook_synced,
+            "thresholds": {
+                "max_support_packet_age_hours": max_support_packet_age_hours,
+                "max_open_non_external_packets": max_open_non_external_packets,
+                "max_closure_waiting_on_release_truth": max_closure_waiting_on_release_truth,
+                "max_update_required_misrouted_cases": max_update_required_misrouted_cases,
+                "max_non_external_needs_human_response": max_non_external_needs_human_response,
+                "require_named_owner_on_non_external_packets": require_named_owner_on_non_external_packets,
+                "require_named_lane_on_non_external_packets": require_named_lane_on_non_external_packets,
+                "allow_cached_packet_refresh_for_gold": allow_cached_packet_refresh_for_gold,
+                "allow_external_backlog_only_with_synced_runbook": allow_external_backlog_only_with_synced_runbook,
+                "require_feedback_progress_email_workflow": require_feedback_progress_email_workflow,
+                "require_feedback_progress_email_e2e_gate": require_feedback_progress_email_e2e_gate,
+                "require_feedback_progress_email_decision_awards": require_feedback_progress_email_decision_awards,
+                "required_feedback_progress_sender_email": required_feedback_progress_sender_email,
+            },
+        },
+        hard_fail=not bool(feedback_loop_gate) or not bool(support_generated_at),
+    )
+    return status, plane
 
 
 def _candidate_supervisor_roots(preferred_path: Path) -> List[Path]:
@@ -681,6 +1065,97 @@ def load_parity_registry_with_fallback(primary_path: Path) -> tuple[Path, Dict[s
         if canonical_payload:
             return CANONICAL_PARITY_REGISTRY, canonical_payload
     return primary_path, {}
+
+
+def load_optional_yaml_with_fallback(primary_path: Path, canonical_path: Path) -> tuple[Path, Dict[str, Any]]:
+    primary_payload = load_yaml(primary_path)
+    if primary_payload:
+        return primary_path, primary_payload
+    if canonical_path != primary_path and canonical_path.is_file():
+        canonical_payload = load_yaml(canonical_path)
+        if canonical_payload:
+            return canonical_path, canonical_payload
+    return primary_path, {}
+
+
+def _dict_rows(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [row for row in value if isinstance(row, dict)]
+
+
+def _normalize_flagship_parity_release_status(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _flagship_parity_families(registry: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for family in _dict_rows(registry.get("families")):
+        family_id = str(family.get("id") or "").strip()
+        if not family_id:
+            continue
+        rows.append(
+            {
+                "id": family_id,
+                "release_status": _normalize_flagship_parity_release_status(family.get("release_status")),
+                "legacy_parity_status": str(family.get("legacy_parity_status") or "").strip().lower(),
+                "owner_repos": _as_string_list(family.get("owner_repos")),
+                "blocking_gaps": _as_string_list(family.get("blocking_gaps")),
+            }
+        )
+    return rows
+
+
+def _flagship_parity_status_counts(families: Sequence[Dict[str, Any]]) -> Dict[str, int]:
+    counts = {key: 0 for key in FLAGSHIP_PARITY_RELEASE_STATUS_ORDER}
+    counts["unknown"] = 0
+    for family in families:
+        status = _normalize_flagship_parity_release_status(family.get("release_status"))
+        if status in counts:
+            counts[status] += 1
+        else:
+            counts["unknown"] += 1
+    return counts
+
+
+def _flagship_parity_family_ids_below(families: Sequence[Dict[str, Any]], minimum_status: str) -> List[str]:
+    threshold = FLAGSHIP_PARITY_RELEASE_STATUS_ORDER.get(minimum_status, -1)
+    ids: List[str] = []
+    for family in families:
+        status = _normalize_flagship_parity_release_status(family.get("release_status"))
+        if FLAGSHIP_PARITY_RELEASE_STATUS_ORDER.get(status, -1) < threshold:
+            family_id = str(family.get("id") or "").strip()
+            if family_id:
+                ids.append(family_id)
+    return sorted(set(ids))
+
+
+def _summarize_ids(ids: Sequence[str], *, limit: int = 4) -> str:
+    values = [str(item).strip() for item in ids if str(item).strip()]
+    if not values:
+        return ""
+    if len(values) <= limit:
+        return ", ".join(values)
+    return ", ".join(values[:limit]) + f", +{len(values) - limit} more"
+
+
+def _route_job_missing_primary(job: Dict[str, Any]) -> bool:
+    primary = job.get("primary_route")
+    if not isinstance(primary, dict):
+        return True
+    return not all(str(primary.get(key) or "").strip() for key in ("repo", "head", "surface"))
+
+
+def _route_job_has_unbounded_fallback(job: Dict[str, Any]) -> bool:
+    fallback_rows = _dict_rows(job.get("fallback_routes"))
+    for row in fallback_rows:
+        posture = str(row.get("posture") or "").strip().lower()
+        condition = str(row.get("condition") or "").strip()
+        if posture not in {"bounded_fallback", "compatibility_only", "supporting_surface_only"}:
+            return True
+        if not condition:
+            return True
+    return False
 
 
 def compare_order(actual: str, expected: str, order: Dict[str, int]) -> int:
@@ -1486,6 +1961,7 @@ def build_flagship_product_readiness_payload(
     *,
     acceptance_path: Path,
     parity_registry_path: Path,
+    feedback_loop_gate_path: Path,
     status_plane_path: Path,
     progress_report_path: Path,
     progress_history_path: Path,
@@ -1514,6 +1990,30 @@ def build_flagship_product_readiness_payload(
     effective_acceptance_path, acceptance = load_acceptance_with_fallback(acceptance_path)
     effective_parity_registry_path, parity_registry = load_parity_registry_with_fallback(parity_registry_path)
     design_product_root = acceptance_path.parent
+    effective_feedback_loop_gate_path, feedback_loop_gate = load_optional_yaml_with_fallback(
+        feedback_loop_gate_path,
+        CANONICAL_FEEDBACK_LOOP_RELEASE_GATE,
+    )
+    effective_feedback_progress_email_workflow_path, feedback_progress_email_workflow = load_optional_yaml_with_fallback(
+        design_product_root / DEFAULT_FEEDBACK_PROGRESS_EMAIL_WORKFLOW.name,
+        CANONICAL_FEEDBACK_PROGRESS_EMAIL_WORKFLOW,
+    )
+    effective_flagship_parity_registry_path, flagship_parity_registry = load_optional_yaml_with_fallback(
+        design_product_root / DEFAULT_FLAGSHIP_PARITY_REGISTRY.name,
+        CANONICAL_FLAGSHIP_PARITY_REGISTRY,
+    )
+    effective_dense_workbench_budget_path, dense_workbench_budget = load_optional_yaml_with_fallback(
+        design_product_root / DEFAULT_DENSE_WORKBENCH_BUDGET.name,
+        CANONICAL_DENSE_WORKBENCH_BUDGET,
+    )
+    effective_veteran_first_minute_gate_path, veteran_first_minute_gate = load_optional_yaml_with_fallback(
+        design_product_root / DEFAULT_VETERAN_FIRST_MINUTE_GATE.name,
+        CANONICAL_VETERAN_FIRST_MINUTE_GATE,
+    )
+    effective_primary_route_registry_path, primary_route_registry = load_optional_yaml_with_fallback(
+        design_product_root / DEFAULT_PRIMARY_ROUTE_REGISTRY.name,
+        CANONICAL_PRIMARY_ROUTE_REGISTRY,
+    )
     flagship_bar_mirror_path = design_product_root / DEFAULT_FLAGSHIP_BAR.name
     horizons_overview_mirror_path = design_product_root / DEFAULT_HORIZONS_OVERVIEW.name
     horizons_mirror_dir = design_product_root / DEFAULT_HORIZONS_DIR.name
@@ -3511,10 +4011,35 @@ def build_flagship_product_readiness_payload(
     fleet_reasons: List[str] = []
     fleet_positives = 0
     support_summary = dict(support_packets.get("summary") or {}) if isinstance(support_packets, dict) else {}
+    support_packets_rows = [
+        dict(item)
+        for item in (support_packets.get("packets") or [])
+        if isinstance(item, dict)
+    ]
     support_open_packet_count = int(support_summary.get("open_packet_count") or 0)
     support_unresolved_external_packet_count = int(support_summary.get("unresolved_external_proof_request_count") or 0)
     support_open_non_external_packet_count = max(0, support_open_packet_count - support_unresolved_external_packet_count)
     support_generated_at = str(support_packets.get("generated_at") or support_packets.get("generatedAt") or "").strip()
+    support_generated_age_seconds = payload_generated_age_seconds(support_packets)[1] if support_packets else None
+    support_source_refresh_mode = str((support_packets.get("source") or {}).get("refresh_mode") or "").strip()
+    support_closure_waiting_on_release_truth = int(support_summary.get("closure_waiting_on_release_truth") or 0)
+    support_update_required_misrouted_case_count = int(support_summary.get("update_required_misrouted_case_count") or 0)
+    support_non_external_needs_human_response_count = int(
+        support_summary.get("non_external_needs_human_response")
+        or sum(
+            1
+            for packet in support_packets_rows
+            if _support_packet_is_non_external(packet) and _support_packet_needs_human_response(packet)
+        )
+    )
+    support_non_external_packets_without_named_owner = int(
+        support_summary.get("non_external_packets_without_named_owner")
+        or sum(1 for packet in support_packets_rows if _support_packet_is_non_external(packet) and not str(packet.get("target_repo") or "").strip())
+    )
+    support_non_external_packets_without_lane = int(
+        support_summary.get("non_external_packets_without_lane")
+        or sum(1 for packet in support_packets_rows if _support_packet_is_non_external(packet) and not str(packet.get("primary_lane") or "").strip())
+    )
     release_channel_generated_at = str(release_channel.get("generatedAt") or release_channel.get("generated_at") or "").strip()
     external_backlog_requests_raw = [
         *install_journey_external_proof_requests,
@@ -3671,8 +4196,15 @@ def build_flagship_product_readiness_payload(
             "journey_blocked_with_local_count": int(journey_summary.get("blocked_with_local_count") or 0),
             "history_snapshot_count": history_snapshot_count,
             "support_packets_generated_at": str(support_packets.get("generated_at") or "").strip(),
+            "support_packets_generated_age_seconds": support_generated_age_seconds,
+            "support_packets_refresh_mode": support_source_refresh_mode,
             "support_open_packet_count": support_open_packet_count,
             "support_open_non_external_packet_count": support_open_non_external_packet_count,
+            "support_closure_waiting_on_release_truth": support_closure_waiting_on_release_truth,
+            "support_update_required_misrouted_case_count": support_update_required_misrouted_case_count,
+            "support_non_external_needs_human_response_count": support_non_external_needs_human_response_count,
+            "support_non_external_packets_without_named_owner": support_non_external_packets_without_named_owner,
+            "support_non_external_packets_without_lane": support_non_external_packets_without_lane,
             "external_proof_backlog_request_count": unresolved_external_requests,
             "external_proof_backlog_request_observation_count": len(external_backlog_requests_raw),
             "external_proof_backlog_duplicate_observation_count": external_backlog_duplicate_count,
@@ -3817,6 +4349,266 @@ def build_flagship_product_readiness_payload(
                 "; warning coverage: " + ", ".join(warning_keys)
             )
 
+    flagship_parity_families = _flagship_parity_families(flagship_parity_registry)
+    flagship_parity_status_counts = _flagship_parity_status_counts(flagship_parity_families)
+    families_below_task_proven = _flagship_parity_family_ids_below(flagship_parity_families, "task_proven")
+    families_below_veteran_approved = _flagship_parity_family_ids_below(flagship_parity_families, "veteran_approved")
+    families_below_gold_ready = _flagship_parity_family_ids_below(flagship_parity_families, "gold_ready")
+
+    route_jobs = _dict_rows(primary_route_registry.get("jobs"))
+    route_jobs_missing_primary = [
+        str(job.get("id") or "").strip()
+        for job in route_jobs
+        if str(job.get("id") or "").strip() and _route_job_missing_primary(job)
+    ]
+    route_jobs_with_unbounded_fallback = [
+        str(job.get("id") or "").strip()
+        for job in route_jobs
+        if str(job.get("id") or "").strip() and _route_job_has_unbounded_fallback(job)
+    ]
+    veteran_required_landmarks = _as_string_list(veteran_first_minute_gate.get("required_landmarks"))
+    veteran_tasks = _dict_rows(veteran_first_minute_gate.get("tasks"))
+    dense_budget_metrics = dense_workbench_budget.get("metrics") if isinstance(dense_workbench_budget.get("metrics"), dict) else {}
+    dense_budget_release_blocking = bool(dense_workbench_budget.get("release_blocking"))
+
+    visual_gate_ready = str(desktop_evidence.get("ui_visual_familiarity_exit_gate_status") or "").strip().lower() in {
+        "pass",
+        "passed",
+        "ready",
+    }
+    workflow_parity_ready = str(desktop_evidence.get("ui_workflow_parity_status") or "").strip().lower() in {
+        "pass",
+        "passed",
+        "ready",
+    }
+    desktop_ready = str(coverage.get("desktop_client") or "").strip().lower() == "ready"
+
+    structural_reasons: List[str] = []
+    if not bool(fleet_evidence.get("dispatchable_truth_ready")):
+        structural_reasons.append("Fleet compile manifest is not marked dispatchable truth ready.")
+    if str(fleet_evidence.get("journey_overall_state") or "").strip().lower() != "ready":
+        structural_reasons.append("Golden journey overall state is not ready.")
+    if not bool(fleet_evidence.get("supervisor_recent_enough")):
+        structural_reasons.append("Supervisor state is not current enough to count as structural truth.")
+    if str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() != "healthy":
+        structural_reasons.append("Runtime healing alert state is not healthy.")
+    structural_status, structural_plane = _coverage_entry(
+        positives=int(bool(fleet_evidence.get("dispatchable_truth_ready")))
+        + int(str(fleet_evidence.get("journey_overall_state") or "").strip().lower() == "ready")
+        + int(bool(fleet_evidence.get("supervisor_recent_enough")))
+        + int(str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() == "healthy"),
+        reasons=structural_reasons,
+        summary_ready="Structural delivery, journey, and control-loop truth are coherent.",
+        summary_missing="Structural delivery truth is still incomplete or stale.",
+        evidence={
+            "dispatchable_truth_ready": bool(fleet_evidence.get("dispatchable_truth_ready")),
+            "journey_overall_state": fleet_evidence.get("journey_overall_state"),
+            "supervisor_recent_enough": bool(fleet_evidence.get("supervisor_recent_enough")),
+            "runtime_healing_alert_state": fleet_evidence.get("runtime_healing_alert_state"),
+        },
+    )
+
+    feedback_loop_status, feedback_loop_plane = _feedback_loop_readiness_plane(
+        feedback_loop_gate=feedback_loop_gate,
+        gate_path=effective_feedback_loop_gate_path,
+        feedback_progress_email_workflow=feedback_progress_email_workflow,
+        feedback_progress_email_workflow_path=effective_feedback_progress_email_workflow_path,
+        support_packets=support_packets,
+        support_open_packet_count=support_open_packet_count,
+        support_open_non_external_packet_count=support_open_non_external_packet_count,
+        support_generated_at=support_generated_at,
+        support_generated_age_seconds=support_generated_age_seconds,
+        support_source_refresh_mode=support_source_refresh_mode,
+        support_closure_waiting_on_release_truth=support_closure_waiting_on_release_truth,
+        support_update_required_misrouted_case_count=support_update_required_misrouted_case_count,
+        support_non_external_needs_human_response_count=support_non_external_needs_human_response_count,
+        support_non_external_packets_without_named_owner=support_non_external_packets_without_named_owner,
+        support_non_external_packets_without_lane=support_non_external_packets_without_lane,
+        unresolved_external_requests=unresolved_external_requests,
+        external_runbook_synced=external_runbook_synced,
+    )
+
+    dense_reasons: List[str] = []
+    if not dense_workbench_budget:
+        dense_reasons.append("Dense workbench budget registry is missing.")
+    elif not dense_budget_release_blocking:
+        dense_reasons.append("Dense workbench budget registry is not marked release-blocking.")
+    if not visual_gate_ready:
+        dense_reasons.append("Desktop visual familiarity gate is not ready.")
+    if int(desktop_evidence.get("ui_visual_familiarity_missing_required_milestone2_test_inventory_count") or 0) > 0:
+        dense_reasons.append("Visual familiarity gate inventory is still missing required milestone-2 dense-workbench tests.")
+    if int(desktop_evidence.get("ui_visual_familiarity_reported_missing_required_milestone2_test_count") or 0) > 0:
+        dense_reasons.append("Visual familiarity gate still reports missing required milestone-2 dense-workbench tests.")
+    if not desktop_ready:
+        dense_reasons.append("Desktop flagship coverage is not ready yet.")
+    dense_status, dense_plane = _coverage_entry(
+        positives=int(bool(dense_workbench_budget))
+        + int(dense_budget_release_blocking)
+        + int(visual_gate_ready)
+        + int(desktop_ready),
+        reasons=dense_reasons,
+        summary_ready="Dense-workbench budget proof is current for the promoted desktop route.",
+        summary_missing="Dense-workbench proof is still incomplete.",
+        evidence={
+            "registry_path": str(effective_dense_workbench_budget_path),
+            "registry_present": bool(dense_workbench_budget),
+            "release_blocking": dense_budget_release_blocking,
+            "metric_group_count": len(dense_budget_metrics),
+            "visual_gate_ready": visual_gate_ready,
+            "desktop_ready": desktop_ready,
+            "missing_required_milestone2_test_inventory_count": int(
+                desktop_evidence.get("ui_visual_familiarity_missing_required_milestone2_test_inventory_count") or 0
+            ),
+            "reported_missing_required_milestone2_test_count": int(
+                desktop_evidence.get("ui_visual_familiarity_reported_missing_required_milestone2_test_count") or 0
+            ),
+        },
+        hard_fail=not bool(dense_workbench_budget),
+    )
+
+    veteran_reasons: List[str] = []
+    if not veteran_first_minute_gate:
+        veteran_reasons.append("Veteran first-minute gate registry is missing.")
+    if not veteran_required_landmarks:
+        veteran_reasons.append("Veteran first-minute gate does not list required landmarks.")
+    if not veteran_tasks:
+        veteran_reasons.append("Veteran first-minute gate does not define required tasks.")
+    if not visual_gate_ready:
+        veteran_reasons.append("Desktop visual familiarity gate is not ready.")
+    if families_below_veteran_approved:
+        veteran_reasons.append(
+            "Flagship parity families are still below veteran-approved: " + _summarize_ids(families_below_veteran_approved) + "."
+        )
+    veteran_status, veteran_plane = _coverage_entry(
+        positives=int(bool(veteran_first_minute_gate))
+        + int(bool(veteran_required_landmarks))
+        + int(bool(veteran_tasks))
+        + int(visual_gate_ready)
+        + int(len(families_below_task_proven) == 0),
+        reasons=veteran_reasons,
+        summary_ready="Veteran-orientation proof is current for the promoted desktop route.",
+        summary_missing="Veteran-orientation proof is still incomplete.",
+        evidence={
+            "registry_path": str(effective_veteran_first_minute_gate_path),
+            "registry_present": bool(veteran_first_minute_gate),
+            "required_landmark_count": len(veteran_required_landmarks),
+            "task_count": len(veteran_tasks),
+            "visual_gate_ready": visual_gate_ready,
+            "families_below_task_proven": families_below_task_proven,
+            "families_below_veteran_approved": families_below_veteran_approved,
+        },
+        hard_fail=not bool(veteran_first_minute_gate),
+    )
+
+    primary_route_reasons: List[str] = []
+    if not primary_route_registry:
+        primary_route_reasons.append("Primary route registry is missing.")
+    if not route_jobs:
+        primary_route_reasons.append("Primary route registry does not declare major jobs.")
+    if route_jobs_missing_primary:
+        primary_route_reasons.append(
+            "Primary route registry has jobs without one explicit primary route: " + _summarize_ids(route_jobs_missing_primary) + "."
+        )
+    if route_jobs_with_unbounded_fallback:
+        primary_route_reasons.append(
+            "Primary route registry has jobs with unbounded fallback posture: "
+            + _summarize_ids(route_jobs_with_unbounded_fallback)
+            + "."
+        )
+    if _as_string_list(desktop_evidence.get("release_channel_missing_required_head_tuples")):
+        primary_route_reasons.append("Release channel is still missing required promoted desktop head tuples.")
+    if _as_string_list(desktop_evidence.get("release_channel_missing_required_platform_head_pairs")):
+        primary_route_reasons.append("Release channel is still missing required desktop platform/head pairs.")
+    primary_route_status, primary_route_plane = _coverage_entry(
+        positives=int(bool(primary_route_registry))
+        + int(bool(route_jobs))
+        + int(len(route_jobs_missing_primary) == 0)
+        + int(len(route_jobs_with_unbounded_fallback) == 0)
+        + int(not _as_string_list(desktop_evidence.get("release_channel_missing_required_head_tuples")))
+        + int(not _as_string_list(desktop_evidence.get("release_channel_missing_required_platform_head_pairs"))),
+        reasons=primary_route_reasons,
+        summary_ready="Primary-route truth is explicit and bounded across the major flagship jobs.",
+        summary_missing="Primary-route truth is still incomplete or ambiguous.",
+        evidence={
+            "registry_path": str(effective_primary_route_registry_path),
+            "registry_present": bool(primary_route_registry),
+            "job_count": len(route_jobs),
+            "jobs_missing_primary_route": route_jobs_missing_primary,
+            "jobs_with_unbounded_fallback": route_jobs_with_unbounded_fallback,
+            "release_channel_missing_required_head_tuples": _as_string_list(
+                desktop_evidence.get("release_channel_missing_required_head_tuples")
+            ),
+            "release_channel_missing_required_platform_head_pairs": _as_string_list(
+                desktop_evidence.get("release_channel_missing_required_platform_head_pairs")
+            ),
+        },
+        hard_fail=not bool(primary_route_registry),
+    )
+
+    flagship_plane_reasons: List[str] = []
+    if coverage_gap_keys:
+        flagship_plane_reasons.append("Whole-product coverage still has open flagship gaps: " + ", ".join(coverage_gap_keys) + ".")
+    if not flagship_parity_registry:
+        flagship_plane_reasons.append("Flagship parity registry is missing.")
+    if families_below_gold_ready:
+        flagship_plane_reasons.append(
+            "Flagship parity families are still below gold-ready: " + _summarize_ids(families_below_gold_ready) + "."
+        )
+    if structural_status != "ready":
+        flagship_plane_reasons.append("Structural readiness plane is not ready.")
+    if veteran_status != "ready":
+        flagship_plane_reasons.append("Veteran readiness plane is not ready.")
+    if primary_route_status != "ready":
+        flagship_plane_reasons.append("Primary-route readiness plane is not ready.")
+    if dense_status != "ready":
+        flagship_plane_reasons.append("Dense-workbench readiness plane is not ready.")
+    if feedback_loop_status != "ready":
+        flagship_plane_reasons.append("Feedback-loop readiness plane is not ready.")
+    flagship_plane_status, flagship_plane = _coverage_entry(
+        positives=(
+            int(len(coverage_gap_keys) == 0)
+            + int(bool(flagship_parity_registry))
+            + int(len(families_below_gold_ready) == 0)
+            + int(structural_status == "ready")
+            + int(veteran_status == "ready")
+            + int(primary_route_status == "ready")
+            + int(dense_status == "ready")
+            + int(feedback_loop_status == "ready")
+        ),
+        reasons=flagship_plane_reasons,
+        summary_ready="Flagship replacement truth is fully green.",
+        summary_missing="Flagship replacement truth is still stricter than the current structural closure.",
+        evidence={
+            "registry_path": str(effective_flagship_parity_registry_path),
+            "registry_present": bool(flagship_parity_registry),
+            "status_counts": flagship_parity_status_counts,
+            "families_below_task_proven": families_below_task_proven,
+            "families_below_veteran_approved": families_below_veteran_approved,
+            "families_below_gold_ready": families_below_gold_ready,
+            "coverage_gap_keys": coverage_gap_keys,
+            "structural_ready": structural_status == "ready",
+            "veteran_ready": veteran_status == "ready",
+            "primary_route_ready": primary_route_status == "ready",
+            "dense_workbench_ready": dense_status == "ready",
+            "feedback_loop_ready": feedback_loop_status == "ready",
+        },
+        hard_fail=not bool(flagship_parity_registry) or str(coverage.get("desktop_client") or "").strip().lower() == "missing",
+    )
+
+    readiness_planes = {
+        "structural_ready": structural_plane,
+        "flagship_ready": flagship_plane,
+        "veteran_ready": veteran_plane,
+        "primary_route_ready": primary_route_plane,
+        "dense_workbench_ready": dense_plane,
+        "feedback_loop_ready": feedback_loop_plane,
+    }
+    readiness_plane_summary = {
+        "ready_count": sum(1 for plane in readiness_planes.values() if str(plane.get("status") or "") == "ready"),
+        "warning_count": sum(1 for plane in readiness_planes.values() if str(plane.get("status") or "") == "warning"),
+        "missing_count": sum(1 for plane in readiness_planes.values() if str(plane.get("status") or "") == "missing"),
+    }
+
     payload: Dict[str, Any] = {
         "contract_name": "fleet.flagship_product_readiness",
         "schema_version": 1,
@@ -3874,8 +4666,11 @@ def build_flagship_product_readiness_payload(
             "bar": "top_flagship_grade",
             "whole_project_frontier_required": True,
             "feedback_autofix_loop_required": True,
+            "feedback_loop_release_gate_required": True,
             "accept_lowered_standards": False,
         },
+        "readiness_planes": readiness_planes,
+        "readiness_plane_summary": readiness_plane_summary,
         "source_documents": [str(item) for item in (acceptance.get("source_documents") or []) if str(item).strip()],
         "acceptance_axes": [
             str(item.get("id") or "").strip()
@@ -3909,9 +4704,22 @@ def build_flagship_product_readiness_payload(
             ],
             "unresolved_families": parity_unresolved_families,
         },
+        "flagship_parity_registry": {
+            "path": str(effective_flagship_parity_registry_path),
+            "status_counts": flagship_parity_status_counts,
+            "family_count": len(flagship_parity_families),
+            "families_below_task_proven": families_below_task_proven,
+            "families_below_veteran_approved": families_below_veteran_approved,
+            "families_below_gold_ready": families_below_gold_ready,
+        },
         "evidence_sources": {
             "acceptance": str(effective_acceptance_path),
             "parity_registry": str(effective_parity_registry_path),
+            "flagship_parity_registry": str(effective_flagship_parity_registry_path),
+            "dense_workbench_budget": str(effective_dense_workbench_budget_path),
+            "veteran_first_minute_gate": str(effective_veteran_first_minute_gate_path),
+            "primary_route_registry": str(effective_primary_route_registry_path),
+            "feedback_loop_release_gate": str(effective_feedback_loop_gate_path),
             "status_plane": str(status_plane_path),
             "progress_report": str(progress_report_path),
             "progress_history": str(progress_history_path),
@@ -3976,6 +4784,7 @@ def materialize_flagship_product_readiness(
     mirror_path: Path | None,
     acceptance_path: Path,
     parity_registry_path: Path,
+    feedback_loop_gate_path: Path,
     status_plane_path: Path,
     progress_report_path: Path,
     progress_history_path: Path,
@@ -4004,6 +4813,7 @@ def materialize_flagship_product_readiness(
     payload = build_flagship_product_readiness_payload(
         acceptance_path=acceptance_path,
         parity_registry_path=parity_registry_path,
+        feedback_loop_gate_path=feedback_loop_gate_path,
         status_plane_path=status_plane_path,
         progress_report_path=progress_report_path,
         progress_history_path=progress_history_path,
@@ -4064,6 +4874,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         progress_history_path=Path(args.progress_history).resolve(),
         journey_gates_path=Path(args.journey_gates).resolve(),
         support_packets_path=Path(args.support_packets).resolve(),
+        feedback_loop_gate_path=Path(args.feedback_loop_gate).resolve(),
         external_proof_runbook_path=Path(args.external_proof_runbook).resolve() if str(args.external_proof_runbook or "").strip() else None,
         supervisor_state_path=Path(args.supervisor_state).resolve(),
         ooda_state_path=Path(args.ooda_state).resolve(),

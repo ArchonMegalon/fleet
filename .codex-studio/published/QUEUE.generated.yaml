@@ -1,13 +1,3 @@
 mode: append
-items:
-- title: Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.
-  task: Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and refresh repo-local review context.
-  package_id: audit-task-3226027
-  source_ref: audit_task_candidates[3226027]
-  audit_finding_key: project.design_mirror_missing_or_stale
-  audit_scope_id: fleet
-  allowed_paths:
-  - .codex-design
-  owned_surfaces:
-  - design_mirror:fleet
+items: []
 source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed

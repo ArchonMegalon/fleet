@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-12T09:07:39Z'
+generated_at: '2026-04-14T05:59:44Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-9
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,7 +32,7 @@ focus:
   - chummer6-ui
   - chummer6-ui-kit
   - chummer6-design
-  - chummer6-core
+  - chummer6-hub
   texts:
   - visual-familiarity
   - chummer5a
@@ -63,12 +63,13 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260412T072410Z is not trusted: worker exit 125'
+  reason: 'latest worker receipt 20260414T053652Z-shard-9 is not trusted: worker exit
+    125'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-12T09:07:20Z'
+  generated_at: '2026-04-14T05:37:02Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -77,34 +78,74 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 4066417069
+- 2594403904
 frontier:
-- id: 4066417069
-  title: Flagship desktop client and workbench finish
+- id: 2594403904
+  title: Unify claim, install, update, and support recovery into one desktop-native
+    flow
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-ui
-  - chummer6-core
-  - chummer6-ui-kit
+  - chummer6-hub
   dependencies: []
   exit_criteria:
-  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
-    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
-    inspection, conditional toggles, desktop packaging, updater, and in-app support
-    polish.
-  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
-    packaging, and support evidence rather than treating Linux exit-gate closure as
-    the whole product.
-source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+  - Remove browser ritual from claim, install, update, rollback, and support continuation
+    for claimed desktop users.
+  - 'Own and prove the surface slice(s): desktop_native_claim_and_recovery, support_followthrough:install_truth'
+  - 'Keep implementation scoped to the allowed paths: Chummer.Run.Api, scripts, tests'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `chummer6-hub` (next90-m102-hub-desktop-native-trust).
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-23h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Unify claim, install, update, and support recovery into
+      one desktop-native flow'' remains open under the flagship closeout frontier.
+      Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-04-14T21:50:08Z'
+    range_low_hours: 9.0
+    range_high_hours: 22.68
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.8
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+source_queue_fingerprint: next90-staging-20260413
+queue_package:
+  repo: chummer6-hub
+  package_id: next90-m102-hub-desktop-native-trust
+  title: Unify claim, install, update, and support recovery into one desktop-native
+    flow
+  priority: 0
+  owned_surfaces:
+  - desktop_native_claim_and_recovery
+  - support_followthrough:install_truth
+  allowed_paths:
+  - Chummer.Run.Api
+  - scripts
+  - tests
 eta:
   status: flagship_delivery
-  eta_human: 8h-20h
+  eta_human: 9h-23h
   eta_confidence: low
-  basis: full_product_frontier_heuristic
+  basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 1 synthetic slices. Outstanding readiness coverage: desktop_client.'
+  summary: 'Milestone ''Unify claim, install, update, and support recovery into one
+    desktop-native flow'' remains open under the flagship closeout frontier. Outstanding
+    readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-04-14T21:50:08Z'
+  range_low_hours: 9.0
+  range_high_hours: 22.68
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.8

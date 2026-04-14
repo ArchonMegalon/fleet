@@ -85,6 +85,8 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.support_case_packets"
     assert payload["summary"]["open_case_count"] == 2
+    assert payload["summary"]["open_non_external_packet_count"] == 2
+    assert payload["summary"]["support_case_backed_open_count"] == 2
     assert payload["summary"]["design_impact_count"] == 1
     assert payload["summary"]["owner_repo_counts"] == {
         "chummer6-design": 1,
@@ -92,6 +94,9 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     }
     assert payload["summary"]["closure_waiting_on_release_truth"] == 0
     assert payload["summary"]["needs_human_response"] == 2
+    assert payload["summary"]["non_external_needs_human_response"] == 2
+    assert payload["summary"]["non_external_packets_without_named_owner"] == 0
+    assert payload["summary"]["non_external_packets_without_lane"] == 0
     assert payload["summary"]["update_required_case_count"] == 0
     assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
     assert payload["summary"]["update_required_misrouted_case_count"] == 0
@@ -528,6 +533,10 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert payload["summary"]["open_case_count"] == 1
     assert payload["summary"]["closure_waiting_on_release_truth"] == 1
     assert payload["summary"]["needs_human_response"] == 0
+    assert payload["summary"]["open_non_external_packet_count"] == 1
+    assert payload["summary"]["non_external_needs_human_response"] == 0
+    assert payload["summary"]["non_external_packets_without_named_owner"] == 0
+    assert payload["summary"]["non_external_packets_without_lane"] == 0
     assert payload["summary"]["install_truth_state_counts"]["promoted_tuple_match"] == 1
     assert payload["summary"]["update_required_case_count"] == 0
     assert payload["summary"]["update_required_routed_to_downloads_count"] == 0
@@ -951,7 +960,12 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["summary"]["open_case_count"] == 0
+    assert payload["summary"]["open_non_external_packet_count"] == 0
     assert payload["summary"]["external_proof_required_case_count"] == 0
+    assert payload["summary"]["needs_human_response"] == 2
+    assert payload["summary"]["non_external_needs_human_response"] == 0
+    assert payload["summary"]["non_external_packets_without_named_owner"] == 0
+    assert payload["summary"]["non_external_packets_without_lane"] == 0
     assert payload["summary"]["unresolved_external_proof_request_count"] == 2
     assert payload["summary"]["unresolved_external_proof_request_host_counts"] == {"macos": 1, "windows": 1}
     assert payload["summary"]["unresolved_external_proof_request_tuple_counts"] == {

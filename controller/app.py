@@ -19444,15 +19444,15 @@ def read_api_key(account_cfg: Any) -> str:
 
 
 def resolved_ea_runtime_settings() -> Dict[str, str]:
-    base_url = str(os.environ.get("EA_BASE_URL") or os.environ.get("EA_MCP_BASE_URL") or "").strip()
+    base_url = str(os.environ.get("EA_MCP_BASE_URL") or os.environ.get("EA_BASE_URL") or "").strip()
     if not base_url:
-        base_url, _ = first_env_value_from_files(("EA_BASE_URL", "EA_MCP_BASE_URL"))
-    api_token = str(os.environ.get("EA_API_TOKEN") or os.environ.get("EA_MCP_API_TOKEN") or "").strip()
+        base_url, _ = first_env_value_from_files(("EA_MCP_BASE_URL", "EA_BASE_URL"))
+    api_token = str(os.environ.get("EA_MCP_API_TOKEN") or os.environ.get("EA_API_TOKEN") or "").strip()
     if not api_token:
-        api_token, _ = first_env_value_from_files(("EA_API_TOKEN", "EA_MCP_API_TOKEN"))
-    principal_id = str(os.environ.get("EA_PRINCIPAL_ID") or os.environ.get("EA_MCP_PRINCIPAL_ID") or "").strip()
+        api_token, _ = first_env_value_from_files(("EA_MCP_API_TOKEN", "EA_API_TOKEN"))
+    principal_id = str(os.environ.get("EA_MCP_PRINCIPAL_ID") or os.environ.get("EA_PRINCIPAL_ID") or "").strip()
     if not principal_id:
-        principal_id, _ = first_env_value_from_files(("EA_PRINCIPAL_ID", "EA_MCP_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID"))
+        principal_id, _ = first_env_value_from_files(("EA_MCP_PRINCIPAL_ID", "EA_PRINCIPAL_ID", "EA_DEFAULT_PRINCIPAL_ID"))
     if not principal_id:
         principal_id = "codex-fleet"
     return {

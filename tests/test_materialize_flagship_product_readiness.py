@@ -59,6 +59,72 @@ def _base_acceptance() -> dict:
     }
 
 
+def _base_feedback_loop_gate() -> dict:
+    return {
+        "version": 1,
+        "release_blocking": True,
+        "thresholds": {
+            "max_support_packet_age_hours": 24,
+            "max_open_non_external_packets": 0,
+            "max_closure_waiting_on_release_truth": 0,
+            "max_update_required_misrouted_cases": 0,
+            "max_non_external_needs_human_response": 0,
+            "require_named_owner_on_non_external_packets": True,
+            "require_named_lane_on_non_external_packets": True,
+            "allow_cached_packet_refresh_for_gold": False,
+            "allow_external_backlog_only_with_synced_runbook": True,
+            "require_feedback_progress_email_workflow": True,
+            "require_feedback_progress_email_e2e_gate": True,
+            "require_feedback_progress_email_decision_awards": True,
+            "required_feedback_progress_sender_email": "wageslave@chummer.run",
+        },
+    }
+
+
+def _base_feedback_progress_email_workflow() -> dict:
+    return {
+        "delivery_plane": {
+            "sender_identity": {
+                "from_email": "wageslave@chummer.run",
+            },
+            "dispatch_contract": {
+                "tool_name": "connector.dispatch",
+                "action_kind": "delivery.send",
+                "channel": "email",
+                "preferred_provider": "emailit",
+                "required_receipt_state": "sent",
+                "required_receipt_transport": "emailit",
+                "required_receipt_fields": [
+                    "delivery_id",
+                    "stage_id",
+                    "case_id",
+                    "recipient",
+                    "from_email",
+                    "subject",
+                    "provider",
+                ],
+            },
+        },
+        "decision_awards": {
+            "accepted": {"label": "Clad Feedbacker"},
+            "denied": {"label": "Denied"},
+        },
+        "stages": [
+            {"id": "request_received"},
+            {"id": "audited_decision"},
+            {"id": "fix_available"},
+        ],
+        "e2e_gate": {
+            "fail_closed": True,
+            "required_stage_sequence": [
+                "request_received",
+                "audited_decision",
+                "fix_available",
+            ],
+        },
+    }
+
+
 def _base_status_plane() -> dict:
     return {
         "runtime_healing": {"summary": {"alert_state": "healthy"}},
@@ -154,6 +220,64 @@ def test_parse_args_inherits_ignore_nonlinux_desktop_host_proof_blockers_from_ru
     monkeypatch.setattr(module, "RUNTIME_ENV_CANDIDATES", (runtime_env,))
     args = module.parse_args(["--out", str(Path("/tmp/flagship.json"))])
     assert args.ignore_nonlinux_desktop_host_proof_blockers is True
+
+
+def test_feedback_loop_readiness_plane_marks_clean_release_truth_backed_closure_ready() -> None:
+    module = _load_module()
+    status, plane = module._feedback_loop_readiness_plane(
+        feedback_loop_gate=_base_feedback_loop_gate(),
+        gate_path=Path("/tmp/FEEDBACK_LOOP_RELEASE_GATE.yaml"),
+        feedback_progress_email_workflow=_base_feedback_progress_email_workflow(),
+        feedback_progress_email_workflow_path=Path("/tmp/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"),
+        support_packets={"generated_at": "2026-04-12T10:00:00Z", "source": {}},
+        support_open_packet_count=0,
+        support_open_non_external_packet_count=0,
+        support_generated_at="2026-04-12T10:00:00Z",
+        support_generated_age_seconds=60,
+        support_source_refresh_mode="",
+        support_closure_waiting_on_release_truth=0,
+        support_update_required_misrouted_case_count=0,
+        support_non_external_needs_human_response_count=0,
+        support_non_external_packets_without_named_owner=0,
+        support_non_external_packets_without_lane=0,
+        unresolved_external_requests=0,
+        external_runbook_synced=True,
+    )
+
+    assert status == "ready"
+    assert plane["status"] == "ready"
+    assert plane["evidence"]["support_open_non_external_packet_count"] == 0
+    assert plane["evidence"]["feedback_progress_email_sender"] == "wageslave@chummer.run"
+
+
+def test_feedback_loop_readiness_plane_flags_release_truth_and_owner_gaps() -> None:
+    module = _load_module()
+    status, plane = module._feedback_loop_readiness_plane(
+        feedback_loop_gate=_base_feedback_loop_gate(),
+        gate_path=Path("/tmp/FEEDBACK_LOOP_RELEASE_GATE.yaml"),
+        feedback_progress_email_workflow={},
+        feedback_progress_email_workflow_path=Path("/tmp/FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml"),
+        support_packets={"generated_at": "2026-04-12T10:00:00Z", "source": {"refresh_mode": "cached_packets_fallback"}},
+        support_open_packet_count=3,
+        support_open_non_external_packet_count=2,
+        support_generated_at="2026-04-12T10:00:00Z",
+        support_generated_age_seconds=60,
+        support_source_refresh_mode="cached_packets_fallback",
+        support_closure_waiting_on_release_truth=1,
+        support_update_required_misrouted_case_count=1,
+        support_non_external_needs_human_response_count=1,
+        support_non_external_packets_without_named_owner=1,
+        support_non_external_packets_without_lane=1,
+        unresolved_external_requests=0,
+        external_runbook_synced=True,
+    )
+
+    assert status == "warning"
+    assert plane["status"] == "warning"
+    assert any("release-truth-backed closure" in reason for reason in plane["reasons"])
+    assert any("lack a named owner repo" in reason for reason in plane["reasons"])
+    assert any("cached_packets_fallback mode" in reason for reason in plane["reasons"])
+    assert any("email workflow" in reason.lower() for reason in plane["reasons"])
 
 
 def test_materialize_flagship_product_readiness_marks_desktop_ready_when_only_ignored_nonlinux_host_proof_is_missing(

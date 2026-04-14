@@ -25,6 +25,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import asdict, dataclass
@@ -1208,6 +1209,14 @@ def _iso_now() -> str:
 def _slug_timestamp(value: Optional[dt.datetime] = None) -> str:
     current = value or _utc_now()
     return current.strftime("%Y%m%dT%H%M%SZ")
+
+
+def _state_scoped_run_id(state_root: Path, value: Optional[dt.datetime] = None) -> str:
+    run_id = _slug_timestamp(value)
+    shard_name = str(Path(state_root).resolve().name or "").strip()
+    if shard_name.startswith("shard-"):
+        return f"{run_id}-{shard_name}"
+    return run_id
 
 
 def _read_text(path: Path) -> str:
@@ -2995,7 +3004,11 @@ def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
         return []
-    rows = payload.get("active_shards") if isinstance(payload, dict) else []
+    rows: Any = []
+    if isinstance(payload, dict):
+        rows = payload.get("configured_shards")
+        if not isinstance(rows, list) or not rows:
+            rows = payload.get("active_shards")
     entries: List[Dict[str, Any]] = []
     for row in rows if isinstance(rows, list) else []:
         if isinstance(row, str):
@@ -3028,6 +3041,41 @@ def _active_shard_manifest_entries(aggregate_root: Path) -> List[Dict[str, Any]]
             if text:
                 entry[field] = text
         entries.append(entry)
+    return entries
+
+
+def _active_shard_manifest_live_summaries(aggregate_root: Path) -> List[Dict[str, Any]]:
+    manifest_path = _active_shard_manifest_path(aggregate_root)
+    if not manifest_path.exists():
+        return []
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rows = payload.get("active_shards") if isinstance(payload, dict) else []
+    entries: List[Dict[str, Any]] = []
+    runtime_field_names = {
+        "updated_at",
+        "active_run_id",
+        "active_run_started_at",
+        "active_run_worker_last_output_at",
+        "active_run_progress_state",
+        "last_run_id",
+    }
+    has_runtime_fields = False
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        token = str(row.get("name") or "").strip()
+        if not token.startswith("shard-"):
+            continue
+        entry = dict(row)
+        entry["name"] = token
+        entries.append(entry)
+        if any(field in entry for field in runtime_field_names):
+            has_runtime_fields = True
+    if not has_runtime_fields:
+        return []
     return entries
 
 
@@ -3807,11 +3855,7 @@ def _flagship_design_source_paths(product_root: Path) -> List[Path]:
     return [path for path in candidates if path.exists()]
 
 
-def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
-    audit = _full_product_readiness_audit(args)
-    queue_frontier = _queue_driven_full_product_frontier(args)
-    if queue_frontier:
-        return queue_frontier
+def _default_full_product_frontier(args: argparse.Namespace, audit: Dict[str, Any]) -> List[Milestone]:
     frontier: List[Milestone] = []
     frontier_status = _full_product_frontier_status(audit)
     missing_coverage_keys = [
@@ -3858,6 +3902,15 @@ def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
             excluded_scope=[str(item).strip() for item in (audit.get("parity_excluded_scope") or []) if str(item).strip()],
         )
     )
+    return frontier
+
+
+def _full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
+    audit = _full_product_readiness_audit(args)
+    frontier = _default_full_product_frontier(args, audit)
+    queue_frontier = _queue_driven_full_product_frontier(args, frontier)
+    if queue_frontier:
+        return queue_frontier
     return frontier
 
 
@@ -3940,8 +3993,59 @@ def _published_queue_payload(workspace_root: Path) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _published_queue_items(workspace_root: Path) -> List[Dict[str, Any]]:
-    payload = _published_queue_payload(workspace_root)
+def _published_next_wave_queue_payload(workspace_root: Path) -> Dict[str, Any]:
+    queue_path = Path(workspace_root).resolve() / ".codex-studio" / "published" / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    if not queue_path.is_file():
+        return {}
+    payload = _read_yaml(queue_path)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _workspace_root_for_state_root(state_root: Path) -> Path:
+    aggregate_root = _aggregate_state_root(state_root)
+    if aggregate_root.name == "chummer_design_supervisor" and aggregate_root.parent.name == "state":
+        return aggregate_root.parent.parent.resolve()
+    return DEFAULT_WORKSPACE_ROOT.resolve()
+
+
+def _next_wave_registry_path(workspace_root: Path) -> Optional[Path]:
+    payload = _published_next_wave_queue_payload(workspace_root)
+    raw_path = str(payload.get("source_registry_path") or "").strip()
+    if not raw_path:
+        return None
+    path = Path(raw_path).resolve()
+    return path if path.is_file() else None
+
+
+def _load_next_wave_registry_milestones(workspace_root: Path) -> List[Milestone]:
+    registry_path = _next_wave_registry_path(workspace_root)
+    if registry_path is None:
+        return []
+    payload = _read_yaml(registry_path)
+    if not isinstance(payload, dict):
+        return []
+    rows: List[Milestone] = []
+    for raw in (payload.get("milestones") or []):
+        if not isinstance(raw, dict):
+            continue
+        milestone_id = _coerce_int(raw.get("id"), 0)
+        if milestone_id <= 0:
+            continue
+        rows.append(
+            Milestone(
+                id=milestone_id,
+                title=str(raw.get("title") or f"Milestone {milestone_id}").strip(),
+                wave=str(raw.get("wave") or "").strip(),
+                status=str(raw.get("status") or "not_started").strip(),
+                owners=[str(value).strip() for value in (raw.get("owners") or []) if str(value).strip()],
+                exit_criteria=[str(value).strip() for value in (raw.get("exit_criteria") or []) if str(value).strip()],
+                dependencies=[_coerce_int(value, 0) for value in (raw.get("dependencies") or []) if _coerce_int(value, 0) > 0],
+            )
+        )
+    return rows
+
+
+def _queue_items_from_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for raw in (payload.get("items") or []):
         item: Any = raw
@@ -3961,20 +4065,62 @@ def _published_queue_items(workspace_root: Path) -> List[Dict[str, Any]]:
     return rows
 
 
-def _queue_item_for_shard(args: argparse.Namespace, state_root: Path) -> Optional[Dict[str, Any]]:
+def _published_queue_items(workspace_root: Path) -> List[Dict[str, Any]]:
+    return _queue_items_from_payload(_published_queue_payload(workspace_root))
+
+
+def _queue_payload_and_item_for_shard(
+    args: argparse.Namespace,
+    state_root: Path,
+    *,
+    base_frontier: Optional[Sequence[Milestone]] = None,
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
     resolved_state_root = Path(state_root).resolve()
     aggregate_root = _aggregate_state_root(resolved_state_root)
     if resolved_state_root == aggregate_root:
-        return None
+        return {}, None
     match = re.fullmatch(r"shard-(\d+)", resolved_state_root.name)
     if not match:
-        return None
+        return {}, None
     shard_index = max(1, int(match.group(1)))
-    items = _published_queue_items(Path(args.workspace_root).resolve())
+    workspace_root = Path(args.workspace_root).resolve()
+    live_payload = _published_queue_payload(workspace_root)
+    items = _queue_items_from_payload(live_payload)
     item_index = shard_index - 1
-    if item_index < 0 or item_index >= len(items):
-        return None
-    return dict(items[item_index])
+    if 0 <= item_index < len(items):
+        return dict(live_payload), dict(items[item_index])
+
+    next_wave_payload = _published_next_wave_queue_payload(workspace_root)
+    next_wave_items = _queue_items_from_payload(next_wave_payload)
+    if not next_wave_items:
+        return {}, None
+
+    current_frontier = list(base_frontier or [])
+    if not current_frontier:
+        current_frontier = _default_full_product_frontier(args, _full_product_readiness_audit(args))
+    configured_shard_roots = _configured_shard_roots(aggregate_root)
+    idle_shard_roots = [
+        shard_root
+        for shard_root in configured_shard_roots
+        if not _open_milestone_shard_frontier(shard_root, current_frontier, default_limit=3)
+    ]
+    try:
+        idle_index = idle_shard_roots.index(resolved_state_root)
+    except ValueError:
+        return {}, None
+    if idle_index < 0 or idle_index >= len(next_wave_items):
+        return {}, None
+    return dict(next_wave_payload), dict(next_wave_items[idle_index])
+
+
+def _queue_item_for_shard(
+    args: argparse.Namespace,
+    state_root: Path,
+    *,
+    base_frontier: Optional[Sequence[Milestone]] = None,
+) -> Optional[Dict[str, Any]]:
+    _payload, item = _queue_payload_and_item_for_shard(args, state_root, base_frontier=base_frontier)
+    return item
 
 
 def _queue_item_exit_criteria(item: Dict[str, Any]) -> List[str]:
@@ -4003,8 +4149,11 @@ def _queue_item_exit_criteria(item: Dict[str, Any]) -> List[str]:
     return criteria[:4]
 
 
-def _queue_driven_full_product_frontier(args: argparse.Namespace) -> List[Milestone]:
-    queue_item = _queue_item_for_shard(args, Path(args.state_root).resolve())
+def _queue_driven_full_product_frontier(
+    args: argparse.Namespace,
+    base_frontier: Optional[Sequence[Milestone]] = None,
+) -> List[Milestone]:
+    queue_item = _queue_item_for_shard(args, Path(args.state_root).resolve(), base_frontier=base_frontier)
     if not queue_item:
         return []
     audit = _full_product_readiness_audit(args)
@@ -4227,6 +4376,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             mirror_path=readiness_mirror_path,
             acceptance_path=acceptance_mirror_path,
             parity_registry_path=workspace_root / ".codex-design" / "product" / "LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml",
+            feedback_loop_gate_path=workspace_root / ".codex-design" / "product" / "FEEDBACK_LOOP_RELEASE_GATE.yaml",
             status_plane_path=Path(args.status_plane_path).resolve(),
             progress_report_path=progress_report_path,
             progress_history_path=progress_history_path,
@@ -4274,6 +4424,8 @@ def _full_product_frontier_payload(
 ) -> Dict[str, Any]:
     product_root = Path(args.program_milestones_path).resolve().parent
     profile_set = {str(item).strip() for item in focus_profiles if str(item).strip()}
+    generated_at = _iso_now()
+    generated_at_dt = _parse_iso(generated_at) or _utc_now()
     frontier_rows = [
         {
             "id": item.id,
@@ -4283,15 +4435,20 @@ def _full_product_frontier_payload(
             "owners": list(item.owners),
             "dependencies": list(item.dependencies),
             "exit_criteria": list(item.exit_criteria),
+            "eta": _estimate_full_product_milestone_eta(
+                item,
+                full_product_audit,
+                (),
+                generated_at_dt,
+            ),
         }
         for item in frontier
     ]
-    queue_payload = _published_queue_payload(Path(args.workspace_root).resolve())
-    queue_item = _queue_item_for_shard(args, state_root)
+    queue_payload, queue_item = _queue_payload_and_item_for_shard(args, state_root)
     payload: Dict[str, Any] = {
         "contract_name": "fleet.full_product_frontier",
         "schema_version": 1,
-        "generated_at": _iso_now(),
+        "generated_at": generated_at,
         "mode": mode,
         "state_root": str(state_root),
         "source_registry_path": str(Path(args.registry_path).resolve()),
@@ -4356,6 +4513,13 @@ def _full_product_frontier_payload(
             "scope_warning": str(eta.get("scope_warning") or "").strip(),
             "blocking_reason": str(eta.get("blocking_reason") or "").strip(),
             "summary": str(eta.get("summary") or "").strip(),
+            "predicted_completion_at": str(eta.get("predicted_completion_at") or "").strip(),
+            "range_low_hours": eta.get("range_low_hours"),
+            "range_high_hours": eta.get("range_high_hours"),
+            "remaining_open_milestones": eta.get("remaining_open_milestones"),
+            "remaining_in_progress_milestones": eta.get("remaining_in_progress_milestones"),
+            "remaining_not_started_milestones": eta.get("remaining_not_started_milestones"),
+            "remaining_effort_units": eta.get("remaining_effort_units"),
         }
     return payload
 
@@ -4426,7 +4590,9 @@ def build_worker_prompt(
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
     runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
     runtime_handoff_guidance = (
-        "If the shard runtime handoff disagrees with the shared NEXT_SESSION_HANDOFF, trust the shard runtime handoff first for resume context.\n\n"
+        "Use the shard runtime handoff as the worker-safe resume context. "
+        "The shared NEXT_SESSION_HANDOFF is operator-only and may contain historical supervisor status commands; "
+        "do not open it or execute commands from it inside worker runs.\n\n"
         if runtime_handoff_path is not None
         else ""
     )
@@ -4442,7 +4608,6 @@ def build_worker_prompt(
         f"- {registry_path}\n"
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
-        f"- {handoff_path}\n"
         f"{runtime_handoff_block}\n"
         f"{runtime_handoff_guidance}"
         f"Writable scope roots:\n{scope_text}\n\n"
@@ -4526,7 +4691,9 @@ def build_completion_review_prompt(
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
     runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
     runtime_handoff_guidance = (
-        "If the shard runtime handoff disagrees with the shared NEXT_SESSION_HANDOFF, trust the shard runtime handoff first for resume context.\n\n"
+        "Use the shard runtime handoff as the worker-safe resume context. "
+        "The shared NEXT_SESSION_HANDOFF is operator-only and may contain historical supervisor status commands; "
+        "do not open it or execute commands from it inside worker runs.\n\n"
         if runtime_handoff_path is not None
         else ""
     )
@@ -4581,7 +4748,6 @@ def build_completion_review_prompt(
             f"- {registry_path}\n"
             f"- {program_milestones_path}\n"
             f"- {roadmap_path}\n"
-            f"- {handoff_path}\n"
             f"{runtime_handoff_block}"
             f"- {frontier_artifact_path}\n"
             f"{compact_guidance_block}"
@@ -4613,7 +4779,6 @@ def build_completion_review_prompt(
         f"- {registry_path}\n"
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
-        f"- {handoff_path}\n"
         f"{runtime_handoff_block}\n"
         f"{guidance_block}"
         f"{desktop_recovery_block}"
@@ -4661,6 +4826,7 @@ def build_flagship_product_prompt(
     completion_audit: Dict[str, Any],
     full_product_audit: Dict[str, Any],
     history: Sequence[Dict[str, Any]],
+    eta_snapshot: Optional[Dict[str, Any]] = None,
     compact_prompt: bool = False,
 ) -> str:
     product_root = program_milestones_path.resolve().parent
@@ -4679,12 +4845,31 @@ def build_flagship_product_prompt(
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
     runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
     runtime_handoff_guidance = (
-        "If the shard runtime handoff disagrees with the shared NEXT_SESSION_HANDOFF, trust the shard runtime handoff first for resume context.\n\n"
+        "Use the shard runtime handoff as the worker-safe resume context. "
+        "The shared NEXT_SESSION_HANDOFF is operator-only and may contain historical supervisor status commands; "
+        "do not open it or execute commands from it inside worker runs.\n\n"
         if runtime_handoff_path is not None
         else ""
     )
     source_lines = "\n".join(f"- {path}" for path in design_source_paths[:12]) or f"- {product_root}"
     missing_coverage = ", ".join(str(item) for item in (full_product_audit.get("missing_coverage_keys") or [])) or "none"
+    eta = _normalize_eta_scope_fields(dict(eta_snapshot or {}))
+    eta_remaining_open = "unknown" if eta.get("remaining_open_milestones") is None else str(eta.get("remaining_open_milestones"))
+    eta_remaining_in_progress = (
+        "unknown" if eta.get("remaining_in_progress_milestones") is None else str(eta.get("remaining_in_progress_milestones"))
+    )
+    eta_remaining_not_started = (
+        "unknown" if eta.get("remaining_not_started_milestones") is None else str(eta.get("remaining_not_started_milestones"))
+    )
+    task_local_status_snapshot = (
+        "Task-local status snapshot:\n"
+        f"- scope: {eta.get('scope_label') or 'unknown'}\n"
+        f"- eta: {eta.get('eta_human') or 'unknown'}\n"
+        f"- remaining open milestones: {eta_remaining_open}\n"
+        f"- remaining in-progress milestones: {eta_remaining_in_progress}\n"
+        f"- remaining not-started milestones: {eta_remaining_not_started}\n"
+        "- this snapshot is provided so you do not need to query supervisor status from inside the worker run.\n\n"
+    )
     flagship_desktop_non_negotiables = (
         "Desktop flagship non-negotiables:\n"
         "- No generic shell, decorative mainframe, or dashboard-first landing page.\n"
@@ -4703,11 +4888,11 @@ def build_flagship_product_prompt(
             "This is the hard flagship bar: build the kind of product future work is measured against. Do not trade that bar down for schedule, local green receipts, or desktop-only wins.\n\n"
             f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n"
             f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
+            f"{task_local_status_snapshot}"
             "Read these files directly first:\n"
             f"- {registry_path}\n"
             f"- {program_milestones_path}\n"
             f"- {roadmap_path}\n"
-            f"- {handoff_path}\n"
             f"{runtime_handoff_block}"
             f"- {readiness_path}\n"
             f"- {frontier_artifact_path}\n"
@@ -4743,11 +4928,11 @@ def build_flagship_product_prompt(
         "Execution discipline: do not call supervisor status, ETA, or active-run queries from inside worker runs. Those commands are hard-blocked and return non-zero during active runs. The operator/OODA loop owns status; keep working the assigned slice.\n\n"
         f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n\n"
         f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
+        f"{task_local_status_snapshot}"
         "Start by reading these files directly:\n"
         f"- {registry_path}\n"
         f"- {program_milestones_path}\n"
         f"- {roadmap_path}\n"
-        f"- {handoff_path}\n"
         f"{runtime_handoff_block}"
         f"- {readiness_path}\n"
         f"- {frontier_artifact_path}\n"
@@ -5558,7 +5743,17 @@ def _lock_payload_path(state_root: Path) -> Path:
 
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     _ensure_dir(path.parent)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    tmp_path = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        tmp_path.write_text(rendered, encoding="utf-8")
+        os.replace(tmp_path, path)
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
 
 
 def _append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
@@ -5755,6 +5950,7 @@ def _write_active_run_state(state_root: Path, run: Optional[ActiveWorkerRun]) ->
         payload.pop("active_run", None)
     else:
         payload["active_run"] = _active_run_payload(run)
+        payload.pop("idle_reason", None)
     _write_json(state_path, payload)
     _write_runtime_handoff(state_root)
 
@@ -5776,10 +5972,18 @@ def _update_active_run_fields(state_root: Path, run_id: str, **fields: Any) -> N
             continue
         active_payload[key] = value
         changed = True
+    if (
+        str(active_payload.get("progress_state") or "").strip() == ""
+        and str(active_payload.get("worker_last_output_at") or active_payload.get("worker_first_output_at") or "").strip()
+    ):
+        active_payload["progress_state"] = "streaming"
+        changed = True
     if not changed:
         return
     payload["updated_at"] = _iso_now()
     payload["active_run"] = active_payload
+    payload.pop("idle_reason", None)
+    payload = _apply_status_alias_fields(payload)
     _write_json(state_path, payload)
     _write_runtime_handoff(state_root)
 
@@ -5883,14 +6087,22 @@ def _write_runtime_handoff(state_root: Path) -> None:
             if stdout_tail:
                 lines.extend(["", "## Recent stdout tail", "", "```text", stdout_tail, "```"])
             if stderr_tail:
-                if self_polling_blocker in stderr_tail or self_polling_blocker in last_message_text:
+                polling_loop_detected = (
+                    self_polling_blocker in stderr_tail
+                    or self_polling_blocker in last_message_text
+                    or "polling_disabled" in stderr_tail
+                    or "polling disabled inside active worker run" in stderr_tail.lower()
+                    or "python3 /docker/fleet/scripts/chummer_design_supervisor.py status" in stderr_tail
+                    or "python3 /docker/fleet/scripts/chummer_design_supervisor.py eta" in stderr_tail
+                )
+                if polling_loop_detected:
                     lines.extend(
                         [
                             "",
                             "## Recent stderr tail",
                             "",
                             "```text",
-                            "Previous run was killed for querying supervisor status from inside an active worker run.",
+                            "Supervisor status polling was observed from inside the active worker run.",
                             "Do not repeat that pattern; keep working from the prompt, handoff, and frontier artifacts only.",
                             "```",
                         ]
@@ -5949,7 +6161,11 @@ def _run_worker_attempt(
     stderr_sink: Any = None,
 ) -> subprocess.CompletedProcess[str]:
     self_poll_status_marker = "status_blocked_inside_worker_run"
-    self_poll_trip_threshold = 2
+    self_poll_command_markers = (
+        "python3 /docker/fleet/scripts/chummer_design_supervisor.py status",
+        "python3 /docker/fleet/scripts/chummer_design_supervisor.py eta",
+    )
+    self_poll_blocked_trip_threshold = 2
     kwargs: Dict[str, Any] = {
         "stdin": subprocess.PIPE,
         "stdout": subprocess.PIPE,
@@ -5971,6 +6187,7 @@ def _run_worker_attempt(
     handoff_heartbeat_stop = threading.Event()
     self_poll_state = {
         "blocked_status_hits": 0,
+        "status_command_hits": 0,
         "tripped": False,
     }
     handoff_heartbeat_seconds = _runtime_handoff_heartbeat_seconds()
@@ -6002,7 +6219,10 @@ def _run_worker_attempt(
         if not should_write:
             return
         now_iso = _iso_now()
-        fields: Dict[str, Any] = {"worker_last_output_at": now_iso}
+        fields: Dict[str, Any] = {
+            "worker_last_output_at": now_iso,
+            "progress_state": "streaming",
+        }
         if not progress_state["first_output_recorded"]:
             fields["worker_first_output_at"] = now_iso
             progress_state["first_output_recorded"] = True
@@ -6029,14 +6249,20 @@ def _run_worker_attempt(
                             sink.flush()
                         except ValueError:
                             sink = None
-                if stream_name == "stderr" and self_poll_status_marker in chunk:
-                    self_poll_state["blocked_status_hits"] = int(self_poll_state["blocked_status_hits"]) + 1
-                    if (
-                        not self_poll_state["tripped"]
-                        and int(self_poll_state["blocked_status_hits"]) >= self_poll_trip_threshold
-                    ):
-                        self_poll_state["tripped"] = True
-                        _terminate_worker_process(process_holder.get("process"))
+                if stream_name == "stderr":
+                    blocked_status_detected = self_poll_status_marker in chunk
+                    raw_status_command_detected = any(marker in chunk for marker in self_poll_command_markers)
+                    if blocked_status_detected:
+                        self_poll_state["blocked_status_hits"] = int(self_poll_state["blocked_status_hits"]) + 1
+                    if raw_status_command_detected:
+                        self_poll_state["status_command_hits"] = int(self_poll_state["status_command_hits"]) + 1
+                    if blocked_status_detected or raw_status_command_detected:
+                        if (
+                            not self_poll_state["tripped"]
+                            and int(self_poll_state["blocked_status_hits"]) >= self_poll_blocked_trip_threshold
+                        ):
+                            self_poll_state["tripped"] = True
+                            _terminate_worker_process(process_holder.get("process"))
                 _persist_output_progress()
         finally:
             try:
@@ -6062,7 +6288,12 @@ def _run_worker_attempt(
         )
 
     process_holder["process"] = process
-    _update_active_run_fields(state_root, run_id, worker_pid=int(process.pid))
+    _update_active_run_fields(
+        state_root,
+        run_id,
+        worker_pid=int(process.pid),
+        progress_state="running_silent",
+    )
     handoff_heartbeat_thread: Optional[threading.Thread] = None
     if handoff_heartbeat_seconds > 0.0:
         handoff_heartbeat_thread = threading.Thread(
@@ -6334,6 +6565,17 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
     shard_eta_not_started_sum = 0
     has_shard_eta_counts = False
     shard_eta_scope_kinds: Set[str] = set()
+    active_parallel_range_lows: List[float] = []
+    active_parallel_range_highs: List[float] = []
+    active_parallel_shard_count = 0
+    claimed_parallel_range_lows: List[float] = []
+    claimed_parallel_range_highs: List[float] = []
+    claimed_parallel_shard_count = 0
+    open_ids = {
+        _coerce_int(value, 0)
+        for value in (updated.get("open_milestone_ids") or [])
+        if _coerce_int(value, 0) > 0
+    }
     for shard in shard_rows:
         for value in (shard.get("active_frontier_ids") or shard.get("frontier_ids") or []):
             normalized = _coerce_int(value, 0)
@@ -6351,6 +6593,33 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
             shard_eta_open_sum += shard_eta_open
             shard_eta_in_progress_sum += shard_eta_in_progress
             shard_eta_not_started_sum += shard_eta_not_started
+        if _shard_summary_counts_as_active_run(shard):
+            active_parallel_shard_count += 1
+            shard_range_low = shard.get("eta_range_low_hours")
+            shard_range_high = shard.get("eta_range_high_hours")
+            try:
+                if shard_range_low is not None:
+                    active_parallel_range_lows.append(max(0.0, float(shard_range_low)))
+                if shard_range_high is not None:
+                    active_parallel_range_highs.append(max(0.0, float(shard_range_high)))
+            except (TypeError, ValueError):
+                pass
+        claimed_frontier_ids = {
+            _coerce_int(value, 0)
+            for value in (shard.get("active_frontier_ids") or shard.get("frontier_ids") or [])
+            if _coerce_int(value, 0) > 0
+        }
+        if claimed_frontier_ids and (not open_ids or claimed_frontier_ids.intersection(open_ids)):
+            claimed_parallel_shard_count += 1
+            shard_range_low = shard.get("eta_range_low_hours")
+            shard_range_high = shard.get("eta_range_high_hours")
+            try:
+                if shard_range_low is not None:
+                    claimed_parallel_range_lows.append(max(0.0, float(shard_range_low)))
+                if shard_range_high is not None:
+                    claimed_parallel_range_highs.append(max(0.0, float(shard_range_high)))
+            except (TypeError, ValueError):
+                pass
         blocker_text = _normalized_blocker_text(shard.get("last_run_blocker"))
         if _ignore_nonlinux_desktop_host_proof_blockers_enabled() and _reason_targets_ignored_nonlinux_desktop_host_platform(
             blocker_text
@@ -6380,17 +6649,13 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
     updated["shards"] = shard_rows
+    updated["active_runs_count"] = sum(1 for shard in shard_rows if _shard_summary_counts_as_active_run(shard))
     if shard_blockers:
         updated["shard_blockers"] = shard_blockers
     else:
         updated.pop("shard_blockers", None)
     eta = dict(updated.get("eta") or {})
     if eta:
-        open_ids = {
-            _coerce_int(value, 0)
-            for value in (updated.get("open_milestone_ids") or [])
-            if _coerce_int(value, 0) > 0
-        }
         active_open_ids = in_progress_ids & open_ids if open_ids else set(in_progress_ids)
         open_count = len(open_ids)
         in_progress_count = len(active_open_ids)
@@ -6437,14 +6702,30 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
                 f"{open_count} open milestones remain across the active frontier."
             )
         elif consistent_shard_scope_kind and consistent_shard_scope_kind != "open_milestone_frontier" and open_count > 0 and len(shard_rows) > 1:
+            parallel_low_hours = max(claimed_parallel_range_lows) if claimed_parallel_range_lows else None
+            parallel_high_hours = max(claimed_parallel_range_highs) if claimed_parallel_range_highs else None
+            parallel_shard_count = claimed_parallel_shard_count
+            if parallel_low_hours is None or parallel_high_hours is None:
+                parallel_low_hours = max(active_parallel_range_lows) if active_parallel_range_lows else None
+                parallel_high_hours = max(active_parallel_range_highs) if active_parallel_range_highs else None
+                parallel_shard_count = active_parallel_shard_count
             eta["status"] = "tracked"
-            eta["eta_human"] = "tracked"
             eta["eta_confidence"] = ETA_STATUS_LOW_CONFIDENCE
             eta["basis"] = "aggregate_shard_parallel_scope"
-            eta["predicted_completion_at"] = ""
+            if parallel_low_hours is not None and parallel_high_hours is not None:
+                parallel_high_hours = max(parallel_high_hours, parallel_low_hours)
+                eta["eta_human"] = _format_eta_window(parallel_low_hours, parallel_high_hours)
+                eta["range_low_hours"] = round(parallel_low_hours, 2)
+                eta["range_high_hours"] = round(parallel_high_hours, 2)
+                eta["predicted_completion_at"] = _iso(
+                    _utc_now() + dt.timedelta(hours=(parallel_low_hours + parallel_high_hours) / 2.0)
+                )
+            else:
+                eta["eta_human"] = "tracked"
+                eta["predicted_completion_at"] = ""
             eta["summary"] = (
                 f"{open_count} open milestones remain ({in_progress_count} in progress, {not_started_count} not started). "
-                f"Aggregate shard status is parallelized across {len(shard_rows)} shards under "
+                f"Aggregate shard status is parallelized across {max(1, parallel_shard_count)} active shards under "
                 f"{eta.get('scope_label') or consistent_shard_scope_kind}."
             )
         eta["remaining_open_milestones"] = open_count
@@ -6468,8 +6749,125 @@ def _reconcile_aggregate_shard_truth(state: Dict[str, Any]) -> Dict[str, Any]:
     return _apply_status_alias_fields(updated)
 
 
+def _shard_summary_counts_as_active_run(shard: Dict[str, Any]) -> bool:
+    active_run_id = str(shard.get("active_run_id") or "").strip()
+    if not active_run_id:
+        return False
+    progress_state = str(shard.get("active_run_progress_state") or "").strip().lower()
+    if progress_state in {"closing", "missing_process"}:
+        return False
+    return True
+
+
 def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     updated = dict(state or {})
+    active_runs = updated.get("active_runs")
+    if isinstance(active_runs, list):
+        updated["active_runs_count"] = sum(
+            1
+            for item in active_runs
+            if isinstance(item, dict) and str(item.get("run_id") or "").strip()
+        )
+    eta = dict(updated.get("eta") or {})
+    if eta:
+        for key in (
+            "remaining_open_milestones",
+            "remaining_in_progress_milestones",
+            "remaining_not_started_milestones",
+        ):
+            value = eta.get(key)
+            if value is None:
+                updated.pop(key, None)
+            else:
+                updated[key] = value
+        eta_human = str(eta.get("eta_human") or "").strip()
+        if eta_human:
+            updated["eta_human"] = eta_human
+        else:
+            updated.pop("eta_human", None)
+        eta_status = str(eta.get("status") or "").strip()
+        if eta_status:
+            updated["eta_status"] = eta_status
+        else:
+            updated.pop("eta_status", None)
+        eta_summary = str(eta.get("summary") or "").strip()
+        if eta_summary:
+            updated["eta_summary"] = eta_summary
+        else:
+            updated.pop("eta_summary", None)
+        eta_confidence = str(eta.get("eta_confidence") or "").strip()
+        if eta_confidence:
+            updated["eta_confidence"] = eta_confidence
+        else:
+            updated.pop("eta_confidence", None)
+        predicted_completion_at = str(eta.get("predicted_completion_at") or "").strip()
+        if predicted_completion_at:
+            updated["predicted_completion_at"] = predicted_completion_at
+        else:
+            updated.pop("predicted_completion_at", None)
+        for key in ("range_low_hours", "range_high_hours"):
+            value = eta.get(key)
+            if value is None:
+                updated.pop(key, None)
+            else:
+                updated[key] = value
+    else:
+        updated.pop("remaining_open_milestones", None)
+        updated.pop("remaining_in_progress_milestones", None)
+        updated.pop("remaining_not_started_milestones", None)
+        updated.pop("eta_human", None)
+        updated.pop("eta_status", None)
+        updated.pop("eta_summary", None)
+        updated.pop("eta_confidence", None)
+        updated.pop("predicted_completion_at", None)
+        updated.pop("range_low_hours", None)
+        updated.pop("range_high_hours", None)
+    raw_successor_eta = updated.get("successor_wave_eta")
+    successor_eta = _normalize_eta_scope_fields(dict(raw_successor_eta)) if isinstance(raw_successor_eta, dict) and raw_successor_eta else {}
+    if successor_eta:
+        updated["successor_wave_eta"] = successor_eta
+        successor_eta_human = str(successor_eta.get("eta_human") or "").strip()
+        if successor_eta_human:
+            updated["successor_wave_eta_human"] = successor_eta_human
+        else:
+            updated.pop("successor_wave_eta_human", None)
+        successor_eta_status = str(successor_eta.get("status") or "").strip()
+        if successor_eta_status:
+            updated["successor_wave_eta_status"] = successor_eta_status
+        else:
+            updated.pop("successor_wave_eta_status", None)
+        successor_eta_summary = str(successor_eta.get("summary") or "").strip()
+        if successor_eta_summary:
+            updated["successor_wave_eta_summary"] = successor_eta_summary
+        else:
+            updated.pop("successor_wave_eta_summary", None)
+        for key, alias in (
+            ("range_low_hours", "successor_wave_range_low_hours"),
+            ("range_high_hours", "successor_wave_range_high_hours"),
+            ("remaining_open_milestones", "successor_wave_remaining_open_milestones"),
+        ):
+            value = successor_eta.get(key)
+            if value is None:
+                updated.pop(alias, None)
+            else:
+                updated[alias] = value
+    else:
+        updated.pop("successor_wave_eta", None)
+        updated.pop("successor_wave_eta_human", None)
+        updated.pop("successor_wave_eta_status", None)
+        updated.pop("successor_wave_eta_summary", None)
+        updated.pop("successor_wave_range_low_hours", None)
+        updated.pop("successor_wave_range_high_hours", None)
+        updated.pop("successor_wave_remaining_open_milestones", None)
+    worker_lane_health = dict(updated.get("worker_lane_health") or {})
+    if worker_lane_health:
+        worker_lanes_status = str(worker_lane_health.get("status") or "").strip()
+        if worker_lanes_status:
+            updated["worker_lanes_status"] = worker_lanes_status
+        else:
+            updated.pop("worker_lanes_status", None)
+    else:
+        updated.pop("worker_lanes_status", None)
     host_memory_pressure = dict(updated.get("host_memory_pressure") or {})
     if host_memory_pressure:
         updated["allowed_active_shards"] = max(
@@ -6484,7 +6882,130 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
     else:
         updated.pop("allowed_active_shards", None)
         updated.pop("host_memory_status", None)
+    active_run = dict(updated.get("active_run") or {}) if isinstance(updated.get("active_run"), dict) else {}
+    mode = str(updated.get("mode") or "").strip()
+    if active_run:
+        active_run_frontier_ids = [_coerce_int(value, 0) for value in (active_run.get("frontier_ids") or [])]
+        active_run_frontier_ids = [value for value in active_run_frontier_ids if value > 0]
+        if active_run_frontier_ids and not list(updated.get("frontier_ids") or []):
+            updated["frontier_ids"] = list(active_run_frontier_ids)
+        active_run_open_milestone_ids = [_coerce_int(value, 0) for value in (active_run.get("open_milestone_ids") or [])]
+        active_run_open_milestone_ids = [value for value in active_run_open_milestone_ids if value > 0]
+        if active_run_open_milestone_ids:
+            if not list(updated.get("open_milestone_ids") or []):
+                updated["open_milestone_ids"] = list(active_run_open_milestone_ids)
+        elif active_run_frontier_ids and mode in {"flagship_product", "completion_review"} and not list(updated.get("open_milestone_ids") or []):
+            updated["open_milestone_ids"] = list(active_run_frontier_ids)
+        active_run_id = str(active_run.get("run_id") or "").strip()
+        if active_run_id:
+            updated["active_run_id"] = active_run_id
+        else:
+            updated.pop("active_run_id", None)
+        active_run_started_at = str(active_run.get("started_at") or "").strip()
+        if active_run_started_at:
+            updated["active_run_started_at"] = active_run_started_at
+        else:
+            updated.pop("active_run_started_at", None)
+        active_run_worker_first_output_at = str(active_run.get("worker_first_output_at") or "").strip()
+        if active_run_worker_first_output_at:
+            updated["active_run_worker_first_output_at"] = active_run_worker_first_output_at
+        else:
+            updated.pop("active_run_worker_first_output_at", None)
+        active_run_worker_last_output_at = str(active_run.get("worker_last_output_at") or "").strip()
+        if active_run_worker_last_output_at:
+            updated["active_run_worker_last_output_at"] = active_run_worker_last_output_at
+        else:
+            updated.pop("active_run_worker_last_output_at", None)
+        active_run_worker_pid = _coerce_int(active_run.get("worker_pid"), 0)
+        if active_run_worker_pid > 0:
+            updated["active_run_worker_pid"] = active_run_worker_pid
+        else:
+            updated.pop("active_run_worker_pid", None)
+        active_run_progress_state = str(active_run.get("progress_state") or "").strip()
+        if active_run_progress_state:
+            updated["active_run_progress_state"] = active_run_progress_state
+        else:
+            updated.pop("active_run_progress_state", None)
+        selected_account_alias = str(active_run.get("selected_account_alias") or updated.get("selected_account_alias") or "").strip()
+        if selected_account_alias:
+            updated["selected_account_alias"] = selected_account_alias
+        else:
+            updated.pop("selected_account_alias", None)
+        selected_model = str(active_run.get("selected_model") or updated.get("selected_model") or "").strip()
+        if selected_model:
+            updated["selected_model"] = selected_model
+        else:
+            updated.pop("selected_model", None)
+    else:
+        updated.pop("active_run_id", None)
+        updated.pop("active_run_started_at", None)
+        updated.pop("active_run_worker_first_output_at", None)
+        updated.pop("active_run_worker_last_output_at", None)
+        updated.pop("active_run_worker_pid", None)
+        updated.pop("active_run_progress_state", None)
+        if "selected_model" in updated and not str(updated.get("selected_model") or "").strip():
+            updated.pop("selected_model", None)
+        if "selected_account_alias" in updated and not str(updated.get("selected_account_alias") or "").strip():
+            updated.pop("selected_account_alias", None)
+    if mode in {"flagship_product", "completion_review"} and list(updated.get("frontier_ids") or []) and not list(updated.get("open_milestone_ids") or []):
+        updated["open_milestone_ids"] = list(updated.get("frontier_ids") or [])
+    last_run = dict(updated.get("last_run") or {}) if isinstance(updated.get("last_run"), dict) else {}
+    if last_run:
+        last_run_id = str(last_run.get("run_id") or "").strip()
+        if last_run_id:
+            updated["last_run_id"] = last_run_id
+        else:
+            updated.pop("last_run_id", None)
+        last_run_finished_at = str(last_run.get("finished_at") or last_run.get("started_at") or "").strip()
+        if last_run_finished_at:
+            updated["last_run_finished_at"] = last_run_finished_at
+        else:
+            updated.pop("last_run_finished_at", None)
+        last_run_blocker = _normalized_blocker_text(last_run.get("blocker"))
+        if last_run_blocker:
+            updated["last_run_blocker"] = last_run_blocker
+        else:
+            updated.pop("last_run_blocker", None)
+    else:
+        updated.pop("last_run_id", None)
+        updated.pop("last_run_finished_at", None)
+        updated.pop("last_run_blocker", None)
+    idle_reason = str(updated.get("idle_reason") or "").strip()
+    if (
+        not idle_reason
+        and not str(updated.get("active_run_id") or "").strip()
+        and list(updated.get("frontier_ids") or [])
+    ):
+        idle_reason = "claimed_frontier_without_active_run"
+    if idle_reason:
+        updated["idle_reason"] = idle_reason
+        if not str(updated.get("active_run_progress_state") or "").strip():
+            updated["active_run_progress_state"] = f"idle_{idle_reason}"
+    else:
+        updated.pop("idle_reason", None)
     return updated
+
+
+def _write_active_shard_manifest_snapshot(aggregate_root: Path) -> None:
+    aggregate_root = _aggregate_state_root(aggregate_root)
+    manifest_path = _active_shard_manifest_path(aggregate_root)
+    configured_shards = _active_shard_manifest_entries(aggregate_root)
+    if not configured_shards and not any(candidate.name.startswith("shard-") for candidate in aggregate_root.iterdir()):
+        return
+    topology_fingerprint = hashlib.sha256(
+        json.dumps(configured_shards, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    active_shards = _statefile_shard_summaries(aggregate_root)
+    payload: Dict[str, Any] = {
+        "generated_at": _iso_now(),
+        "manifest_kind": "configured_shard_topology",
+        "topology_fingerprint": topology_fingerprint,
+        "configured_shard_count": len(configured_shards),
+        "configured_shards": configured_shards,
+        "active_run_count": sum(1 for item in active_shards if str(item.get("active_run_id") or "").strip()),
+        "active_shards": active_shards,
+    }
+    _write_json(manifest_path, payload)
 
 
 def _has_current_flagship_pass_proof(state: Dict[str, Any]) -> bool:
@@ -7207,6 +7728,15 @@ def _eta_scope_fields(
 
 def _eta_scope_defaults(scope_kind: str) -> Dict[str, Any]:
     normalized = str(scope_kind or "").strip()
+    if normalized == "next_90_day_successor_wave":
+        return _eta_scope_fields(
+            scope_kind="next_90_day_successor_wave",
+            scope_label="Next 90-day product advance wave",
+            scope_warning=(
+                "This successor-wave ETA is tracked separately from the current flagship closeout frontier. "
+                "It assumes spare-shard execution continues without stealing active closeout shards."
+            ),
+        )
     if normalized == "completion_review_recovery":
         return _eta_scope_fields(
             scope_kind="completion_review_recovery",
@@ -7263,11 +7793,125 @@ def _normalize_eta_scope_fields(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         eta.update(_eta_scope_defaults("flagship_product_readiness"))
     elif basis == "completion_audit_pass" or status == "ready":
         eta.update(_eta_scope_defaults("repo_local_completion_ready"))
+    elif "successor_wave" in basis:
+        eta.update(_eta_scope_defaults("next_90_day_successor_wave"))
     elif basis in {"empirical_open_milestone_burn", "heuristic_status_mix"} or remaining_open > 0:
         eta.update(_eta_scope_defaults("open_milestone_frontier"))
     else:
         eta.update(_eta_scope_defaults("unknown"))
     return eta
+
+
+def _successor_wave_eta_snapshot(
+    workspace_root: Path,
+    *,
+    now: Optional[dt.datetime] = None,
+) -> Dict[str, Any]:
+    queue_payload = _published_next_wave_queue_payload(workspace_root)
+    queue_items = _queue_items_from_payload(queue_payload)
+    milestones = _load_next_wave_registry_milestones(workspace_root)
+    if not queue_items or not milestones:
+        return {}
+
+    remaining = [
+        item
+        for item in milestones
+        if str(item.status or "").strip().lower() not in {"complete", "completed", "done", "closed", "pass", "passed"}
+    ]
+    if not remaining:
+        current_time = now or _utc_now()
+        return {
+            "status": "ready",
+            "eta_human": "ready now",
+            "eta_confidence": ETA_STATUS_HIGH_CONFIDENCE,
+            "basis": "successor_wave_registry_complete",
+            "summary": "The next 90-day successor wave has no open milestones.",
+            "predicted_completion_at": _iso(current_time),
+            "range_low_hours": 0.0,
+            "range_high_hours": 0.0,
+            "remaining_open_milestones": 0,
+            "remaining_in_progress_milestones": 0,
+            "remaining_not_started_milestones": 0,
+            "remaining_queue_items": 0,
+            "critical_path_milestone_ids": [],
+            "blocking_reason": "",
+            **_eta_scope_fields(
+                scope_kind="next_90_day_successor_wave",
+                scope_label="Next 90-day product advance wave",
+                scope_warning=(
+                    "This successor-wave ETA is tracked separately from the current flagship closeout frontier. "
+                    "It assumes spare-shard execution continues without stealing active closeout shards."
+                ),
+            ),
+        }
+
+    by_id = {item.id: item for item in remaining}
+    memo: Dict[int, Tuple[float, float, List[int]]] = {}
+
+    def span(milestone_id: int) -> Tuple[float, float, List[int]]:
+        cached = memo.get(milestone_id)
+        if cached is not None:
+            return cached
+        item = by_id[milestone_id]
+        own_low, own_high = _full_product_milestone_eta_hours(item)
+        dependency_paths = [span(dep_id) for dep_id in item.dependencies if dep_id in by_id]
+        if dependency_paths:
+            dep_low, dep_high, dep_path = max(
+                dependency_paths,
+                key=lambda candidate: (candidate[1], candidate[0], len(candidate[2])),
+            )
+            result = (round(dep_low + own_low, 2), round(dep_high + own_high, 2), [*dep_path, milestone_id])
+        else:
+            result = (round(own_low, 2), round(own_high, 2), [milestone_id])
+        memo[milestone_id] = result
+        return result
+
+    critical_low, critical_high, critical_path = max(
+        (span(item.id) for item in remaining),
+        key=lambda candidate: (candidate[1], candidate[0], len(candidate[2])),
+    )
+    current_time = now or _utc_now()
+    in_progress_count = sum(1 for item in remaining if str(item.status or "").strip().lower() == "in_progress")
+    not_started_count = max(0, len(remaining) - in_progress_count)
+    queue_milestone_ids = {
+        _coerce_int(item.get("milestone_id"), 0)
+        for item in queue_items
+        if _coerce_int(item.get("milestone_id"), 0) > 0
+    }
+    critical_path_text = " -> ".join(str(value) for value in critical_path)
+    status = str(queue_payload.get("status") or "tracked").strip().lower()
+    return {
+        "status": "tracked" if status else "tracked",
+        "eta_human": _format_eta_window(critical_low, critical_high),
+        "eta_confidence": ETA_STATUS_LOW_CONFIDENCE,
+        "basis": "successor_wave_registry_dependency_critical_path",
+        "summary": (
+            f"{len(remaining)} next-wave milestones remain across {len(queue_items)} queue slices "
+            f"({in_progress_count} in progress, {not_started_count} not started). "
+            f"Current dependency critical path: {critical_path_text}."
+        ),
+        "predicted_completion_at": _iso(current_time + dt.timedelta(hours=(critical_low + critical_high) / 2.0)),
+        "range_low_hours": critical_low,
+        "range_high_hours": critical_high,
+        "remaining_open_milestones": len(remaining),
+        "remaining_in_progress_milestones": in_progress_count,
+        "remaining_not_started_milestones": not_started_count,
+        "remaining_queue_items": sum(
+            1
+            for item in queue_items
+            if _coerce_int(item.get("milestone_id"), 0) in queue_milestone_ids
+        ),
+        "critical_path_milestone_ids": critical_path,
+        "blocking_reason": "",
+        **_eta_scope_fields(
+            scope_kind="next_90_day_successor_wave",
+            scope_label="Next 90-day product advance wave",
+            scope_warning=(
+                "This successor-wave ETA is tracked separately from the current flagship closeout frontier. "
+                "It assumes spare-shard execution continues without stealing active closeout shards."
+            ),
+        ),
+    }
 
 
 def _run_open_milestone_ids(run: Dict[str, Any]) -> List[int]:
@@ -7612,12 +8256,85 @@ def _full_product_milestone_effort_units(item: Milestone) -> float:
     return round(max(0.75, min(2.5, units)), 2)
 
 
+def _full_product_milestone_eta_hours(item: Milestone) -> Tuple[float, float]:
+    text = " ".join([item.title, item.wave, item.status, *item.exit_criteria]).lower()
+    low_multiplier = 4.0
+    high_multiplier = 10.0
+    if any(term in text for term in ("rules", "parity", "import", "explain", "certification")):
+        low_multiplier += 1.1
+        high_multiplier += 2.5
+    elif any(term in text for term in ("desktop", "workbench", "builder", "updater", "packaging")):
+        low_multiplier += 0.8
+        high_multiplier += 2.1
+    elif any(term in text for term in ("hub", "registry", "public", "downloads", "account", "install", "update")):
+        low_multiplier += 0.55
+        high_multiplier += 1.6
+    elif any(term in text for term in ("design system", "accessibility", "localization", "polish")):
+        low_multiplier += 0.4
+        high_multiplier += 1.35
+    elif any(term in text for term in ("fleet", "operator", "feedback", "support", "proof", "signal")):
+        low_multiplier += 0.3
+        high_multiplier += 1.1
+
+    status = str(item.status or "").strip().lower()
+    if status == "in_progress":
+        low_multiplier = max(3.4, low_multiplier - 0.35)
+        high_multiplier = max(low_multiplier + 2.5, high_multiplier - 0.9)
+    elif status == "not_started":
+        low_multiplier += 0.2
+        high_multiplier += 0.5
+
+    units = _full_product_milestone_effort_units(item)
+    low_hours = max(4.0, units * low_multiplier)
+    high_hours = max(low_hours + 3.0, units * high_multiplier)
+    return round(low_hours, 2), round(high_hours, 2)
+
+
+def _estimate_full_product_milestone_eta(
+    item: Milestone,
+    full_product_audit: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+    now: dt.datetime,
+) -> Dict[str, Any]:
+    low_hours, high_hours = _full_product_milestone_eta_hours(item)
+    missing_coverage = [str(value) for value in (full_product_audit.get("missing_coverage_keys") or []) if str(value)]
+    coverage_text = ", ".join(missing_coverage) if missing_coverage else "flagship readiness proof refresh"
+    effort_units = _full_product_milestone_effort_units(item)
+    return {
+        "status": "flagship_delivery",
+        "eta_human": _format_eta_window(low_hours, high_hours),
+        "eta_confidence": ETA_STATUS_LOW_CONFIDENCE,
+        "basis": "full_product_single_milestone_heuristic",
+        "summary": (
+            f"Milestone '{item.title}' remains open under the flagship closeout frontier. "
+            f"Outstanding readiness coverage: {coverage_text}."
+        ),
+        "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
+        "range_low_hours": low_hours,
+        "range_high_hours": high_hours,
+        "remaining_open_milestones": 1,
+        "remaining_in_progress_milestones": 1 if str(item.status or '').strip().lower() == 'in_progress' else 0,
+        "remaining_not_started_milestones": 0 if str(item.status or '').strip().lower() == 'in_progress' else 1,
+        "remaining_effort_units": round(effort_units, 2),
+        "history_sample_count": len(history),
+        "observed_burn_milestones_per_day": 0.0,
+        "blocking_reason": "",
+        **_eta_scope_fields(
+            scope_kind="flagship_product_readiness",
+            scope_label="Full Chummer5A parity and flagship proof closeout",
+        ),
+    }
+
+
 def _estimate_full_product_eta(
     frontier: Sequence[Milestone],
     full_product_audit: Dict[str, Any],
     history: Sequence[Dict[str, Any]],
     now: dt.datetime,
 ) -> Dict[str, Any]:
+    current_open_count = len(frontier)
+    in_progress_count = sum(1 for item in frontier if str(item.status or "").strip().lower() == "in_progress")
+    not_started_count = max(0, current_open_count - in_progress_count)
     recovery_units = sum(_full_product_milestone_effort_units(item) for item in frontier)
     low_hours = max(6.0, recovery_units * 4.0)
     high_hours = max(low_hours + 4.0, recovery_units * 10.0)
@@ -7635,9 +8352,9 @@ def _estimate_full_product_eta(
         "predicted_completion_at": _iso(now + dt.timedelta(hours=(low_hours + high_hours) / 2.0)),
         "range_low_hours": round(low_hours, 2),
         "range_high_hours": round(high_hours, 2),
-        "remaining_open_milestones": 0,
-        "remaining_in_progress_milestones": 0,
-        "remaining_not_started_milestones": len(frontier),
+        "remaining_open_milestones": current_open_count,
+        "remaining_in_progress_milestones": in_progress_count,
+        "remaining_not_started_milestones": not_started_count,
         "remaining_effort_units": round(recovery_units, 2),
         "history_sample_count": len(history),
         "observed_burn_milestones_per_day": 0.0,
@@ -7683,6 +8400,7 @@ def _build_eta_snapshot(
     mode: str,
     open_milestones: Sequence[Milestone],
     frontier: Sequence[Milestone],
+    scope_frontier: Optional[Sequence[Milestone]] = None,
     history: Sequence[Dict[str, Any]],
     completion_audit: Optional[Dict[str, Any]] = None,
     full_product_audit: Optional[Dict[str, Any]] = None,
@@ -7693,14 +8411,29 @@ def _build_eta_snapshot(
     blocker_reason = _eta_external_blocker_reason(history, completion_audit, full_product_audit) or _worker_lane_health_blocker_reason(
         worker_lane_health
     )
+    effective_scope_frontier = list(scope_frontier or [])
     base_snapshot: Dict[str, Any]
+    flagship_scope_frontier = list(open_milestones or frontier or effective_scope_frontier)
     if (
+        mode == "flagship_product"
+        and isinstance(full_product_audit, dict)
+        and full_product_audit.get("status") != "pass"
+        and len(flagship_scope_frontier) == 1
+    ):
+        base_snapshot = _estimate_full_product_milestone_eta(
+            flagship_scope_frontier[0],
+            full_product_audit,
+            history,
+            current_time,
+        )
+    elif (
         isinstance(full_product_audit, dict)
         and full_product_audit.get("status") != "pass"
         and not open_milestones
         and (mode == "flagship_product" or (completion_audit and completion_audit.get("status") == "pass"))
     ):
-        base_snapshot = _estimate_full_product_eta(frontier, full_product_audit, history, current_time)
+        effective_frontier = frontier or effective_scope_frontier
+        base_snapshot = _estimate_full_product_eta(effective_frontier, full_product_audit, history, current_time)
     elif completion_audit and completion_audit.get("status") == "pass" and not open_milestones:
         base_snapshot = {
             "status": "ready",
@@ -7754,6 +8487,49 @@ def _build_eta_snapshot(
             ),
         }
     return _apply_eta_blocker(base_snapshot, blocker_reason)
+
+
+def _idle_scope_frontier(
+    args: argparse.Namespace,
+    state_root: Path,
+    context: Dict[str, Any],
+    history: Sequence[Dict[str, Any]],
+) -> Sequence[Milestone]:
+    if context.get("full_product_audit"):
+        scope_frontier = list(context.get("flagship_product_scope_frontier") or [])
+        if scope_frontier:
+            return scope_frontier
+        full_frontier = _full_product_frontier(args)
+        prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
+        available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
+        return list(available_frontier or full_frontier)
+    if context.get("completion_audit"):
+        scope_frontier = list(context.get("completion_review_scope_frontier") or [])
+        if scope_frontier:
+            return scope_frontier
+        full_frontier = _completion_review_frontier(
+            dict(context.get("completion_audit") or {}),
+            Path(args.registry_path).resolve(),
+            history,
+        )
+        prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
+        available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
+        return list(available_frontier or full_frontier)
+    return []
+
+
+def _aggregate_idle_eta_snapshot(state_root: Path) -> Optional[Dict[str, Any]]:
+    resolved_state_root = Path(state_root).resolve()
+    aggregate_root = _aggregate_state_root(state_root)
+    if resolved_state_root == aggregate_root:
+        return None
+    aggregate_state, _history = _effective_supervisor_state(aggregate_root, history_limit=COMPLETION_AUDIT_HISTORY_LIMIT)
+    aggregate_eta = dict(aggregate_state.get("eta") or {})
+    if not aggregate_eta:
+        return None
+    if aggregate_eta.get("remaining_open_milestones") is None:
+        return None
+    return _normalize_eta_scope_fields(aggregate_eta)
 
 
 def _render_eta(eta: Dict[str, Any]) -> str:
@@ -8121,6 +8897,7 @@ def derive_completion_review_context(
             "completion_audit": review_audit,
             "completion_history": history,
             "completion_review_full_frontier_ids": [item.id for item in full_frontier],
+            "completion_review_scope_frontier": list(full_frontier),
             "completion_review_prior_claimed_frontier_ids": prior_claimed_ids,
             "completion_review_shard_index": _shard_index(state_root),
             "completion_review_frontier_path": materialized_paths["published_path"],
@@ -8143,27 +8920,48 @@ def derive_flagship_product_context(
     current_completion_audit = dict(completion_audit or _design_completion_audit(args, history))
     current_full_product_audit = dict(full_product_audit or _full_product_readiness_audit(args))
     full_frontier = _full_product_frontier(args)
+    queue_item = _queue_item_for_shard(
+        args,
+        state_root,
+        base_frontier=_default_full_product_frontier(args, current_full_product_audit),
+    )
     frontier_limit = _completion_review_shard_frontier_limit(state_root, full_frontier, default_limit=3)
-    prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
-    available_frontier = _exclude_frontier_ids(full_frontier, prior_claimed_ids)
-    if available_frontier:
-        frontier = _focused_frontier(args, available_frontier, available_frontier)
-        frontier = _bounded_frontier(frontier, limit=frontier_limit)
-    elif prior_claimed_ids and full_frontier:
-        rotated_frontier = list(full_frontier)
-        if len(rotated_frontier) > 1:
-            offset = _shard_index(state_root) % len(rotated_frontier)
-            rotated_frontier = rotated_frontier[offset:] + rotated_frontier[:offset]
-        frontier = _focused_frontier(args, rotated_frontier, rotated_frontier)
-        frontier = _bounded_frontier(frontier, limit=1)
-    elif prior_claimed_ids:
-        frontier = []
+    focused_full_frontier = _focused_frontier(args, full_frontier, full_frontier)
+    prior_claimed_ids: List[int] = []
+    resolved_state_root = Path(state_root).resolve()
+    aggregate_root = _aggregate_state_root(state_root)
+    if resolved_state_root != aggregate_root and resolved_state_root.name.startswith("shard-"):
+        if queue_item:
+            frontier = _bounded_frontier(focused_full_frontier, limit=frontier_limit)
+        else:
+            frontier = _open_milestone_shard_frontier(
+                state_root,
+                focused_full_frontier,
+                default_limit=frontier_limit,
+            )
     else:
-        frontier = _bounded_frontier(_focused_frontier(args, full_frontier, full_frontier), limit=frontier_limit)
+        prior_claimed_ids = _prior_active_shard_frontier_ids(state_root)
+        available_frontier = _exclude_frontier_ids(focused_full_frontier, prior_claimed_ids)
+        if available_frontier:
+            frontier = _bounded_frontier(available_frontier, limit=frontier_limit)
+        elif prior_claimed_ids:
+            frontier = []
+        else:
+            frontier = _bounded_frontier(focused_full_frontier, limit=frontier_limit)
     pinned_frontier_ids = [int(value) for value in (args.frontier_id or []) if int(value or 0) > 0]
     if pinned_frontier_ids:
         by_id = {item.id: item for item in full_frontier}
         frontier = [by_id[value] for value in pinned_frontier_ids if value in by_id]
+    eta_snapshot = _build_eta_snapshot(
+        mode="flagship_product",
+        open_milestones=context.get("open_milestones") or [],
+        frontier=frontier,
+        scope_frontier=focused_full_frontier,
+        history=history,
+        completion_audit=current_completion_audit,
+        full_product_audit=current_full_product_audit,
+        now=_utc_now(),
+    )
     focus_profiles, focus_owners, focus_texts = _flagship_product_focus_bundle(
         args,
         frontier,
@@ -8189,6 +8987,7 @@ def derive_flagship_product_context(
         completion_audit=current_completion_audit,
         full_product_audit=current_full_product_audit,
         history=history,
+        eta_snapshot=eta_snapshot,
         compact_prompt=(str(args.worker_bin or "").strip().endswith("codexea") or bool(str(args.worker_lane or "").strip())),
     )
     materialized_paths = _materialize_full_product_frontier(
@@ -8214,6 +9013,7 @@ def derive_flagship_product_context(
             "completion_audit": current_completion_audit,
             "full_product_audit": current_full_product_audit,
             "flagship_product_full_frontier_ids": [item.id for item in full_frontier],
+            "flagship_product_scope_frontier": list(focused_full_frontier),
             "flagship_product_prior_claimed_frontier_ids": prior_claimed_ids,
             "flagship_product_shard_index": _shard_index(state_root),
             "full_product_frontier_path": materialized_paths["published_path"],
@@ -8276,6 +9076,7 @@ def _live_state_with_current_completion_audit(
     )
     host_memory_pressure = _memory_dispatch_snapshot(effective_args, state_root)
     updated = dict(state)
+    updated["updated_at"] = _iso_now()
     readiness_path = str(getattr(effective_args, "flagship_product_readiness_path", "") or "").strip()
     if readiness_path:
         updated["flagship_product_readiness_path"] = str(Path(readiness_path).resolve())
@@ -8337,6 +9138,15 @@ def _live_state_with_current_completion_audit(
             else:
                 updated["mode"] = mode
             updated.update(_reconcile_aggregate_shard_truth(updated))
+        if Path(state_root).resolve() == _aggregate_state_root(state_root):
+            successor_wave_eta = _successor_wave_eta_snapshot(Path(effective_args.workspace_root).resolve())
+            if successor_wave_eta:
+                updated["successor_wave_eta"] = successor_wave_eta
+            else:
+                updated.pop("successor_wave_eta", None)
+        normalized = _apply_status_alias_fields(updated)
+        updated.clear()
+        updated.update(normalized)
 
     if context["open_milestones"]:
         open_milestone_ids = [item.id for item in context["open_milestones"]]
@@ -8702,7 +9512,7 @@ def _fast_status_state(
     if freshest_shard_updated_at is not None:
         updated["updated_at"] = _iso(freshest_shard_updated_at)
     updated["active_runs_count"] = sum(
-        1 for item in (updated.get("shards") or []) if str(item.get("active_run_id") or "").strip()
+        1 for item in (updated.get("shards") or []) if _shard_summary_counts_as_active_run(item)
     )
     shard_frontier_ids = sorted(
         {
@@ -8797,7 +9607,6 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
         )
     ).resolve()
     use_runtime_shard_env = runtime_state_root == aggregate_root.resolve()
-    summaries: List[Dict[str, Any]] = []
     for shard_root in _configured_shard_roots(aggregate_root):
         shard_state = _read_state(_state_payload_path(shard_root))
         shard_history = _read_history(_history_payload_path(shard_root), limit=ETA_HISTORY_LIMIT)
@@ -8935,33 +9744,15 @@ def _live_shard_summaries(args: argparse.Namespace, state_root: Path) -> List[Di
             refresh_flagship_readiness=False,
         )
         _persist_live_state_snapshot(shard_root, updated_shard)
-        current_frontier_ids = list(updated_shard.get("frontier_ids") or [])
-        active_frontier_ids = list(((updated_shard.get("active_run") or {}) if isinstance(updated_shard.get("active_run"), dict) else {}).get("frontier_ids") or [])
-        summaries.append(
-            {
-                "name": shard_root.name,
-                "state_root": str(shard_root),
-                "updated_at": updated_shard.get("updated_at") or "",
-                "mode": updated_shard.get("mode") or "",
-                "frontier_ids": current_frontier_ids,
-                "active_frontier_ids": active_frontier_ids,
-                "open_milestone_ids": _state_open_milestone_ids(updated_shard),
-                "focus_profiles": list(updated_shard.get("focus_profiles") or []),
-                "focus_owners": list(updated_shard.get("focus_owners") or []),
-                "focus_texts": list(updated_shard.get("focus_texts") or []),
-                "eta_status": str((updated_shard.get("eta") or {}).get("status") or "").strip(),
-                "last_run_id": str((updated_shard.get("last_run") or {}).get("run_id") or "").strip(),
-                "last_run_finished_at": str(
-                    (updated_shard.get("last_run") or {}).get("finished_at")
-                    or (updated_shard.get("last_run") or {}).get("started_at")
-                    or ""
-                ).strip(),
-                "last_run_blocker": _normalized_blocker_text((updated_shard.get("last_run") or {}).get("blocker")),
-                "active_run_id": str((updated_shard.get("active_run") or {}).get("run_id") or "").strip(),
-                "active_run_started_at": str((updated_shard.get("active_run") or {}).get("started_at") or "").strip(),
-            }
-        )
-    return summaries
+    # Prefer the supervisor-authored runtime manifest when available so host-side operator reads
+    # do not replace container-local process truth with a weaker outside-the-container guess.
+    if not _running_inside_container():
+        manifest_summaries = _active_shard_manifest_live_summaries(aggregate_root)
+        if manifest_summaries:
+            return manifest_summaries
+    # Otherwise re-read the persisted shard snapshots so live refresh and cached state expose the
+    # same detailed shard summary surface instead of diverging on active-run aliases/progress fields.
+    return _statefile_shard_summaries(aggregate_root)
 
 
 def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
@@ -8970,6 +9761,8 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
     running_inside_container = _running_inside_container()
     for shard_root in _configured_shard_roots(aggregate_root):
         shard_state = _read_state(_state_payload_path(shard_root))
+        state_frontier_ids = _state_frontier_ids(shard_state)
+        state_open_milestone_ids = _state_open_milestone_ids(shard_state)
         state_payload_path = _state_payload_path(shard_root)
         state_payload_updated_at = _state_updated_at(shard_state)
         try:
@@ -8986,11 +9779,16 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
         if not active_run:
             recovered_active_run = _recover_matching_live_active_run(
                 shard_root,
-                frontier_ids=_state_frontier_ids(shard_state),
-                open_milestone_ids=_state_open_milestone_ids(shard_state),
+                frontier_ids=state_frontier_ids,
+                open_milestone_ids=state_open_milestone_ids,
             )
             if recovered_active_run is not None:
                 active_run = dict(recovered_active_run)
+        active_run_id = str(active_run.get("run_id") or "").strip()
+        last_run_id = str(last_run.get("run_id") or "").strip()
+        idle_reason = str(shard_state.get("idle_reason") or "").strip()
+        if not idle_reason and not active_run_id and state_frontier_ids and not last_run_id:
+            idle_reason = "claimed_frontier_without_active_run"
         worker_pid = _coerce_int(active_run.get("worker_pid"), 0)
         process_probe_scope = "local"
         process_alive: Optional[bool] = False
@@ -9055,14 +9853,17 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                 "state_root": str(shard_root),
                 "updated_at": _iso(freshest_updated_at) if freshest_updated_at is not None else "",
                 "mode": shard_state.get("mode") or "",
-                "frontier_ids": _state_frontier_ids(shard_state),
+                "frontier_ids": state_frontier_ids,
                 "active_frontier_ids": list(active_run.get("frontier_ids") or []),
-                "open_milestone_ids": _state_open_milestone_ids(shard_state),
+                "open_milestone_ids": state_open_milestone_ids,
                 "focus_profiles": list(shard_state.get("focus_profiles") or []),
                 "focus_owners": list(shard_state.get("focus_owners") or []),
                 "focus_texts": list(shard_state.get("focus_texts") or []),
                 "eta_status": str((shard_state.get("eta") or {}).get("status") or "").strip(),
                 "eta_scope_kind": str((shard_state.get("eta") or {}).get("scope_kind") or "").strip(),
+                "eta_summary": str((shard_state.get("eta") or {}).get("summary") or "").strip(),
+                "eta_range_low_hours": (shard_state.get("eta") or {}).get("range_low_hours"),
+                "eta_range_high_hours": (shard_state.get("eta") or {}).get("range_high_hours"),
                 "eta_remaining_open_milestones": (shard_state.get("eta") or {}).get("remaining_open_milestones"),
                 "eta_remaining_in_progress_milestones": (
                     (shard_state.get("eta") or {}).get("remaining_in_progress_milestones")
@@ -9070,10 +9871,11 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                 "eta_remaining_not_started_milestones": (
                     (shard_state.get("eta") or {}).get("remaining_not_started_milestones")
                 ),
-                "last_run_id": str(last_run.get("run_id") or "").strip(),
+                "last_run_id": last_run_id,
                 "last_run_finished_at": str(last_run.get("finished_at") or last_run.get("started_at") or "").strip(),
                 "last_run_blocker": _normalized_blocker_text(last_run.get("blocker")),
-                "active_run_id": str(active_run.get("run_id") or "").strip(),
+                "idle_reason": idle_reason,
+                "active_run_id": active_run_id,
                 "active_run_started_at": str(active_run.get("started_at") or "").strip(),
                 "selected_account_alias": str(active_run.get("selected_account_alias") or "").strip(),
                 "selected_model": str(active_run.get("selected_model") or "").strip(),
@@ -9101,7 +9903,11 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                             else (
                                 "container_scoped"
                                 if worker_pid > 0 and process_probe_scope == "container_local"
-                                else ("missing_process" if worker_pid > 0 and process_alive is False else "unknown")
+                                else (
+                                    "missing_process"
+                                    if worker_pid > 0 and process_alive is False
+                                    else (f"idle_{idle_reason}" if idle_reason else "unknown")
+                                )
                             )
                         )
                     )
@@ -10045,7 +10851,7 @@ def launch_worker(
     open_milestones: List[Milestone] = context["open_milestones"]
     frontier: List[Milestone] = context["frontier"]
     prompt = str(context["prompt"])
-    run_id = _slug_timestamp()
+    run_id = _state_scoped_run_id(state_root)
     run_dir = state_root / "runs" / run_id
     prompt_path = _write_run_artifacts(run_dir, prompt)
     stdout_path = run_dir / "worker.stdout.log"
@@ -10068,6 +10874,8 @@ def launch_worker(
     started_at = _iso_now()
     frontier_ids = [item.id for item in frontier]
     open_milestone_ids = [item.id for item in open_milestones]
+    if not open_milestone_ids and frontier_ids:
+        open_milestone_ids = list(frontier_ids)
     primary_milestone_id = frontier[0].id if frontier else None
     if args.dry_run:
         stdout_path.write_text("", encoding="utf-8")
@@ -10893,12 +11701,18 @@ def _write_state(
     completion_review_frontier_mirror_path: str = "",
     full_product_frontier_path: str = "",
     full_product_frontier_mirror_path: str = "",
+    idle_reason: str = "",
 ) -> None:
+    open_milestone_items = list(open_milestones)
+    frontier_items = list(frontier)
+    if not open_milestone_items and frontier_items and mode in {"flagship_product", "completion_review"}:
+        # In flagship/review slices the shard's local frontier is the effective open work set.
+        open_milestone_items = list(frontier_items)
     payload: Dict[str, Any] = {
         "updated_at": _iso_now(),
         "mode": mode,
-        "open_milestone_ids": [item.id for item in open_milestones],
-        "frontier_ids": [item.id for item in frontier],
+        "open_milestone_ids": [item.id for item in open_milestone_items],
+        "frontier_ids": [item.id for item in frontier_items],
         "focus_profiles": list(focus_profiles),
         "focus_owners": list(focus_owners),
         "focus_texts": list(focus_texts),
@@ -10931,9 +11745,18 @@ def _write_state(
         payload["full_product_frontier_path"] = str(full_product_frontier_path)
     if full_product_frontier_mirror_path:
         payload["full_product_frontier_mirror_path"] = str(full_product_frontier_mirror_path)
-    payload = _apply_status_alias_fields(payload)
+    idle_reason = str(idle_reason or "").strip()
+    if idle_reason:
+        payload["idle_reason"] = idle_reason
+    if Path(state_root).resolve() == _aggregate_state_root(state_root):
+        successor_wave_eta = _successor_wave_eta_snapshot(_workspace_root_for_state_root(state_root))
+        if successor_wave_eta:
+            payload["successor_wave_eta"] = successor_wave_eta
     _merge_matching_live_active_run(state_root, payload)
+    payload = _apply_status_alias_fields(payload)
     _write_json(_state_payload_path(state_root), payload)
+    if _running_inside_container():
+        _write_active_shard_manifest_snapshot(state_root)
     _write_runtime_handoff(state_root)
     if run is not None:
         _append_jsonl(_history_payload_path(state_root), payload["last_run"])
@@ -10987,12 +11810,28 @@ def _merge_matching_live_active_run(state_root: Path, payload: Dict[str, Any]) -
 
 
 def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> None:
-    payload = _apply_status_alias_fields(dict(state))
+    payload = dict(state)
     payload.pop("state_root", None)
-    payload.pop("shard_count", None)
-    payload.pop("shards", None)
+    aggregate_root = _aggregate_state_root(state_root)
+    resolved_state_root = Path(state_root).resolve()
+    keep_shards = (
+        resolved_state_root == aggregate_root
+        and isinstance(payload.get("shards"), list)
+        and bool(_configured_shard_roots(aggregate_root))
+    )
+    if not keep_shards:
+        payload.pop("shards", None)
+    if Path(state_root).resolve() == _aggregate_state_root(state_root):
+        successor_wave_eta = _successor_wave_eta_snapshot(_workspace_root_for_state_root(state_root))
+        if successor_wave_eta:
+            payload["successor_wave_eta"] = successor_wave_eta
+        else:
+            payload.pop("successor_wave_eta", None)
     _merge_matching_live_active_run(state_root, payload)
+    payload = _apply_status_alias_fields(payload)
     _write_json(_state_payload_path(state_root), payload)
+    if _running_inside_container():
+        _write_active_shard_manifest_snapshot(state_root)
 
 
 def _render_status(state: Dict[str, Any]) -> str:
@@ -11007,6 +11846,18 @@ def _render_status(state: Dict[str, Any]) -> str:
         f"focus_owners: {', '.join(str(value) for value in (state.get('focus_owners') or [])) or 'none'}",
         f"focus_texts: {', '.join(str(value) for value in (state.get('focus_texts') or [])) or 'none'}",
     ]
+    idle_reason = str(state.get("idle_reason") or "").strip()
+    if idle_reason:
+        lines.append(f"idle_reason: {idle_reason}")
+    successor_wave_eta = dict(state.get("successor_wave_eta") or {})
+    if successor_wave_eta:
+        lines.extend(
+            [
+                f"successor_wave_eta.status: {successor_wave_eta.get('status') or 'unknown'}",
+                f"successor_wave_eta.human: {successor_wave_eta.get('eta_human') or 'unknown'}",
+                f"successor_wave_eta.summary: {successor_wave_eta.get('summary') or 'none'}",
+            ]
+        )
     completion_review_frontier_path = str(state.get("completion_review_frontier_path") or "").strip()
     if completion_review_frontier_path:
         lines.append(f"completion_review_frontier.path: {completion_review_frontier_path}")
@@ -11419,6 +12270,7 @@ def _worker_status_task_local_payload(args: argparse.Namespace, blocked_reason: 
         "polling disabled inside active worker run; continue the assigned slice using the prompt, handoff, "
         "and frontier artifacts instead of querying supervisor status again"
     )
+    state_eta = _normalize_eta_scope_fields(dict(state.get("eta") or {}))
     frontier_ids = sorted({_coerce_int(value, 0) for value in _state_frontier_ids(state) if _coerce_int(value, 0) > 0})
     open_milestone_ids = sorted(
         {_coerce_int(value, 0) for value in _state_open_milestone_ids(state) if _coerce_int(value, 0) > 0}
@@ -11427,15 +12279,18 @@ def _worker_status_task_local_payload(args: argparse.Namespace, blocked_reason: 
         "mode": "task_local_only",
         "polling_disabled": True,
         "status_query_supported": False,
+        "active_runs_count": state.get("active_runs_count"),
         "eta": {
             "status": "polling_disabled",
-            "scope_kind": "task_local_only",
-            "predicted_completion_at": "",
-            "remaining_open_milestones": None,
-            "remaining_not_started_milestones": None,
-            "remaining_in_progress_milestones": None,
-            "eta_human": "polling_disabled",
-            "summary": guidance,
+            "scope_kind": str(state_eta.get("scope_kind") or "task_local_only").strip(),
+            "scope_label": str(state_eta.get("scope_label") or "").strip(),
+            "scope_warning": str(state_eta.get("scope_warning") or "").strip(),
+            "predicted_completion_at": str(state_eta.get("predicted_completion_at") or "").strip(),
+            "remaining_open_milestones": state_eta.get("remaining_open_milestones"),
+            "remaining_not_started_milestones": state_eta.get("remaining_not_started_milestones"),
+            "remaining_in_progress_milestones": state_eta.get("remaining_in_progress_milestones"),
+            "eta_human": str(state_eta.get("eta_human") or "polling_disabled").strip(),
+            "summary": str(state_eta.get("summary") or guidance).strip(),
         },
         "warning": str(blocked_reason or "").strip() or "worker_status_budget_exhausted",
         "guidance": guidance,
@@ -13863,6 +14718,7 @@ def run_loop(args: argparse.Namespace) -> int:
                     completion_review_frontier_mirror_path="",
                     full_product_frontier_path="",
                     full_product_frontier_mirror_path="",
+                    idle_reason="waiting_for_local_shard_slice",
                 )
                 notice = "[fleet-supervisor] loop has no local shard slice; waiting for another shard or milestone progress"
                 if notice != last_idle_notice:
@@ -13872,15 +14728,20 @@ def run_loop(args: argparse.Namespace) -> int:
                 continue
             if not open_milestones and not frontier:
                 idle_mode = "flagship_product" if context.get("full_product_audit") else "completion_review"
+                idle_scope_frontier = _idle_scope_frontier(args, state_root, context, history)
                 eta = _build_eta_snapshot(
                     mode=idle_mode,
                     open_milestones=[],
                     frontier=[],
+                    scope_frontier=idle_scope_frontier,
                     history=history,
                     completion_audit=context.get("completion_audit"),
                     full_product_audit=context.get("full_product_audit"),
                     worker_lane_health=worker_lane_health,
                 )
+                aggregate_idle_eta = _aggregate_idle_eta_snapshot(state_root)
+                if aggregate_idle_eta:
+                    eta = aggregate_idle_eta
                 completion_frontier_paths = {"published_path": "", "mirror_path": ""}
                 full_frontier_paths = {"published_path": "", "mirror_path": ""}
                 if context.get("full_product_audit"):
@@ -13926,6 +14787,7 @@ def run_loop(args: argparse.Namespace) -> int:
                     completion_review_frontier_mirror_path=completion_frontier_paths["mirror_path"],
                     full_product_frontier_path=full_frontier_paths["published_path"],
                     full_product_frontier_mirror_path=full_frontier_paths["mirror_path"],
+                    idle_reason="waiting_for_local_frontier_slice",
                 )
                 notice = (
                     "[fleet-supervisor] flagship product frontier has no local shard slice; waiting for another shard or new evidence"
@@ -14080,12 +14942,13 @@ def main() -> None:
         if not allowed:
             payload = _worker_status_task_local_payload(args, blocked_reason)
             payload["command"] = str(args.command)
-            payload["nonfatal_fallback"] = True
+            payload["nonfatal_fallback"] = False
             if args.json:
                 print(json.dumps(payload, indent=2, sort_keys=True))
             else:
                 print(_render_worker_status_task_local_payload(payload))
-            return
+            print(_worker_status_block_message(args, blocked_reason), file=sys.stderr)
+            raise SystemExit(2)
     if args.command == "status":
         state_root = Path(args.state_root).resolve()
         include_shards = not state_root.name.startswith("shard-")

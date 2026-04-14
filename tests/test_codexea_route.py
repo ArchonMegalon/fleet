@@ -507,7 +507,7 @@ class CodexEaRouteTests(unittest.TestCase):
 
         self.assertTrue(response["ok"])
         self.assertEqual(response["exit_code"], 0)
-        self.assertIn("direct 1min probe data", response["message"])
+        self.assertIn("direct local 1min provider health", response["message"])
         self.assertEqual(response["data"]["probe"]["slot_count"], 2)
 
     def test_onemin_aggregate_response_uses_profiles_fallback_when_status_is_unavailable(self) -> None:
@@ -673,7 +673,7 @@ class CodexEaRouteTests(unittest.TestCase):
 
         self.assertTrue(response["ok"])
         self.assertIn("EA API token is not configured", response["message"])
-        self.assertIn("probe-all was skipped", response["message"])
+        self.assertIn("used a direct local 1min probe fallback instead", response["message"])
         self.assertIn("billing refresh was skipped", response["message"])
         self.assertIn("fresh classification requires a configured EA API token", response["message"])
 
@@ -928,8 +928,8 @@ class CodexEaRouteTests(unittest.TestCase):
         with mock.patch.object(self.route_module, "_ea_onemin_probe_payload", return_value=None):
             response = self.route_module._onemin_aggregate_response(probe_all=True)
 
-        self.assertFalse(response["ok"])
-        self.assertIn("timed out after 180s", response["message"])
+        self.assertTrue(response["ok"])
+        self.assertIn("used a direct local 1min probe fallback instead", response["message"])
 
     def test_onemin_probe_failure_keeps_cached_aggregate_when_local_runtime_cache_exists(self) -> None:
         self.write_config({})
@@ -960,7 +960,7 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertTrue(response["ok"])
         self.assertEqual(response["exit_code"], 0)
         self.assertEqual(response["data"]["sum_free_credits"], 500)
-        self.assertIn("probe-all failed", response["message"])
+        self.assertIn("used a direct local 1min probe fallback instead", response["message"])
         self.assertIn("using local Fleet runtime cache", response["message"])
 
     def test_onemin_aggregate_response_prefers_direct_local_onemin_over_zero_slot_cache(self) -> None:

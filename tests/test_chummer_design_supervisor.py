@@ -186,6 +186,69 @@ def _write_published_queue(root: Path, items: list[object], *, fingerprint: str 
     )
 
 
+def _write_next_wave_queue(
+    root: Path,
+    items: list[object],
+    *,
+    fingerprint: str = "next90-fingerprint",
+    source_registry_path: str | None = None,
+) -> None:
+    published = root / ".codex-studio" / "published"
+    published.mkdir(parents=True, exist_ok=True)
+    (published / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "mode": "append",
+                "status": "live_parallel_successor",
+                "source_registry_path": source_registry_path or str(root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"),
+                "items": items,
+                "source_queue_fingerprint": fingerprint,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_next_wave_registry(root: Path) -> None:
+    (root / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "program_wave": "next_90_day_product_advance",
+                "milestones": [
+                    {
+                        "id": 101,
+                        "title": "Native-host desktop release train and promotion discipline",
+                        "wave": "W6",
+                        "status": "in_progress",
+                        "owners": ["chummer6-ui", "fleet"],
+                        "exit_criteria": ["Release truth is repeatable."],
+                        "dependencies": [],
+                    },
+                    {
+                        "id": 102,
+                        "title": "Desktop-native claim, update, rollback, and support followthrough",
+                        "wave": "W6",
+                        "status": "in_progress",
+                        "owners": ["chummer6-hub", "fleet"],
+                        "exit_criteria": ["Claim and support flows are desktop-native."],
+                        "dependencies": [101],
+                    },
+                    {
+                        "id": 103,
+                        "title": "Chummer5a parity lab and veteran migration certification",
+                        "wave": "W7",
+                        "status": "in_progress",
+                        "owners": ["executive-assistant", "chummer6-ui"],
+                        "exit_criteria": ["Veteran migration is evidence-backed."],
+                        "dependencies": [101, 102],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _args(root: Path) -> Namespace:
     return Namespace(
         command="once",
@@ -607,8 +670,13 @@ def test_write_active_run_state_refreshes_runtime_handoff_snapshot(tmp_path: Pat
         worker_last_output_at="2026-04-08T19:20:15Z",
     )
 
+    shard_state = json.loads(module._state_payload_path(state_root).read_text(encoding="utf-8"))
     handoff_text = module._runtime_handoff_path(state_root).read_text(encoding="utf-8")
 
+    assert shard_state["active_run_id"] == "run-123"
+    assert shard_state["active_run_progress_state"] == "streaming"
+    assert shard_state["active_run_worker_first_output_at"] == "2026-04-08T19:20:05Z"
+    assert shard_state["active_run_worker_last_output_at"] == "2026-04-08T19:20:15Z"
     assert "Shard Runtime Handoff" in handoff_text
     assert "Frontier ids: 2788253648" in handoff_text
     assert "Selected account: acct-ea-core" in handoff_text
@@ -706,7 +774,7 @@ def test_derive_context_materializes_runtime_handoff_and_includes_it_in_prompt(t
     assert runtime_handoff_path.exists() is True
     assert context["runtime_handoff_path"] == runtime_handoff_path
     assert str(runtime_handoff_path) in context["prompt"]
-    assert "trust the shard runtime handoff first" in context["prompt"]
+    assert "Use the shard runtime handoff as the worker-safe resume context" in context["prompt"]
 
 
 def test_status_json_inside_worker_run_blocks_with_task_local_guidance(monkeypatch, tmp_path: Path) -> None:
@@ -744,14 +812,14 @@ def test_status_json_inside_worker_run_blocks_with_task_local_guidance(monkeypat
 
     stdout = io.StringIO()
     stderr = io.StringIO()
-    with redirect_stdout(stdout), redirect_stderr(stderr):
-        module.main()
-
-    assert stderr.getvalue() == ""
+    with pytest.raises(SystemExit) as excinfo:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            module.main()
+    assert excinfo.value.code == 2
     payload = json.loads(stdout.getvalue())
     assert payload["mode"] == "task_local_only"
     assert payload["command"] == "status"
-    assert payload["nonfatal_fallback"] is True
+    assert payload["nonfatal_fallback"] is False
     assert payload["polling_disabled"] is True
     assert payload["status_query_supported"] is False
     assert payload["warning"].startswith("worker_status_budget_exhausted")
@@ -759,11 +827,15 @@ def test_status_json_inside_worker_run_blocks_with_task_local_guidance(monkeypat
     assert payload["prompt_path"] == str(prompt_path)
     assert payload["full_product_frontier_path"] == str(frontier_path)
     assert payload["handoff_path"] == str(handoff_path.resolve())
-    assert "active_runs_count" not in payload
+    assert "active_runs_count" in payload
+    assert payload["active_runs_count"] is None
     assert payload["eta"]["status"] == "polling_disabled"
     assert payload["eta"]["eta_human"] == "polling_disabled"
     assert payload["eta"]["remaining_open_milestones"] is None
     assert payload["eta"]["remaining_in_progress_milestones"] is None
+    stderr_text = stderr.getvalue()
+    assert "status_blocked_inside_worker_run" in stderr_text
+    assert "worker_status_budget_exhausted" in stderr_text
 
 
 def test_eta_json_inside_worker_run_blocks_with_task_local_guidance(monkeypatch, tmp_path: Path) -> None:
@@ -810,22 +882,26 @@ def test_eta_json_inside_worker_run_blocks_with_task_local_guidance(monkeypatch,
 
     stdout = io.StringIO()
     stderr = io.StringIO()
-    with redirect_stdout(stdout), redirect_stderr(stderr):
-        module.main()
-
-    assert stderr.getvalue() == ""
+    with pytest.raises(SystemExit) as excinfo:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            module.main()
+    assert excinfo.value.code == 2
     payload = json.loads(stdout.getvalue())
     assert payload["command"] == "eta"
-    assert payload["nonfatal_fallback"] is True
+    assert payload["nonfatal_fallback"] is False
     assert payload["status_query_supported"] is False
+    assert payload["active_runs_count"] is None
     assert payload["frontier_ids"] == [11, 12]
     assert payload["open_milestone_ids"] == [11, 12, 13]
     assert payload["eta"]["status"] == "polling_disabled"
-    assert payload["eta"]["eta_human"] == "polling_disabled"
-    assert payload["eta"]["remaining_open_milestones"] is None
-    assert payload["eta"]["remaining_in_progress_milestones"] is None
-    assert payload["eta"]["remaining_not_started_milestones"] is None
+    assert payload["eta"]["eta_human"] == "tracked"
+    assert payload["eta"]["remaining_open_milestones"] == 3
+    assert payload["eta"]["remaining_in_progress_milestones"] == 2
+    assert payload["eta"]["remaining_not_started_milestones"] == 1
     assert payload["prompt_path"] == str(prompt_path)
+    stderr_text = stderr.getvalue()
+    assert "status_blocked_inside_worker_run" in stderr_text
+    assert "worker_status_budget_exhausted" in stderr_text
 
 
 def test_launch_worker_prefers_full_lanes_and_uses_anonymous_core_when_accounts_are_saturated(monkeypatch) -> None:
@@ -903,6 +979,102 @@ def test_launch_worker_prefers_full_lanes_and_uses_anonymous_core_when_accounts_
         assert run.attempted_accounts == ["lane:core"]
         assert run.attempted_models == ["ea-coder-hard"]
         assert run.worker_command[:3] == ["/docker/fleet/scripts/codex-shims/codexea", "core", "exec"]
+
+
+def test_launch_worker_uses_shard_scoped_run_ids(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard"
+        context = module.derive_context(args)
+
+        monkeypatch.setattr(module, "_slug_timestamp", lambda value=None: "20260413T151110Z")
+        monkeypatch.setattr(module, "_prepare_account_environment", lambda _state_root, _workspace_root, _account: {})
+
+        def fake_run_worker_attempt(
+            command,
+            *,
+            prompt,
+            workspace_root,
+            worker_env,
+            timeout_seconds,
+            last_message_path,
+            state_root,
+            run_id,
+            stdout_sink=None,
+            stderr_sink=None,
+        ):
+            last_message_path.write_text(
+                "What shipped: kept work moving\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module, "_run_worker_attempt", fake_run_worker_attempt)
+
+        shard_one_run = module.launch_worker(args, context, root / "state" / "shard-1")
+        shard_two_run = module.launch_worker(args, context, root / "state" / "shard-2")
+
+        assert shard_one_run.run_id == "20260413T151110Z-shard-1"
+        assert shard_two_run.run_id == "20260413T151110Z-shard-2"
+        assert shard_one_run.run_id != shard_two_run.run_id
+
+
+def test_launch_worker_falls_back_to_frontier_ids_when_open_milestones_are_empty(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard"
+        context = module.derive_context(args)
+        context["open_milestones"] = []
+        context["frontier"] = [context["frontier"][0]]
+        context["frontier_ids"] = [context["frontier"][0].id]
+
+        monkeypatch.setattr(module, "_prepare_account_environment", lambda _state_root, _workspace_root, _account: {})
+
+        def fake_run_worker_attempt(
+            command,
+            *,
+            prompt,
+            workspace_root,
+            worker_env,
+            timeout_seconds,
+            last_message_path,
+            state_root,
+            run_id,
+            stdout_sink=None,
+            stderr_sink=None,
+        ):
+            last_message_path.write_text(
+                "What shipped: kept work moving\n"
+                "What remains: follow-through\n"
+                "Exact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        monkeypatch.setattr(module, "_run_worker_attempt", fake_run_worker_attempt)
+
+        run = module.launch_worker(args, context, root / "state" / "shard-1")
+
+        assert run.frontier_ids == [context["frontier"][0].id]
+        assert run.open_milestone_ids == [context["frontier"][0].id]
 
 
 def test_launch_worker_uses_anonymous_core_before_repair_when_full_account_is_backed_off(monkeypatch) -> None:
@@ -2033,6 +2205,7 @@ def test_refresh_flagship_product_readiness_artifact_uses_workspace_sibling_gene
         assert calls["out_path"] == str(root / "FLAGSHIP_PRODUCT_READINESS.generated.json")
         assert calls["journey_gates_path"] == str(root / "JOURNEY_GATES.generated.json")
         assert calls["acceptance_path"] == str(root / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml")
+        assert calls["feedback_loop_gate_path"] == str(root / ".codex-design" / "product" / "FEEDBACK_LOOP_RELEASE_GATE.yaml")
         assert calls["mirror_path"] == str(root / "state" / "artifacts" / "FLAGSHIP_PRODUCT_READINESS.generated.json")
         ui_published_root = module.PREFERRED_UI_REPO_ROOT / ".codex-studio" / "published"
         assert calls["ui_windows_exit_gate_path"] == str(ui_published_root / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json")
@@ -2064,7 +2237,7 @@ def test_derive_context_prefers_handoff_frontier_ids() -> None:
         assert [item.id for item in context["frontier"]] == [15, 18, 19]
         assert [item.id for item in context["open_milestones"]] == [6, 15, 18, 21, 19]
         assert "Frontier milestone ids to prioritize first: 15, 18, 19" in context["prompt"]
-        assert str(root / "NEXT_SESSION_HANDOFF.md") in context["prompt"]
+        assert str(root / "NEXT_SESSION_HANDOFF.md") not in context["prompt"]
 
 
 def test_parse_frontier_ids_from_handoff_prefers_explicit_frontier_line() -> None:
@@ -3667,6 +3840,312 @@ def test_run_worker_attempt_ignores_value_error_when_stream_is_closed_mid_read(m
         assert completed.returncode == 0
         assert completed.stdout == "stdout line\n"
         assert completed.stderr == ""
+
+
+def test_run_worker_attempt_allows_single_supervisor_status_command(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43211
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"\n',
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="hello\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=root / "state",
+            run_id="run-2",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        assert completed.returncode == 0
+        assert "worker_self_polling:supervisor_status_loop" not in completed.stderr
+        assert not last_message_path.exists()
+
+
+def test_run_worker_attempt_allows_repeated_successful_supervisor_status_commands(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43212
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"\n',
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"\n',
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"\n',
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="hello\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=root / "state",
+            run_id="run-2b",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        assert completed.returncode == 0
+        assert "worker_self_polling:supervisor_status_loop" not in completed.stderr
+        assert not last_message_path.exists()
+
+
+def test_run_worker_attempt_allows_one_duplicate_supervisor_status_command(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43213
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"\n',
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"\n',
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="hello\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=root / "state",
+            run_id="run-2c",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        assert completed.returncode == 0
+        assert "worker_self_polling:supervisor_status_loop" not in completed.stderr
+        assert not last_message_path.exists()
+
+
+def test_run_worker_attempt_trips_on_repeated_blocked_status_loops(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43214
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "exec\n",
+                    '{"status":"polling_disabled"}\n',
+                    "status_blocked_inside_worker_run\n",
+                    "exec\n",
+                    '{"status":"polling_disabled"}\n',
+                    "status_blocked_inside_worker_run\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="hello\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=root / "state",
+            run_id="run-2d",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        assert completed.returncode == 125
+        assert "worker_self_polling:supervisor_status_loop" in completed.stderr
+        assert last_message_path.read_text(encoding="utf-8").strip() == "Exact blocker: worker_self_polling:supervisor_status_loop"
 
 
 def test_worker_lane_candidates_prioritize_core_rescue_before_survival_for_core() -> None:
@@ -5812,11 +6291,444 @@ def test_write_runtime_handoff_sanitizes_self_polling_stderr_tail(tmp_path: Path
     module._write_runtime_handoff(state_root)
 
     handoff = (state_root / module.DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME).read_text(encoding="utf-8")
-    assert "Previous run was killed for querying supervisor status from inside an active worker run." in handoff
+    assert "Supervisor status polling was observed from inside the active worker run." in handoff
     assert "Do not repeat that pattern; keep working from the prompt, handoff, and frontier artifacts only." in handoff
     assert "python3 /docker/fleet/scripts/chummer_design_supervisor.py status" not in handoff
     assert "Latest blocker: worker_self_polling:supervisor_status_loop" not in handoff
     assert "Latest blocker: previous run was killed for querying supervisor status inside an active worker run" in handoff
+
+
+def test_write_runtime_handoff_sanitizes_polling_disabled_status_loop(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "state" / "shard-7"
+    run_root = state_root / "runs" / "20260412T211842Z"
+    run_root.mkdir(parents=True, exist_ok=True)
+    stderr_path = run_root / "worker.stderr.log"
+    stderr_path.write_text(
+        "\n".join(
+            [
+                '{"active_runs_count":null,"remaining_open_milestones":null,"eta_human":"polling_disabled","summary":"polling disabled inside active worker run; continue the assigned slice using the prompt, handoff, and frontier artifacts instead of querying supervisor status again"}',
+                "",
+                "Trace: lane=core waiting for model output",
+                "exec",
+                '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json"',
+                'succeeded in 410ms:',
+                '{"active_runs_count":null,"remaining_open_milestones":null,"eta_human":"polling_disabled"}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    last_message_path = run_root / "last_message.txt"
+    last_message_path.write_text("", encoding="utf-8")
+    stdout_path = run_root / "worker.stdout.log"
+    stdout_path.write_text("", encoding="utf-8")
+    prompt_path = run_root / "prompt.txt"
+    prompt_path.write_text("Run the flagship full-product delivery pass.\n", encoding="utf-8")
+    module._write_json(
+        state_root / "state.json",
+        {
+            "mode": "flagship_product",
+            "focus_profiles": ["top_flagship_grade"],
+            "focus_owners": ["fleet"],
+            "focus_texts": ["supervisor", "ooda"],
+            "frontier_ids": [1300044932],
+            "active_run": {
+                "run_id": "20260412T211842Z",
+                "selected_account_alias": "acct-ea-core-17",
+                "selected_model": "ea-coder-hard",
+                "started_at": "2026-04-12T21:18:42Z",
+                "worker_first_output_at": "2026-04-13T05:18:43Z",
+                "worker_last_output_at": "2026-04-13T10:20:51Z",
+                "prompt_path": str(prompt_path),
+                "stdout_path": str(stdout_path),
+                "stderr_path": str(stderr_path),
+                "last_message_path": str(last_message_path),
+            },
+        },
+    )
+
+    module._write_runtime_handoff(state_root)
+
+    handoff = (state_root / module.DEFAULT_SHARD_RUNTIME_HANDOFF_FILENAME).read_text(encoding="utf-8")
+    assert "Supervisor status polling was observed from inside the active worker run." in handoff
+    assert "Do not repeat that pattern; keep working from the prompt, handoff, and frontier artifacts only." in handoff
+    assert "python3 /docker/fleet/scripts/chummer_design_supervisor.py status" not in handoff
+    assert "polling_disabled" not in handoff
+
+
+def test_build_flagship_product_prompt_includes_task_local_status_snapshot(tmp_path: Path) -> None:
+    module = _load_module()
+    root = tmp_path
+    registry_path = root / "registry.yaml"
+    registry_path.write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+    program_milestones_path = root / "PROGRAM_MILESTONES.yaml"
+    program_milestones_path.write_text("product: chummer\n", encoding="utf-8")
+    roadmap_path = root / "ROADMAP.md"
+    roadmap_path.write_text("# Roadmap\n", encoding="utf-8")
+    handoff_path = root / "NEXT_SESSION_HANDOFF.md"
+    handoff_path.write_text("handoff\n", encoding="utf-8")
+    readiness_path = root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    readiness_path.write_text("{}\n", encoding="utf-8")
+    frontier_artifact_path = root / "FULL_PRODUCT_FRONTIER.generated.yaml"
+    frontier_artifact_path.write_text("frontier: []\n", encoding="utf-8")
+    frontier = [
+        module.Milestone(
+            id=4066417069,
+            title="Flagship desktop client and workbench finish",
+            wave="W4",
+            status="not_started",
+            owners=["chummer6-ui"],
+            exit_criteria=["Ship the flagship workbench."],
+            dependencies=[],
+        )
+    ]
+
+    prompt = module.build_flagship_product_prompt(
+        registry_path=registry_path,
+        program_milestones_path=program_milestones_path,
+        roadmap_path=roadmap_path,
+        handoff_path=handoff_path,
+        runtime_handoff_path=None,
+        readiness_path=readiness_path,
+        frontier_artifact_path=frontier_artifact_path,
+        frontier=frontier,
+        scope_roots=[root],
+        focus_profiles=["top_flagship_grade"],
+        focus_owners=["fleet"],
+        focus_texts=["desktop client"],
+        completion_audit={"status": "fail", "reason": "untrusted receipt"},
+        full_product_audit={"status": "fail", "reason": "missing desktop_client", "missing_coverage_keys": ["desktop_client"]},
+        history=[],
+        eta_snapshot={
+            "eta_human": "5d-1.4w",
+            "remaining_open_milestones": 8,
+            "remaining_in_progress_milestones": 5,
+            "remaining_not_started_milestones": 3,
+            "scope_kind": "open_milestone_frontier",
+        },
+        compact_prompt=True,
+    )
+
+    assert "Task-local status snapshot:" in prompt
+    assert "- eta: 5d-1.4w" in prompt
+    assert "- remaining open milestones: 8" in prompt
+    assert "- remaining in-progress milestones: 5" in prompt
+    assert "- remaining not-started milestones: 3" in prompt
+    assert "do not need to query supervisor status from inside the worker run" in prompt
+
+
+def test_build_flagship_product_prompt_uses_runtime_handoff_not_shared_handoff_path(tmp_path: Path) -> None:
+    module = _load_module()
+    root = tmp_path
+    registry_path = root / "registry.yaml"
+    registry_path.write_text("waves: []\nmilestones: []\n", encoding="utf-8")
+    program_milestones_path = root / "PROGRAM_MILESTONES.yaml"
+    program_milestones_path.write_text("product: chummer\n", encoding="utf-8")
+    roadmap_path = root / "ROADMAP.md"
+    roadmap_path.write_text("# Roadmap\n", encoding="utf-8")
+    handoff_path = root / "NEXT_SESSION_HANDOFF.md"
+    handoff_path.write_text("operator-only handoff\n", encoding="utf-8")
+    runtime_handoff_path = root / "ACTIVE_RUN_HANDOFF.generated.md"
+    runtime_handoff_path.write_text("worker-safe handoff\n", encoding="utf-8")
+    readiness_path = root / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    readiness_path.write_text("{}\n", encoding="utf-8")
+    frontier_artifact_path = root / "FULL_PRODUCT_FRONTIER.generated.yaml"
+    frontier_artifact_path.write_text("frontier: []\n", encoding="utf-8")
+
+    prompt = module.build_flagship_product_prompt(
+        registry_path=registry_path,
+        program_milestones_path=program_milestones_path,
+        roadmap_path=roadmap_path,
+        handoff_path=handoff_path,
+        runtime_handoff_path=runtime_handoff_path,
+        readiness_path=readiness_path,
+        frontier_artifact_path=frontier_artifact_path,
+        frontier=[],
+        scope_roots=[root],
+        focus_profiles=["top_flagship_grade"],
+        focus_owners=["fleet"],
+        focus_texts=["desktop client"],
+        completion_audit={"status": "fail", "reason": "untrusted receipt"},
+        full_product_audit={"status": "fail", "reason": "missing desktop_client", "missing_coverage_keys": ["desktop_client"]},
+        history=[],
+        eta_snapshot={"eta_human": "tracked"},
+        compact_prompt=True,
+    )
+
+    assert str(runtime_handoff_path) in prompt
+    assert str(handoff_path) not in prompt
+    assert "operator-only" in prompt
+    assert "do not open it or execute commands from it inside worker runs" in prompt
+
+
+def test_estimate_full_product_eta_reports_frontier_counts() -> None:
+    module = _load_module()
+    frontier = [
+        module.Milestone(
+            id=1,
+            title="Desktop flagship",
+            wave="W4",
+            status="in_progress",
+            owners=["chummer6-ui"],
+            exit_criteria=["Ship desktop"],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=2,
+            title="Hub route",
+            wave="W4",
+            status="not_started",
+            owners=["chummer6-hub"],
+            exit_criteria=["Ship hub"],
+            dependencies=[],
+        ),
+    ]
+
+    snapshot = module._estimate_full_product_eta(
+        frontier,
+        {"missing_coverage_keys": ["desktop_client"]},
+        [],
+        dt.datetime(2026, 4, 13, 10, 0, 0, tzinfo=dt.timezone.utc),
+    )
+
+    assert snapshot["remaining_open_milestones"] == 2
+    assert snapshot["remaining_in_progress_milestones"] == 1
+    assert snapshot["remaining_not_started_milestones"] == 1
+
+
+def test_estimate_full_product_milestone_eta_reports_distinct_ranges() -> None:
+    module = _load_module()
+    desktop = module.Milestone(
+        id=1,
+        title="Flagship desktop client and workbench finish",
+        wave="flagship_product",
+        status="not_started",
+        owners=["chummer6-ui", "chummer6-core", "chummer6-ui-kit"],
+        exit_criteria=["Ship desktop workbench, packaging, updater, and support polish."],
+        dependencies=[],
+    )
+    fleet = module.Milestone(
+        id=2,
+        title="Fleet and operator loop flagship finish",
+        wave="flagship_product",
+        status="not_started",
+        owners=["fleet", "executive-assistant", "chummer6-design", "chummer6-hub"],
+        exit_criteria=["Keep the operator loop durable with proofs, traces, ETAs, and handoffs."],
+        dependencies=[],
+    )
+
+    desktop_eta = module._estimate_full_product_milestone_eta(
+        desktop,
+        {"missing_coverage_keys": ["desktop_client"]},
+        [],
+        dt.datetime(2026, 4, 13, 10, 0, 0, tzinfo=dt.timezone.utc),
+    )
+    fleet_eta = module._estimate_full_product_milestone_eta(
+        fleet,
+        {"missing_coverage_keys": ["desktop_client"]},
+        [],
+        dt.datetime(2026, 4, 13, 10, 0, 0, tzinfo=dt.timezone.utc),
+    )
+
+    assert desktop_eta["remaining_open_milestones"] == 1
+    assert fleet_eta["remaining_open_milestones"] == 1
+    assert desktop_eta["range_low_hours"] > fleet_eta["range_low_hours"]
+    assert desktop_eta["range_high_hours"] > fleet_eta["range_high_hours"]
+    assert "Flagship desktop client and workbench finish" in desktop_eta["summary"]
+
+
+def test_build_eta_snapshot_uses_scope_frontier_for_idle_flagship_delivery() -> None:
+    module = _load_module()
+    scope_frontier = [
+        module.Milestone(
+            id=1,
+            title="Desktop flagship",
+            wave="W4",
+            status="in_progress",
+            owners=["chummer6-ui"],
+            exit_criteria=["Ship desktop"],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=2,
+            title="Hub route",
+            wave="W4",
+            status="not_started",
+            owners=["chummer6-hub"],
+            exit_criteria=["Ship hub"],
+            dependencies=[],
+        ),
+    ]
+
+    eta = module._build_eta_snapshot(
+        mode="flagship_product",
+        open_milestones=[],
+        frontier=[],
+        scope_frontier=scope_frontier,
+        history=[],
+        full_product_audit={"status": "fail", "missing_coverage_keys": ["desktop_client"]},
+        now=module._parse_iso("2026-04-13T10:00:00Z"),
+    )
+
+    assert eta["status"] == "flagship_delivery"
+    assert eta["remaining_open_milestones"] == 2
+    assert eta["remaining_in_progress_milestones"] == 1
+    assert eta["remaining_not_started_milestones"] == 1
+    assert "2 synthetic slices" in eta["summary"]
+
+
+def test_build_eta_snapshot_uses_single_milestone_flagship_eta_for_active_flagship_slice() -> None:
+    module = _load_module()
+    milestone = module.Milestone(
+        id=4066417069,
+        title="Flagship desktop client and workbench finish",
+        wave="flagship_product",
+        status="in_progress",
+        owners=["chummer6-ui", "chummer6-core", "chummer6-ui-kit"],
+        exit_criteria=["Ship desktop workbench, packaging, updater, and support polish."],
+        dependencies=[],
+    )
+
+    eta = module._build_eta_snapshot(
+        mode="flagship_product",
+        open_milestones=[milestone],
+        frontier=[milestone],
+        history=[],
+        full_product_audit={"status": "fail", "missing_coverage_keys": ["desktop_client"]},
+        now=module._parse_iso("2026-04-13T10:00:00Z"),
+    )
+    expected = module._estimate_full_product_milestone_eta(
+        milestone,
+        {"status": "fail", "missing_coverage_keys": ["desktop_client"]},
+        [],
+        module._parse_iso("2026-04-13T10:00:00Z"),
+    )
+
+    assert eta["basis"] == "full_product_single_milestone_heuristic"
+    assert eta["scope_kind"] == "flagship_product_readiness"
+    assert eta["remaining_open_milestones"] == 1
+    assert eta["range_low_hours"] == expected["range_low_hours"]
+    assert eta["range_high_hours"] == expected["range_high_hours"]
+    assert "Flagship desktop client and workbench finish" in eta["summary"]
+
+
+def test_build_eta_snapshot_prefers_local_flagship_slice_over_wider_scope_frontier() -> None:
+    module = _load_module()
+    local_milestone = module.Milestone(
+        id=4066417069,
+        title="Flagship desktop client and workbench finish",
+        wave="flagship_product",
+        status="in_progress",
+        owners=["chummer6-ui", "chummer6-core", "chummer6-ui-kit"],
+        exit_criteria=["Ship desktop workbench, packaging, updater, and support polish."],
+        dependencies=[],
+    )
+    scope_frontier = [
+        local_milestone,
+        module.Milestone(
+            id=2541792707,
+            title="Hub, registry, and public front door flagship finish",
+            wave="flagship_product",
+            status="in_progress",
+            owners=["chummer6-hub", "chummer6-hub-registry", "chummer6-design"],
+            exit_criteria=["Finish hub, registry, and public front door closeout."],
+            dependencies=[],
+        ),
+    ]
+
+    eta = module._build_eta_snapshot(
+        mode="flagship_product",
+        open_milestones=[local_milestone],
+        frontier=[local_milestone],
+        scope_frontier=scope_frontier,
+        history=[],
+        full_product_audit={"status": "fail", "missing_coverage_keys": ["desktop_client"]},
+        now=module._parse_iso("2026-04-13T10:00:00Z"),
+    )
+
+    expected = module._estimate_full_product_milestone_eta(
+        local_milestone,
+        {"status": "fail", "missing_coverage_keys": ["desktop_client"]},
+        [],
+        module._parse_iso("2026-04-13T10:00:00Z"),
+    )
+
+    assert eta["basis"] == "full_product_single_milestone_heuristic"
+    assert eta["range_low_hours"] == expected["range_low_hours"]
+    assert eta["range_high_hours"] == expected["range_high_hours"]
+
+
+def test_idle_scope_frontier_rebuilds_flagship_scope_when_context_omits_it(tmp_path: Path) -> None:
+    module = _load_module()
+    args = _args(tmp_path)
+    state_root = tmp_path / "state" / "chummer_design_supervisor" / "shard-4"
+    state_root.mkdir(parents=True, exist_ok=True)
+    frontier = [
+        module.Milestone(
+            id=1,
+            title="Desktop flagship",
+            wave="W4",
+            status="in_progress",
+            owners=["chummer6-ui"],
+            exit_criteria=["Ship desktop"],
+            dependencies=[],
+        ),
+        module.Milestone(
+            id=2,
+            title="Hub route",
+            wave="W4",
+            status="not_started",
+            owners=["chummer6-hub"],
+            exit_criteria=["Ship hub"],
+            dependencies=[],
+        ),
+    ]
+
+    module._full_product_frontier = lambda _args: list(frontier)
+    module._prior_active_shard_frontier_ids = lambda _state_root: [1]
+
+    scope = module._idle_scope_frontier(
+        args,
+        state_root,
+        {"full_product_audit": {"status": "fail"}},
+        [],
+    )
+
+    assert [item.id for item in scope] == [2]
+
+
+def test_aggregate_idle_eta_snapshot_prefers_aggregate_eta(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-4"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "state.json",
+        {
+            "updated_at": "2026-04-13T19:43:15Z",
+            "eta": {
+                "status": "tracked",
+                "summary": "4 open milestones remain (4 in progress, 0 not started).",
+                "eta_human": "tracked",
+                "eta_confidence": "low",
+                "remaining_open_milestones": 4,
+                "remaining_in_progress_milestones": 4,
+                "remaining_not_started_milestones": 0,
+                "range_low_hours": 25.0,
+                "range_high_hours": 62.5,
+                "scope_kind": "flagship_product_readiness",
+                "scope_label": "Full Chummer5A parity and flagship proof closeout",
+            },
+        },
+    )
+
+    eta = module._aggregate_idle_eta_snapshot(shard_root)
+
+    assert eta is not None
+    assert eta["status"] == "tracked"
+    assert eta["remaining_open_milestones"] == 4
+    assert eta["scope_kind"] == "flagship_product_readiness"
 
 
 def test_derive_completion_review_context_targets_recent_untrusted_frontier() -> None:
@@ -7605,6 +8517,74 @@ def test_run_supervisor_launcher_clears_stale_account_runtime_state() -> None:
         assert not stale_runtime.exists()
 
 
+def test_run_supervisor_launcher_preserves_aggregate_state_snapshot() -> None:
+    launcher = Path("/docker/fleet/scripts/run_chummer_design_supervisor.sh")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        wrapper = root / "python3"
+        wrapper.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    "if [[ \"${1:-}\" == \"-\" ]]; then",
+                    "  exec /usr/bin/python3 \"$@\"",
+                    "fi",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"status\" && \"${3:-}\" == \"--json\" ]]; then",
+                    "  printf '%s\\n' '{\"frontier_ids\": []}'",
+                    "  exit 0",
+                    "fi",
+                    "if [[ \"${1:-}\" == \"scripts/chummer_design_supervisor.py\" && \"${2:-}\" == \"loop\" ]]; then",
+                    "  exit 0",
+                    "fi",
+                    "echo 'unexpected python3 invocation' >&2",
+                    "printf '%s\\n' \"$*\" >&2",
+                    "exit 99",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        state_root = root / "state" / "chummer_design_supervisor"
+        state_root.mkdir(parents=True, exist_ok=True)
+        aggregate_state = state_root / "state.json"
+        aggregate_state.write_text(
+            json.dumps(
+                {
+                    "updated_at": "2026-04-13T12:00:00Z",
+                    "active_runs_count": 13,
+                    "remaining_open_milestones": 8,
+                    "eta_human": "2d-5.3d",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            [str(launcher)],
+            cwd="/docker/fleet",
+            env={
+                **os.environ,
+                "PATH": f"{root}:{os.environ['PATH']}",
+                "CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS": "2",
+                "CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT": str(state_root),
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS": "",
+                "CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_MODE": "skip",
+                "CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SECONDS": "0",
+            },
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert aggregate_state.exists()
+        payload = json.loads(aggregate_state.read_text(encoding="utf-8"))
+        assert payload["active_runs_count"] == 13
+        assert payload["remaining_open_milestones"] == 8
+
+
 def test_derive_completion_review_context_can_focus_repo_backlog_items_beyond_first_five() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -8015,6 +8995,48 @@ def test_live_state_with_open_milestones_preserves_current_audits() -> None:
         assert updated["full_product_audit"]
         assert updated["completion_audit"]["status"] in {"pass", "fail"}
         assert updated["full_product_audit"]["status"] in {"pass", "fail"}
+
+
+def test_live_state_with_current_completion_audit_stamps_updated_at_when_missing() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "registry.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "waves": [{"id": "W1"}],
+                    "milestones": [
+                        {
+                            "id": 1,
+                            "title": "Gold install lane",
+                            "wave": "W1",
+                            "status": "planned",
+                            "owners": ["fleet"],
+                            "exit_criteria": ["Install lane is real."],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        state_root = root / "state" / "chummer_design_supervisor" / "shard-1"
+        state_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.state_root = str(state_root)
+
+        updated, _history = module._live_state_with_current_completion_audit(
+            args,
+            state_root,
+            {},
+            [],
+            include_shards=False,
+            refresh_flagship_readiness=False,
+        )
+
+        assert isinstance(updated["updated_at"], str)
+        assert updated["updated_at"]
 
 
 def test_derive_context_fair_shares_open_milestone_frontier_across_three_shards() -> None:
@@ -9434,6 +10456,25 @@ def test_render_status_includes_worker_lane_health_fields() -> None:
     assert "worker_lane_health.repair: profile=repair state=degraded routable=no" in rendered
 
 
+def test_render_status_includes_idle_reason() -> None:
+    module = _load_module()
+
+    rendered = module._render_status(
+        {
+            "updated_at": "2026-03-31T10:00:00Z",
+            "mode": "flagship_product",
+            "open_milestone_ids": [],
+            "frontier_ids": [],
+            "focus_profiles": [],
+            "focus_owners": [],
+            "focus_texts": [],
+            "idle_reason": "waiting_for_local_frontier_slice",
+        }
+    )
+
+    assert "idle_reason: waiting_for_local_frontier_slice" in rendered
+
+
 def test_render_status_includes_active_run_watchdog_timeout_seconds() -> None:
     module = _load_module()
 
@@ -9629,6 +10670,8 @@ def test_fast_status_state_rebuilds_parallel_flagship_eta_from_statefile_shards(
                     "eta_human": "7h-18h",
                     "basis": "full_product_frontier_heuristic",
                     "scope_kind": "flagship_product_readiness",
+                    "range_low_hours": 7.0,
+                    "range_high_hours": 18.0,
                     "remaining_open_milestones": 0,
                     "remaining_in_progress_milestones": 0,
                     "remaining_not_started_milestones": 1,
@@ -9652,6 +10695,8 @@ def test_fast_status_state_rebuilds_parallel_flagship_eta_from_statefile_shards(
                     "eta_human": "7h-16h",
                     "basis": "full_product_frontier_heuristic",
                     "scope_kind": "flagship_product_readiness",
+                    "range_low_hours": 7.0,
+                    "range_high_hours": 16.0,
                     "remaining_open_milestones": 0,
                     "remaining_in_progress_milestones": 0,
                     "remaining_not_started_milestones": 1,
@@ -9680,11 +10725,14 @@ def test_fast_status_state_rebuilds_parallel_flagship_eta_from_statefile_shards(
 
         assert updated["active_runs_count"] == 2
         assert updated["eta"]["basis"] == "aggregate_shard_parallel_scope"
-        assert updated["eta"]["eta_human"] == "tracked"
+        assert updated["eta"]["eta_human"] == "7h-18h"
+        assert updated["eta"]["range_low_hours"] == 7.0
+        assert updated["eta"]["range_high_hours"] == 18.0
         assert updated["eta"]["scope_kind"] == "flagship_product_readiness"
         assert updated["eta"]["remaining_open_milestones"] == 2
         assert updated["eta"]["remaining_in_progress_milestones"] == 2
         assert updated["eta"]["remaining_not_started_milestones"] == 0
+        assert "parallelized across 2 active shards" in updated["eta"]["summary"]
 
 
 def test_fast_status_state_keeps_latest_worker_lane_and_audit_fields_from_shards() -> None:
@@ -10701,6 +11749,59 @@ def test_live_shard_summaries_persist_refreshed_shard_state() -> None:
         assert persisted["frontier_ids"] == summaries[0]["frontier_ids"]
 
 
+def test_live_shard_summaries_return_persisted_active_run_detail_fields(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        shard_root = aggregate_root / "shard-1"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-13T12:20:00Z",
+                "mode": "loop",
+                "frontier_ids": [13],
+                "open_milestone_ids": [13],
+                "focus_owners": ["fleet"],
+            },
+        )
+
+        def fake_live_state(*_args, **_kwargs):
+            return (
+                {
+                    "updated_at": "2026-04-13T12:21:00Z",
+                    "mode": "loop",
+                    "frontier_ids": [13],
+                    "open_milestone_ids": [13],
+                    "focus_owners": ["fleet"],
+                    "active_run": {
+                        "run_id": "run-live-detail",
+                        "frontier_ids": [13],
+                        "open_milestone_ids": [13],
+                        "started_at": "2026-04-13T12:20:05Z",
+                        "worker_first_output_at": "2026-04-13T12:20:06Z",
+                        "worker_last_output_at": "2026-04-13T12:20:30Z",
+                        "selected_account_alias": "acct-ea-core-01",
+                        "selected_model": "ea-coder-hard",
+                    },
+                },
+                [],
+            )
+
+        monkeypatch.setattr(module, "_live_state_with_current_completion_audit", fake_live_state)
+
+        summaries = module._live_shard_summaries(_args(root), aggregate_root)
+
+        assert len(summaries) == 1
+        shard = summaries[0]
+        assert shard["active_run_id"] == "run-live-detail"
+        assert shard["active_run_worker_last_output_at"] == "2026-04-13T12:20:30Z"
+        assert shard["active_run_progress_state"] == "streaming"
+        assert shard["selected_account_alias"] == "acct-ea-core-01"
+        assert shard["selected_model"] == "ea-coder-hard"
+
+
 def test_live_shard_summaries_apply_runtime_focus_profiles(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -11080,7 +12181,7 @@ def test_live_state_with_current_completion_audit_aggregates_union_of_shard_fron
         assert updated_state["shards"][1]["frontier_ids"] == [13, 14]
 
 
-def test_persist_live_state_snapshot_strips_aggregate_only_fields() -> None:
+def test_persist_live_state_snapshot_keeps_shard_count_but_strips_heavy_aggregate_fields() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
         state_root = Path(tmp)
@@ -11100,8 +12201,8 @@ def test_persist_live_state_snapshot_strips_aggregate_only_fields() -> None:
 
         assert persisted["mode"] == "flagship_product"
         assert persisted["frontier_ids"] == [1, 2, 3]
+        assert persisted["shard_count"] == 3
         assert "state_root" not in persisted
-        assert "shard_count" not in persisted
         assert "shards" not in persisted
 
 
@@ -11130,6 +12231,157 @@ def test_write_state_preserves_matching_active_run_from_existing_state() -> None
 
         assert persisted["mode"] == "flagship_product"
         assert persisted["active_run"]["run_id"] == "run-1"
+
+
+def test_write_state_uses_frontier_ids_as_open_milestone_ids_for_flagship_slice() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+
+        frontier_item = Namespace(id=13)
+        module._write_state(
+            state_root,
+            mode="flagship_product",
+            run=None,
+            open_milestones=[],
+            frontier=[frontier_item],
+        )
+
+        persisted = json.loads((state_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["mode"] == "flagship_product"
+        assert persisted["frontier_ids"] == [13]
+        assert persisted["open_milestone_ids"] == [13]
+
+
+def test_apply_status_alias_fields_restores_open_milestone_ids_from_active_run_for_flagship_slice() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields(
+        {
+            "mode": "flagship_product",
+            "frontier_ids": [21],
+            "open_milestone_ids": [],
+            "active_run": {
+                "run_id": "run-21",
+                "frontier_ids": [21],
+                "open_milestone_ids": [21],
+                "progress_state": "streaming",
+            },
+        }
+    )
+
+    assert updated["active_run_id"] == "run-21"
+    assert updated["frontier_ids"] == [21]
+    assert updated["open_milestone_ids"] == [21]
+
+
+def test_apply_status_alias_fields_uses_frontier_ids_for_idle_flagship_slice_when_open_ids_missing() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields(
+        {
+            "mode": "flagship_product",
+            "frontier_ids": [34],
+            "open_milestone_ids": [],
+        }
+    )
+
+    assert updated["frontier_ids"] == [34]
+    assert updated["open_milestone_ids"] == [34]
+
+
+def test_successor_wave_eta_snapshot_reports_dependency_critical_path() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_next_wave_registry(root)
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-ui",
+                    "package_id": "next90-101-ui",
+                    "title": "Desktop release train",
+                    "task": "Keep native-host release proof independent for the primary desktop head.",
+                    "milestone_id": 101,
+                },
+                {
+                    "repo": "chummer6-hub",
+                    "package_id": "next90-102-hub",
+                    "title": "Desktop-native trust flow",
+                    "task": "Remove browser ritual from claim and support continuation.",
+                    "milestone_id": 102,
+                },
+                {
+                    "repo": "executive-assistant",
+                    "package_id": "next90-103-ea",
+                    "title": "Parity lab",
+                    "task": "Extract Chummer5a screenshot baselines and veteran workflow packs.",
+                    "milestone_id": 103,
+                },
+            ],
+        )
+
+        eta = module._successor_wave_eta_snapshot(root, now=dt.datetime(2026, 4, 14, 4, 0, tzinfo=dt.timezone.utc))
+
+        assert eta["status"] == "tracked"
+        assert eta["basis"] == "successor_wave_registry_dependency_critical_path"
+        assert eta["remaining_open_milestones"] == 3
+        assert eta["remaining_queue_items"] == 3
+        assert eta["critical_path_milestone_ids"] == [101, 102, 103]
+        assert eta["range_low_hours"] > 0
+        assert eta["range_high_hours"] > eta["range_low_hours"]
+        assert eta["scope_kind"] == "next_90_day_successor_wave"
+
+
+def test_apply_status_alias_fields_restores_successor_wave_eta_aliases() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields(
+        {
+            "successor_wave_eta": {
+                "status": "tracked",
+                "eta_human": "2d-4d",
+                "summary": "6 next-wave milestones remain.",
+                "range_low_hours": 48.0,
+                "range_high_hours": 96.0,
+                "remaining_open_milestones": 6,
+                "basis": "successor_wave_registry_dependency_critical_path",
+            }
+        }
+    )
+
+    assert updated["successor_wave_eta_status"] == "tracked"
+    assert updated["successor_wave_eta_human"] == "2d-4d"
+    assert updated["successor_wave_eta_summary"] == "6 next-wave milestones remain."
+    assert updated["successor_wave_range_low_hours"] == 48.0
+    assert updated["successor_wave_range_high_hours"] == 96.0
+    assert updated["successor_wave_remaining_open_milestones"] == 6
+
+
+def test_apply_status_alias_fields_does_not_invent_empty_successor_wave_eta() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields({"successor_wave_eta": {}})
+
+    assert "successor_wave_eta" not in updated
+    assert "successor_wave_eta_human" not in updated
+
+
+def test_apply_status_alias_fields_infers_idle_reason_for_claimed_frontier_without_active_run() -> None:
+    module = _load_module()
+
+    updated = module._apply_status_alias_fields(
+        {
+            "mode": "flagship_product",
+            "frontier_ids": [4087117301],
+            "open_milestone_ids": [4087117301],
+        }
+    )
+
+    assert updated["idle_reason"] == "claimed_frontier_without_active_run"
+    assert updated["active_run_progress_state"] == "idle_claimed_frontier_without_active_run"
 
 
 def test_persist_live_state_snapshot_preserves_matching_active_run_from_existing_state() -> None:
@@ -11667,6 +12919,207 @@ def test_full_product_frontier_payload_carries_queue_fingerprint_and_package_met
             ".codex-design/product/CHUMMER5A_FAMILIARITY_BRIDGE.md",
             ".codex-design/product/FLAGSHIP_PRODUCT_BAR.md",
         ]
+        assert payload["frontier"][0]["eta"]["status"] == "flagship_delivery"
+        assert payload["frontier"][0]["eta"]["remaining_open_milestones"] == 1
+        assert payload["frontier"][0]["eta"]["range_low_hours"] is not None
+        assert payload["frontier"][0]["eta"]["range_high_hours"] is not None
+
+
+def test_full_product_frontier_uses_next_wave_queue_only_for_idle_shards(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(root, status="fail")
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-ui",
+                    "package_id": "next90-ui",
+                    "title": "Next90 UI desktop release train",
+                    "task": "Keep native-host release proof independent for the primary desktop head.",
+                    "owned_surfaces": ["desktop_release_train:avalonia"],
+                    "allowed_paths": ["Chummer.Avalonia"],
+                },
+                {
+                    "repo": "fleet",
+                    "package_id": "next90-fleet",
+                    "title": "Next90 fleet governor packet",
+                    "task": "Publish weekly governor packets with measured launch and rollback decisions.",
+                    "owned_surfaces": ["weekly_governor_packet"],
+                    "allowed_paths": ["scripts"],
+                },
+            ],
+            fingerprint="next90-abc",
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        for name in ("shard-1", "shard-2", "shard-3", "shard-4"):
+            (aggregate_root / name).mkdir(parents=True, exist_ok=True)
+
+        base_frontier = [
+            module.Milestone(
+                id=9001,
+                title="Current flagship closeout A",
+                wave="W5",
+                status="in_progress",
+                owners=["chummer6-ui"],
+                exit_criteria=["Land current closeout A."],
+                dependencies=[],
+            ),
+            module.Milestone(
+                id=9002,
+                title="Current flagship closeout B",
+                wave="W5",
+                status="in_progress",
+                owners=["chummer6-core"],
+                exit_criteria=["Land current closeout B."],
+                dependencies=[],
+            ),
+        ]
+        monkeypatch.setattr(module, "_full_product_readiness_audit", lambda args: {"status": "fail"})
+
+        active_args = _args(root)
+        active_args.state_root = str(aggregate_root / "shard-1")
+        assert module._queue_driven_full_product_frontier(active_args, base_frontier) == []
+
+        idle_args = _args(root)
+        idle_args.state_root = str(aggregate_root / "shard-3")
+        idle_frontier = module._queue_driven_full_product_frontier(idle_args, base_frontier)
+        assert len(idle_frontier) == 1
+        assert idle_frontier[0].title == "Next90 UI desktop release train"
+        assert idle_frontier[0].owners == ["chummer6-ui"]
+
+        second_idle_args = _args(root)
+        second_idle_args.state_root = str(aggregate_root / "shard-4")
+        second_idle_frontier = module._queue_driven_full_product_frontier(second_idle_args, base_frontier)
+        assert len(second_idle_frontier) == 1
+        assert second_idle_frontier[0].title == "Next90 fleet governor packet"
+        assert second_idle_frontier[0].owners == ["fleet"]
+
+
+def test_full_product_frontier_payload_carries_next_wave_queue_fingerprint_for_idle_shard(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_flagship_product_readiness(root, status="fail")
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-hub",
+                    "package_id": "next90-hub",
+                    "title": "Next90 workspace continuity provenance",
+                    "task": "Emit provenance and conflict receipts for workspace restore and continuity.",
+                    "owned_surfaces": ["workspace_restore:provenance"],
+                    "allowed_paths": ["Chummer.Run.Api"],
+                    "priority": 7,
+                }
+            ],
+            fingerprint="next90-live",
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        for name in ("shard-1", "shard-2"):
+            (aggregate_root / name).mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(module, "_full_product_readiness_audit", lambda args: {"status": "fail"})
+        monkeypatch.setattr(module, "_default_full_product_frontier", lambda args, audit: [])
+
+        shard_root = aggregate_root / "shard-1"
+        args = _args(root)
+        args.state_root = str(shard_root)
+        frontier = module._full_product_frontier(args)
+        audit = module._full_product_readiness_audit(args)
+
+        payload = module._full_product_frontier_payload(
+            args=args,
+            state_root=shard_root,
+            mode="flagship_product",
+            frontier=frontier,
+            focus_profiles=[],
+            focus_owners=[],
+            focus_texts=[],
+            completion_audit={"status": "fail", "reason": "pending"},
+            full_product_audit=audit,
+            eta=None,
+        )
+
+        assert payload["source_queue_fingerprint"] == "next90-live"
+        assert payload["queue_package"]["repo"] == "chummer6-hub"
+        assert payload["queue_package"]["package_id"] == "next90-hub"
+        assert payload["queue_package"]["priority"] == 7
+
+
+def test_derive_flagship_product_context_keeps_next_wave_queue_slice_for_idle_shard(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        _write_flagship_product_readiness(root, status="fail")
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        for name in ("shard-1", "shard-2", "shard-3", "shard-4"):
+            (aggregate_root / name).mkdir(parents=True, exist_ok=True)
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-ui",
+                    "package_id": "next90-ui",
+                    "title": "Next90 UI desktop release train",
+                    "task": "Keep native-host release proof independent for the primary desktop head.",
+                    "owned_surfaces": ["desktop_release_train:avalonia"],
+                    "allowed_paths": ["Chummer.Avalonia"],
+                },
+                {
+                    "repo": "fleet",
+                    "package_id": "next90-fleet",
+                    "title": "Next90 fleet governor packet",
+                    "task": "Publish weekly governor packets with measured launch and rollback decisions.",
+                    "owned_surfaces": ["weekly_governor_packet"],
+                    "allowed_paths": ["scripts"],
+                },
+            ],
+            fingerprint="next90-abc",
+        )
+
+        base_frontier = [
+            module.Milestone(
+                id=9001,
+                title="Current flagship closeout A",
+                wave="W5",
+                status="in_progress",
+                owners=["chummer6-ui"],
+                exit_criteria=["Land current closeout A."],
+                dependencies=[],
+            ),
+            module.Milestone(
+                id=9002,
+                title="Current flagship closeout B",
+                wave="W5",
+                status="in_progress",
+                owners=["chummer6-core"],
+                exit_criteria=["Land current closeout B."],
+                dependencies=[],
+            ),
+        ]
+        monkeypatch.setattr(module, "_default_full_product_frontier", lambda args, audit: list(base_frontier))
+        monkeypatch.setattr(module, "_design_completion_audit", lambda args, history: {"status": "pass"})
+
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+        shard_root = aggregate_root / "shard-3"
+        args.state_root = str(shard_root)
+
+        context = module.derive_flagship_product_context(
+            args,
+            shard_root,
+            base_context=module.derive_context(args),
+        )
+
+        assert len(context["frontier"]) == 1
+        assert context["frontier"][0].title == "Next90 UI desktop release train"
+        assert context["frontier_ids"] == [module._synthetic_full_product_id("next90-ui")]
 
 
 def test_derive_flagship_product_context_honors_frontier_id_override() -> None:
@@ -11693,6 +13146,84 @@ def test_derive_flagship_product_context_honors_frontier_id_override() -> None:
 
         assert context["frontier_ids"] == [3449507998]
         assert [item.id for item in context["frontier"]] == [3449507998]
+
+
+def test_derive_flagship_product_context_returns_empty_slice_when_prior_shards_claim_all_frontier(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        shard_root = root / "state" / "chummer_design_supervisor" / "shard-4"
+        shard_root.mkdir(parents=True, exist_ok=True)
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+
+        module._write_json(
+            root / "state" / "chummer_design_supervisor" / "shard-1" / "state.json",
+            {"active_run": {"run_id": "run-1", "frontier_ids": [4066417069]}},
+        )
+        module._write_json(
+            root / "state" / "chummer_design_supervisor" / "shard-2" / "state.json",
+            {"active_run": {"run_id": "run-2", "frontier_ids": [3449507998]}},
+        )
+        module._write_json(
+            root / "state" / "chummer_design_supervisor" / "shard-3" / "state.json",
+            {"active_run": {"run_id": "run-3", "frontier_ids": [2541792707]}},
+        )
+
+        frontier = [
+            module.Milestone(id=4066417069, title="Desktop proof", wave="W1", status="pending", owners=["fleet"], exit_criteria=["prove desktop"], dependencies=[]),
+            module.Milestone(id=3449507998, title="Core proof", wave="W1", status="pending", owners=["fleet"], exit_criteria=["prove core"], dependencies=[]),
+            module.Milestone(id=2541792707, title="Hub proof", wave="W1", status="pending", owners=["fleet"], exit_criteria=["prove hub"], dependencies=[]),
+        ]
+        monkeypatch.setattr(module, "_full_product_frontier", lambda _args: frontier)
+        monkeypatch.setattr(module, "_full_product_readiness_audit", lambda _args: {"status": "fail"})
+        monkeypatch.setattr(module, "_design_completion_audit", lambda _args, _history: {"status": "pass"})
+
+        context = module.derive_flagship_product_context(
+            args,
+            shard_root,
+            base_context=module.derive_context(args),
+        )
+
+        assert context["frontier"] == []
+        assert context["frontier_ids"] == []
+
+
+def test_derive_flagship_product_context_uses_deterministic_shard_slice(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        for index in range(1, 5):
+            (root / "state" / "chummer_design_supervisor" / f"shard-{index}").mkdir(parents=True, exist_ok=True)
+        shard_root = root / "state" / "chummer_design_supervisor" / "shard-2"
+        args = _args(root)
+        args.focus_profile = ["top_flagship_grade", "whole_project_frontier"]
+
+        frontier = [
+            module.Milestone(id=4066417069, title="Desktop proof", wave="W1", status="pending", owners=["fleet"], exit_criteria=["prove desktop"], dependencies=[]),
+            module.Milestone(id=3449507998, title="Core proof", wave="W1", status="pending", owners=["fleet"], exit_criteria=["prove core"], dependencies=[]),
+            module.Milestone(id=2541792707, title="Hub proof", wave="W1", status="pending", owners=["fleet"], exit_criteria=["prove hub"], dependencies=[]),
+        ]
+        monkeypatch.setattr(module, "_full_product_frontier", lambda _args: frontier)
+        monkeypatch.setattr(module, "_full_product_readiness_audit", lambda _args: {"status": "fail"})
+        monkeypatch.setattr(module, "_design_completion_audit", lambda _args, _history: {"status": "pass"})
+
+        context = module.derive_flagship_product_context(
+            args,
+            shard_root,
+            base_context=module.derive_context(args),
+        )
+
+        assert [item.id for item in context["frontier"]] == [3449507998]
+        assert context["frontier_ids"] == [3449507998]
 
 
 def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries() -> None:
@@ -11776,13 +13307,84 @@ def test_live_state_with_current_completion_audit_refreshes_live_shard_summaries
         )
         assert updated_state["full_product_audit"]["status"] == "fail"
         assert "flagship product readiness proof is missing" in updated_state["full_product_audit"]["reason"]
-        assert len(updated_state["shards"]) == 2
-        assert {shard["mode"] for shard in updated_state["shards"]} == {"completion_review"}
-        for shard in updated_state["shards"]:
-            assert shard["frontier_ids"][0] == synthetic_id
-            assert synthetic_id in shard["frontier_ids"]
-            assert shard["active_frontier_ids"] == []
-            assert shard["active_run_id"] == ""
+
+
+def test_live_state_with_current_completion_audit_includes_successor_wave_eta() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("Flagship frontier remains open.\n", encoding="utf-8")
+        _write_flagship_product_readiness(root, status="fail")
+        _write_next_wave_registry(root)
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-ui",
+                    "package_id": "next90-101-ui",
+                    "title": "Desktop release train",
+                    "task": "Keep native-host release proof independent for the primary desktop head.",
+                    "milestone_id": 101,
+                },
+                {
+                    "repo": "chummer6-hub",
+                    "package_id": "next90-102-hub",
+                    "title": "Desktop-native trust flow",
+                    "task": "Remove browser ritual from claim and support continuation.",
+                    "milestone_id": 102,
+                },
+            ],
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        for name in ("shard-1", "shard-2", "shard-3"):
+            (aggregate_root / name).mkdir(parents=True, exist_ok=True)
+
+        args = _args(root)
+        state, history = module._effective_supervisor_state(aggregate_root, history_limit=10)
+        updated_state, _ = module._live_state_with_current_completion_audit(args, aggregate_root, state, history)
+
+        assert updated_state["successor_wave_eta"]["status"] == "tracked"
+        assert updated_state["successor_wave_eta"]["remaining_open_milestones"] == 3
+        assert updated_state["successor_wave_eta_human"]
+        assert updated_state["successor_wave_eta_status"] == "tracked"
+        assert len(updated_state["shards"]) == 3
+
+
+def test_write_state_populates_successor_wave_eta_for_aggregate_root() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_next_wave_registry(root)
+        _write_next_wave_queue(
+            root,
+            [
+                {
+                    "repo": "chummer6-ui",
+                    "package_id": "next90-101-ui",
+                    "title": "Desktop release train",
+                    "task": "Keep native-host release proof independent for the primary desktop head.",
+                    "milestone_id": 101,
+                }
+            ],
+        )
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        aggregate_root.mkdir(parents=True, exist_ok=True)
+
+        module._write_state(
+            aggregate_root,
+            mode="flagship_product",
+            run=None,
+            open_milestones=[],
+            frontier=[],
+        )
+
+        persisted = json.loads((aggregate_root / "state.json").read_text(encoding="utf-8"))
+
+        assert persisted["successor_wave_eta"]["status"] == "tracked"
+        assert persisted["successor_wave_eta_human"]
 
 
 def test_render_status_shows_current_and_active_frontier_when_they_differ() -> None:
@@ -12413,6 +14015,434 @@ def test_write_state_persists_host_memory_status_aliases(tmp_path: Path) -> None
     assert payload["host_memory_pressure"]["status"] == "ok"
     assert payload["host_memory_status"] == "ok"
     assert payload["allowed_active_shards"] == 13
+
+
+def test_write_state_persists_eta_aliases(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "state"
+    state_root.mkdir(parents=True, exist_ok=True)
+
+    module._write_state(
+        state_root,
+        mode="flagship_product",
+        run=None,
+        open_milestones=[],
+        frontier=[],
+        eta={
+            "status": "tracked",
+            "eta_human": "8.2h-20.5h",
+            "summary": "8 open milestones remain (5 in progress, 3 not started).",
+            "eta_confidence": "low",
+            "predicted_completion_at": "2026-04-14T09:00:00Z",
+            "range_low_hours": 8.2,
+            "range_high_hours": 20.5,
+            "remaining_open_milestones": 8,
+            "remaining_in_progress_milestones": 5,
+            "remaining_not_started_milestones": 3,
+        },
+    )
+
+    payload = module._read_state(state_root / "state.json")
+    assert payload["eta"]["eta_human"] == "8.2h-20.5h"
+    assert payload["remaining_open_milestones"] == 8
+    assert payload["remaining_in_progress_milestones"] == 5
+    assert payload["remaining_not_started_milestones"] == 3
+    assert payload["eta_human"] == "8.2h-20.5h"
+    assert payload["eta_status"] == "tracked"
+    assert payload["eta_summary"] == "8 open milestones remain (5 in progress, 3 not started)."
+    assert payload["eta_confidence"] == "low"
+    assert payload["predicted_completion_at"] == "2026-04-14T09:00:00Z"
+    assert payload["range_low_hours"] == 8.2
+    assert payload["range_high_hours"] == 20.5
+
+
+def test_write_state_persists_worker_lane_status_alias(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "state"
+    state_root.mkdir(parents=True, exist_ok=True)
+
+    module._write_state(
+        state_root,
+        mode="flagship_product",
+        run=None,
+        open_milestones=[],
+        frontier=[],
+        worker_lane_health={
+            "status": "pass",
+            "routable_lanes": ["core", "survival"],
+        },
+    )
+
+    payload = module._read_state(state_root / "state.json")
+    assert payload["worker_lane_health"]["status"] == "pass"
+    assert payload["worker_lanes_status"] == "pass"
+
+
+def test_write_state_persists_idle_reason(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "state"
+    state_root.mkdir(parents=True, exist_ok=True)
+
+    module._write_state(
+        state_root,
+        mode="flagship_product",
+        run=None,
+        open_milestones=[],
+        frontier=[],
+        idle_reason="waiting_for_local_frontier_slice",
+    )
+
+    payload = module._read_state(state_root / "state.json")
+    assert payload["idle_reason"] == "waiting_for_local_frontier_slice"
+
+
+def test_write_json_replaces_atomically_without_temp_leaks(tmp_path: Path) -> None:
+    module = _load_module()
+    target = tmp_path / "state.json"
+
+    module._write_json(target, {"alpha": 1})
+    module._write_json(target, {"beta": 2})
+
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    assert payload == {"beta": 2}
+    assert list(tmp_path.glob(".state.json.*.tmp")) == []
+
+
+def test_apply_status_alias_fields_restores_active_and_last_run_aliases() -> None:
+    module = _load_module()
+
+    payload = module._apply_status_alias_fields(
+        {
+            "active_runs": [
+                {"run_id": "run-123"},
+                {"run_id": "run-124"},
+                {"run_id": ""},
+            ],
+            "active_run": {
+                "run_id": "run-123",
+                "started_at": "2026-04-13T11:40:00Z",
+                "worker_first_output_at": "2026-04-13T11:40:05Z",
+                "worker_last_output_at": "2026-04-13T11:41:00Z",
+                "worker_pid": 4242,
+                "progress_state": "streaming",
+                "selected_account_alias": "acct-ea-main",
+                "selected_model": "ea-coder-hard",
+            },
+            "last_run": {
+                "run_id": "run-122",
+                "finished_at": "2026-04-13T11:39:00Z",
+                "blocker": "worker exit 1",
+            },
+            "eta": {
+                "status": "tracked",
+                "eta_human": "8.2h-20.5h",
+                "summary": "8 open milestones remain (5 in progress, 3 not started).",
+                "eta_confidence": "low",
+                "predicted_completion_at": "2026-04-14T09:00:00Z",
+                "range_low_hours": 8.2,
+                "range_high_hours": 20.5,
+                "remaining_open_milestones": 8,
+                "remaining_in_progress_milestones": 5,
+                "remaining_not_started_milestones": 3,
+            },
+        }
+    )
+
+    assert payload["active_runs_count"] == 2
+    assert payload["active_run_id"] == "run-123"
+    assert payload["active_run_started_at"] == "2026-04-13T11:40:00Z"
+    assert payload["active_run_worker_first_output_at"] == "2026-04-13T11:40:05Z"
+    assert payload["active_run_worker_last_output_at"] == "2026-04-13T11:41:00Z"
+    assert payload["active_run_worker_pid"] == 4242
+    assert payload["active_run_progress_state"] == "streaming"
+    assert payload["selected_account_alias"] == "acct-ea-main"
+    assert payload["selected_model"] == "ea-coder-hard"
+    assert payload["remaining_open_milestones"] == 8
+    assert payload["remaining_in_progress_milestones"] == 5
+    assert payload["remaining_not_started_milestones"] == 3
+    assert payload["eta_human"] == "8.2h-20.5h"
+    assert payload["eta_status"] == "tracked"
+    assert payload["eta_summary"] == "8 open milestones remain (5 in progress, 3 not started)."
+    assert payload["eta_confidence"] == "low"
+    assert payload["predicted_completion_at"] == "2026-04-14T09:00:00Z"
+    assert payload["range_low_hours"] == 8.2
+    assert payload["range_high_hours"] == 20.5
+    assert payload["last_run_id"] == "run-122"
+    assert payload["last_run_finished_at"] == "2026-04-13T11:39:00Z"
+    assert payload["last_run_blocker"] == "worker exit 1"
+
+
+def test_update_active_run_fields_clears_idle_reason(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "state"
+    state_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        state_root / "state.json",
+        {
+            "updated_at": "2026-04-13T17:40:00Z",
+            "idle_reason": "waiting_for_local_frontier_slice",
+            "active_run": {
+                "run_id": "run-123",
+                "started_at": "2026-04-13T17:40:00Z",
+            },
+        },
+    )
+
+    module._update_active_run_fields(
+        state_root,
+        "run-123",
+        worker_last_output_at="2026-04-13T17:40:05Z",
+    )
+
+    payload = module._read_state(state_root / "state.json")
+    assert "idle_reason" not in payload
+    assert payload["active_run_progress_state"] == "streaming"
+
+
+def test_persist_live_state_snapshot_refreshes_shard_aliases_and_active_shards_manifest(tmp_path: Path) -> None:
+    module = _load_module()
+    original_running_inside_container = module._running_inside_container
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-1"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "generated_at": "2026-04-13T11:35:00Z",
+            "manifest_kind": "configured_shard_topology",
+            "topology_fingerprint": "seed",
+            "configured_shard_count": 1,
+            "configured_shards": [
+                {
+                    "name": "shard-1",
+                    "index": 1,
+                    "frontier_ids": [4066417069],
+                    "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                    "worker_lane": "core",
+                    "worker_model": "ea-coder-hard",
+                }
+            ],
+            "active_run_count": None,
+            "active_shards": [
+                {
+                    "name": "shard-1",
+                    "index": 1,
+                    "frontier_ids": [4066417069],
+                    "worker_bin": "/docker/fleet/scripts/codex-shims/codexea",
+                    "worker_lane": "core",
+                    "worker_model": "ea-coder-hard",
+                }
+            ],
+        },
+    )
+
+    try:
+        module._running_inside_container = lambda: True
+        module._persist_live_state_snapshot(
+            shard_root,
+            {
+                "updated_at": "2026-04-13T11:41:00Z",
+                "mode": "loop",
+                "frontier_ids": [4066417069],
+                "open_milestone_ids": [4066417069],
+                "focus_owners": ["fleet"],
+                "focus_texts": ["status-plane"],
+                "active_run": {
+                    "run_id": "run-live-1",
+                    "frontier_ids": [4066417069],
+                    "open_milestone_ids": [4066417069],
+                    "started_at": "2026-04-13T11:40:00Z",
+                    "worker_last_output_at": "2026-04-13T11:40:30Z",
+                    "worker_pid": 1234,
+                    "progress_state": "streaming",
+                },
+            },
+        )
+    finally:
+        module._running_inside_container = original_running_inside_container
+
+    shard_payload = json.loads((shard_root / "state.json").read_text(encoding="utf-8"))
+    manifest_payload = json.loads((aggregate_root / "active_shards.json").read_text(encoding="utf-8"))
+
+    assert shard_payload["active_run_id"] == "run-live-1"
+    assert shard_payload["active_run_started_at"] == "2026-04-13T11:40:00Z"
+    assert shard_payload["active_run_worker_last_output_at"] == "2026-04-13T11:40:30Z"
+    assert shard_payload["active_run_progress_state"] == "streaming"
+    assert manifest_payload["configured_shards"][0]["worker_model"] == "ea-coder-hard"
+    assert manifest_payload["active_run_count"] == 1
+    assert manifest_payload["active_shards"][0]["name"] == "shard-1"
+    assert manifest_payload["active_shards"][0]["active_run_id"] == "run-live-1"
+    assert "worker_model" not in manifest_payload["active_shards"][0]
+
+
+def test_live_shard_summaries_prefer_supervisor_authored_manifest_on_host(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-1"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "generated_at": "2026-04-13T12:15:00Z",
+            "manifest_kind": "configured_shard_topology",
+            "configured_shard_count": 1,
+            "configured_shards": [{"name": "shard-1"}],
+            "active_run_count": 1,
+            "active_shards": [
+                {
+                    "name": "shard-1",
+                    "updated_at": "2026-04-13T12:15:00Z",
+                    "active_run_id": "run-from-manifest",
+                    "active_run_worker_last_output_at": "2026-04-13T12:15:30Z",
+                    "active_run_progress_state": "closing",
+                    "selected_model": "ea-coder-hard",
+                }
+            ],
+        },
+    )
+    module._write_json(
+        shard_root / "state.json",
+        {
+            "updated_at": "2026-04-13T12:15:00Z",
+            "mode": "loop",
+            "frontier_ids": [13],
+            "open_milestone_ids": [13],
+        },
+    )
+
+    monkeypatch.setattr(module, "_running_inside_container", lambda: False)
+    monkeypatch.setattr(
+        module,
+        "_live_state_with_current_completion_audit",
+        lambda *_args, **_kwargs: (
+            {
+                "updated_at": "2026-04-13T12:16:00Z",
+                "mode": "loop",
+                "frontier_ids": [13],
+                "open_milestone_ids": [13],
+                "active_run": {
+                    "run_id": "run-from-host",
+                    "worker_last_output_at": "2026-04-13T12:16:30Z",
+                    "selected_model": "host-guess",
+                },
+            },
+            [],
+        ),
+    )
+
+    summaries = module._live_shard_summaries(_args(tmp_path), aggregate_root)
+
+    assert len(summaries) == 1
+    assert summaries[0]["active_run_id"] == "run-from-manifest"
+    assert summaries[0]["active_run_progress_state"] == "closing"
+    assert summaries[0]["selected_model"] == "ea-coder-hard"
+
+
+def test_statefile_shard_summaries_surface_inferred_idle_reason_for_claimed_frontier_without_active_run(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-8"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        shard_root / "state.json",
+        {
+            "updated_at": "2026-04-13T19:51:05Z",
+            "mode": "flagship_product",
+            "frontier_ids": [3109832007],
+            "open_milestone_ids": [],
+            "eta": {
+                "status": "flagship_delivery",
+                "summary": "Current closeout gates are green, but flagship product work still remains across 1 synthetic slices.",
+                "remaining_open_milestones": 1,
+                "remaining_in_progress_milestones": 0,
+                "remaining_not_started_milestones": 1,
+                "scope_kind": "flagship_product_readiness",
+            },
+        },
+    )
+
+    monkeypatch.setattr(module, "_running_inside_container", lambda: True)
+
+    summaries = module._statefile_shard_summaries(aggregate_root)
+
+    assert len(summaries) == 1
+    assert summaries[0]["idle_reason"] == "claimed_frontier_without_active_run"
+    assert summaries[0]["active_run_progress_state"] == "idle_claimed_frontier_without_active_run"
+    assert summaries[0]["eta_summary"].startswith("Current closeout gates are green")
+
+
+def test_reconcile_aggregate_shard_truth_counts_only_non_closing_active_runs() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "shards": [
+                {"name": "shard-1", "active_run_id": "run-1", "active_run_progress_state": "closing"},
+                {"name": "shard-2", "active_run_id": "run-2", "active_run_progress_state": "missing_process"},
+                {"name": "shard-3", "active_run_id": "run-3", "active_run_progress_state": "streaming"},
+                {"name": "shard-4", "active_run_id": "run-4"},
+            ]
+        }
+    )
+
+    assert updated["active_runs_count"] == 2
+
+
+def test_reconcile_aggregate_shard_truth_parallelizes_eta_across_claimed_frontier_shards_even_when_closing() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "open_milestone_ids": [4066417069, 3449507998],
+            "eta": {
+                "status": "tracked",
+                "eta_human": "tracked",
+                "eta_confidence": "low",
+                "basis": "full_product_frontier_heuristic",
+                "scope_kind": "flagship_product_readiness",
+                "scope_label": "Full Chummer5A parity and flagship proof closeout",
+                "remaining_open_milestones": 2,
+                "remaining_in_progress_milestones": 2,
+                "remaining_not_started_milestones": 0,
+                "summary": "booting",
+            },
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "frontier_ids": [4066417069],
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "closing",
+                    "eta_scope_kind": "flagship_product_readiness",
+                    "eta_range_low_hours": 10.86,
+                    "eta_range_high_hours": 26.65,
+                    "eta_remaining_open_milestones": 1,
+                    "eta_remaining_in_progress_milestones": 1,
+                    "eta_remaining_not_started_milestones": 0,
+                },
+                {
+                    "name": "shard-2",
+                    "frontier_ids": [3449507998],
+                    "active_run_id": "run-2",
+                    "active_run_progress_state": "closing",
+                    "eta_scope_kind": "flagship_product_readiness",
+                    "eta_range_low_hours": 9.0,
+                    "eta_range_high_hours": 23.2,
+                    "eta_remaining_open_milestones": 1,
+                    "eta_remaining_in_progress_milestones": 1,
+                    "eta_remaining_not_started_milestones": 0,
+                },
+            ],
+        }
+    )
+
+    assert updated["active_runs_count"] == 0
+    assert updated["eta"]["basis"] == "aggregate_shard_parallel_scope"
+    assert updated["eta"]["range_low_hours"] == 10.86
+    assert updated["eta"]["range_high_hours"] == 26.65
+    assert updated["eta"]["eta_human"] == "11h-1.1d"
+    assert "parallelized across 2 active shards" in updated["eta"]["summary"]
 
 
 def test_memory_pressure_notice_key_ignores_reason_jitter() -> None:

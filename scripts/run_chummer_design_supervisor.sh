@@ -595,7 +595,6 @@ active_manifest_rows=()
 if [[ -n "$state_root_base" ]]; then
   rm -f \
     "$state_root_base/active_shards.json" \
-    "$state_root_base/state.json" \
     "$state_root_base/active_run.json"
 fi
 cleanup() {

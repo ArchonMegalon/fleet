@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-12T09:07:31Z'
+generated_at: '2026-04-14T05:59:40Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-3
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -63,12 +63,13 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260412T072404Z is not trusted: worker exit 125'
+  reason: 'latest worker receipt 20260414T053632Z-shard-3 is not trusted: worker exit
+    125'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-12T09:07:20Z'
+  generated_at: '2026-04-14T05:37:02Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -95,15 +96,41 @@ frontier:
   - Keep public landing, signed-in overlays, release heads, install guidance, and
     support/control truth aligned with design-owned manifests instead of repo-local
     improvisation.
-source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+  eta:
+    status: flagship_delivery
+    eta_human: 10h-1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
+      open under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-04-14T22:50:40Z'
+    range_low_hours: 9.5
+    range_high_hours: 24.2
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.0
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
 eta:
   status: flagship_delivery
-  eta_human: 8h-20h
+  eta_human: 10h-1d
   eta_confidence: low
-  basis: full_product_frontier_heuristic
+  basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 1 synthetic slices. Outstanding readiness coverage: desktop_client.'
+  summary: 'Milestone ''Hub, registry, and public front door flagship finish'' remains
+    open under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-04-14T22:50:40Z'
+  range_low_hours: 9.5
+  range_high_hours: 24.2
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 2.0

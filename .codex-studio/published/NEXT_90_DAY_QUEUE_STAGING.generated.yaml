@@ -1,0 +1,173 @@
+mode: append
+program_wave: next_90_day_product_advance
+status: live_parallel_successor
+source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml
+source_design_queue_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
+activation_rule: Use these items immediately on shards whose current flagship closeout slice is empty; do not let them replace active shards already assigned to the current closeout frontier.
+items:
+  - title: Unify claim, install, update, and support recovery into one desktop-native flow
+    task: Remove browser ritual from claim, install, update, rollback, and support continuation for claimed desktop users.
+    package_id: next90-m102-hub-desktop-native-trust
+    milestone_id: 102
+    wave: W6
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - desktop_native_claim_and_recovery
+      - support_followthrough:install_truth
+  - title: Keep native-host release proof independent for the primary desktop head
+    task: Prove Avalonia as the primary desktop route on Windows, macOS, and Linux without leaning on Blazor fallback receipts.
+    package_id: next90-m101-ui-release-train
+    milestone_id: 101
+    wave: W6
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - desktop_release_train:avalonia
+      - flagship_route_truth:desktop
+  - title: Extract Chummer5a oracle baselines and veteran workflow packs
+    task: Capture screenshot baselines, first-minute veteran tasks, and compare artifacts from the Chummer5a oracle repo.
+    package_id: next90-m103-ea-parity-lab
+    milestone_id: 103
+    wave: W7
+    repo: executive-assistant
+    allowed_paths:
+      - skills
+      - tests
+      - feedback
+      - docs
+    owned_surfaces:
+      - parity_lab:capture
+      - veteran_compare_packs
+  - title: Build golden oracle suites and release-bound engine proof packs
+    task: Land golden oracle coverage and publish engine proof packs with explain and performance budgets for promoted desktop releases.
+    package_id: next90-m104-core-proof-pack
+    milestone_id: 104
+    wave: W7
+    repo: chummer6-core
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - engine_proof_pack
+      - import_oracle_discipline
+  - title: Emit provenance and conflict receipts for workspace restore and continuity
+    task: Make roaming workspace, entitlement replication, stale state, and conflict posture explicit and recoverable.
+    package_id: next90-m105-hub-workspace-continuity
+    milestone_id: 105
+    wave: W8
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - workspace_restore:provenance
+      - entitlement_sync:conflict_receipts
+  - title: Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions
+    task: Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.
+    package_id: next90-m106-fleet-governor-packet
+    milestone_id: 106
+    wave: W8
+    repo: fleet
+    allowed_paths:
+      - admin
+      - scripts
+      - tests
+      - .codex-studio
+    owned_surfaces:
+      - weekly_governor_packet
+      - measured_rollout_loop
+  - title: Gate fix followthrough against real install and receipt truth
+    task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
+    package_id: next90-m102-fleet-reporter-receipts
+    milestone_id: 102
+    wave: W6
+    repo: fleet
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - feedback_loop_ready:install_receipts
+      - product_governor:followthrough
+  - title: Publish explicit promotion, fallback, and rollback rationale in registry truth
+    task: Make channel truth explain why each desktop head is primary, fallback, promoted, or revoked on each platform tuple.
+    package_id: next90-m101-registry-promotion-discipline
+    milestone_id: 101
+    wave: W6
+    repo: chummer6-hub-registry
+    allowed_paths:
+      - Chummer.Hub.Registry
+      - scripts
+      - docs
+    owned_surfaces:
+      - release_channel_truth:desktop
+      - rollback_and_revoke_reasoning
+  - title: Run screenshot-backed parity review on the promoted desktop head
+    task: Prove menu, toolstrip, roster, master index, settings, and import familiarity against Chummer5a on the promoted head.
+    package_id: next90-m103-ui-veteran-certification
+    milestone_id: 103
+    wave: W7
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Blazor
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - veteran_migration_certification
+      - screenshot_parity:desktop
+  - title: Surface explain receipts and environment diffs where users need trust
+    task: Expose grounded explain receipts and before-after environment diffs on import, build blockers, and support diagnostics.
+    package_id: next90-m104-ui-explain-receipts
+    milestone_id: 104
+    wave: W7
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Blazor
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+    owned_surfaces:
+      - explain_receipts:desktop
+      - diagnostics_diff:desktop
+  - title: Land restore continuation and conflict-safe UX on the primary desktop route
+    task: Keep restore, stale-state visibility, and conflict choices visible and boring on the primary desktop head.
+    package_id: next90-m105-ui-restore-continuity
+    milestone_id: 105
+    wave: W8
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - restore_continuation:desktop
+      - conflict_safe_workspace:desktop
+  - title: Synthesize parity, support, and release signals into operator-ready and reporter-ready packets
+    task: Produce operator packets and reporter followthrough from the same readiness and parity truth used by the governor loop.
+    package_id: next90-m106-ea-governor-packets
+    milestone_id: 106
+    wave: W8
+    repo: executive-assistant
+    allowed_paths:
+      - skills
+      - tests
+      - feedback
+      - docs
+    owned_surfaces:
+      - operator_packets:weekly_governor
+      - reporter_followthrough:release_truth
+source_queue_fingerprint: next90-staging-20260413

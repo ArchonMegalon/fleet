@@ -1745,7 +1745,8 @@ def _onemin_aggregate_response(
                 )
             elif probe_error == "missing_api_token":
                 probe_warning = (
-                    "Note: Live 1min probe-all was skipped because the EA API token is not configured. "
+                    "Note: Live 1min probe-all was skipped because the EA API token is not configured; "
+                    "used a direct local 1min probe fallback instead when available. "
                     "Showing the best available cached aggregate without a fresh probe."
                 )
             elif probe_error == "http_403":
@@ -1753,7 +1754,9 @@ def _onemin_aggregate_response(
             else:
                 probe_warning = (
                     "Note: Live 1min probe-all failed; "
-                    f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}. Showing the best available cached aggregate without a fresh probe."
+                    f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}; "
+                    "used a direct local 1min probe fallback instead when available. "
+                    "Showing the best available cached aggregate without a fresh probe."
                 )
     if billing:
         billing_refresh_payload = _ea_onemin_billing_refresh_payload(
@@ -1800,7 +1803,10 @@ def _onemin_aggregate_response(
         if fragments:
             if probe_warning:
                 fragments.insert(0, probe_warning)
-            fragments.append("Live CodexEA status is unavailable right now; showing direct 1min probe data without the full aggregate.")
+            fragments.append(
+                "Live CodexEA status is unavailable right now; "
+                "showing direct local 1min provider health without the full aggregate."
+            )
             data: dict[str, Any] = {}
             if isinstance(probe_payload, dict):
                 data["probe"] = probe_payload
@@ -1820,12 +1826,13 @@ def _onemin_aggregate_response(
         if probe_warning:
             return {
                 "matched": True,
-                "ok": False,
-                "exit_code": 1,
+                "ok": True,
+                "exit_code": 0,
                 "message": (
                     probe_warning
                     + "\n\nLive CodexEA status is unavailable right now; `codexea credits` requires `/v1/codex/status` or `/v1/codex/profiles`."
                 ),
+                "data": {},
                 "payload_source": payload_source,
                 "payload_fetched_at": payload_fetched_at,
                 "status_error": status_error,
@@ -1886,29 +1893,6 @@ def _onemin_aggregate_response(
             "ok": False,
             "exit_code": 1,
             "message": "Live CodexEA status refreshed, but no 1min aggregate data was returned.",
-            "payload_source": payload_source,
-            "payload_fetched_at": payload_fetched_at,
-            "status_error": status_error,
-            "profiles_error": profiles_error,
-        }
-    if (
-        probe_all
-        and not isinstance(probe_payload, dict)
-        and probe_error
-        and probe_error != "http_403"
-        and payload_source not in {
-        "status_local_runtime_cache",
-        "profiles_local_runtime_cache",
-        }
-    ):
-        return {
-            "matched": True,
-            "ok": False,
-            "exit_code": 1,
-            "message": (
-                "Live 1min probe-all failed; "
-                f"`/v1/providers/onemin/probe-all` {_ea_http_error_detail(probe_error)}."
-            ),
             "payload_source": payload_source,
             "payload_fetched_at": payload_fetched_at,
             "status_error": status_error,

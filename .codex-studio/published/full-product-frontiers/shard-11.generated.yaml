@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-12T09:07:42Z'
+generated_at: '2026-04-14T05:59:46Z'
 mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -32,8 +32,7 @@ focus:
   - chummer6-design
   - fleet
   - chummer6-ui
-  - chummer6-hub
-  - chummer6-hub-registry
+  - executive-assistant
   texts:
   - chummer5a
   - visual-similarity
@@ -64,12 +63,13 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260412T072416Z is not trusted: worker exit 125'
+  reason: 'latest worker receipt 20260414T053708Z-shard-11 is not trusted: worker
+    exit 125'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-12T09:07:20Z'
+  generated_at: '2026-04-14T05:37:02Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -78,33 +78,73 @@ full_product_audit:
   unresolved_parity_family_ids: []
 frontier_count: 1
 frontier_ids:
-- 2541792707
+- 1430909325
 frontier:
-- id: 2541792707
-  title: Hub, registry, and public front door flagship finish
+- id: 1430909325
+  title: Extract Chummer5a oracle baselines and veteran workflow packs
   wave: flagship_product
   status: not_started
   owners:
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-design
+  - executive-assistant
   dependencies: []
   exit_criteria:
-  - Deliver the relationship/orchestration, publication, downloads, account, install,
-    update, proof-shelf, and support surfaces promised in `projects/hub.md`, `projects/hub-registry.md`,
-    and the product front door canon.
-  - Keep public landing, signed-in overlays, release heads, install guidance, and
-    support/control truth aligned with design-owned manifests instead of repo-local
-    improvisation.
-source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+  - Capture screenshot baselines, first-minute veteran tasks, and compare artifacts
+    from the Chummer5a oracle repo.
+  - 'Own and prove the surface slice(s): parity_lab:capture, veteran_compare_packs'
+  - 'Keep implementation scoped to the allowed paths: skills, tests, feedback, docs'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed for `executive-assistant` (next90-m103-ea-parity-lab).
+  eta:
+    status: flagship_delivery
+    eta_human: 9h-21h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Extract Chummer5a oracle baselines and veteran workflow
+      packs'' remains open under the flagship closeout frontier. Outstanding readiness
+      coverage: desktop_client.'
+    predicted_completion_at: '2026-04-14T21:05:28Z'
+    range_low_hours: 8.74
+    range_high_hours: 21.45
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.65
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+source_queue_fingerprint: next90-staging-20260413
+queue_package:
+  repo: executive-assistant
+  package_id: next90-m103-ea-parity-lab
+  title: Extract Chummer5a oracle baselines and veteran workflow packs
+  priority: 0
+  owned_surfaces:
+  - parity_lab:capture
+  - veteran_compare_packs
+  allowed_paths:
+  - skills
+  - tests
+  - feedback
+  - docs
 eta:
   status: flagship_delivery
-  eta_human: 8h-20h
+  eta_human: 9h-21h
   eta_confidence: low
-  basis: full_product_frontier_heuristic
+  basis: full_product_single_milestone_heuristic
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 1 synthetic slices. Outstanding readiness coverage: desktop_client.'
+  summary: 'Milestone ''Extract Chummer5a oracle baselines and veteran workflow packs''
+    remains open under the flagship closeout frontier. Outstanding readiness coverage:
+    desktop_client.'
+  predicted_completion_at: '2026-04-14T21:05:28Z'
+  range_low_hours: 8.74
+  range_high_hours: 21.45
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.65

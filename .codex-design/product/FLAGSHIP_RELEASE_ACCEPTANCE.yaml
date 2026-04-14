@@ -4,6 +4,12 @@ last_reviewed: 2026-04-10
 purpose: Machine-readable flagship-grade acceptance matrix for whole-product public-release readiness.
 source_documents:
   - FLAGSHIP_PRODUCT_BAR.md
+  - FLAGSHIP_PARITY_REGISTRY.yaml
+  - DENSE_WORKBENCH_BUDGET.yaml
+  - VETERAN_FIRST_MINUTE_GATE.yaml
+  - PRIMARY_ROUTE_REGISTRY.yaml
+  - FEEDBACK_LOOP_RELEASE_GATE.yaml
+  - FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
   - DESKTOP_CLIENT_PRODUCT_CUT.md
   - DESKTOP_PLATFORM_ACCEPTANCE_MATRIX.yaml
   - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
@@ -16,10 +22,14 @@ source_documents:
 acceptance_axes:
   - id: primary_path_clarity
     rule: Each major user job exposes one obvious primary path and one bounded fallback story.
+  - id: veteran_first_minute_orientation
+    rule: A Chummer5a veteran can reach the real workbench and find the key landmarks in the first minute without browser ritual or dashboard detours.
   - id: desktop_familiarity_and_install_continuity
     rule: Desktop install, claim, restore, and workbench continuation preserve Chummer5a familiarity and avoid browser-ritual or dashboard-first detours on the promoted path.
   - id: desktop_head_authority_and_fallback_honesty
     rule: Avalonia is the default primary desktop head; preview may still label Blazor Desktop as bounded fallback when the release shelf, platform matrix, and public copy explicitly say so, but any gold claim requires every shipped desktop head to independently meet the flagship bar for its promised scope.
+  - id: dense_workbench_budget
+    rule: The promoted desktop head stays within the dense-workbench budget for spacing, chrome, visible rows, and always-visible trust posture.
   - id: authored_ruleset_experience
     rule: SR4, SR5, and SR6 preserve edition-specific terminology, effect semantics, and workflow cues where the editions materially diverge.
   - id: dense_data_expert_speed
@@ -34,6 +44,8 @@ acceptance_axes:
     rule: Promoted surfaces follow one shared design contract with trustworthy theming, platform-fit layout grammar, explicit state treatment, and screenshot-backed critique evidence.
   - id: no_step_back_client_parity
     rule: Every legacy or adjacent client feature family that remains in scope has a first-class Chummer6 equivalent or an explicit bounded replacement story backed by the parity registry.
+  - id: flagship_release_parity_truth
+    rule: Legacy parity `covered` is not release truth; flagship release claims must clear the stricter status ladder in `FLAGSHIP_PARITY_REGISTRY.yaml`.
 
 surfaces:
   - id: desktop_workbench
@@ -49,8 +61,10 @@ surfaces:
       - A gold desktop claim is only true when every shipped desktop head independently satisfies startup, install, update, crash-recovery, feedback, workflow, and visual-familiarity proof.
       - The promoted desktop path starts with a guided product installer path instead of a framework chooser or browser ritual.
       - Install, claim, and restore land in the installer or app and open a workbench or restore continuation flow without a dashboard-first detour.
+      - The promoted desktop head clears the veteran first-minute gate and keeps key landmarks visible without hunting.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
       - The desktop shell keeps a real `File` menu, first-class master index and character roster routes, roster-first orientation, and other veteran Chummer5a familiarity anchors on the flagship path.
+      - The promoted desktop head stays within the dense-workbench budget for spacing, chrome, visible rows, and status-strip permanence.
       - Builder, inspect, compare, explain, and active-effect flows stay dense-data comfortable for expert users.
       - SR4, SR5, and SR6 use authored labels, prompts, and interaction cues where the rules differ in meaning.
       - The active ruleset, preset, and amend-package set stay visible and previewable before a user trusts a build or explain result.
@@ -62,8 +76,12 @@ surfaces:
       - RULE_ENVIRONMENT_AND_AMEND_SYSTEM.md
       - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
       - FLAGSHIP_UI_RELEASE_GATE.md
+      - DENSE_WORKBENCH_BUDGET.yaml
+      - VETERAN_FIRST_MINUTE_GATE.yaml
+      - PRIMARY_ROUTE_REGISTRY.yaml
       - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
       - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+      - FLAGSHIP_PARITY_REGISTRY.yaml
       - PUBLIC_RELEASE_EXPERIENCE.yaml
       - GOLDEN_JOURNEY_RELEASE_GATES.yaml
 
@@ -118,6 +136,8 @@ surfaces:
       - PUBLIC_DOWNLOADS_POLICY.md
       - SURFACE_DESIGN_SYSTEM_AND_AI_REVIEW_LOOP.md
       - FEEDBACK_AND_CRASH_REPORTING_SYSTEM.md
+      - FEEDBACK_LOOP_RELEASE_GATE.yaml
+      - FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
 
   - id: publication_and_artifacts
     owner_repos:
@@ -142,17 +162,27 @@ surfaces:
       - executive-assistant
     must_prove:
       - Whole-product completion is derived from flagship acceptance and lived journey proof, not only empty milestone rows or green repo tests.
+      - Structural readiness and flagship readiness are published as distinct planes so green milestone coverage cannot masquerade as veteran-ready product truth.
       - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
       - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
     evidence_sources:
       - FLAGSHIP_PRODUCT_BAR.md
+      - FLAGSHIP_PARITY_REGISTRY.yaml
+      - DENSE_WORKBENCH_BUDGET.yaml
+      - VETERAN_FIRST_MINUTE_GATE.yaml
+      - PRIMARY_ROUTE_REGISTRY.yaml
       - PRODUCT_GOVERNOR_AND_AUTOPILOT_LOOP.md
       - PRODUCT_HEALTH_SCORECARD.yaml
+      - FEEDBACK_LOOP_RELEASE_GATE.yaml
+      - FEEDBACK_PROGRESS_EMAIL_WORKFLOW.yaml
 
 whole_product_release_rules:
   - Public release claims must stay within the surfaces that pass this matrix or carry an explicit, bounded preview explanation.
+  - Structural completion and flagship replacement truth must be published separately; green milestones, empty uncovered-scope lists, or clean repo graphs are not a substitute for veteran-ready product proof.
   - A desktop release claim is incomplete if it names Blazor Desktop as available without also stating whether it is fallback or flagship for that lane.
   - A fallback head does not satisfy flagship readiness by association; if it is the only user-facing desktop route or the recommended public route, it must pass the flagship bar directly.
   - A gold claim cannot ship a secondary desktop head on shell-only, visual-only, or borrowed proof; every shipped head must independently clear the flagship bar.
   - Empty backlog views, green repo tests, or clean worktrees are not sufficient proof of flagship-grade completion by themselves.
+  - Legacy parity rows marked `covered` are necessary structural evidence, but release truth is tracked in `FLAGSHIP_PARITY_REGISTRY.yaml`; `covered` alone cannot justify veteran-ready or gold-ready claims.
+  - Reporter-facing support progress mail must be a sent, staged, receipt-bearing workflow from `wageslave@chummer.run`, not a vague promise that the support timeline exists somewhere.
   - Flagship release cannot claim no-step-back parity while any in-scope family marked `missing` or unbounded `partial` remains unresolved in `LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml`; a `partial` family is only bounded when Fleet's flagship-readiness parity audit records a proof-backed successor route for that family, and families listed under `scope.excluded` there, including `plugin-framework`, do not block the claim.

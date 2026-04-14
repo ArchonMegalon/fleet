@@ -219,8 +219,10 @@ raise SystemExit(0)
 PY
 }
 
-export EA_PRINCIPAL_ID="${EA_PRINCIPAL_ID:-$(id -un)-codex-audit}"
-export EA_MCP_PRINCIPAL_ID="${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID}}"
+principal_seed="${CODEXAUDIT_PRINCIPAL_ID:-${EA_MCP_PRINCIPAL_ID:-${EA_PRINCIPAL_ID:-$(id -un)}}}"
+principal_seed="${principal_seed%-codex-audit}"
+export EA_PRINCIPAL_ID="${principal_seed}-codex-audit"
+export EA_MCP_PRINCIPAL_ID="${EA_PRINCIPAL_ID}"
 export CODEXEA_LANE="jury"
 export CODEXEA_POST_AUDIT="${CODEXEA_POST_AUDIT:-0}"
 CODEXAUDIT_USE_DIRECT_TOOL=1

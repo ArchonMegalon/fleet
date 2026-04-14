@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-12T09:07:32Z'
+generated_at: '2026-04-14T06:01:41Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-4
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -31,29 +31,31 @@ focus:
   owners:
   - chummer6-ui
   - chummer6-hub
-  - chummer6-media-factory
-  - chummer6-hub-registry
   texts:
+  - top flagship grade
+  - whole project frontier
+  - feedback
+  - automatic bugfixing
+  - crash
+  - support
+  - accessibility
+  - localization
+  - restore confidence
+  - fit and finish
   - startup
   - skip-mainframe
   - launch-flow
   - restore
   - last-session
   - quiet-defaults
-  - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
-  - restore confidence
-  - accessibility
-  - localization
   - performance
   - proof shelf
-  - fit and finish
   - desktop client
 quality_policy:
   bar: top_flagship_grade
@@ -63,46 +65,38 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260412T075949Z is not trusted: worker exit 125'
+  reason: 'latest worker receipt 20260413T162343Z-shard-4 is not trusted: worker exit
+    125'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-12T09:07:20Z'
+  generated_at: '2026-04-14T05:37:02Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 1
-frontier_ids:
-- 4355602193
-frontier:
-- id: 4355602193
-  title: Media, artifacts, publication, and recap flagship finish
-  wave: flagship_product
-  status: not_started
-  owners:
-  - chummer6-media-factory
-  - chummer6-hub
-  - chummer6-hub-registry
-  dependencies: []
-  exit_criteria:
-  - Make documents, previews, portraits, bounded video, recap artifacts, manifests,
-    and publication receipts dependable product surfaces instead of sidecar exports,
-    following `projects/media-factory.md`.
-  - Keep provenance, preview, publish, and restore evidence intact across Hub, Registry,
-    and Media Factory.
-source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+frontier_count: 0
+frontier_ids: []
+frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 8h-20h
+  status: tracked
+  eta_human: tracked
   eta_confidence: low
-  basis: full_product_frontier_heuristic
+  basis: aggregate_shard_parallel_scope
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Current closeout gates are green, but flagship product work still remains
-    across 1 synthetic slices. Outstanding readiness coverage: desktop_client.'
+  summary: 10 open milestones remain (10 in progress, 0 not started). Aggregate shard
+    status is parallelized across 10 active shards under Full Chummer5A parity and
+    flagship proof closeout.
+  predicted_completion_at: ''
+  range_low_hours: 10.86
+  range_high_hours: 26.65
+  remaining_open_milestones: 10
+  remaining_in_progress_milestones: 10
+  remaining_not_started_milestones: 0
+  remaining_effort_units: 2.05

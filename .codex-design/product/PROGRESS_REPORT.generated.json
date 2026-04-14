@@ -1,9 +1,9 @@
 {
   "contract_name": "fleet.public_progress_report",
   "contract_version": "2026-03-23",
-  "generated_at": "2026-04-12T08:31:09Z",
-  "as_of": "2026-03-23",
-  "history_snapshot_count": 13,
+  "generated_at": "2026-04-13T20:25:51Z",
+  "as_of": "2026-04-13",
+  "history_snapshot_count": 14,
   "brand": "Chummer6",
   "active_wave": "Next 12 Biggest Wins",
   "active_wave_status": "active",
@@ -156,10 +156,10 @@
   "overall_progress_percent": 99,
   "phase_label": "Public-fit polish",
   "current_phase": "Public-fit polish",
-  "next_checkpoint_eta_weeks_low": 0,
-  "next_checkpoint_eta_weeks_high": 0,
-  "eta_summary": "tracked in full-product frontier",
-  "eta_human": "tracked in full-product frontier",
+  "next_checkpoint_eta_weeks_low": 1,
+  "next_checkpoint_eta_weeks_high": 1,
+  "eta_summary": "1 weeks",
+  "eta_human": "1 weeks",
   "longest_pole": {
     "id": "core-engine",
     "label": "Core Engine",
@@ -234,7 +234,7 @@
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-11T20:44:46.560447Z",
+            "published_at": "2026-04-12T11:45:59.599926Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -321,7 +321,7 @@
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-11T20:53:35.979762Z",
+            "published_at": "2026-04-12T11:46:01.049922Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -350,7 +350,7 @@
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-12T00:14:26.239937Z",
+            "published_at": "2026-04-12T11:46:01.234922Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -435,7 +435,7 @@
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-12T04:23:38.445712Z",
+            "published_at": "2026-04-12T15:43:45.534605Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -485,7 +485,7 @@
           "body": "A cohesive hosted community and publication stack ready for real public participation."
         }
       ],
-      "recent_commit_count_7d": 36,
+      "recent_commit_count_7d": 37,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -518,13 +518,13 @@
           "repo_slug": "chummer6-hub",
           "path": "/docker/chummercomplete/chummer6-hub",
           "lifecycle": "live",
-          "recent_commit_count_7d": 6,
+          "recent_commit_count_7d": 7,
           "design_total_weight": 60,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-11T20:44:46.747447Z",
+            "published_at": "2026-04-12T14:13:32.793825Z",
             "stages": {
               "design_compile": true,
               "policy_compile": true,
@@ -553,7 +553,7 @@
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-11T20:44:46.931446Z",
+            "published_at": "2026-04-12T14:11:11.781206Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -583,7 +583,7 @@
           "remaining_open_milestones": 0,
           "uncovered_scope_count": 0,
           "compile": {
-            "published_at": "2026-04-11T20:44:47.134446Z",
+            "published_at": "2026-04-12T11:46:00.174925Z",
             "stages": {
               "capacity_compile": true,
               "design_compile": true,
@@ -631,7 +631,7 @@
           "body": "One authoritative public story, compiled cleanly into every downstream surface."
         }
       ],
-      "recent_commit_count_7d": 4,
+      "recent_commit_count_7d": 5,
       "remaining_open_weight": 0,
       "remaining_open_milestones": 0,
       "uncovered_scope_count": 0,
@@ -664,7 +664,7 @@
           "repo_slug": "chummer6-design",
           "path": "/docker/chummercomplete/chummer-design",
           "lifecycle": "dispatchable",
-          "recent_commit_count_7d": 2,
+          "recent_commit_count_7d": 3,
           "design_total_weight": 44,
           "remaining_open_weight": 0,
           "remaining_open_milestones": 0,
@@ -752,42 +752,38 @@
     "limitations": [
       "ETA is a momentum-based planning band, not a delivery promise.",
       "Weekly public progress history is now available; ETA uses recorded velocity where enough snapshots exist and falls back to the short-horizon momentum proxy elsewhere.",
-      "Mapped public milestones are complete, but the full-product frontier remains open with 13 milestone(s). Full completion requires full frontier closure.",
-      "The current supervisor ETA is tactical or otherwise not yet calendar-grade enough for a full-product parity forecast, so the public surface tracks the remaining frontier without publishing a parity date band."
+      "Mapped public milestones are complete, but the full-product frontier remains open with 5 milestone(s). Full completion requires full frontier closure."
     ],
-    "history_snapshot_count": 13
+    "history_snapshot_count": 14
   },
-  "eta_scope": "full_product_queue_unestimated",
+  "eta_scope": "full_product_queue",
   "full_product_queue": {
     "mode": "sharded",
-    "active_runs_count": 13,
+    "active_runs_count": 5,
     "active_frontier_ids": [
-      1300044932,
       2541792707,
       3109832007,
       3449507998,
       4066417069,
-      4182074715,
-      4355602193,
-      4575045159
+      4182074715
     ],
-    "open_frontier_milestones": 13,
-    "open_milestone_ids_count": 0,
+    "open_frontier_milestones": 5,
+    "open_milestone_ids_count": 5,
     "eta": {
-      "eta_human": "tracked",
+      "eta_human": "11h-1.1d",
       "eta_status": "tracked",
       "scope_kind": "flagship_product_readiness",
       "scope_label": "Full Chummer5A parity and flagship proof closeout",
       "scope_warning": "",
-      "eta_weeks_low": null,
-      "eta_weeks_high": null,
-      "remaining_open_milestones": 13,
-      "remaining_in_progress_milestones": 8,
-      "remaining_not_started_milestones": 5
+      "eta_weeks_low": 1,
+      "eta_weeks_high": 1,
+      "remaining_open_milestones": 5,
+      "remaining_in_progress_milestones": 5,
+      "remaining_not_started_milestones": 0
     },
     "active_runs": [
       {
-        "run_id": "20260412T081825Z",
+        "run_id": "20260413T201626Z-shard-1",
         "shard": "shard-1",
         "frontier_count": 1,
         "frontier_ids": [
@@ -795,39 +791,7 @@
         ]
       },
       {
-        "run_id": "20260412T081855Z",
-        "shard": "shard-10",
-        "frontier_count": 1,
-        "frontier_ids": [
-          2541792707
-        ]
-      },
-      {
-        "run_id": "20260412T081857Z",
-        "shard": "shard-11",
-        "frontier_count": 1,
-        "frontier_ids": [
-          2541792707
-        ]
-      },
-      {
-        "run_id": "20260412T081907Z",
-        "shard": "shard-12",
-        "frontier_count": 1,
-        "frontier_ids": [
-          3109832007
-        ]
-      },
-      {
-        "run_id": "20260412T081909Z",
-        "shard": "shard-13",
-        "frontier_count": 1,
-        "frontier_ids": [
-          4182074715
-        ]
-      },
-      {
-        "run_id": "20260412T081829Z",
+        "run_id": "20260413T201630Z-shard-2",
         "shard": "shard-2",
         "frontier_count": 1,
         "frontier_ids": [
@@ -835,7 +799,7 @@
         ]
       },
       {
-        "run_id": "20260412T081832Z",
+        "run_id": "20260413T201633Z-shard-3",
         "shard": "shard-3",
         "frontier_count": 1,
         "frontier_ids": [
@@ -843,51 +807,19 @@
         ]
       },
       {
-        "run_id": "20260412T081835Z",
-        "shard": "shard-4",
-        "frontier_count": 1,
-        "frontier_ids": [
-          4355602193
-        ]
-      },
-      {
-        "run_id": "20260412T081837Z",
+        "run_id": "20260413T201638Z-shard-5",
         "shard": "shard-5",
-        "frontier_count": 1,
-        "frontier_ids": [
-          1300044932
-        ]
-      },
-      {
-        "run_id": "20260412T081840Z",
-        "shard": "shard-6",
         "frontier_count": 1,
         "frontier_ids": [
           4182074715
         ]
       },
       {
-        "run_id": "20260412T081844Z",
-        "shard": "shard-7",
-        "frontier_count": 1,
-        "frontier_ids": [
-          4575045159
-        ]
-      },
-      {
-        "run_id": "20260412T081848Z",
+        "run_id": "20260413T201648Z-shard-8",
         "shard": "shard-8",
         "frontier_count": 1,
         "frontier_ids": [
           3109832007
-        ]
-      },
-      {
-        "run_id": "20260412T081850Z",
-        "shard": "shard-9",
-        "frontier_count": 1,
-        "frontier_ids": [
-          4066417069
         ]
       }
     ]

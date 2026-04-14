@@ -975,6 +975,8 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
 
     return {
         "packet_id": packet_id,
+        "packet_kind": "support_case",
+        "support_case_backed": True,
         "kind": kind,
         "status": status,
         "target_repo": target_repo,
@@ -1360,6 +1362,14 @@ def _needs_human_response(packet: Dict[str, Any]) -> bool:
     return status in {"new", "clustered", "awaiting_evidence"}
 
 
+def _is_non_external_packet(packet: Dict[str, Any]) -> bool:
+    install_diagnosis = packet.get("install_diagnosis")
+    if isinstance(install_diagnosis, dict) and bool(install_diagnosis.get("external_proof_required")):
+        return False
+    packet_kind = _normalize_text(packet.get("packet_kind") or packet.get("kind")).lower()
+    return packet_kind != "external_proof_request"
+
+
 def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
     generated_at = _utc_now_iso()
     raw_items = source_payload.get("items") or []
@@ -1398,6 +1408,7 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
     ]
     packets = case_packets + operator_packets
     open_packets = packets
+    non_external_packets = [dict(item) for item in open_packets if _is_non_external_packet(item)]
     open_items = [
         dict(item)
         for item in raw_items
@@ -1418,6 +1429,8 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         "summary": {
             "open_case_count": len(case_packets),
             "open_packet_count": len(open_packets),
+            "open_non_external_packet_count": len(non_external_packets),
+            "support_case_backed_open_count": sum(1 for item in open_packets if bool(item.get("support_case_backed"))),
             "operator_packet_count": len(operator_packets),
             "design_impact_count": sum(1 for item in case_packets if item["design_impact_suspected"]),
             "owner_repo_counts": _counter_map(
@@ -1428,6 +1441,13 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "status_counts": _counter_map(item["status"] for item in open_packets),
             "closure_waiting_on_release_truth": sum(1 for item in open_packets if _closure_waiting_on_release_truth(item)),
             "needs_human_response": sum(1 for item in open_packets if _needs_human_response(item)),
+            "non_external_needs_human_response": sum(1 for item in non_external_packets if _needs_human_response(item)),
+            "non_external_packets_without_named_owner": sum(
+                1 for item in non_external_packets if not _normalize_text(item.get("target_repo"))
+            ),
+            "non_external_packets_without_lane": sum(
+                1 for item in non_external_packets if not _normalize_text(item.get("primary_lane"))
+            ),
             "install_truth_state_counts": _counter_map(item.get("install_truth_state") for item in open_packets),
             "update_required_case_count": sum(
                 1 for item in open_packets if bool((item.get("fix_confirmation") or {}).get("update_required"))
@@ -1522,6 +1542,7 @@ def _cached_packets_fallback_payload(
     packets = [dict(item) for item in (existing_payload.get("packets") or []) if isinstance(item, dict)]
     case_packets = [dict(item) for item in packets if bool(item.get("support_case_backed"))]
     operator_packets = [dict(item) for item in packets if not bool(item.get("support_case_backed"))]
+    non_external_packets = [dict(item) for item in packets if _is_non_external_packet(item)]
     unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
     unresolved_external_proof_execution_plan = _external_proof_execution_plan(
         release_channel_index,
@@ -1546,6 +1567,8 @@ def _cached_packets_fallback_payload(
         "summary": {
             "open_case_count": len(case_packets),
             "open_packet_count": len(packets),
+            "open_non_external_packet_count": len(non_external_packets),
+            "support_case_backed_open_count": sum(1 for item in packets if bool(item.get("support_case_backed"))),
             "operator_packet_count": len(operator_packets),
             "design_impact_count": sum(1 for item in case_packets if item.get("design_impact_suspected")),
             "owner_repo_counts": _counter_map(
@@ -1556,6 +1579,13 @@ def _cached_packets_fallback_payload(
             "status_counts": _counter_map(_normalize_text(item.get("status")) for item in packets),
             "closure_waiting_on_release_truth": sum(1 for item in packets if _closure_waiting_on_release_truth(item)),
             "needs_human_response": sum(1 for item in packets if _needs_human_response(item)),
+            "non_external_needs_human_response": sum(1 for item in non_external_packets if _needs_human_response(item)),
+            "non_external_packets_without_named_owner": sum(
+                1 for item in non_external_packets if not _normalize_text(item.get("target_repo"))
+            ),
+            "non_external_packets_without_lane": sum(
+                1 for item in non_external_packets if not _normalize_text(item.get("primary_lane"))
+            ),
             "install_truth_state_counts": _counter_map(_normalize_text(item.get("install_truth_state")) for item in packets),
             "update_required_case_count": sum(
                 1 for item in packets if bool((item.get("fix_confirmation") or {}).get("update_required"))

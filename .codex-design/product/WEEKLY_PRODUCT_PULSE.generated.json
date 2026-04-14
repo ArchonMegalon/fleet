@@ -1,8 +1,8 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-04-12T08:42:27Z",
-  "as_of": "2026-04-12",
+  "generated_at": "2026-04-13T20:25:52Z",
+  "as_of": "2026-04-13",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
   "progress_history_source": "products/chummer/PROGRESS_HISTORY.generated.json",
@@ -29,10 +29,10 @@
   "journey_gate_health": {
     "state": "blocked",
     "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
-    "blocked_count": 4,
+    "blocked_count": 6,
     "warning_count": 0,
     "blocked_external_only_count": 0,
-    "blocked_with_local_count": 4,
+    "blocked_with_local_count": 6,
     "blocked_external_only_hosts": [],
     "blocked_external_only_tuples": []
   },
@@ -62,30 +62,30 @@
       ]
     }
   ],
-  "oldest_blocker_days": 2,
+  "oldest_blocker_days": 3,
   "design_drift_count": 0,
   "public_promise_drift_count": 0,
   "governor_decisions": [
     {
-      "decision_id": "2026-04-12-focus-next-12-biggest-wins",
+      "decision_id": "2026-04-13-focus-next-12-biggest-wins",
       "action": "focus_shift",
-      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 13 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+      "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 14 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
       "cited_signals": [
         "overall_progress_percent=99",
-        "history_snapshot_count=13",
-        "oldest_blocker_days=2",
+        "history_snapshot_count=14",
+        "oldest_blocker_days=3",
         "phase_label=Public-fit polish",
         "longest_pole=Core Engine",
         "active_wave_status=active"
       ]
     },
     {
-      "decision_id": "2026-04-12-launch-governance",
+      "decision_id": "2026-04-13-launch-governance",
       "action": "freeze_launch",
-      "reason": "Freeze launch expansion while 4 golden journey(s) remain blocked and journey health is blocked.",
+      "reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
       "cited_signals": [
         "journey_gate_state=blocked",
-        "journey_gate_blocked_count=4",
+        "journey_gate_blocked_count=6",
         "local_release_proof_status=unknown",
         "provider_canary_status=Canary evidence is still accumulating",
         "closure_health_state=watch"
@@ -114,10 +114,10 @@
     "journey_gate_health": {
       "state": "blocked",
       "reason": "Resolve the blocking golden-journey gaps before widening publish claims.",
-      "blocked_count": 4,
+      "blocked_count": 6,
       "warning_count": 0,
       "blocked_external_only_count": 0,
-      "blocked_with_local_count": 4,
+      "blocked_with_local_count": 6,
       "blocked_external_only_hosts": [],
       "blocked_external_only_tuples": []
     },
@@ -147,30 +147,30 @@
         ]
       }
     ],
-    "oldest_blocker_days": 2,
+    "oldest_blocker_days": 3,
     "design_drift_count": 0,
     "public_promise_drift_count": 0,
     "governor_decisions": [
       {
-        "decision_id": "2026-04-12-focus-next-12-biggest-wins",
+        "decision_id": "2026-04-13-focus-next-12-biggest-wins",
         "action": "focus_shift",
-        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 13 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
+        "reason": "Keep delivery focus on Next 12 Biggest Wins. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 14 snapshots, and the pacing risk remains concentrated in Core Engine while trust/publication/utility closure still needs measured completion on the active registry.",
         "cited_signals": [
           "overall_progress_percent=99",
-          "history_snapshot_count=13",
-          "oldest_blocker_days=2",
+          "history_snapshot_count=14",
+          "oldest_blocker_days=3",
           "phase_label=Public-fit polish",
           "longest_pole=Core Engine",
           "active_wave_status=active"
         ]
       },
       {
-        "decision_id": "2026-04-12-launch-governance",
+        "decision_id": "2026-04-13-launch-governance",
         "action": "freeze_launch",
-        "reason": "Freeze launch expansion while 4 golden journey(s) remain blocked and journey health is blocked.",
+        "reason": "Freeze launch expansion while 6 golden journey(s) remain blocked and journey health is blocked.",
         "cited_signals": [
           "journey_gate_state=blocked",
-          "journey_gate_blocked_count=4",
+          "journey_gate_blocked_count=6",
           "local_release_proof_status=unknown",
           "provider_canary_status=Canary evidence is still accumulating",
           "closure_health_state=watch"
@@ -183,9 +183,9 @@
     "current_recommended_wave": "Next 12 Biggest Wins",
     "overall_progress_percent": 99,
     "phase_label": "Public-fit polish",
-    "history_snapshot_count": 13,
+    "history_snapshot_count": 14,
     "longest_pole": "Core Engine",
-    "launch_readiness": "Hold launch expansion pending route-canary validation. 4 golden journey(s) remain blocked.",
+    "launch_readiness": "Hold launch expansion pending route-canary validation. 6 golden journey(s) remain blocked.",
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
       "canary_status": "Canary evidence is still accumulating",
@@ -195,7 +195,7 @@
     "journey_gate_source": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "post_audit_next20_status": "complete",
     "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
-    "scorecard_metric_count": 22,
+    "scorecard_metric_count": 24,
     "automation_alignment": {
       "state": "misaligned",
       "active_wave_registry": "products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
@@ -251,22 +251,18 @@
       "local_release_proof_status": "unknown",
       "proven_journey_count": 0,
       "proven_route_count": 0,
-      "history_snapshot_count": 13,
-      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 13 weekly snapshots are on record for the current public trust posture."
+      "history_snapshot_count": 14,
+      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 14 weekly snapshots are on record for the current public trust posture."
     },
     "progress_trend": {
       "state": "steady",
       "direction": "flat",
       "delta_percent": 0,
-      "from_as_of": "2026-04-11",
-      "to_as_of": "2026-04-12",
-      "summary": "Flat trend 0% from 2026-04-11 to 2026-04-12. Trend window: 2026-03-31 100% -> 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100% -> 2026-04-04 100% -> 2026-04-05 100% -> 2026-04-11 99% -> 2026-04-12 99%.",
+      "from_as_of": "2026-04-12",
+      "to_as_of": "2026-04-13",
+      "summary": "Flat trend 0% from 2026-04-12 to 2026-04-13. Trend window: 2026-04-01 100% -> 2026-04-02 100% -> 2026-04-03 100% -> 2026-04-04 100% -> 2026-04-05 100% -> 2026-04-11 99% -> 2026-04-12 99% -> 2026-04-13 99%.",
       "sample_count": 8,
       "samples": [
-        {
-          "as_of": "2026-03-31",
-          "overall_progress_percent": 100
-        },
         {
           "as_of": "2026-04-01",
           "overall_progress_percent": 100
@@ -293,6 +289,10 @@
         },
         {
           "as_of": "2026-04-12",
+          "overall_progress_percent": 99
+        },
+        {
+          "as_of": "2026-04-13",
           "overall_progress_percent": 99
         }
       ]
