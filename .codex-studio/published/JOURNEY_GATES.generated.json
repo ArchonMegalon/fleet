@@ -1,7 +1,7 @@
 {
   "contract_name": "fleet.journey_gates",
   "contract_version": 1,
-  "generated_at": "2026-04-14T05:37:01Z",
+  "generated_at": "2026-04-14T16:38:57Z",
   "source_registry_path": "/docker/fleet/.codex-design/product/GOLDEN_JOURNEY_RELEASE_GATES.yaml",
   "summary": {
     "overall_state": "blocked",
@@ -21,7 +21,7 @@
     "compile_manifest": {
       "artifact": "compile_manifest",
       "available": true,
-      "at": "2026-04-14T05:37:01Z",
+      "at": "2026-04-14T16:38:57Z",
       "state": "fresh",
       "age_seconds": 0
     },
@@ -30,26 +30,26 @@
       "available": true,
       "at": "2026-04-12T08:40:13Z",
       "state": "stale",
-      "age_seconds": 161808
+      "age_seconds": 201524
     },
     "progress_report": {
       "artifact": "progress_report",
       "available": true,
-      "at": "2026-04-13T20:25:51Z",
+      "at": "2026-04-14T07:09:39Z",
       "state": "fresh",
-      "age_seconds": 33070
+      "age_seconds": 34158
     },
     "progress_history": {
       "artifact": "progress_history",
       "available": true,
-      "at": "2026-04-13T20:25:51Z",
+      "at": "2026-04-14T07:09:39Z",
       "state": "fresh",
-      "age_seconds": 33070
+      "age_seconds": 34158
     },
     "support_packets": {
       "artifact": "support_packets",
       "available": true,
-      "at": "2026-04-14T05:37:01Z",
+      "at": "2026-04-14T16:38:57Z",
       "state": "fresh",
       "age_seconds": 0
     }
@@ -63,11 +63,12 @@
       "recommended_action": "Resolve the blocking artifact or posture gap before widening promotion or trust claims.",
       "blockers": [
         "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (181525s old > 172800s max).",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
@@ -82,15 +83,18 @@
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.desktop_familiarity.startup_opens_workbench_not_landing' expected True but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.manual_browser_claim_code_required' expected False but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.claim_flow_surface' expected 'installer_or_in_app' but was None.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.product_installer_guides_head_choice' expected True but was None."
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.product_installer_guides_head_choice' expected True but was None.",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (175576s old > 172800s max).",
+        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (176112s old > 172800s max)."
       ],
       "blocking_reasons": [
         "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (181525s old > 172800s max).",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadPairs' expected [] but was ['avalonia:windows', 'blazor-desktop:windows', 'avalonia:macos', 'blazor-desktop:macos'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' expected [] but was ['avalonia:osx-arm64:macos', 'avalonia:win-x64:windows', 'blazor-desktop:osx-arm64:macos', 'blazor-desktop:win-x64:windows'].",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
@@ -105,7 +109,9 @@
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.desktop_familiarity.startup_opens_workbench_not_landing' expected True but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.manual_browser_claim_code_required' expected False but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.claim_flow_surface' expected 'installer_or_in_app' but was None.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.product_installer_guides_head_choice' expected True but was None."
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.product_installer_guides_head_choice' expected True but was None.",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (175576s old > 172800s max).",
+        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (176112s old > 172800s max)."
       ],
       "external_blocking_reasons": [
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'desktopTupleCoverage.missingRequiredPlatforms' expected [] but was ['windows', 'macos'].",
@@ -118,8 +124,9 @@
       ],
       "local_blocking_reasons": [
         "status_plane is stale.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (181525s old > 172800s max).",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
         "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is missing required marker '\"local_blocking_findings_count\": 0'.",
@@ -130,7 +137,9 @@
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.desktop_familiarity.startup_opens_workbench_not_landing' expected True but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.manual_browser_claim_code_required' expected False but was None.",
         "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.claim_flow_surface' expected 'installer_or_in_app' but was None.",
-        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.product_installer_guides_head_choice' expected True but was None."
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json field 'evidence.install_experience.product_installer_guides_head_choice' expected True but was None.",
+        "repo proof chummer6-ui:.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json is stale (175576s old > 172800s max).",
+        "repo proof chummer6-mobile:.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json is stale (176112s old > 172800s max)."
       ],
       "blocked_by_external_constraints_only": false,
       "external_proof_requests": [
@@ -457,8 +466,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 14,
-        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "history_snapshot_count": 15,
+        "support_packets_generated_at": "2026-04-14T16:38:57Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -621,7 +630,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 21,
+        "blocking_reason_count": 24,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 4,
@@ -633,7 +642,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 7,
-        "local_blocking_reason_count": 14,
+        "local_blocking_reason_count": 17,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 4
       }
@@ -955,8 +964,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 14,
-        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "history_snapshot_count": 15,
+        "support_packets_generated_at": "2026-04-14T16:38:57Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1391,8 +1400,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 14,
-        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "history_snapshot_count": 15,
+        "support_packets_generated_at": "2026-04-14T16:38:57Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1510,8 +1519,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 14,
-        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "history_snapshot_count": 15,
+        "support_packets_generated_at": "2026-04-14T16:38:57Z",
         "required_artifacts": [
           "status_plane",
           "progress_report"
@@ -1550,7 +1559,7 @@
         "status_plane is stale.",
         "repo proof executive-assistant:README.md is missing required marker 'delivery.send'.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
@@ -1574,7 +1583,7 @@
         "status_plane is stale.",
         "repo proof executive-assistant:README.md is missing required marker 'delivery.send'.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
@@ -1604,7 +1613,7 @@
         "status_plane is stale.",
         "repo proof executive-assistant:README.md is missing required marker 'delivery.send'.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
         "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
         "support packet support_packet_1e7cc73c9675 install_diagnosis.registry_channel_id must match release-channel value 'docker' but was 'preview'.",
@@ -1897,8 +1906,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 14,
-        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "history_snapshot_count": 15,
+        "support_packets_generated_at": "2026-04-14T16:38:57Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -2086,9 +2095,10 @@
       "blockers": [
         "status_plane is stale.",
         "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is missing required marker '\"/downloads\"'.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (181525s old > 172800s max).",
         "repo proof executive-assistant:README.md is missing required marker 'delivery.send'.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
@@ -2099,9 +2109,10 @@
       "blocking_reasons": [
         "status_plane is stale.",
         "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is missing required marker '\"/downloads\"'.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (181525s old > 172800s max).",
         "repo proof executive-assistant:README.md is missing required marker 'delivery.send'.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple avalonia:osx-arm64:macos. Expected targets: artifactId avalonia-osx-arm64-installer, installer chummer-avalonia-osx-arm64-installer.dmg, public route /downloads/install/avalonia-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on macos host for tuple blazor-desktop:osx-arm64:macos. Expected targets: artifactId blazor-desktop-osx-arm64-installer, installer chummer-blazor-desktop-osx-arm64-installer.dmg, public route /downloads/install/blazor-desktop-osx-arm64-installer, startup-smoke receipt startup-smoke/startup-smoke-blazor-desktop-osx-arm64.receipt.json.",
         "release_channel.generated.json field 'desktopTupleCoverage.missingRequiredPlatformHeadRidTuples' external proof request: capture promoted_installer_artifact, startup_smoke_receipt on windows host for tuple avalonia:win-x64:windows. Expected targets: artifactId avalonia-win-x64-installer, installer chummer-avalonia-win-x64-installer.exe, public route /downloads/install/avalonia-win-x64-installer, startup-smoke receipt startup-smoke/startup-smoke-avalonia-win-x64.receipt.json.",
@@ -2118,9 +2129,10 @@
       "local_blocking_reasons": [
         "status_plane is stale.",
         "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is missing required marker '\"/downloads\"'.",
+        "repo proof chummer6-hub:.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json is stale (181525s old > 172800s max).",
         "repo proof executive-assistant:README.md is missing required marker 'delivery.send'.",
         "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json field 'status' expected one of ['published', 'publishable'] but was 'unpublished'.",
-        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (208441s old > 172800s max).",
+        "repo proof chummer6-hub-registry:.codex-studio/published/RELEASE_CHANNEL.generated.json is stale (248157s old > 172800s max).",
         "release_channel.generated.json field 'rolloutState' must be 'coverage_incomplete' while desktopTupleCoverage reports missing platform/head/tuple inventory.",
         "release_channel.generated.json field 'supportabilityState' must be 'review_required' while desktopTupleCoverage reports missing platform/head/tuple inventory."
       ],
@@ -2398,8 +2410,8 @@
         ]
       },
       "evidence": {
-        "history_snapshot_count": 14,
-        "support_packets_generated_at": "2026-04-14T05:37:01Z",
+        "history_snapshot_count": 15,
+        "support_packets_generated_at": "2026-04-14T16:38:57Z",
         "required_artifacts": [
           "status_plane",
           "progress_report",
@@ -2561,7 +2573,7 @@
         ]
       },
       "signals": {
-        "blocking_reason_count": 11,
+        "blocking_reason_count": 12,
         "warning_reason_count": 0,
         "support_closure_waiting_count": 0,
         "support_needs_human_response_count": 4,
@@ -2573,7 +2585,7 @@
         "support_install_truth_contract_violation_count": 0,
         "support_recovery_route_contract_violation_count": 0,
         "external_blocking_reason_count": 4,
-        "local_blocking_reason_count": 7,
+        "local_blocking_reason_count": 8,
         "blocked_by_external_constraints_only": false,
         "external_proof_request_count": 4
       }

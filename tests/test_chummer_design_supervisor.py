@@ -7,6 +7,7 @@ import inspect
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -489,6 +490,78 @@ def test_candidate_models_for_account_allows_core_lane_to_use_repair_and_surviva
     assert survival_models == ["ea-coder-survival"]
 
 
+def test_candidate_models_for_account_prefers_hard_batch_for_core_lane() -> None:
+    module = _load_module()
+    core_account = module.WorkerAccount(
+        alias="acct-ea-core",
+        owner_id="tibor.girschele",
+        lane="core",
+        auth_kind="ea",
+        auth_json_file="",
+        api_key_env="",
+        api_key_file="",
+        allowed_models=["ea-coder-hard-batch", "ea-coder-hard"],
+        health_state="ready",
+        spark_enabled=False,
+        bridge_priority=0,
+        forced_login_method="",
+        forced_chatgpt_workspace_id="",
+        openai_base_url="",
+        home_dir="",
+    )
+
+    models = module._candidate_models_for_account(
+        core_account,
+        ["ea-coder-hard"],
+        {},
+        requested_worker_lane="core",
+    )
+
+    assert models == ["ea-coder-hard-batch"]
+
+
+def test_rotate_model_candidates_after_recent_stall_moves_latest_stalled_model_to_end(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "shard-1"
+    state_root.mkdir(parents=True)
+    module._append_jsonl(
+        module._history_payload_path(state_root),
+        {
+            "accepted": False,
+            "blocker": "Error: worker_model_output_stalled:240s",
+            "selected_model": "ea-coder-hard-batch",
+        },
+    )
+
+    rotated = module._rotate_model_candidates_after_recent_stall(
+        state_root,
+        ["ea-coder-hard-batch", "ea-coder-hard"],
+    )
+
+    assert rotated == ["ea-coder-hard", "ea-coder-hard-batch"]
+
+
+def test_rotate_model_candidates_after_recent_stall_ignores_nonstall_blockers(tmp_path: Path) -> None:
+    module = _load_module()
+    state_root = tmp_path / "shard-1"
+    state_root.mkdir(parents=True)
+    module._append_jsonl(
+        module._history_payload_path(state_root),
+        {
+            "accepted": False,
+            "blocker": "worker exit 2",
+            "selected_model": "ea-coder-hard-batch",
+        },
+    )
+
+    rotated = module._rotate_model_candidates_after_recent_stall(
+        state_root,
+        ["ea-coder-hard-batch", "ea-coder-hard"],
+    )
+
+    assert rotated == ["ea-coder-hard-batch", "ea-coder-hard"]
+
+
 def test_candidate_models_for_account_allows_audit_shard_to_use_core_fallbacks() -> None:
     module = _load_module()
     core_account = module.WorkerAccount(
@@ -777,6 +850,45 @@ def test_derive_context_materializes_runtime_handoff_and_includes_it_in_prompt(t
     assert "Use the shard runtime handoff as the worker-safe resume context" in context["prompt"]
 
 
+def test_prepare_run_prompt_materializes_task_local_telemetry_file(tmp_path: Path) -> None:
+    module = _load_module()
+    run_dir = tmp_path / "runs" / "run-123"
+    telemetry_payload = {
+        "active_runs_count": 4,
+        "remaining_open_milestones": 1,
+        "remaining_not_started_milestones": 1,
+        "remaining_in_progress_milestones": 0,
+        "eta_human": "11h-1.1d",
+        "summary": "Milestone remains open.",
+    }
+    prompt = (
+        "Task-local run context:\n"
+        "- the verbatim task-local telemetry snapshot is embedded below; use it as-is and do not regenerate it via shell, Python, or supervisor helper commands from inside the worker run.\n"
+        "```json\n"
+        '{"active_runs_count":4,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"11h-1.1d","summary":"Milestone remains open."}\n'
+        "```\n\n"
+        "Operator telemetry CLI is forbidden during active worker runs. Do not invoke supervisor helper commands from inside the worker run; use the embedded JSON block and listed files instead.\n\n"
+        "Read these files directly first:\n"
+        "- /tmp/frontier.yaml\n"
+    )
+
+    rendered = module._prepare_run_prompt(
+        run_dir,
+        prompt,
+        task_local_telemetry_payload=telemetry_payload,
+    )
+    prompt_path = module._write_run_artifacts(run_dir, rendered)
+
+    telemetry_path = run_dir / module.TASK_LOCAL_TELEMETRY_FILENAME
+    rendered_text = prompt_path.read_text(encoding="utf-8")
+
+    assert telemetry_path.exists()
+    assert json.loads(telemetry_path.read_text(encoding="utf-8")) == telemetry_payload
+    assert f"- {telemetry_path}" in rendered
+    assert f"- {telemetry_path}" in rendered_text
+    assert "use the task-local telemetry file at" in rendered_text
+
+
 def test_status_json_inside_worker_run_blocks_with_task_local_guidance(monkeypatch, tmp_path: Path) -> None:
     module = _load_module()
     root = tmp_path
@@ -817,22 +929,9 @@ def test_status_json_inside_worker_run_blocks_with_task_local_guidance(monkeypat
             module.main()
     assert excinfo.value.code == 2
     payload = json.loads(stdout.getvalue())
-    assert payload["mode"] == "task_local_only"
     assert payload["command"] == "status"
-    assert payload["nonfatal_fallback"] is False
-    assert payload["polling_disabled"] is True
-    assert payload["status_query_supported"] is False
+    assert payload["status_budget_exhausted"] is True
     assert payload["warning"].startswith("worker_status_budget_exhausted")
-    assert payload["run_id"] == "run-123"
-    assert payload["prompt_path"] == str(prompt_path)
-    assert payload["full_product_frontier_path"] == str(frontier_path)
-    assert payload["handoff_path"] == str(handoff_path.resolve())
-    assert "active_runs_count" in payload
-    assert payload["active_runs_count"] is None
-    assert payload["eta"]["status"] == "polling_disabled"
-    assert payload["eta"]["eta_human"] == "polling_disabled"
-    assert payload["eta"]["remaining_open_milestones"] is None
-    assert payload["eta"]["remaining_in_progress_milestones"] is None
     stderr_text = stderr.getvalue()
     assert "status_blocked_inside_worker_run" in stderr_text
     assert "worker_status_budget_exhausted" in stderr_text
@@ -888,20 +987,363 @@ def test_eta_json_inside_worker_run_blocks_with_task_local_guidance(monkeypatch,
     assert excinfo.value.code == 2
     payload = json.loads(stdout.getvalue())
     assert payload["command"] == "eta"
-    assert payload["nonfatal_fallback"] is False
-    assert payload["status_query_supported"] is False
-    assert payload["active_runs_count"] is None
-    assert payload["frontier_ids"] == [11, 12]
-    assert payload["open_milestone_ids"] == [11, 12, 13]
-    assert payload["eta"]["status"] == "polling_disabled"
-    assert payload["eta"]["eta_human"] == "tracked"
-    assert payload["eta"]["remaining_open_milestones"] == 3
-    assert payload["eta"]["remaining_in_progress_milestones"] == 2
-    assert payload["eta"]["remaining_not_started_milestones"] == 1
-    assert payload["prompt_path"] == str(prompt_path)
+    assert payload["status_budget_exhausted"] is True
+    assert payload["warning"].startswith("worker_status_budget_exhausted")
     stderr_text = stderr.getvalue()
     assert "status_blocked_inside_worker_run" in stderr_text
     assert "worker_status_budget_exhausted" in stderr_text
+
+
+def test_status_json_inside_worker_run_returns_task_local_snapshot_before_budget_exhausts(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    args = _args(root)
+    args.command = "status"
+    args.json = True
+
+    state_root = Path(args.state_root)
+    state_root.mkdir(parents=True, exist_ok=True)
+    run_dir = state_root / "runs" / "run-allowed"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = run_dir / "prompt.txt"
+    prompt_path.write_text("read files first\n", encoding="utf-8")
+    module._write_json(
+        module._state_payload_path(state_root),
+        {
+            "frontier_ids": [44],
+            "open_milestone_ids": [44],
+            "eta": {
+                "status": "tracked",
+                "eta_human": "10h-1d",
+                "summary": "1 open milestone remains.",
+                "remaining_open_milestones": 1,
+                "remaining_in_progress_milestones": 1,
+                "remaining_not_started_milestones": 0,
+            },
+        },
+    )
+
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "run-allowed")
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", str(run_dir))
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET", "1")
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    with pytest.raises(SystemExit) as excinfo:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            module.main()
+
+    assert excinfo.value.code == 0
+    payload = json.loads(stdout.getvalue())
+    assert payload["command"] == "status"
+    assert payload["nonfatal_fallback"] is True
+    assert payload["polling_disabled"] is True
+    assert payload["status_query_supported"] is False
+    assert payload["eta"]["status"] == "tracked"
+    assert payload["eta"]["eta_human"] == "10h-1d"
+    assert payload["frontier_ids"] == [44]
+    assert payload["open_milestone_ids"] == [44]
+    assert payload["prompt_path"] == str(prompt_path)
+    assert stderr.getvalue() == ""
+
+
+def test_status_json_inside_worker_run_allows_two_probes_then_blocks(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    root = tmp_path
+    args = _args(root)
+    args.command = "status"
+    args.json = True
+
+    state_root = Path(args.state_root)
+    state_root.mkdir(parents=True, exist_ok=True)
+    run_dir = state_root / "runs" / "run-budget-2"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = run_dir / "prompt.txt"
+    prompt_path.write_text("read files first\n", encoding="utf-8")
+    module._write_json(
+        module._state_payload_path(state_root),
+        {
+            "frontier_ids": [45],
+            "open_milestone_ids": [45],
+            "eta": {
+                "status": "tracked",
+                "eta_human": "9h-22h",
+                "summary": "1 open milestone remains.",
+                "remaining_open_milestones": 1,
+                "remaining_in_progress_milestones": 1,
+                "remaining_not_started_milestones": 0,
+            },
+        },
+    )
+
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "run-budget-2")
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", str(run_dir))
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET", "2")
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+
+    for expected_count in (1, 2):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with pytest.raises(SystemExit) as excinfo:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                module.main()
+        assert excinfo.value.code == 0
+        payload = json.loads(stdout.getvalue())
+        assert payload["nonfatal_fallback"] is True
+        assert payload["prompt_path"] == str(prompt_path)
+        assert stderr.getvalue() == ""
+        budget_payload = json.loads((run_dir / ".status_budget.json").read_text(encoding="utf-8"))
+        assert budget_payload["count"] == expected_count
+        assert budget_payload["budget"] == 2
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    with pytest.raises(SystemExit) as excinfo:
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            module.main()
+    assert excinfo.value.code == 2
+    payload = json.loads(stdout.getvalue())
+    assert payload["command"] == "status"
+    assert payload["status_budget_exhausted"] is True
+    assert payload["warning"].startswith("worker_status_budget_exhausted")
+    stderr_text = stderr.getvalue()
+    assert "status_blocked_inside_worker_run" in stderr_text
+    assert "worker_status_budget_exhausted: status polling budget 2/2 already consumed" in stderr_text
+
+
+def test_worker_status_block_message_prefers_active_run_shard_state_root(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    aggregate_root = root / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-2"
+    run_dir = shard_root / "runs" / "run-shard-2"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    module._write_json(
+        aggregate_root / "state.json",
+        {
+            "full_product_frontier_path": "/tmp/aggregate/shard-1.generated.yaml",
+        },
+    )
+    module._write_json(
+        shard_root / "state.json",
+        {
+            "full_product_frontier_path": "/tmp/shards/shard-2.generated.yaml",
+        },
+    )
+    runtime_handoff_path = shard_root / "ACTIVE_RUN_HANDOFF.generated.md"
+    runtime_handoff_path.write_text("worker-safe handoff\n", encoding="utf-8")
+    telemetry_path = run_dir / module.TASK_LOCAL_TELEMETRY_FILENAME
+    telemetry_path.write_text("{}\n", encoding="utf-8")
+
+    args = _args(root)
+    args.command = "status"
+    args.state_root = str(aggregate_root)
+
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "run-shard-2")
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", str(run_dir))
+
+    message = module._worker_status_block_message(args, "worker_status_budget_exhausted")
+
+    assert "run_id: run-shard-2" in message
+    assert "prompt_path: " + str(run_dir / "prompt.txt") in message
+    assert f"task_local_telemetry_path: {telemetry_path}" in message
+    assert f"runtime_handoff_path: {runtime_handoff_path}" in message
+    assert "full_product_frontier_path: /tmp/shards/shard-2.generated.yaml" in message
+    assert "/tmp/aggregate/shard-1.generated.yaml" not in message
+    assert "\nhandoff_path: " not in f"\n{message}"
+
+
+def test_worker_status_task_local_payload_falls_back_to_shard_eta_aliases(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    aggregate_root = root / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-2"
+    run_dir = shard_root / "runs" / "run-shard-2"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "prompt.txt").write_text("prompt\n", encoding="utf-8")
+    telemetry_path = run_dir / module.TASK_LOCAL_TELEMETRY_FILENAME
+    telemetry_path.write_text("{}\n", encoding="utf-8")
+
+    module._write_json(
+        aggregate_root / "state.json",
+        {
+            "active_runs_count": 7,
+            "eta": {
+                "status": "tracked",
+                "eta_human": "2d-5d",
+                "summary": "7 open milestones remain.",
+                "remaining_open_milestones": 7,
+                "remaining_in_progress_milestones": 5,
+                "remaining_not_started_milestones": 2,
+            },
+        },
+    )
+    module._write_json(
+        shard_root / "state.json",
+        {
+            "frontier_ids": [22],
+            "open_milestone_ids": [22],
+            "eta_status": "flagship_delivery",
+            "eta_human": "11h-1.1d",
+            "eta_summary": "Milestone 'Flagship desktop client and workbench finish' remains open.",
+            "remaining_open_milestones": 1,
+            "remaining_not_started_milestones": 1,
+            "remaining_in_progress_milestones": 0,
+        },
+    )
+
+    args = _args(root)
+    args.command = "status"
+    args.state_root = str(aggregate_root)
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "run-shard-2")
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", str(run_dir))
+
+    payload = module._worker_status_task_local_payload(args, "")
+
+    assert payload["active_runs_count"] == 7
+    assert payload["task_local_telemetry_path"] == str(telemetry_path)
+    assert payload["eta"]["status"] == "flagship_delivery"
+    assert payload["eta"]["eta_human"] == "11h-1.1d"
+    assert payload["eta"]["remaining_open_milestones"] == 1
+    assert payload["eta"]["remaining_not_started_milestones"] == 1
+    assert payload["eta"]["remaining_in_progress_milestones"] == 0
+    assert payload["eta"]["summary"] == "Milestone 'Flagship desktop client and workbench finish' remains open."
+
+
+def test_worker_status_task_local_payload_prefers_local_open_slice_over_aggregate_eta(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    aggregate_root = root / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-2"
+    run_dir = shard_root / "runs" / "run-shard-2"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "prompt.txt").write_text("prompt\n", encoding="utf-8")
+
+    module._write_json(
+        aggregate_root / "state.json",
+        {
+            "active_runs_count": 6,
+            "eta": {
+                "status": "tracked",
+                "eta_human": "tracked",
+                "summary": "10 open milestones remain (10 in progress, 0 not started).",
+                "remaining_open_milestones": 10,
+                "remaining_in_progress_milestones": 10,
+                "remaining_not_started_milestones": 0,
+            },
+        },
+    )
+    module._write_json(
+        shard_root / "state.json",
+        {
+            "frontier_ids": [22],
+            "open_milestone_ids": [22],
+        },
+    )
+
+    args = _args(root)
+    args.command = "status"
+    args.state_root = str(aggregate_root)
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID", "run-shard-2")
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR", str(run_dir))
+
+    payload = module._worker_status_task_local_payload(args, "")
+
+    assert payload["active_runs_count"] == 6
+    assert payload["eta"]["remaining_open_milestones"] == 1
+    assert payload["eta"]["remaining_not_started_milestones"] == 1
+    assert payload["eta"]["remaining_in_progress_milestones"] == 0
+    assert payload["eta"]["summary"] == "1 open milestone remains in the current shard slice."
+
+
+def test_stamp_worker_supervisor_guard_defaults_status_budget_to_one(tmp_path: Path) -> None:
+    module = _load_module()
+    run_dir = tmp_path / "runs" / "run-123"
+
+    updated = module._stamp_worker_supervisor_guard({}, run_id="run-123", run_dir=run_dir)
+
+    assert updated["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_ID"] == "run-123"
+    assert updated["CHUMMER_DESIGN_SUPERVISOR_STATUS_BUDGET"] == "1"
+    assert updated["CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3"]
+    assert updated["PATH"].split(os.pathsep)[0] == str((module.DEFAULT_WORKSPACE_ROOT / "scripts" / "codex-shims").resolve())
+    assert updated["BASH_ENV"] == str(run_dir / module.WORKER_BASH_ENV_FILENAME)
+    assert Path(updated["BASH_ENV"]).exists()
+
+
+def test_worker_python3_shim_serves_task_local_telemetry_file(tmp_path: Path) -> None:
+    module = _load_module()
+    run_dir = tmp_path / "runs" / "run-123"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    telemetry_path = run_dir / module.TASK_LOCAL_TELEMETRY_FILENAME
+    telemetry_payload = {
+        "active_runs_count": 6,
+        "remaining_open_milestones": 1,
+        "remaining_not_started_milestones": 1,
+        "remaining_in_progress_milestones": 0,
+        "eta_human": "11h-1.1d",
+        "summary": "1 open milestone remains in the current shard slice.",
+    }
+    telemetry_path.write_text(json.dumps(telemetry_payload), encoding="utf-8")
+    shim_path = module.DEFAULT_WORKSPACE_ROOT / "scripts" / "codex-shims" / "python3"
+    env = os.environ.copy()
+    env["CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR"] = str(run_dir)
+    env["CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3"] = str(shutil.which("python3") or sys.executable)
+
+    completed = subprocess.run(
+        ["bash", str(shim_path), "/docker/fleet/scripts/chummer_design_supervisor.py", "status", "--json"],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+    assert payload["active_runs_count"] == 6
+    assert payload["eta"]["remaining_open_milestones"] == 1
+    assert payload["eta"]["eta_human"] == "11h-1.1d"
+
+
+def test_worker_bash_env_redirects_python3_status_helper_to_task_local_telemetry(tmp_path: Path) -> None:
+    module = _load_module()
+    run_dir = tmp_path / "runs" / "run-123"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    telemetry_path = run_dir / module.TASK_LOCAL_TELEMETRY_FILENAME
+    telemetry_payload = {
+        "active_runs_count": 9,
+        "remaining_open_milestones": 2,
+        "remaining_not_started_milestones": 1,
+        "remaining_in_progress_milestones": 1,
+        "eta_human": "tracked",
+        "summary": "2 open milestones remain in the current shard slice.",
+    }
+    telemetry_path.write_text(json.dumps(telemetry_payload), encoding="utf-8")
+    env = module._stamp_worker_supervisor_guard({}, run_id="run-123", run_dir=run_dir)
+    env["CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3"] = str(shutil.which("python3") or sys.executable)
+
+    completed = subprocess.run(
+        ["/bin/bash", "-lc", "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --json"],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+
+    assert completed.returncode == 0
+    payload = json.loads(completed.stdout)
+    assert payload["active_runs_count"] == 9
+    assert payload["eta"]["remaining_open_milestones"] == 2
+    assert payload["eta"]["summary"] == "2 open milestones remain in the current shard slice."
 
 
 def test_launch_worker_prefers_full_lanes_and_uses_anonymous_core_when_accounts_are_saturated(monkeypatch) -> None:
@@ -2880,6 +3322,33 @@ def test_prepare_direct_worker_environment_applies_workspace_stream_budget_for_c
         assert env.get("CODEXEA_CORE_RESPONSES_PROFILE") == "core_batch"
 
 
+def test_prepare_direct_worker_environment_caps_stream_budget_to_explicit_model_output_stall() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "runtime.env").write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_IDLE_TIMEOUT_MS=1200000",
+                    "CHUMMER_DESIGN_SUPERVISOR_STREAM_MAX_RETRIES=12",
+                    "CHUMMER_DESIGN_SUPERVISOR_MODEL_OUTPUT_STALL_SECONDS=60",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        env = module._prepare_direct_worker_environment(
+            root / "state",
+            "core",
+            workspace_root=root,
+            worker_bin="codexea",
+        )
+
+        assert env.get("CODEXEA_STREAM_IDLE_TIMEOUT_MS") == "60000"
+        assert env.get("CODEXEA_STREAM_MAX_RETRIES") == "0"
+
+
 def test_prepare_direct_worker_environment_preserves_host_git_and_gh_auth(monkeypatch) -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:
@@ -3172,6 +3641,7 @@ def test_is_missing_github_push_blocker_accepts_remote_push_wording() -> None:
 
 def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_account(monkeypatch) -> None:
     module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         _write_registry(root / "registry.yaml")
@@ -3234,6 +3704,305 @@ def test_launch_worker_can_escape_retryable_direct_lane_failure_to_openai_accoun
         assert run.attempted_models == ["default", "gpt-5.3-codex"]
         assert calls[0][:3] == ["codexea", "core", "exec"]
         assert calls[1][0] == "codex"
+
+
+def test_launch_worker_can_escape_routed_account_stall_to_openai_account(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        auth_path = root / "acct-chatgpt-core.auth.json"
+        auth_path.write_text('{"access_token":"token"}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                    "accounts": {
+                        "acct-ea-core": {
+                            "auth_kind": "ea",
+                            "api_key_env": "EA_KEY",
+                            "allowed_models": ["ea-coder-hard-batch", "ea-coder-hard"],
+                            "health_state": "ready",
+                            "owner_id": "tibor.girschele",
+                            "lane": "core",
+                        },
+                        "acct-chatgpt-core": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.3-codex"],
+                            "spark_enabled": False,
+                            "health_state": "ready",
+                            "owner_id": "tibor.girschele",
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard-batch"
+        context = module.derive_context(args)
+        monkeypatch.setenv("EA_KEY", "test-key")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "gpt-5.3-codex")
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            if command[0] == "codexea":
+                message_path.write_text("", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 124, stdout="", stderr="Error: worker_model_output_stalled:240s\n")
+            assert env is not None
+            assert env.get("CODEX_HOME")
+            message_path.write_text(
+                "What shipped: openai escape hatch landed the routed slice\nWhat remains: none\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        _patch_launch_worker_fake_run(monkeypatch, module, fake_run)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "acct-chatgpt-core"
+        assert run.attempted_accounts == ["acct-ea-core", "acct-chatgpt-core"]
+        assert run.attempted_models == ["ea-coder-hard-batch", "gpt-5.3-codex"]
+        assert calls[0][:3] == ["codexea", "core", "exec"]
+        assert calls[1][0] == "codex"
+
+
+def test_should_attempt_openai_escape_hatch_accepts_status_helper_loop_signal(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
+
+    assert (
+        module._should_attempt_openai_escape_hatch(
+            "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+            "",
+            "",
+        )
+        is True
+    )
+
+
+def test_openai_escape_hatch_settings_prefer_runtime_env_file_over_stale_process_env(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        runtime_env = Path(tmp) / "runtime.env"
+        runtime_env.write_text(
+            "\n".join(
+                [
+                    "CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES=acct-chatgpt-core",
+                    "CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS=gpt-5.3-codex-spark,gpt-5.3-codex",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", (runtime_env,))
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "ea-coder-hard")
+
+        assert module._openai_escape_hatch_account_aliases() == ["acct-chatgpt-core"]
+        assert module._openai_escape_hatch_model_candidates() == ["gpt-5.3-codex-spark", "gpt-5.3-codex"]
+
+
+def test_recent_helper_loop_failure_count_counts_consecutive_failures() -> None:
+    module = _load_module()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        history_rows = [
+            {"run_id": "run-ok", "accepted": True, "blocker": "none"},
+            {
+                "run_id": "run-a",
+                "accepted": False,
+                "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+            },
+            {
+                "run_id": "run-b",
+                "accepted": False,
+                "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+            },
+        ]
+        (state_root / "history.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in history_rows),
+            encoding="utf-8",
+        )
+
+        assert module._recent_helper_loop_failure_count(state_root) == 2
+        assert module._prefer_openai_escape_fastpath_after_recent_helper_loop(state_root) is False
+    monkeypatch.undo()
+
+
+def test_prefer_openai_escape_fastpath_after_recent_helper_loop_requires_enabled_escape(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        (state_root / "history.jsonl").write_text(
+            "".join(
+                json.dumps(
+                    {
+                        "run_id": f"run-{idx}",
+                        "accepted": False,
+                        "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+                    }
+                )
+                + "\n"
+                for idx in range(2)
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
+
+        assert module._prefer_openai_escape_fastpath_after_recent_helper_loop(state_root) is True
+
+
+def test_prefer_openai_escape_fastpath_after_recent_helper_loop_survives_escape_worker_exit_one(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        (state_root / "history.jsonl").write_text(
+            "".join(
+                json.dumps(row) + "\n"
+                for row in [
+                    {
+                        "run_id": "run-1",
+                        "accepted": False,
+                        "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+                    },
+                    {
+                        "run_id": "run-2",
+                        "accepted": True,
+                        "blocker": "linux host cannot produce native windows proof",
+                    },
+                    {
+                        "run_id": "run-3",
+                        "accepted": False,
+                        "blocker": "worker exit 1",
+                    },
+                    {
+                        "run_id": "run-4",
+                        "accepted": False,
+                        "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
+
+        assert module._prefer_openai_escape_fastpath_after_recent_helper_loop(state_root) is True
+
+
+def test_run_scoped_worker_contract_violation_accepts_status_helper_loop() -> None:
+    module = _load_module()
+
+    assert module._run_scoped_worker_contract_violation(
+        "Error: worker_status_helper_loop:repeated_blocked_status_polling"
+    ) is True
+
+
+def test_launch_worker_prefers_escape_first_after_recent_helper_loop_churn(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        auth_path = root / "acct-chatgpt-core.auth.json"
+        auth_path.write_text('{"access_token":"token"}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                    "accounts": {
+                        "acct-ea-core": {
+                            "auth_kind": "ea",
+                            "api_key_env": "EA_KEY",
+                            "allowed_models": ["ea-coder-hard-batch", "ea-coder-hard"],
+                            "health_state": "ready",
+                            "owner_id": "tibor.girschele",
+                            "lane": "core",
+                        },
+                        "acct-chatgpt-core": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.3-codex-spark", "gpt-5.3-codex"],
+                            "spark_enabled": True,
+                            "health_state": "ready",
+                            "owner_id": "tibor.girschele",
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        state_root = root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "history.jsonl").write_text(
+            "".join(
+                json.dumps(
+                    {
+                        "run_id": f"run-{idx}",
+                        "accepted": False,
+                        "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+                    }
+                )
+                + "\n"
+                for idx in range(2)
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard-batch"
+        context = module.derive_context(args)
+        monkeypatch.setenv("EA_KEY", "test-key")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_MODELS", "gpt-5.3-codex-spark,gpt-5.3-codex")
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, input, text, capture_output, cwd, check, env=None):
+            calls.append(list(command))
+            message_path = Path(command[command.index("-o") + 1])
+            assert command[0] == "codex"
+            assert env is not None
+            assert env.get("CODEX_HOME")
+            message_path.write_text(
+                "What shipped: escape-first landed the slice\nWhat remains: none\nExact blocker: none\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        _patch_launch_worker_fake_run(monkeypatch, module, fake_run)
+
+        run = module.launch_worker(args, context, state_root)
+
+        assert run.worker_exit_code == 0
+        assert run.accepted is True
+        assert run.selected_account_alias == "acct-chatgpt-core"
+        assert run.attempted_accounts == ["acct-chatgpt-core"]
+        assert run.attempted_models == ["gpt-5.3-codex-spark"]
+        assert calls[0][0] == "codex"
 
 
 def test_launch_worker_falls_back_from_account_primary_to_direct_ea_lane_on_usage_limit(monkeypatch) -> None:
@@ -3690,7 +4459,7 @@ def test_launch_worker_clears_last_message_between_retry_attempts(monkeypatch) -
             current_message = last_message_path.read_text(encoding="utf-8") if last_message_path.exists() else ""
             if lane == "core":
                 assert current_message == ""
-                last_message_path.write_text("Exact blocker: worker_self_polling:supervisor_status_loop\n", encoding="utf-8")
+                last_message_path.write_text("Exact blocker: temporary timeout while waiting for worker output\n", encoding="utf-8")
                 return subprocess.CompletedProcess(command, 1, stdout="", stderr="upstream_timeout:300s\n")
             assert lane == "core_rescue"
             assert current_message == ""
@@ -3710,6 +4479,338 @@ def test_launch_worker_clears_last_message_between_retry_attempts(monkeypatch) -
         assert run.accepted is True
         assert run.selected_account_alias == "lane:core_rescue"
         assert run.shipped == "retry lane recovered the slice"
+
+
+def test_launch_worker_does_not_retry_after_self_polling_blocker(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        args.fallback_worker_lane = ["core_rescue"]
+        context = module.derive_context(args)
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core", "core_rescue"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "core_rescue": {"worker_lane": "core_rescue", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        attempts: list[str] = []
+
+        def fake_run_worker_attempt(
+            command,
+            *,
+            prompt,
+            workspace_root,
+            worker_env,
+            timeout_seconds,
+            last_message_path,
+            state_root,
+            run_id,
+            stdout_sink=None,
+            stderr_sink=None,
+        ):
+            lane = command[1]
+            attempts.append(lane)
+            last_message_path.write_text("Exact blocker: worker_self_polling:supervisor_status_loop\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                command,
+                125,
+                stdout="",
+                stderr="Error: worker_self_polling:supervisor_status_loop\n",
+            )
+
+        monkeypatch.setattr(module, "_run_worker_attempt", fake_run_worker_attempt)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert attempts == ["core"]
+        assert run.accepted is False
+        assert run.worker_exit_code == 125
+        assert run.selected_account_alias == "lane:core"
+        assert run.blocker == "worker_self_polling:supervisor_status_loop"
+
+
+def test_launch_worker_does_not_retry_after_model_output_stall(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        args = _args(root)
+        args.worker_bin = "codexea"
+        args.worker_lane = "core"
+        args.worker_model = ""
+        args.fallback_worker_lane = ["core_rescue"]
+        context = module.derive_context(args)
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core", "core_rescue"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "core_rescue": {"worker_lane": "core_rescue", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        attempts: list[str] = []
+
+        def fake_run_worker_attempt(
+            command,
+            *,
+            prompt,
+            workspace_root,
+            worker_env,
+            timeout_seconds,
+            last_message_path,
+            state_root,
+            run_id,
+            stdout_sink=None,
+            stderr_sink=None,
+        ):
+            lane = command[1]
+            attempts.append(lane)
+            last_message_path.write_text("Error: worker_model_output_stalled:60s\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                command,
+                124,
+                stdout="",
+                stderr=(
+                    "status_blocked_inside_worker_run\n"
+                    "worker_status_budget_exhausted: status polling budget 2/2 already consumed\n"
+                    "Error: worker_model_output_stalled:60s\n"
+                ),
+            )
+
+        monkeypatch.setattr(module, "_run_worker_attempt", fake_run_worker_attempt)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert attempts == ["core"]
+        assert run.accepted is False
+        assert run.worker_exit_code == 124
+        assert run.selected_account_alias == "lane:core"
+        assert "worker_model_output_stalled:60s" in run.blocker
+
+
+def test_launch_worker_does_not_fallback_after_self_polling_from_routed_account(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                    "accounts": {
+                        "acct-ea-core": {
+                            "auth_kind": "ea",
+                            "owner_id": "tibor.girschele",
+                            "allowed_models": ["ea-coder-hard"],
+                            "health_state": "ready",
+                            "lane": "core",
+                            "max_parallel_runs": 1,
+                        },
+                        "acct-ea-core-2": {
+                            "auth_kind": "ea",
+                            "owner_id": "tibor.girschele",
+                            "allowed_models": ["ea-coder-hard"],
+                            "health_state": "ready",
+                            "lane": "core",
+                            "max_parallel_runs": 1,
+                        },
+                        "acct-ea-repair": {
+                            "auth_kind": "ea",
+                            "owner_id": "tibor.girschele",
+                            "allowed_models": ["ea-coder-hard"],
+                            "health_state": "ready",
+                            "lane": "repair",
+                            "max_parallel_runs": 1,
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard"
+        context = module.derive_context(args)
+
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES", "1")
+        monkeypatch.setattr(module, "_prepare_account_environment", lambda _state_root, _workspace_root, _account: {})
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core", "repair"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "repair": {"worker_lane": "repair", "profile": "repair_batch", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        def fake_run_worker_attempt(
+            command,
+            *,
+            prompt,
+            workspace_root,
+            worker_env,
+            timeout_seconds,
+            last_message_path,
+            state_root,
+            run_id,
+            stdout_sink=None,
+            stderr_sink=None,
+        ):
+            last_message_path.write_text("Exact blocker: worker_self_polling:supervisor_status_loop\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                command,
+                125,
+                stdout="",
+                stderr="Error: worker_self_polling:supervisor_status_loop\n",
+            )
+
+        monkeypatch.setattr(module, "_run_worker_attempt", fake_run_worker_attempt)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.accepted is False
+        assert run.worker_exit_code == 125
+        assert run.attempted_accounts == ["acct-ea-core"]
+        assert run.selected_account_alias == "acct-ea-core"
+        assert run.blocker == "worker_self_polling:supervisor_status_loop"
+
+
+def test_launch_worker_does_not_fallback_after_model_output_stall_from_routed_account(monkeypatch) -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write_registry(root / "registry.yaml")
+        (root / "PROGRAM_MILESTONES.yaml").write_text("product: chummer\n", encoding="utf-8")
+        (root / "ROADMAP.md").write_text("# Roadmap\n", encoding="utf-8")
+        (root / "NEXT_SESSION_HANDOFF.md").write_text("W2 milestone `21` remains active.\n", encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                    "accounts": {
+                        "acct-ea-core": {
+                            "auth_kind": "ea",
+                            "owner_id": "tibor.girschele",
+                            "allowed_models": ["ea-coder-hard"],
+                            "health_state": "ready",
+                            "lane": "core",
+                            "max_parallel_runs": 1,
+                        },
+                        "acct-ea-core-2": {
+                            "auth_kind": "ea",
+                            "owner_id": "tibor.girschele",
+                            "allowed_models": ["ea-coder-hard"],
+                            "health_state": "ready",
+                            "lane": "core",
+                            "max_parallel_runs": 1,
+                        },
+                        "acct-ea-repair": {
+                            "auth_kind": "ea",
+                            "owner_id": "tibor.girschele",
+                            "allowed_models": ["ea-coder-hard"],
+                            "health_state": "ready",
+                            "lane": "repair",
+                            "max_parallel_runs": 1,
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+        args.worker_bin = "/docker/fleet/scripts/codex-shims/codexea"
+        args.worker_lane = "core"
+        args.worker_model = "ea-coder-hard"
+        context = module.derive_context(args)
+
+        monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES", "1")
+        monkeypatch.setattr(module, "_prepare_account_environment", lambda _state_root, _workspace_root, _account: {})
+        monkeypatch.setattr(
+            module,
+            "_direct_worker_lane_health_snapshot",
+            lambda _args, _lanes: {
+                "status": "pass",
+                "reason": "all checked direct lanes are currently routable",
+                "routable_lanes": ["core", "repair"],
+                "unroutable_lanes": [],
+                "lanes": {
+                    "core": {"worker_lane": "core", "profile": "core_batch", "state": "ready", "routable": True, "reason": ""},
+                    "repair": {"worker_lane": "repair", "profile": "repair_batch", "state": "ready", "routable": True, "reason": ""},
+                },
+            },
+        )
+
+        def fake_run_worker_attempt(
+            command,
+            *,
+            prompt,
+            workspace_root,
+            worker_env,
+            timeout_seconds,
+            last_message_path,
+            state_root,
+            run_id,
+            stdout_sink=None,
+            stderr_sink=None,
+        ):
+            last_message_path.write_text("Error: worker_model_output_stalled:60s\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                command,
+                124,
+                stdout="",
+                stderr=(
+                    "status_blocked_inside_worker_run\n"
+                    "worker_status_budget_exhausted: status polling budget 2/2 already consumed\n"
+                    "Error: worker_model_output_stalled:60s\n"
+                ),
+            )
+
+        monkeypatch.setattr(module, "_run_worker_attempt", fake_run_worker_attempt)
+
+        run = module.launch_worker(args, context, root / "state")
+
+        assert run.accepted is False
+        assert run.worker_exit_code == 124
+        assert run.attempted_accounts == ["acct-ea-core"]
+        assert run.selected_account_alias == "acct-ea-core"
+        assert "worker_model_output_stalled:60s" in run.blocker
 
 
 def test_launch_worker_raises_direct_codexea_watchdog_to_workspace_stream_budget(monkeypatch) -> None:
@@ -4111,6 +5212,9 @@ def test_run_worker_attempt_trips_on_repeated_blocked_status_loops(monkeypatch) 
                     "exec\n",
                     '{"status":"polling_disabled"}\n',
                     "status_blocked_inside_worker_run\n",
+                    "exec\n",
+                    '{"status":"polling_disabled"}\n',
+                    "status_blocked_inside_worker_run\n",
                 ]
             )
 
@@ -4126,6 +5230,7 @@ def test_run_worker_attempt_trips_on_repeated_blocked_status_loops(monkeypatch) 
     monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
     monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
     monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_SELF_POLL_BLOCKED_TRIP_THRESHOLD", "1")
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -4146,6 +5251,761 @@ def test_run_worker_attempt_trips_on_repeated_blocked_status_loops(monkeypatch) 
         assert completed.returncode == 125
         assert "worker_self_polling:supervisor_status_loop" in completed.stderr
         assert last_message_path.read_text(encoding="utf-8").strip() == "Exact blocker: worker_self_polling:supervisor_status_loop"
+
+
+def test_run_worker_attempt_does_not_trip_on_blocked_status_loops_by_default(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43215
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "exec\n",
+                    '{"status":"polling_disabled"}\n',
+                    "status_blocked_inside_worker_run\n",
+                    "exec\n",
+                    '{"status":"polling_disabled"}\n',
+                    "status_blocked_inside_worker_run\n",
+                    "exec\n",
+                    '{"status":"polling_disabled"}\n',
+                    "status_blocked_inside_worker_run\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.delenv("CHUMMER_DESIGN_SUPERVISOR_SELF_POLL_BLOCKED_TRIP_THRESHOLD", raising=False)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="hello\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=root / "state",
+            run_id="run-2e",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        assert completed.returncode == 0
+        assert "worker_self_polling:supervisor_status_loop" not in completed.stderr
+        assert not last_message_path.exists()
+
+
+def test_run_worker_attempt_marks_waiting_for_model_output_without_streaming(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43215
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "[fleet-supervisor] attempt 1/20 account=acct-ea-core-01 owner= model=ea-coder-hard\n",
+                    "Trace: lane=core provider=ea model=ea-coder-hard-batch mode=responses next=start_exec_session\n",
+                    "Trace: lane=core waiting for model output (0s)\n",
+                    "OpenAI Codex v0.118.0 (research preview)\n",
+                    "--------\n",
+                    "workdir: /docker/fleet\n",
+                    "provider: ea\n",
+                    "user\n",
+                    "Run the flagship full-product delivery pass for Chummer.\n",
+                    "warning: Codex could not find system bubblewrap on PATH. Please install bubblewrap with your package manager. Codex will use the vendored bubblewrap in the meantime.\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-waiting",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=root / "last_message.txt",
+            state_root=state_root,
+            run_id="run-waiting",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 0
+        assert payload["active_run_progress_state"] == "waiting_for_model_output"
+        assert payload.get("active_run_worker_last_output_at") in (None, "")
+        assert payload.get("worker_last_output_at") in (None, "")
+
+
+def test_run_worker_attempt_ignores_supervisor_status_probe_output_as_progress(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43218
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=core provider=ea model=ea-coder-hard-batch mode=responses next=start_exec_session\n",
+                    "Trace: lane=core waiting for model output (0s)\n",
+                    "OpenAI Codex v0.118.0 (research preview)\n",
+                    "--------\n",
+                    "workdir: /docker/fleet\n",
+                    "provider: ea\n",
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " succeeded in 453ms:\n",
+                    '{"active_runs_count":null,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"11h-1.1d","summary":"Milestone remains open."}\n',
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-status-probe",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=root / "last_message.txt",
+            state_root=state_root,
+            run_id="run-status-probe",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 0
+        assert payload["active_run_progress_state"] == "waiting_for_model_output"
+        assert payload.get("active_run_worker_last_output_at") in (None, "")
+        assert payload.get("worker_last_output_at") in (None, "")
+
+
+def test_run_worker_attempt_ignores_blocked_status_traceback_as_progress(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43219
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=core waiting for model output (0s)\n",
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " exited 1 in 482ms:\n",
+                    "status_blocked_inside_worker_run\n",
+                    "worker_status_budget_exhausted: status polling budget 2/2 already consumed for active run run-status-blocked\n",
+                    "read the task-local prompt, shard runtime handoff, and frontier artifacts directly instead of polling supervisor status from inside the active worker run.\n",
+                    "run_id: run-status-blocked\n",
+                    "prompt_path: /tmp/run-status-blocked/prompt.txt\n",
+                    "runtime_handoff_path: /tmp/state/ACTIVE_RUN_HANDOFF.generated.md\n",
+                    "flagship_product_readiness_path: /tmp/FLAGSHIP_PRODUCT_READINESS.generated.json\n",
+                    "Traceback (most recent call last):\n",
+                    '  File "<string>", line 1, in <module>\n',
+                    "    return loads(fp.read(),\n",
+                    "           ^^^^^^^^^^^^^^^^\n",
+                    "    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n",
+                    "    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\n",
+                    "json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-status-blocked",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=root / "last_message.txt",
+            state_root=state_root,
+            run_id="run-status-blocked",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 0
+        assert payload["active_run_progress_state"] == "waiting_for_model_output"
+        assert payload.get("active_run_worker_last_output_at") in (None, "")
+        assert payload.get("worker_last_output_at") in (None, "")
+
+
+def test_run_worker_attempt_times_out_when_only_model_wait_traces_arrive(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43216
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=core provider=ea model=ea-coder-hard-batch mode=responses next=start_exec_session\n",
+                    "Trace: lane=core waiting for model output (0s)\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexea", "core", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 0.01)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-stalled",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=state_root,
+            run_id="run-stalled",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert "worker_model_output_stalled:0.01s" in completed.stderr
+        assert last_message_path.read_text(encoding="utf-8").strip() == "Error: worker_model_output_stalled:0.01s"
+        assert payload["active_run_progress_state"] == "waiting_for_model_output"
+        assert module._retryable_worker_error(completed.stderr) is True
+
+
+def test_run_worker_attempt_recycles_repeated_blocked_status_helper_loop(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43221
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=core waiting for model output (0s)\n",
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " succeeded in 482ms:\n",
+                    "status_blocked_inside_worker_run\n",
+                    "worker_status_budget_exhausted: status polling budget 1/1 already consumed for active run run-status-loop\n",
+                    '{"active_runs_count":1,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"tracked","summary":"1 open milestone remains in the current shard slice."}\n',
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " succeeded in 401ms:\n",
+                    "status_blocked_inside_worker_run\n",
+                    "worker_status_budget_exhausted: status polling budget 1/1 already consumed for active run run-status-loop\n",
+                    '{"active_runs_count":1,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"tracked","summary":"1 open milestone remains in the current shard slice."}\n',
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexea", "core", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 999.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-status-loop",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=state_root,
+            run_id="run-status-loop",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert "worker_status_helper_loop:repeated_blocked_status_polling" in completed.stderr
+        assert (
+            last_message_path.read_text(encoding="utf-8").strip()
+            == "Error: worker_status_helper_loop:repeated_blocked_status_polling"
+        )
+        assert payload["active_run_progress_state"] == "waiting_for_model_output"
+        assert module._retryable_worker_error(completed.stderr) is True
+
+
+def test_run_worker_attempt_recycles_repeated_status_helper_loop_without_blocked_marker(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43222
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "Trace: lane=core waiting for model output (0s)\n",
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " succeeded in 0ms:\n",
+                    '{"active_runs_count":1,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"tracked","summary":"1 open milestone remains in the current shard slice."}\n',
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " succeeded in 0ms:\n",
+                    '{"active_runs_count":1,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"tracked","summary":"1 open milestone remains in the current shard slice."}\n',
+                    "Trace: lane=core waiting for model output\n",
+                    "exec\n",
+                    '/usr/bin/bash -lc "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --state-root /docker/fleet/state/chummer_design_supervisor --json | python3 -c ..."\n',
+                    " succeeded in 0ms:\n",
+                    '{"active_runs_count":1,"remaining_open_milestones":1,"remaining_not_started_milestones":1,"remaining_in_progress_milestones":0,"eta_human":"tracked","summary":"1 open milestone remains in the current shard slice."}\n',
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexea", "core", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 999.0)
+    monkeypatch.setattr(module, "_worker_status_helper_loop_trip_threshold", lambda workspace_root: 3)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-status-loop",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=state_root,
+            run_id="run-status-loop",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert "worker_status_helper_loop:repeated_blocked_status_polling" in completed.stderr
+        assert (
+            last_message_path.read_text(encoding="utf-8").strip()
+            == "Error: worker_status_helper_loop:repeated_blocked_status_polling"
+        )
+        assert payload["active_run_progress_state"] == "waiting_for_model_output"
+        assert module._retryable_worker_error(completed.stderr) is True
+
+
+def test_run_worker_attempt_times_out_when_no_meaningful_output_arrives(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43217
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "OpenAI Codex v0.118.0 (research preview)\n",
+                    "--------\n",
+                    "workdir: /docker/fleet\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.05)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexea", "core", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 0.01)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-no-output",
+                    "started_at": "2026-04-14T11:08:45Z",
+                }
+            },
+        )
+        last_message_path = root / "last_message.txt"
+        completed = module._run_worker_attempt(
+            ["codexea", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=last_message_path,
+            state_root=state_root,
+            run_id="run-no-output",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert "worker_model_output_stalled:0.01s" in completed.stderr
+        assert last_message_path.read_text(encoding="utf-8").strip() == "Error: worker_model_output_stalled:0.01s"
+        assert payload.get("active_run_worker_last_output_at") in (None, "")
+        assert module._retryable_worker_error(completed.stderr) is True
 
 
 def test_worker_lane_candidates_prioritize_core_rescue_before_survival_for_core() -> None:
@@ -6401,6 +8261,7 @@ def test_build_flagship_product_prompt_includes_task_local_status_snapshot(tmp_p
         full_product_audit={"status": "fail", "reason": "missing desktop_client", "missing_coverage_keys": ["desktop_client"]},
         history=[],
         eta_snapshot={
+            "active_runs_count": 13,
             "eta_human": "5d-1.4w",
             "remaining_open_milestones": 8,
             "remaining_in_progress_milestones": 5,
@@ -6410,12 +8271,17 @@ def test_build_flagship_product_prompt_includes_task_local_status_snapshot(tmp_p
         compact_prompt=True,
     )
 
-    assert "Task-local status snapshot:" in prompt
+    assert "Task-local run context:" in prompt
     assert "- eta: 5d-1.4w" in prompt
     assert "- remaining open milestones: 8" in prompt
     assert "- remaining in-progress milestones: 5" in prompt
     assert "- remaining not-started milestones: 3" in prompt
-    assert "do not need to query supervisor status from inside the worker run" in prompt
+    assert "verbatim task-local telemetry snapshot is embedded below" in prompt
+    assert "do not regenerate it via shell, Python, or supervisor helper commands" in prompt
+    assert '{"active_runs_count":13,"remaining_open_milestones":8,"remaining_not_started_milestones":3,"remaining_in_progress_milestones":5,"eta_human":"5d-1.4w","summary":null}' in prompt
+    assert "Operator telemetry CLI is forbidden during active worker runs." in prompt
+    assert "python3 /docker/fleet/scripts/chummer_design_supervisor.py status --json" not in prompt
+    assert "python3 /docker/fleet/scripts/chummer_design_supervisor.py eta --json" not in prompt
 
 
 def test_build_flagship_product_prompt_uses_runtime_handoff_not_shared_handoff_path(tmp_path: Path) -> None:
@@ -6458,8 +8324,10 @@ def test_build_flagship_product_prompt_uses_runtime_handoff_not_shared_handoff_p
 
     assert str(runtime_handoff_path) in prompt
     assert str(handoff_path) not in prompt
-    assert "operator-only" in prompt
+    assert "shared operator handoff is operator-only" in prompt
     assert "do not open it or execute commands from it inside worker runs" in prompt
+    assert "historical operator status snippets" in prompt
+    assert "NEXT_SESSION_HANDOFF" not in prompt
 
 
 def test_estimate_full_product_eta_reports_frontier_counts() -> None:
@@ -12458,6 +14326,32 @@ def test_persist_live_state_snapshot_preserves_matching_active_run_with_unseen_p
             module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_resolve_run_artifact_path_prefers_workspace_mirror_for_container_local_artifacts(tmp_path: Path) -> None:
+    module = _load_module()
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = tmp_path
+        mirrored = (
+            tmp_path
+            / "state"
+            / "chummer_design_supervisor"
+            / "shard-1"
+            / "runs"
+            / "20260411T200411Z"
+            / "worker.stderr.log"
+        )
+        mirrored.parent.mkdir(parents=True, exist_ok=True)
+        mirrored.write_text("worker output\n", encoding="utf-8")
+
+        resolved = module._resolve_run_artifact_path(
+            "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/20260411T200411Z/worker.stderr.log"
+        )
+
+        assert resolved == mirrored.resolve()
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
 def test_statefile_shard_summaries_recovers_container_local_active_run_when_state_dropped_it(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -12519,6 +14413,7 @@ def test_statefile_shard_summaries_recovers_container_local_active_run_when_stat
         assert len(summaries) == 1
         shard = summaries[0]
         assert shard["active_run_id"] == "20260411T200411Z"
+        assert shard["shard_token"] == "shard-1"
         assert shard["active_frontier_ids"] == [34]
         assert shard["active_run_worker_pid"] == 12345
         assert shard["active_run_process_probe_scope"] == "container_local"
@@ -12526,6 +14421,8 @@ def test_statefile_shard_summaries_recovers_container_local_active_run_when_stat
         assert shard["active_run_progress_state"] == "streaming"
         assert shard["selected_account_alias"] == "acct-ea-core-01"
         assert shard["selected_model"] == "ea-coder-hard"
+        assert shard["worker_stderr_path"] == str(stderr_path.resolve())
+        assert shard["worker_last_message_path"] == str(last_message_path.resolve())
     finally:
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
@@ -13881,6 +15778,37 @@ def test_memory_dispatch_snapshot_reuses_active_slots_before_parking_next_idle_s
         assert follow_on == ["shard-2", "shard-1"]
 
 
+def test_memory_dispatch_snapshot_ignores_stale_swap_pressure_when_ram_headroom_is_healthy() -> None:
+    module = _load_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        aggregate_root = root / "state"
+        for index in range(1, 5):
+            shard_root = aggregate_root / f"shard-{index}"
+            shard_root.mkdir(parents=True, exist_ok=True)
+            module._write_json(shard_root / "state.json", {"updated_at": "2026-04-14T08:00:00Z"})
+
+        args = _args(root)
+        args.state_root = str(aggregate_root / "shard-4")
+
+        snapshot = module._memory_dispatch_snapshot(
+            args,
+            Path(args.state_root),
+            meminfo_bytes={
+                "MemTotal": 16 * 1024**3,
+                "MemAvailable": 8 * 1024**3,
+                "SwapTotal": 8 * 1024**3,
+                "SwapFree": int(1.7 * 1024**3),
+            },
+        )
+
+        assert snapshot["status"] == "ok"
+        assert snapshot["allowed_active_shards"] == 4
+        assert snapshot["dispatch_allowed"] is True
+        assert snapshot["throttled"] is False
+        assert "swap used" not in str(snapshot.get("reason") or "")
+
+
 def test_memory_dispatch_snapshot_counts_recovered_container_local_active_runs(monkeypatch, tmp_path: Path) -> None:
     module = _load_module()
     root = tmp_path
@@ -14121,6 +16049,10 @@ def test_apply_status_alias_fields_restores_active_and_last_run_aliases() -> Non
             "active_run": {
                 "run_id": "run-123",
                 "started_at": "2026-04-13T11:40:00Z",
+                "prompt_path": "/tmp/run-123/prompt.txt",
+                "stdout_path": "/tmp/run-123/stdout.log",
+                "stderr_path": "/tmp/run-123/stderr.log",
+                "last_message_path": "/tmp/run-123/last_message.txt",
                 "worker_first_output_at": "2026-04-13T11:40:05Z",
                 "worker_last_output_at": "2026-04-13T11:41:00Z",
                 "worker_pid": 4242,
@@ -14153,23 +16085,54 @@ def test_apply_status_alias_fields_restores_active_and_last_run_aliases() -> Non
     assert payload["active_run_started_at"] == "2026-04-13T11:40:00Z"
     assert payload["active_run_worker_first_output_at"] == "2026-04-13T11:40:05Z"
     assert payload["active_run_worker_last_output_at"] == "2026-04-13T11:41:00Z"
+    assert payload["worker_last_output_at"] == "2026-04-13T11:41:00Z"
     assert payload["active_run_worker_pid"] == 4242
     assert payload["active_run_progress_state"] == "streaming"
     assert payload["selected_account_alias"] == "acct-ea-main"
     assert payload["selected_model"] == "ea-coder-hard"
+    assert payload["active_run_prompt_path"] == "/tmp/run-123/prompt.txt"
+    assert payload["worker_stdout_path"] == "/tmp/run-123/stdout.log"
+    assert payload["worker_stderr_path"] == "/tmp/run-123/stderr.log"
+    assert payload["worker_last_message_path"] == "/tmp/run-123/last_message.txt"
     assert payload["remaining_open_milestones"] == 8
     assert payload["remaining_in_progress_milestones"] == 5
     assert payload["remaining_not_started_milestones"] == 3
     assert payload["eta_human"] == "8.2h-20.5h"
     assert payload["eta_status"] == "tracked"
     assert payload["eta_summary"] == "8 open milestones remain (5 in progress, 3 not started)."
-    assert payload["eta_confidence"] == "low"
-    assert payload["predicted_completion_at"] == "2026-04-14T09:00:00Z"
-    assert payload["range_low_hours"] == 8.2
-    assert payload["range_high_hours"] == 20.5
-    assert payload["last_run_id"] == "run-122"
-    assert payload["last_run_finished_at"] == "2026-04-13T11:39:00Z"
-    assert payload["last_run_blocker"] == "worker exit 1"
+
+
+def test_persist_live_state_snapshot_clears_dead_local_active_run(monkeypatch, tmp_path: Path) -> None:
+    module = _load_module()
+    shard_root = tmp_path / "state" / "chummer_design_supervisor" / "shard-1"
+    shard_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(module, "_running_inside_container", lambda: True)
+    monkeypatch.setattr(module, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(module, "_write_active_shard_manifest_snapshot", lambda state_root: None)
+
+    module._persist_live_state_snapshot(
+        shard_root,
+        {
+            "mode": "flagship_product",
+            "frontier_ids": [4066417069],
+            "open_milestone_ids": [4066417069],
+            "active_run": {
+                "run_id": "20260414T135906Z-shard-1",
+                "started_at": "2026-04-14T13:59:06Z",
+                "worker_pid": 424242,
+                "progress_state": "waiting_for_model_output",
+                "prompt_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-1/runs/20260414T135906Z-shard-1/prompt.txt",
+            },
+            "active_run_worker_pid": 424242,
+            "active_run_progress_state": "waiting_for_model_output",
+        },
+    )
+
+    payload = module._read_state(shard_root / "state.json")
+    assert payload.get("active_run") in (None, {})
+    assert str(payload.get("active_run_id") or "").strip() == ""
+    assert str(payload.get("idle_reason") or "").strip() == "claimed_frontier_without_active_run"
 
 
 def test_update_active_run_fields_clears_idle_reason(tmp_path: Path) -> None:
@@ -14202,6 +16165,7 @@ def test_update_active_run_fields_clears_idle_reason(tmp_path: Path) -> None:
 def test_persist_live_state_snapshot_refreshes_shard_aliases_and_active_shards_manifest(tmp_path: Path) -> None:
     module = _load_module()
     original_running_inside_container = module._running_inside_container
+    original_pid_alive = module._pid_alive
     aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
     shard_root = aggregate_root / "shard-1"
     shard_root.mkdir(parents=True, exist_ok=True)
@@ -14238,6 +16202,7 @@ def test_persist_live_state_snapshot_refreshes_shard_aliases_and_active_shards_m
 
     try:
         module._running_inside_container = lambda: True
+        module._pid_alive = lambda pid: True
         module._persist_live_state_snapshot(
             shard_root,
             {
@@ -14260,19 +16225,118 @@ def test_persist_live_state_snapshot_refreshes_shard_aliases_and_active_shards_m
         )
     finally:
         module._running_inside_container = original_running_inside_container
+        module._pid_alive = original_pid_alive
 
     shard_payload = json.loads((shard_root / "state.json").read_text(encoding="utf-8"))
     manifest_payload = json.loads((aggregate_root / "active_shards.json").read_text(encoding="utf-8"))
 
+    assert shard_payload["shard_id"] == "shard-1"
+    assert shard_payload["shard_token"] == "shard-1"
     assert shard_payload["active_run_id"] == "run-live-1"
     assert shard_payload["active_run_started_at"] == "2026-04-13T11:40:00Z"
     assert shard_payload["active_run_worker_last_output_at"] == "2026-04-13T11:40:30Z"
+    assert shard_payload["worker_last_output_at"] == "2026-04-13T11:40:30Z"
     assert shard_payload["active_run_progress_state"] == "streaming"
     assert manifest_payload["configured_shards"][0]["worker_model"] == "ea-coder-hard"
     assert manifest_payload["active_run_count"] == 1
+    assert manifest_payload["updated_at"] == manifest_payload["generated_at"]
     assert manifest_payload["active_shards"][0]["name"] == "shard-1"
+    assert manifest_payload["active_shards"][0]["shard_id"] == "shard-1"
+    assert manifest_payload["active_shards"][0]["shard_token"] == "shard-1"
     assert manifest_payload["active_shards"][0]["active_run_id"] == "run-live-1"
+    assert manifest_payload["active_shards"][0]["worker_last_output_at"] == "2026-04-13T11:40:30Z"
     assert "worker_model" not in manifest_payload["active_shards"][0]
+
+
+def test_reconcile_aggregate_shard_truth_clears_shard_scoped_aliases_when_parallelized() -> None:
+    module = _load_module()
+
+    updated = module._reconcile_aggregate_shard_truth(
+        {
+            "mode": "sharded",
+            "active_run_id": "run-from-latest-shard",
+            "active_run_started_at": "2026-04-14T06:00:00Z",
+            "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+            "worker_last_output_at": "2026-04-14T06:00:05Z",
+            "selected_account_alias": "acct-ea-core-01",
+            "selected_model": "ea-coder-hard",
+            "idle_reason": "claimed_frontier_without_active_run",
+            "open_milestone_ids": [1, 2],
+            "eta": {
+                "status": "tracked",
+                "scope_kind": "flagship_product_readiness",
+                "summary": "2 open milestones remain.",
+                "remaining_open_milestones": 2,
+                "remaining_in_progress_milestones": 1,
+                "remaining_not_started_milestones": 1,
+            },
+            "shards": [
+                {
+                    "name": "shard-1",
+                    "frontier_ids": [1],
+                    "active_frontier_ids": [1],
+                    "open_milestone_ids": [1],
+                    "active_run_id": "run-1",
+                    "active_run_progress_state": "streaming",
+                    "idle_reason": "",
+                    "eta_scope_kind": "flagship_product_readiness",
+                    "eta_remaining_open_milestones": 1,
+                    "eta_remaining_in_progress_milestones": 1,
+                    "eta_remaining_not_started_milestones": 0,
+                },
+                {
+                    "name": "shard-2",
+                    "frontier_ids": [2],
+                    "active_frontier_ids": [],
+                    "open_milestone_ids": [2],
+                    "active_run_id": "",
+                    "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+                    "idle_reason": "claimed_frontier_without_active_run",
+                    "eta_scope_kind": "flagship_product_readiness",
+                    "eta_remaining_open_milestones": 1,
+                    "eta_remaining_in_progress_milestones": 0,
+                    "eta_remaining_not_started_milestones": 1,
+                },
+            ],
+        }
+    )
+
+    assert updated["active_runs_count"] == 1
+    assert "active_run_progress_state" not in updated
+    assert "active_run_id" not in updated
+    assert "active_run_started_at" not in updated
+    assert "worker_last_output_at" not in updated
+    assert "selected_account_alias" not in updated
+    assert "selected_model" not in updated
+    assert "idle_reason" not in updated
+
+
+def test_persist_live_state_snapshot_clears_shard_scoped_aliases_for_aggregate_root(tmp_path: Path) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    (aggregate_root / "shard-1").mkdir(parents=True, exist_ok=True)
+    (aggregate_root / "shard-2").mkdir(parents=True, exist_ok=True)
+
+    module._persist_live_state_snapshot(
+        aggregate_root,
+        {
+            "updated_at": "2026-04-14T06:56:00Z",
+            "mode": "sharded",
+            "active_run_id": "run-from-latest-shard",
+            "active_run_progress_state": "idle_claimed_frontier_without_active_run",
+            "idle_reason": "claimed_frontier_without_active_run",
+            "selected_account_alias": "acct-ea-core-01",
+            "selected_model": "ea-coder-hard",
+            "shards": [],
+        },
+    )
+
+    payload = module._read_state(aggregate_root / "state.json")
+    assert "active_run_id" not in payload
+    assert "active_run_progress_state" not in payload
+    assert "idle_reason" not in payload
+    assert "selected_account_alias" not in payload
+    assert "selected_model" not in payload
 
 
 def test_live_shard_summaries_prefer_supervisor_authored_manifest_on_host(monkeypatch, tmp_path: Path) -> None:
@@ -14371,6 +16435,46 @@ def test_statefile_shard_summaries_surface_inferred_idle_reason_for_claimed_fron
     assert summaries[0]["idle_reason"] == "claimed_frontier_without_active_run"
     assert summaries[0]["active_run_progress_state"] == "idle_claimed_frontier_without_active_run"
     assert summaries[0]["eta_summary"].startswith("Current closeout gates are green")
+
+
+def test_statefile_shard_summaries_fall_back_to_configured_manifest_metadata_when_shard_state_is_blank(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    aggregate_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = aggregate_root / "shard-2"
+    shard_root.mkdir(parents=True, exist_ok=True)
+    module._write_json(
+        aggregate_root / "active_shards.json",
+        {
+            "configured_shards": [
+                {
+                    "name": "shard-2",
+                    "index": 2,
+                    "frontier_ids": [3449507998],
+                    "focus_owner": ["chummer6-ui", "chummer6-ui-kit"],
+                    "focus_text": ["blazor", "desktop", "shell"],
+                    "account_alias": ["acct-ea-core-10"],
+                    "worker_model": "ea-coder-hard",
+                }
+            ],
+            "active_shards": [],
+        },
+    )
+
+    summaries = module._statefile_shard_summaries(aggregate_root)
+
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary["name"] == "shard-2"
+    assert summary["frontier_ids"] == [3449507998]
+    assert summary["open_milestone_ids"] == [3449507998]
+    assert summary["focus_owners"] == ["chummer6-ui", "chummer6-ui-kit"]
+    assert summary["focus_texts"] == ["blazor", "desktop", "shell"]
+    assert summary["selected_account_alias"] == "acct-ea-core-10"
+    assert summary["selected_model"] == "ea-coder-hard"
+    assert summary["idle_reason"] == "claimed_frontier_without_active_run"
+    assert summary["active_run_progress_state"] == "idle_claimed_frontier_without_active_run"
 
 
 def test_reconcile_aggregate_shard_truth_counts_only_non_closing_active_runs() -> None:

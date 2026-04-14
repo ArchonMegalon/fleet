@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_PYTHON3="${CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3:-/usr/bin/python3}"
+ACTIVE_RUN_DIR="${CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR:-}"
+SUPERVISOR_SCRIPT="/docker/fleet/scripts/chummer_design_supervisor.py"
+
+if [[ -n "${ACTIVE_RUN_DIR}" && $# -ge 2 ]]; then
+  script_path="$1"
+  command_name="$2"
+  telemetry_path="${ACTIVE_RUN_DIR}/TASK_LOCAL_TELEMETRY.generated.json"
+  if [[ "${script_path}" == "${SUPERVISOR_SCRIPT}" && ( "${command_name}" == "status" || "${command_name}" == "eta" ) && -f "${telemetry_path}" ]]; then
+    CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH="${telemetry_path}" \
+    CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_COMMAND="${command_name}" \
+    exec "${REAL_PYTHON3}" - <<'PY'
+import json
+import os
+import sys
+
+path = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH", "") or "").strip()
+command = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_COMMAND", "") or "").strip() or "status"
+payload = {}
+if path:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle) or {}
+    except Exception:
+        payload = {}
+
+eta = {
+    "status": "tracked",
+    "scope_kind": "task_local_only",
+    "scope_label": "task_local_only",
+    "remaining_open_milestones": payload.get("remaining_open_milestones"),
+    "remaining_not_started_milestones": payload.get("remaining_not_started_milestones"),
+    "remaining_in_progress_milestones": payload.get("remaining_in_progress_milestones"),
+    "eta_human": payload.get("eta_human"),
+    "summary": payload.get("summary"),
+}
+if command == "eta":
+    response = eta
+else:
+    response = {
+        "mode": "task_local_only",
+        "polling_disabled": True,
+        "status_query_supported": False,
+        "active_runs_count": payload.get("active_runs_count"),
+        "eta": eta,
+        "warning": "task_local_telemetry_file",
+        "guidance": "read TASK_LOCAL_TELEMETRY.generated.json directly inside the active worker run",
+    }
+json.dump(response, sys.stdout, separators=(",", ":"))
+sys.stdout.write("\n")
+PY
+  fi
+fi
+
+exec "${REAL_PYTHON3}" "$@"

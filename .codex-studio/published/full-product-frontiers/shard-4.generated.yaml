@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-14T06:01:41Z'
+generated_at: '2026-04-14T16:41:25Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-4
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -71,7 +71,7 @@ full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-14T05:37:02Z'
+  generated_at: '2026-04-14T16:38:57Z'
   proof_status: fail
   missing_coverage_keys:
   - desktop_client
@@ -82,21 +82,23 @@ frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: tracked
-  eta_human: tracked
+  status: blocked
+  eta_human: tracked after unblock
   eta_confidence: low
-  basis: aggregate_shard_parallel_scope
+  basis: aggregate_shard_parallel_scope+external_blocker
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
-  blocking_reason: ''
-  summary: 10 open milestones remain (10 in progress, 0 not started). Aggregate shard
-    status is parallelized across 10 active shards under Full Chummer5A parity and
-    flagship proof closeout.
+  blocking_reason: 'shard-1: Error: worker_status_helper_loop:repeated_blocked_status_polling
+    (+5 more shard blockers)'
+  summary: '10 open milestones remain (10 in progress, 0 not started). Aggregate shard
+    status is parallelized across 4 active shards under Full Chummer5A parity and
+    flagship proof closeout. Current external blocker: shard-1: Error: worker_status_helper_loop:repeated_blocked_status_polling
+    (+5 more shard blockers)'
   predicted_completion_at: ''
-  range_low_hours: 10.86
-  range_high_hours: 26.65
+  range_low_hours: 8.74
+  range_high_hours: 21.45
   remaining_open_milestones: 10
   remaining_in_progress_milestones: 10
   remaining_not_started_milestones: 0
-  remaining_effort_units: 2.05
+  remaining_effort_units: 1.65
