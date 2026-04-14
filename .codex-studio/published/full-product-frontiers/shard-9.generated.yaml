@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-14T16:41:11Z'
+generated_at: '2026-04-14T16:41:34Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-9
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -107,7 +107,7 @@ frontier:
     summary: 'Milestone ''Unify claim, install, update, and support recovery into
       one desktop-native flow'' remains open under the flagship closeout frontier.
       Outstanding readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-04-15T08:31:35Z'
+    predicted_completion_at: '2026-04-15T08:31:58Z'
     range_low_hours: 9.0
     range_high_hours: 22.68
     remaining_open_milestones: 1
@@ -134,3 +134,22 @@ queue_package:
   - Chummer.Run.Api
   - scripts
   - tests
+eta:
+  status: flagship_delivery
+  eta_human: 9h-23h
+  eta_confidence: low
+  basis: full_product_single_milestone_heuristic
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 'Milestone ''Unify claim, install, update, and support recovery into one
+    desktop-native flow'' remains open under the flagship closeout frontier. Outstanding
+    readiness coverage: desktop_client.'
+  predicted_completion_at: '2026-04-15T08:31:58Z'
+  range_low_hours: 9.0
+  range_high_hours: 22.68
+  remaining_open_milestones: 1
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 1
+  remaining_effort_units: 1.8
