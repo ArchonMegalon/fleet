@@ -327,6 +327,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 96125b0e pins the latest M104 explain receipt proof guard for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit c51f8657 pins the current M104 explain receipt proof guard for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit d3dfb527 tightens M104 explain receipt proof anchor for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit d18aa133 pins M104 explain receipt proof anchor for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit 0da2d157 pins M104 explain receipt latest proof anchor for repeat prevention.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
