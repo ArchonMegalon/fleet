@@ -248,6 +248,7 @@ items:
       - python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
       - verifier rebuilds the decision-critical packet projection from live source inputs
+      - verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs
       - verifier requires every measured rollout action to appear in both the decision board and decision gate ledger
       - forbidden worker proof strings are rejected case-insensitively
       - verifier rejects Fleet proof paths outside package allowed path roots

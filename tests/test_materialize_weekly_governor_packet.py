@@ -105,6 +105,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
+                                "Verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
@@ -164,6 +165,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
+                        "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
                         "forbidden worker proof strings are rejected case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
@@ -219,6 +221,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     _write_json(
         readiness,
         {
+            "generated_at": _iso_now(),
             "status": "pass",
             "readiness_planes": {
                 "flagship_ready": {
@@ -242,7 +245,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
             },
         },
     )
-    _write_json(journeys, {"summary": {"overall_state": "ready"}})
+    _write_json(journeys, {"generated_at": _iso_now(), "summary": {"overall_state": "ready"}})
     _write_json(
         support,
         {
@@ -274,7 +277,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
             },
         },
     )
-    _write_yaml(status, {"whole_product_final_claim_status": "pass"})
+    _write_yaml(status, {"generated_at": _iso_now(), "whole_product_final_claim_status": "pass"})
     return {
         "root": root,
         "published": published,
@@ -957,6 +960,66 @@ def test_verify_next90_m106_governor_packet_rejects_packet_older_than_support_so
     assert verifier.returncode == 1
     assert (
         "checked-in packet generated_at predates support_packets; regenerate "
+        "WEEKLY_GOVERNOR_PACKET.generated.json after refreshing source inputs"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_packet_older_than_status_plane(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    status = yaml.safe_load(paths["status"].read_text(encoding="utf-8"))
+    packet["generated_at"] = "2026-04-15T10:00:00Z"
+    status["generated_at"] = "2026-04-15T10:00:01Z"
+    _write_json(out, packet)
+    _write_yaml(paths["status"], status)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "checked-in packet generated_at predates status_plane; regenerate "
         "WEEKLY_GOVERNOR_PACKET.generated.json after refreshing source inputs"
         in verifier.stderr
     )

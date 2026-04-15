@@ -172,7 +172,10 @@ def verify(args: argparse.Namespace) -> List[str]:
     design_queue = weekly._read_yaml(design_queue_path)
     queue = weekly._read_yaml(queue_path)
     weekly_pulse = weekly._read_json(weekly_pulse_path)
+    flagship_readiness = weekly._read_json(flagship_readiness_path)
+    journey_gates = weekly._read_json(journey_gates_path)
     support_packets = weekly._read_json(support_packets_path)
+    status_plane = weekly._read_yaml(status_plane_path)
     verification = weekly.verify_package(
         registry=registry,
         design_queue=design_queue,
@@ -195,10 +198,10 @@ def verify(args: argparse.Namespace) -> List[str]:
         design_queue=design_queue,
         queue=queue,
         weekly_pulse=weekly_pulse,
-        flagship_readiness=weekly._read_json(flagship_readiness_path),
-        journey_gates=weekly._read_json(journey_gates_path),
+        flagship_readiness=flagship_readiness,
+        journey_gates=journey_gates,
         support_packets=support_packets,
-        status_plane=weekly._read_yaml(status_plane_path),
+        status_plane=status_plane,
         source_paths=source_paths,
     )
     packet_verification = dict(packet.get("package_verification") or {})
@@ -253,6 +256,24 @@ def verify(args: argparse.Namespace) -> List[str]:
         packet_generated_at=str(packet.get("generated_at") or ""),
         source_generated_at=str(support_packets.get("generated_at") or ""),
         source_name="support_packets",
+        issues=issues,
+    )
+    _require_generated_after_source(
+        packet_generated_at=str(packet.get("generated_at") or ""),
+        source_generated_at=str(flagship_readiness.get("generated_at") or ""),
+        source_name="flagship_readiness",
+        issues=issues,
+    )
+    _require_generated_after_source(
+        packet_generated_at=str(packet.get("generated_at") or ""),
+        source_generated_at=str(journey_gates.get("generated_at") or ""),
+        source_name="journey_gates",
+        issues=issues,
+    )
+    _require_generated_after_source(
+        packet_generated_at=str(packet.get("generated_at") or ""),
+        source_generated_at=str(status_plane.get("generated_at") or ""),
+        source_name="status_plane",
         issues=issues,
     )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")

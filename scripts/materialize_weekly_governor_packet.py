@@ -60,6 +60,13 @@ CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 SUPPORT_PACKETS_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
+REQUIRED_GENERATED_SOURCE_INPUTS = (
+    "weekly_pulse",
+    "flagship_readiness",
+    "journey_gates",
+    "support_packets",
+    "status_plane",
+)
 REQUIRED_QUEUE_PROOF_MARKERS = (
     "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
     "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
@@ -73,6 +80,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
     "verifier rebuilds the decision-critical packet projection from live source inputs",
+    "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
     "forbidden worker proof strings are rejected case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
@@ -93,6 +101,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "verify_next90_m106_fleet_governor_packet.py exits 0",
     "tmp_path fixture invocation",
     "decision-critical packet projection",
+    "packet freshness drift against generated readiness",
     "every measured rollout action",
     "forbidden worker proof strings",
     "proof paths outside package allowed path roots",
@@ -685,13 +694,18 @@ def verify_source_inputs(
         }
         if state != "present":
             issues.append(f"{name} is missing, empty, unparseable, or lacks {required_key}")
+        if name in REQUIRED_GENERATED_SOURCE_INPUTS:
+            generated_at = str(payload.get("generated_at") or "").strip() if present else ""
+            rows[name]["generated_at"] = generated_at
+            rows[name]["source_path"] = str(dict(source_paths or {}).get(name) or "").strip()
+            if state == "present" and not _parse_iso_utc(generated_at):
+                issues.append(f"{name} generated_at is missing or invalid")
     support_successor_proof = dict(support_packets.get("successor_package_verification") or {})
     support_successor_status = str(support_successor_proof.get("status") or "").strip()
     support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
     rows["support_packets"]["successor_package_verification_status"] = (
         support_successor_status or "missing"
     )
-    rows["support_packets"]["generated_at"] = str(support_packets.get("generated_at") or "").strip()
     rows["support_packets"]["max_age_seconds"] = SUPPORT_PACKETS_MAX_AGE_SECONDS
     if rows["support_packets"]["state"] == "present" and support_successor_status != "pass":
         issues.append(
