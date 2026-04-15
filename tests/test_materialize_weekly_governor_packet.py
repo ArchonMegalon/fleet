@@ -43,6 +43,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     _write_yaml(projects / "fleet.yaml", {"id": "fleet", "path": str(root), "queue": []})
     for proof_anchor in (
         root / "scripts" / "materialize_weekly_governor_packet.py",
+        root / "scripts" / "verify_next90_m106_fleet_governor_packet.py",
         root / "tests" / "test_materialize_weekly_governor_packet.py",
     ):
         proof_anchor.parent.mkdir(parents=True, exist_ok=True)
@@ -75,10 +76,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                             "status": "complete",
                             "evidence": [
                                 "/docker/fleet/scripts/materialize_weekly_governor_packet.py compiles readiness inputs.",
+                                "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py verifies the checked-in packet closeout without regenerating timestamps.",
                                 "/docker/fleet/tests/test_materialize_weekly_governor_packet.py fail-closes drift.",
                                 "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json reports current decisions.",
                                 "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md mirrors the operator packet.",
-                                "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
+                                "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
+                                "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                             ],
@@ -123,10 +126,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "status": "complete",
                     "proof": [
                         "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+                        "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
                         "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
                         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
                         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
-                        "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+                        "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+                        "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                     ],
@@ -507,6 +512,67 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
     assert launch_gates["decision_alignment"]["state"] == "fail"
     assert payload["public_status_copy"]["state"] == "freeze_launch"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    verifier = subprocess.run(
+        [
+            sys.executable,
+            "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+            "--repo-root",
+            str(paths["root"]),
+            "--packet",
+            str(out),
+            "--markdown",
+            str(paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert verifier.returncode == 0, verifier.stderr
+    assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
 
 
 def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates_are_green(
@@ -1336,6 +1402,7 @@ def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is
     assert payload["repeat_prevention"]["status"] == "blocked"
     assert payload["package_verification"]["required_resolving_proof_paths"] == [
         "scripts/materialize_weekly_governor_packet.py",
+        "scripts/verify_next90_m106_fleet_governor_packet.py",
         "tests/test_materialize_weekly_governor_packet.py",
     ]
     assert (

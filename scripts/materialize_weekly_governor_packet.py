@@ -52,24 +52,29 @@ UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 REQUIRED_QUEUE_PROOF_MARKERS = (
     "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+    "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
     "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
     "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
     "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
-    "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+    "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+    "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "scripts/materialize_weekly_governor_packet.py",
+    "scripts/verify_next90_m106_fleet_governor_packet.py",
     "tests/test_materialize_weekly_governor_packet.py",
     "WEEKLY_GOVERNOR_PACKET.generated.json",
     "WEEKLY_GOVERNOR_PACKET.generated.md",
-    "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+    "py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+    "verify_next90_m106_fleet_governor_packet.py exits 0",
     "tmp_path fixture invocation",
     "successor frontier 2376135131",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
     "scripts/materialize_weekly_governor_packet.py",
+    "scripts/verify_next90_m106_fleet_governor_packet.py",
     "tests/test_materialize_weekly_governor_packet.py",
 )
 DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (

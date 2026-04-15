@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:52:15Z",
+  "generated_at": "2026-04-15T12:04:53Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -310,24 +310,29 @@
     "repo": "fleet",
     "required_queue_proof_markers": [
       "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+      "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
       "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
       "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
-      "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+      "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+      "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
       "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_weekly_governor_packet.py",
+      "scripts/verify_next90_m106_fleet_governor_packet.py",
       "tests/test_materialize_weekly_governor_packet.py",
       "WEEKLY_GOVERNOR_PACKET.generated.json",
       "WEEKLY_GOVERNOR_PACKET.generated.md",
-      "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+      "py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+      "verify_next90_m106_fleet_governor_packet.py exits 0",
       "tmp_path fixture invocation",
       "successor frontier 2376135131"
     ],
     "required_resolving_proof_paths": [
       "scripts/materialize_weekly_governor_packet.py",
+      "scripts/verify_next90_m106_fleet_governor_packet.py",
       "tests/test_materialize_weekly_governor_packet.py"
     ],
     "status": "pass",

@@ -52,6 +52,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 79760cc1 refreshes the M101 release train receipt after queue closure proof tightening.
       - /docker/chummercomplete/chummer6-ui-finish commit a3bf058e tightens M101 proof commit resolution so stale proof anchors cannot keep the closed package green.
       - /docker/chummercomplete/chummer6-ui-finish commit 0954e2a1 pins M101 proof resolution guard into verifier, receipt, and compliance proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit e519ca4b pins the latest M101 proof anchor into the verifier, receipt, and compliance guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -284,6 +285,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit d9e5392d wires the M104 explain receipt guard into standard scripts/ai/verify.sh for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit d4d34e1c requires the standard-verify wiring commit as registry and queue proof for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit cea19d0d tightens M104 explain receipt proof guard for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit f27fefb8 tightens M104 proof commit resolution for repeat prevention.
       - bash scripts/ai/milestones/next90-m104-ui-explain-receipts-check.sh
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
@@ -384,6 +386,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 60125d9e tightens M107 artifact factory proof guard.
       - /docker/chummercomplete/chummer.run-services commit c98a49f2 tightens M107 artifact factory closeout proof.
       - /docker/chummercomplete/chummer.run-services commit 28d3e13f tightens M107 artifact factory closeout guard.
+      - /docker/chummercomplete/chummer.run-services commit 76b0c410 tightens M107 artifact factory release-bundle output refs.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
