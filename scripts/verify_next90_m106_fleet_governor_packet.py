@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -106,6 +107,10 @@ def _stable_markdown(markdown: str) -> str:
         "Generated: <ignored>" if line.startswith("Generated: ") else line
         for line in lines
     )
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _require_generated_after_source(
@@ -224,6 +229,8 @@ def verify(args: argparse.Namespace) -> List[str]:
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
+    required_inputs = dict(dict(packet.get("source_input_health") or {}).get("required_inputs") or {})
+    support_input_health = dict(required_inputs.get("support_packets") or {})
     local_commit_resolution = dict(packet_verification.get("local_commit_resolution") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
@@ -295,6 +302,18 @@ def verify(args: argparse.Namespace) -> List[str]:
     )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
     _require(packet.get("status") == "ready", issues, "packet status is not ready")
+    support_source_sha256 = str(support_input_health.get("source_sha256") or "").strip().lower()
+    actual_support_source_sha256 = _sha256_file(support_packets_path)
+    _require(
+        bool(support_source_sha256),
+        issues,
+        "packet support_packets source_sha256 is missing",
+    )
+    _require(
+        support_source_sha256 == actual_support_source_sha256,
+        issues,
+        "packet support_packets source_sha256 no longer matches SUPPORT_CASE_PACKETS.generated.json",
+    )
     _require(
         packet_verification == verification,
         issues,

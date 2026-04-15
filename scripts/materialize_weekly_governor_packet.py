@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import re
 import subprocess
@@ -758,10 +759,18 @@ def verify_source_inputs(
     support_successor_proof = dict(support_packets.get("successor_package_verification") or {})
     support_successor_status = str(support_successor_proof.get("status") or "").strip()
     support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
+    support_source_path = str(dict(source_paths or {}).get("support_packets") or "").strip()
     rows["support_packets"]["successor_package_verification_status"] = (
         support_successor_status or "missing"
     )
     rows["support_packets"]["max_age_seconds"] = SUPPORT_PACKETS_MAX_AGE_SECONDS
+    if support_source_path:
+        try:
+            rows["support_packets"]["source_sha256"] = hashlib.sha256(
+                Path(support_source_path).read_bytes()
+            ).hexdigest()
+        except OSError:
+            rows["support_packets"]["source_sha256"] = ""
     if rows["support_packets"]["state"] == "present" and support_successor_status != "pass":
         issues.append(
             "support_packets successor_package_verification.status is not pass; "

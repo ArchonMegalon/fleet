@@ -508,6 +508,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 5c19e4e3 pins M104 explain receipt proof floor for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit c92d8dc4 tightens M104 explain receipt proof floor for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit af590503 tightens M104 canonical proof-path scope so extra registry or queue proof paths must stay inside the assigned UI roots or named proof exceptions.
+      - /docker/chummercomplete/chummer6-ui-finish commit f6049a9d tightens M104 queue and registry uniqueness proof so duplicate completed-package rows cannot make future shards repeat this slice.
+      - /docker/chummercomplete/chummer6-ui-finish commit 283f8ee3 pins M104 explain receipt uniqueness proof so future shards verify the current completed-package guard.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia

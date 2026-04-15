@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import subprocess
 import sys
@@ -463,6 +464,10 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["decision_alignment"]["actual_action"] == "freeze_launch"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
     assert payload["source_input_health"]["required_inputs"]["design_queue_staging"]["state"] == "present"
+    assert (
+        payload["source_input_health"]["required_inputs"]["support_packets"]["source_sha256"]
+        == hashlib.sha256(paths["support"].read_bytes()).hexdigest()
+    )
     assert payload["package_verification"]["registry_dependencies"] == [101, 102, 103, 104, 105]
     assert payload["truth_inputs"]["successor_dependency_status"] == "open"
     assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
@@ -746,6 +751,62 @@ def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
     assert verifier.returncode == 1
     assert (
         "packet package_verification no longer matches live successor registry and queue verification"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_support_source_hash_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["source_input_health"]["required_inputs"]["support_packets"]["source_sha256"] = "0" * 64
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "packet support_packets source_sha256 no longer matches SUPPORT_CASE_PACKETS.generated.json"
         in verifier.stderr
     )
 
