@@ -1223,6 +1223,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Queue closeout status: {_markdown_status(verification.get('queue_status'))}",
             f"- Queue mirror status: {_markdown_status(verification.get('queue_mirror_status'))}",
             f"- Required queue proof markers: {len(verification.get('required_queue_proof_markers') or [])}",
+            f"- Required resolving proof paths: {_markdown_list(verification.get('required_resolving_proof_paths'))}",
             f"- Successor dependency posture: {_markdown_status(dependency.get('status'))}",
             f"- Open successor dependencies: {_markdown_list(dependency.get('open_dependency_ids'))}",
             f"- Remaining sibling work tasks: {_markdown_list(closeout.get('remaining_sibling_work_task_ids'))}",

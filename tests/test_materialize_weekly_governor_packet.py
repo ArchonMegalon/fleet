@@ -461,6 +461,12 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
     assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
+    assert (
+        "- Required resolving proof paths: "
+        "scripts/materialize_weekly_governor_packet.py, "
+        "scripts/verify_next90_m106_fleet_governor_packet.py, "
+        "tests/test_materialize_weekly_governor_packet.py"
+    ) in markdown
     assert "- Queue mirror status: in_sync" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
     assert "- Reporter followthrough ready: 2" in markdown
@@ -780,6 +786,61 @@ def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
         "repeat prevention worker command guard rule no longer requires repo-local proof"
         in verifier.stderr
     )
+
+
+def test_verify_next90_m106_governor_packet_rejects_resolving_proof_path_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["package_verification"]["required_resolving_proof_paths"] = [
+        "scripts/materialize_weekly_governor_packet.py"
+    ]
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert "packet required_resolving_proof_paths drifted" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(

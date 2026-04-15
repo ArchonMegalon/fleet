@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T14:24:28Z
+Generated: 2026-04-15T14:28:42Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -31,6 +31,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Queue closeout status: complete
 - Queue mirror status: in_sync
 - Required queue proof markers: 11
+- Required resolving proof paths: scripts/materialize_weekly_governor_packet.py, scripts/verify_next90_m106_fleet_governor_packet.py, tests/test_materialize_weekly_governor_packet.py
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
 - Remaining sibling work tasks: 106.3, 106.4

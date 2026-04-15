@@ -152,6 +152,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
+    required_resolving_paths = packet_verification.get("required_resolving_proof_paths") or []
     packet_projection = _decision_projection(packet)
     live_projection = _decision_projection(live_payload)
     projection_drift = _projection_drift(live_projection, packet_projection)
@@ -182,6 +183,21 @@ def verify(args: argparse.Namespace) -> List[str]:
     _require(packet_verification.get("queue_frontier_id") == SUCCESSOR_FRONTIER_ID, issues, "packet queue_frontier_id drifted")
     _require(packet_verification.get("design_queue_frontier_id") == SUCCESSOR_FRONTIER_ID, issues, "packet design_queue_frontier_id drifted")
     _require(packet_verification.get("queue_mirror_status") == "in_sync", issues, "packet queue mirror is not in_sync")
+    _require(
+        required_resolving_paths == list(weekly.REQUIRED_RESOLVING_PROOF_PATHS),
+        issues,
+        "packet required_resolving_proof_paths drifted",
+    )
+    missing_resolving_paths = [
+        marker
+        for marker in weekly.REQUIRED_RESOLVING_PROOF_PATHS
+        if not (repo_root / marker).is_file()
+    ]
+    _require(
+        not missing_resolving_paths,
+        issues,
+        "packet resolving proof anchors no longer resolve: " + ", ".join(missing_resolving_paths),
+    )
     _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
     _require(repeat_prevention.get("status") == "closed_for_fleet_package", issues, "repeat prevention is not closed_for_fleet_package")
     _require(repeat_prevention.get("do_not_reopen_owned_surfaces") is True, issues, "owned surfaces are not protected from reopen")
@@ -212,6 +228,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "packet does not require the M106 verifier script proof marker",
     )
+    for marker in weekly.REQUIRED_RESOLVING_PROOF_PATHS:
+        _require(
+            f"/docker/fleet/{marker}" in required_packet_markers,
+            issues,
+            f"packet does not require resolving source proof marker {marker}",
+        )
     _require(
         "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0" in required_packet_markers,
         issues,
