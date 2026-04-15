@@ -702,6 +702,66 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_proof_is_m
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
+def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append("python3 scripts/run_ooda_design_supervisor_until_quiet.py --once")
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "python3 scripts/ooda_design_supervisor.py --telemetry"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["package_closeout"]["do_not_reopen_package"] is False
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert "queue item proof includes active-run or operator-helper command evidence" in (
+        payload["package_verification"]["issues"][0]
+    )
+    assert "registry work task 106.1 evidence includes active-run or operator-helper command evidence" in (
+        payload["package_verification"]["issues"][1]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == [
+        "run_ooda_design_supervisor_until_quiet",
+        "ooda_design_supervisor.py",
+        "TASK_LOCAL_TELEMETRY.generated.json",
+    ]
+
+
 def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(tmp_path: Path) -> None:
     paths = _fixture_tree(tmp_path)
     weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))

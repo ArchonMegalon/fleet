@@ -132,7 +132,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T10:13:05Z",
+  "generated_at": "2026-04-15T10:20:16Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -255,6 +255,11 @@
       ],
       "status": "open"
     },
+    "disallowed_worker_proof_command_markers": [
+      "run_ooda_design_supervisor_until_quiet",
+      "ooda_design_supervisor.py",
+      "TASK_LOCAL_TELEMETRY.generated.json"
+    ],
     "issues": [],
     "milestone_id": 106,
     "owned_surfaces": [

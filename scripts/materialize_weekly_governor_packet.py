@@ -58,6 +58,11 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
     "tmp_path fixture invocation",
 )
+DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
+    "run_ooda_design_supervisor_until_quiet",
+    "ooda_design_supervisor.py",
+    "TASK_LOCAL_TELEMETRY.generated.json",
+)
 REQUIRED_LAUNCH_SIGNALS = (
     "journey_gate_state",
     "local_release_proof_status",
@@ -120,6 +125,16 @@ def _norm_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _disallowed_worker_proof_entries(entries: List[str]) -> List[str]:
+    blocked: List[str] = []
+    for entry in entries:
+        for marker in DISALLOWED_WORKER_PROOF_COMMAND_MARKERS:
+            if marker in entry:
+                blocked.append(entry)
+                break
+    return blocked
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -270,6 +285,13 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
                 "queue item proof is missing required weekly governor receipt(s): "
                 + ", ".join(missing_proof)
             )
+        disallowed_proof = _disallowed_worker_proof_entries(proof_entries)
+        if disallowed_proof:
+            issues.append(
+                "queue item proof includes active-run or operator-helper command evidence "
+                "that worker packages must not invoke: "
+                + ", ".join(disallowed_proof)
+            )
     if milestone:
         if str(milestone.get("status") or "").strip() != "in_progress":
             issues.append("milestone 106 is not in_progress in successor registry")
@@ -284,6 +306,7 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
             if str(registry_work_task.get("status") or "").strip().lower() not in COMPLETE_STATUSES:
                 issues.append("registry work task 106.1 is not marked complete")
             evidence_text = "\n".join(_norm_list(registry_work_task.get("evidence")))
+            evidence_entries = _norm_list(registry_work_task.get("evidence"))
             missing_registry_evidence = [
                 marker
                 for marker in REQUIRED_REGISTRY_EVIDENCE_MARKERS
@@ -293,6 +316,13 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
                 issues.append(
                     "registry work task 106.1 evidence is missing required weekly governor marker(s): "
                     + ", ".join(missing_registry_evidence)
+                )
+            disallowed_registry_evidence = _disallowed_worker_proof_entries(evidence_entries)
+            if disallowed_registry_evidence:
+                issues.append(
+                    "registry work task 106.1 evidence includes active-run or operator-helper "
+                    "command evidence that worker packages must not invoke: "
+                    + ", ".join(disallowed_registry_evidence)
                 )
     return {
         "status": "pass" if not issues else "fail",
@@ -316,6 +346,7 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
         "queue_task": str(item.get("task") or "").strip(),
         "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),
         "required_registry_evidence_markers": list(REQUIRED_REGISTRY_EVIDENCE_MARKERS),
+        "disallowed_worker_proof_command_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
         "issues": issues,
     }
 
