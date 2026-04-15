@@ -314,6 +314,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit b08d3b2c tightens M104 blocked-helper proof exclusion and commit resolution proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 0a84aef2 pins the M104 blocked-helper proof anchor for repeat prevention.
       - bash scripts/ai/milestones/next90-m104-ui-explain-receipts-check.sh
+      - /docker/chummercomplete/chummer6-ui-finish commit 96125b0e pins the latest M104 explain receipt proof guard for repeat prevention.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
