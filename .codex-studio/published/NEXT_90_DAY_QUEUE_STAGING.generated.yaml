@@ -33,6 +33,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit b9404a4c pins the M102 desktop trust latest proof guard.
       - /docker/chummercomplete/chummer.run-services commit e6ae11a7 pins the M102 desktop trust guard closure.
       - /docker/chummercomplete/chummer.run-services commit 4c542b50 pins the latest M102 desktop trust closure guard.
+      - /docker/chummercomplete/chummer.run-services commit 02bed909 pins the M102 desktop trust closure guard.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
