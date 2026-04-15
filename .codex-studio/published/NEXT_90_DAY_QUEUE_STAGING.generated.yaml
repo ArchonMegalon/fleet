@@ -591,6 +591,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit f0bdfcb9 tightens M107 artifact factory duplicate queue/package proof guard.
       - /docker/chummercomplete/chummer.run-services commit 66b1a1c7 tightens M107 artifact factory duplicate queue proof guard.
       - /docker/chummercomplete/chummer.run-services commit 51623cd3 pins M107 artifact factory duplicate queue guard proof.
+      - /docker/chummercomplete/chummer.run-services commit 2b8a9431 tightens the current M107 duplicate queue proof guard.
       - /docker/chummercomplete/chummer.run-services commit a20aa910 tightens M107 artifact factory public shelf ref safety.
       - /docker/chummercomplete/chummer.run-services commit 7ce86602 pins M107 artifact factory shelf safety proof.
       - /docker/chummercomplete/chummer.run-services commit 326db197 tightens M107 artifact factory source-pack proof.
@@ -602,6 +603,14 @@ items:
       - /docker/chummercomplete/chummer.run-services commit a66a06bb tightens M107 artifact output shelf proof pin.
       - /docker/chummercomplete/chummer.run-services commit 9a8e56f0 tightens M107 artifact shelf proof floor.
       - /docker/chummercomplete/chummer.run-services commit a929cc7d pins M107 artifact shelf proof floor.
+      - /docker/chummercomplete/chummer.run-services commit ff3100b4 requires the current M107 artifact shelf proof floor.
+      - /docker/chummercomplete/chummer.run-services commit 94f0c9e1 pins M107 current duplicate queue guard.
+      - /docker/chummercomplete/chummer.run-services commit 6c700c38 tightens the M107 artifact-factory proof floor guard.
+      - /docker/chummercomplete/chummer.run-services commit f22ce5a5 tightens M107 artifact factory source-pack id normalization.
+      - /docker/chummercomplete/chummer.run-services commit b15c2193 pins M107 source pack id proof.
+      - /docker/chummercomplete/chummer.run-services commit 9b032c87 tightens M107 artifact path id guards.
+      - /docker/chummercomplete/chummer.run-services commit f1ca6c1a pins M107 artifact path guard proof.
+      - /docker/chummercomplete/chummer.run-services commit a91ea733 tightens M107 artifact factory receipt refs.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
