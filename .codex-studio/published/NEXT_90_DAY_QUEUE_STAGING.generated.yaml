@@ -56,6 +56,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit a3bf058e tightens M101 proof commit resolution so stale proof anchors cannot keep the closed package green.
       - /docker/chummercomplete/chummer6-ui-finish commit 0954e2a1 pins M101 proof resolution guard into verifier, receipt, and compliance proof.
       - /docker/chummercomplete/chummer6-ui-finish commit e519ca4b pins the latest M101 proof anchor into the verifier, receipt, and compliance guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit f3e0e90b tightens the M101 blocked-helper proof guard so closed-package evidence cannot cite active-run telemetry or operator helper commands.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -256,6 +257,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit b42416b8 pins the M103 veteran proof hardening commit.
       - /docker/chummercomplete/chummer6-ui-finish commit 5d9f1c86 pins M103 queue frontier proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 2bfc7338 pins M103 veteran queue proof anchors.
+      - /docker/chummercomplete/chummer6-ui-finish commit 243062ac pins M103 veteran queue proof commit.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
@@ -329,6 +331,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 0bed530b
       - /docker/chummercomplete/chummer6-ui-finish commit b7908ee8 tightens queue frontier-id repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit 1b590dab tightens blocked helper-command proof exclusion.
+      - /docker/chummercomplete/chummer6-ui-finish commit b0d32e72 pins M105 helper-proof repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
