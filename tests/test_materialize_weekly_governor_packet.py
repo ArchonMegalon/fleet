@@ -330,6 +330,39 @@ def _verifier_args(paths: dict[str, Path], packet: Path) -> list[str]:
     ]
 
 
+def _run_materializer(paths: dict[str, Path], out: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proof_are_not_green(tmp_path: Path) -> None:
     paths = _fixture_tree(tmp_path)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -2090,6 +2123,52 @@ def test_weekly_governor_packet_fails_package_verification_on_missing_structured
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
+def test_weekly_governor_packet_fails_package_verification_on_duplicate_queue_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"].append(dict(queue["items"][0]))
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "queue staging has duplicate package rows for next90-m106-fleet-governor-packet"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_duplicate_design_queue_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    design_queue["items"].append(dict(design_queue["items"][0]))
+    _write_yaml(paths["design_queue"], design_queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "design queue staging has duplicate package rows for next90-m106-fleet-governor-packet"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
 def test_weekly_governor_packet_fails_package_verification_on_fleet_queue_mirror_drift(
     tmp_path: Path,
 ) -> None:
@@ -2394,6 +2473,31 @@ def test_weekly_governor_packet_fails_package_verification_when_registry_task_is
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["package_verification"]["status"] == "fail"
     assert "registry work task 106.1 is not marked complete" in payload["package_verification"]["issues"]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_duplicate_registry_task_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"].append(
+        dict(registry["milestones"][0]["work_tasks"][0])
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "milestone 106 has duplicate registry work task 106.1 rows"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 

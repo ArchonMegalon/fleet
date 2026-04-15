@@ -379,17 +379,31 @@ def _dependency_posture(registry: Dict[str, Any], milestone: Dict[str, Any]) -> 
 
 
 def _find_queue_item(queue: Dict[str, Any]) -> Dict[str, Any]:
-    for row in queue.get("items") or []:
-        if isinstance(row, dict) and str(row.get("package_id") or "").strip() == PACKAGE_ID:
-            return row
-    return {}
+    matches = _find_queue_items(queue)
+    return matches[0] if matches else {}
+
+
+def _find_queue_items(queue: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in queue.get("items") or []
+        if isinstance(row, dict) and str(row.get("package_id") or "").strip() == PACKAGE_ID
+    ]
 
 
 def _find_registry_work_task(milestone: Dict[str, Any], task_id: str) -> Dict[str, Any]:
-    for row in milestone.get("work_tasks") or []:
-        if isinstance(row, dict) and str(row.get("id") or "").strip() == task_id:
-            return row
-    return {}
+    matches = _find_registry_work_tasks(milestone, task_id)
+    return matches[0] if matches else {}
+
+
+def _find_registry_work_tasks(
+    milestone: Dict[str, Any], task_id: str
+) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in milestone.get("work_tasks") or []
+        if isinstance(row, dict) and str(row.get("id") or "").strip() == task_id
+    ]
 
 
 def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
@@ -522,9 +536,14 @@ def verify_package(
 ) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
     wave = _find_wave(registry)
+    design_items = _find_queue_items(design_queue)
+    items = _find_queue_items(queue)
     design_item = _find_queue_item(design_queue)
     item = _find_queue_item(queue)
-    registry_work_task = _find_registry_work_task(milestone, "106.1") if milestone else {}
+    registry_work_tasks = (
+        _find_registry_work_tasks(milestone, "106.1") if milestone else []
+    )
+    registry_work_task = registry_work_tasks[0] if registry_work_tasks else {}
     dependency_posture = _dependency_posture(registry, milestone) if milestone else {
         "status": "open",
         "dependencies": [],
@@ -549,8 +568,12 @@ def verify_package(
             issues.append("successor registry wave W8 does not include milestone 106")
     if not item:
         issues.append(f"queue item {PACKAGE_ID} is missing from staging queue")
+    elif len(items) > 1:
+        issues.append(f"queue staging has duplicate package rows for {PACKAGE_ID}")
     if not design_item:
         issues.append(f"design queue item {PACKAGE_ID} is missing from canonical staging queue")
+    elif len(design_items) > 1:
+        issues.append(f"design queue staging has duplicate package rows for {PACKAGE_ID}")
     if str(design_queue.get("program_wave") or "").strip() != PROGRAM_WAVE:
         issues.append("design queue staging program_wave is not next_90_day_product_advance")
     if str(design_queue.get("status") or "").strip() != QUEUE_STATUS:
@@ -587,7 +610,9 @@ def verify_package(
             issues.append("milestone 106 no longer names fleet as an owner")
         if not registry_work_task:
             issues.append("fleet registry work task 106.1 is missing from milestone 106")
-        else:
+        if len(registry_work_tasks) > 1:
+            issues.append("milestone 106 has duplicate registry work task 106.1 rows")
+        if registry_work_task:
             if str(registry_work_task.get("owner") or "").strip() != "fleet":
                 issues.append("registry work task 106.1 is no longer owned by fleet")
             if str(registry_work_task.get("status") or "").strip().lower() not in COMPLETE_STATUSES:
