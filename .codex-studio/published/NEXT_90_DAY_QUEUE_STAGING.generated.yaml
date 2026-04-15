@@ -296,6 +296,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit e3612368
       - /docker/chummercomplete/chummer6-ui-finish commit 59926b09
       - /docker/chummercomplete/chummer6-ui-finish commit 4faa2339
+      - /docker/chummercomplete/chummer6-ui-finish commit 85c79fdd
+      - /docker/chummercomplete/chummer6-ui-finish commit 0bed530b
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
