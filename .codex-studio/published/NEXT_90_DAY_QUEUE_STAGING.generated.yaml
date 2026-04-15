@@ -125,11 +125,13 @@ items:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs
       - /docker/chummercomplete/chummer.run-services commit b39147dc tightens the Hub local release proof guard for package next90-m105-hub-workspace-continuity and frontier 4623636482.
       - /docker/chummercomplete/chummer.run-services commit 5796e220 wires the M105 workspace restore verifier into scripts/ai/verify.sh so standard Hub verification runs the closed-package guard.
+      - /docker/chummercomplete/chummer.run-services commit 80454b41 fail-closes workspace restore proof if landed verifier commits no longer resolve locally.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
       - /docker/chummercomplete/chummer.run-services/tests/test_workspace_restore_receipts.py
+      - /docker/chummercomplete/chummer.run-services/tests/test_workspace_restore_commit_resolution.py
       - python3 scripts/verify_workspace_restore_receipts.py
-      - python3 -m unittest tests/test_workspace_restore_receipts.py
+      - python3 -m unittest tests/test_workspace_restore_receipts.py tests/test_workspace_restore_queue_frontier_guard.py tests/test_workspace_restore_commit_resolution.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "CampaignSpineRestoreReceiptTests|CampaignWorkspaceServerPlaneServiceTests|CampaignOsLocalProofMaterializerTests" --no-restore
     allowed_paths:
       - Chummer.Run.Api
