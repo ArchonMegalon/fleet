@@ -34,6 +34,9 @@ items:
       - /docker/chummercomplete/chummer.run-services commit e6ae11a7 pins the M102 desktop trust guard closure.
       - /docker/chummercomplete/chummer.run-services commit 4c542b50 pins the latest M102 desktop trust closure guard.
       - /docker/chummercomplete/chummer.run-services commit 02bed909 pins the M102 desktop trust closure guard.
+      - /docker/chummercomplete/chummer.run-services commit 2017cdfe requires the latest M102 desktop trust proof guard.
+      - /docker/chummercomplete/chummer.run-services commit 24432002 tightens the current M102 desktop trust proof guard.
+      - /docker/chummercomplete/chummer.run-services commit 4afd6c3e pins the current M102 desktop trust proof floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -285,8 +288,6 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 258fed08 tightens M103 successor queue header proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 6c3c93e9 pins M103 queue-header proof commit.
       - /docker/chummercomplete/chummer6-ui-finish commit 22758a4c pins the latest M103 queue proof guard.
-      - /docker/chummercomplete/chummer6-ui-finish commit fd93bb8a tightens M103 queue mirror proof guard.
-      - /docker/chummercomplete/chummer6-ui-finish commit e9f92d0d pins M103 queue mirror proof guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
