@@ -176,12 +176,27 @@ def verify(args: argparse.Namespace) -> List[str]:
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
+    package_closeout = dict(packet.get("package_closeout") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
     required_resolving_paths = packet_verification.get("required_resolving_proof_paths") or []
     packet_projection = _decision_projection(packet)
     live_projection = _decision_projection(live_payload)
     projection_drift = _projection_drift(live_projection, packet_projection)
     expected_markdown = weekly.render_markdown_packet(live_payload)
+    live_package_closeout = dict(live_payload.get("package_closeout") or {})
+    live_repeat_prevention = dict(live_payload.get("repeat_prevention") or {})
+    dependency_posture = dict(verification.get("dependency_posture") or {})
+    expected_remaining_dependencies = [
+        weekly._coerce_int(dep, -1)
+        for dep in (
+            list(dependency_posture.get("open_dependency_ids") or [])
+            + list(dependency_posture.get("missing_dependency_ids") or [])
+        )
+        if weekly._coerce_int(dep, -1) >= 0
+    ]
+    expected_remaining_siblings = list(
+        live_package_closeout.get("remaining_sibling_work_task_ids") or []
+    )
 
     _require(verification["status"] == "pass", issues, f"live package verification is not pass: {verification['issues']}")
     _require(
@@ -236,6 +251,46 @@ def verify(args: argparse.Namespace) -> List[str]:
         "packet resolving proof anchors no longer resolve: " + ", ".join(missing_resolving_paths),
     )
     _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
+    _require(
+        package_closeout.get("status") == "fleet_package_complete",
+        issues,
+        "package closeout is not fleet_package_complete",
+    )
+    _require(
+        package_closeout.get("do_not_reopen_package") is True,
+        issues,
+        "package closeout no longer marks this Fleet slice do-not-reopen",
+    )
+    _require(
+        package_closeout.get("remaining_milestone_dependency_ids") == expected_remaining_dependencies,
+        issues,
+        "package closeout remaining dependency list no longer matches live successor registry posture",
+    )
+    _require(
+        repeat_prevention.get("remaining_dependency_ids") == expected_remaining_dependencies,
+        issues,
+        "repeat prevention remaining dependency list no longer matches live successor registry posture",
+    )
+    _require(
+        repeat_prevention.get("remaining_sibling_work_task_ids") == expected_remaining_siblings,
+        issues,
+        "repeat prevention remaining sibling list no longer matches package closeout posture",
+    )
+    _require(
+        package_closeout.get("remaining_sibling_work_task_ids") == expected_remaining_siblings,
+        issues,
+        "package closeout remaining sibling list no longer matches live successor registry posture",
+    )
+    _require(
+        "route remaining M106 work" in str(repeat_prevention.get("handoff_rule") or ""),
+        issues,
+        "repeat prevention handoff rule no longer routes remaining M106 work away from this closed Fleet slice",
+    )
+    _require(
+        repeat_prevention.get("handoff_rule") == live_repeat_prevention.get("handoff_rule"),
+        issues,
+        "repeat prevention handoff rule no longer matches the live closeout projection",
+    )
     _require(repeat_prevention.get("status") == "closed_for_fleet_package", issues, "repeat prevention is not closed_for_fleet_package")
     _require(repeat_prevention.get("do_not_reopen_owned_surfaces") is True, issues, "owned surfaces are not protected from reopen")
     _require(

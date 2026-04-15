@@ -981,6 +981,93 @@ def test_verify_next90_m106_governor_packet_rejects_resolving_proof_path_drift(
     assert "packet required_resolving_proof_paths drifted" in verifier.stderr
 
 
+def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["package_closeout"]["status"] = "reopen"
+    packet["package_closeout"]["do_not_reopen_package"] = False
+    packet["package_closeout"]["remaining_milestone_dependency_ids"] = []
+    packet["package_closeout"]["remaining_sibling_work_task_ids"] = []
+    packet["repeat_prevention"]["remaining_dependency_ids"] = []
+    packet["repeat_prevention"]["remaining_sibling_work_task_ids"] = []
+    packet["repeat_prevention"]["handoff_rule"] = "repeat this package on the next shard"
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert "package closeout is not fleet_package_complete" in verifier.stderr
+    assert (
+        "package closeout no longer marks this Fleet slice do-not-reopen"
+        in verifier.stderr
+    )
+    assert (
+        "package closeout remaining dependency list no longer matches live successor registry posture"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention remaining dependency list no longer matches live successor registry posture"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention remaining sibling list no longer matches package closeout posture"
+        in verifier.stderr
+    )
+    assert (
+        "package closeout remaining sibling list no longer matches live successor registry posture"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention handoff rule no longer routes remaining M106 work away from this closed Fleet slice"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention handoff rule no longer matches the live closeout projection"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(
     tmp_path: Path,
 ) -> None:

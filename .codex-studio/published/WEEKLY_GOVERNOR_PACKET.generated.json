@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T14:40:27Z",
+  "generated_at": "2026-04-15T14:47:34Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -488,7 +488,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T14:15:51Z",
+        "generated_at": "2026-04-15T14:46:59Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "state": "present",
