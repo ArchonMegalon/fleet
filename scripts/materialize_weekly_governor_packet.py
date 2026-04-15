@@ -280,6 +280,44 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
     }
 
 
+def verify_source_inputs(
+    *,
+    registry: Dict[str, Any],
+    queue: Dict[str, Any],
+    weekly_pulse: Dict[str, Any],
+    flagship_readiness: Dict[str, Any],
+    journey_gates: Dict[str, Any],
+    support_packets: Dict[str, Any],
+    status_plane: Dict[str, Any],
+) -> Dict[str, Any]:
+    required: Dict[str, tuple[Dict[str, Any], str]] = {
+        "successor_registry": (registry, "program_wave"),
+        "queue_staging": (queue, "items"),
+        "weekly_pulse": (weekly_pulse, "contract_name"),
+        "flagship_readiness": (flagship_readiness, "status"),
+        "journey_gates": (journey_gates, "summary"),
+        "support_packets": (support_packets, "summary"),
+        "status_plane": (status_plane, "whole_product_final_claim_status"),
+    }
+    rows: Dict[str, Dict[str, Any]] = {}
+    issues: List[str] = []
+    for name, (payload, required_key) in required.items():
+        present = bool(payload)
+        has_required_key = bool(payload.get(required_key)) if present else False
+        state = "present" if present and has_required_key else "missing_or_unparseable"
+        rows[name] = {
+            "state": state,
+            "required_key": required_key,
+        }
+        if state != "present":
+            issues.append(f"{name} is missing, empty, unparseable, or lacks {required_key}")
+    return {
+        "status": "pass" if not issues else "fail",
+        "required_inputs": rows,
+        "issues": issues,
+    }
+
+
 def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     summary = dict(support_packets.get("summary") or {})
     return {
@@ -336,6 +374,15 @@ def build_payload(
     verification = verify_package(registry, queue)
     launch_decision = _launch_decision(weekly_pulse)
     weekly_input_health = verify_weekly_inputs(weekly_pulse, launch_decision)
+    source_input_health = verify_source_inputs(
+        registry=registry,
+        queue=queue,
+        weekly_pulse=weekly_pulse,
+        flagship_readiness=flagship_readiness,
+        journey_gates=journey_gates,
+        support_packets=support_packets,
+        status_plane=status_plane,
+    )
     launch_signals = _decision_signal_map(launch_decision)
     supporting = dict(weekly_pulse.get("supporting_signals") or {})
     provider = dict(supporting.get("provider_route_stewardship") or {})
@@ -368,6 +415,7 @@ def build_payload(
     launch_allowed = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
+        and source_input_health["status"] == "pass"
         and dependency_status == "satisfied"
         and readiness_status == "pass"
         and parity_gold_ready
@@ -390,6 +438,7 @@ def build_payload(
     measured_loop_ready = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
+        and source_input_health["status"] == "pass"
         and readiness_status == "pass"
         and parity["release_truth_status"] in {"gold_ready", "veteran_ready"}
         and support["open_non_external_packet_count"] == 0
@@ -402,6 +451,7 @@ def build_payload(
         "program_wave": "next_90_day_product_advance",
         "package_verification": verification,
         "weekly_input_health": weekly_input_health,
+        "source_input_health": source_input_health,
         "source_paths": source_paths,
         "truth_inputs": {
             "weekly_pulse_contract": str(weekly_pulse.get("contract_name") or "").strip(),

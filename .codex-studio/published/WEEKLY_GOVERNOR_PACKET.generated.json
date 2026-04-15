@@ -26,7 +26,7 @@
       "state": "armed"
     }
   },
-  "generated_at": "2026-04-15T08:50:26Z",
+  "generated_at": "2026-04-15T09:01:44Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -140,6 +140,40 @@
     }
   ],
   "schema_version": 1,
+  "source_input_health": {
+    "issues": [],
+    "required_inputs": {
+      "flagship_readiness": {
+        "required_key": "status",
+        "state": "present"
+      },
+      "journey_gates": {
+        "required_key": "summary",
+        "state": "present"
+      },
+      "queue_staging": {
+        "required_key": "items",
+        "state": "present"
+      },
+      "status_plane": {
+        "required_key": "whole_product_final_claim_status",
+        "state": "present"
+      },
+      "successor_registry": {
+        "required_key": "program_wave",
+        "state": "present"
+      },
+      "support_packets": {
+        "required_key": "summary",
+        "state": "present"
+      },
+      "weekly_pulse": {
+        "required_key": "contract_name",
+        "state": "present"
+      }
+    },
+    "status": "pass"
+  },
   "source_paths": {
     "flagship_readiness": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",

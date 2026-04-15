@@ -199,6 +199,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["contract_name"] == "fleet.weekly_governor_packet"
     assert payload["package_verification"]["status"] == "pass"
     assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "pass"
+    assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
     assert payload["package_verification"]["registry_dependencies"] == [101, 102, 103, 104, 105]
     assert payload["truth_inputs"]["successor_dependency_status"] == "open"
     assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
@@ -373,7 +375,52 @@ def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["package_verification"]["status"] == "pass"
     assert payload["weekly_input_health"]["status"] == "fail"
+    assert payload["source_input_health"]["status"] == "pass"
     assert "provider_canary_status" in payload["weekly_input_health"]["issues"][0]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_loop_ready_when_required_source_is_missing(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    paths["journeys"].unlink()
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "fail"
+    assert payload["source_input_health"]["required_inputs"]["journey_gates"]["state"] == "missing_or_unparseable"
+    assert "journey_gates" in payload["source_input_health"]["issues"][0]
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
