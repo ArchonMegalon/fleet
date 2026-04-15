@@ -461,6 +461,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit ea689297 pins M104 explain receipt proof floor for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit 5a8e0b2a pins M104 explain receipt guard floor for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit bfd66025 pins M104 explain receipt current guard floor for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit f9607bb8 tightens M104 generated proof hygiene so receipt proof arrays reject worker-unsafe run-helper citations.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
