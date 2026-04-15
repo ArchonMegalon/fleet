@@ -18,7 +18,7 @@
       "state": "active"
     },
     "launch_expand": {
-      "reason": "Hold expansion until readiness, local release proof, canary, closure, and support gates are all green.",
+      "reason": "Hold expansion until readiness, parity, local release proof, canary, closure, and support gates are all green.",
       "state": "blocked"
     },
     "rollback": {
@@ -26,13 +26,14 @@
       "state": "armed"
     }
   },
-  "generated_at": "2026-04-15T08:24:36Z",
+  "generated_at": "2026-04-15T08:40:13Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
       "successor registry and queue item match package authority",
       "weekly pulse cites journey, local release proof, canary, and closure signals",
       "flagship readiness remains green before any launch expansion",
+      "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
       "support packet counts stay clear for non-external closure work"
     ],
     "loop_status": "ready",
@@ -111,6 +112,23 @@
   },
   "truth_inputs": {
     "closure_health_state": "clear",
+    "flagship_parity_release_truth": {
+      "families_below_gold_ready": [],
+      "families_below_task_proven": [],
+      "families_below_veteran_approved": [],
+      "readiness_plane_status": "ready",
+      "registry_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PARITY_REGISTRY.yaml",
+      "registry_present": true,
+      "release_truth_status": "gold_ready",
+      "status_counts": {
+        "documented": 0,
+        "gold_ready": 11,
+        "implemented": 0,
+        "task_proven": 0,
+        "unknown": 0,
+        "veteran_approved": 0
+      }
+    },
     "flagship_readiness_status": "pass",
     "journey_gate_state": "ready",
     "local_release_proof_status": "unknown",
@@ -126,7 +144,7 @@
     "weekly_pulse_version": 3
   },
   "weekly_input_health": {
-    "generated_at": "2026-04-15T08:23:41Z",
+    "generated_at": "2026-04-15T08:25:28Z",
     "issues": [],
     "max_age_seconds": 691200,
     "required_launch_signals": [

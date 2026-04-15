@@ -109,7 +109,32 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
             ],
         },
     )
-    _write_json(readiness, {"status": "pass"})
+    _write_json(
+        readiness,
+        {
+            "status": "pass",
+            "readiness_planes": {
+                "flagship_ready": {
+                    "status": "ready",
+                    "evidence": {
+                        "registry_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PARITY_REGISTRY.yaml",
+                        "registry_present": True,
+                        "status_counts": {
+                            "documented": 0,
+                            "implemented": 0,
+                            "task_proven": 0,
+                            "veteran_approved": 0,
+                            "gold_ready": 11,
+                            "unknown": 0,
+                        },
+                        "families_below_task_proven": [],
+                        "families_below_veteran_approved": [],
+                        "families_below_gold_ready": [],
+                    },
+                }
+            },
+        },
+    )
     _write_json(journeys, {"summary": {"overall_state": "ready"}})
     _write_json(
         support,
@@ -179,6 +204,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["decision_board"]["freeze_launch"]["state"] == "active"
     assert payload["decision_board"]["canary"]["state"] == "accumulating"
     assert payload["decision_board"]["rollback"]["state"] == "armed"
+    assert payload["truth_inputs"]["flagship_parity_release_truth"]["release_truth_status"] == "gold_ready"
+    assert payload["measured_rollout_loop"]["loop_status"] == "ready"
     assert payload["measured_rollout_loop"]["required_decision_actions"] == [
         "launch_expand",
         "freeze_launch",
@@ -279,4 +306,60 @@ def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(
     assert payload["package_verification"]["status"] == "pass"
     assert payload["weekly_input_health"]["status"] == "fail"
     assert "provider_canary_status" in payload["weekly_input_health"]["issues"][0]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_loop_ready_when_parity_truth_drops_below_veteran_ready(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    readiness = json.loads(paths["readiness"].read_text(encoding="utf-8"))
+    evidence = readiness["readiness_planes"]["flagship_ready"]["evidence"]
+    evidence["status_counts"] = {
+        "documented": 1,
+        "implemented": 0,
+        "task_proven": 10,
+        "veteran_approved": 0,
+        "gold_ready": 0,
+        "unknown": 0,
+    }
+    evidence["families_below_task_proven"] = ["settings_and_source_toggles"]
+    evidence["families_below_veteran_approved"] = ["settings_and_source_toggles"]
+    evidence["families_below_gold_ready"] = ["settings_and_source_toggles"]
+    _write_json(paths["readiness"], readiness)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["truth_inputs"]["flagship_parity_release_truth"]["release_truth_status"] == "blocked"
+    assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"

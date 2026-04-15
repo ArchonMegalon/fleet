@@ -239,6 +239,38 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _flagship_parity_summary(flagship_readiness: Dict[str, Any]) -> Dict[str, Any]:
+    planes = dict(flagship_readiness.get("readiness_planes") or {})
+    flagship = dict(planes.get("flagship_ready") or {})
+    evidence = dict(flagship.get("evidence") or {})
+    status_counts = {
+        str(key): _coerce_int(value, 0)
+        for key, value in dict(evidence.get("status_counts") or {}).items()
+    }
+    families_below_task = _norm_list(evidence.get("families_below_task_proven"))
+    families_below_veteran = _norm_list(evidence.get("families_below_veteran_approved"))
+    families_below_gold = _norm_list(evidence.get("families_below_gold_ready"))
+    known_family_count = sum(status_counts.values())
+    if not evidence or not bool(evidence.get("registry_present")) or known_family_count == 0:
+        release_truth_status = "unknown"
+    elif families_below_task or families_below_veteran:
+        release_truth_status = "blocked"
+    elif families_below_gold:
+        release_truth_status = "veteran_ready"
+    else:
+        release_truth_status = "gold_ready"
+    return {
+        "release_truth_status": release_truth_status,
+        "readiness_plane_status": str(flagship.get("status") or "unknown").strip(),
+        "registry_path": str(evidence.get("registry_path") or "").strip(),
+        "registry_present": bool(evidence.get("registry_present")),
+        "status_counts": status_counts,
+        "families_below_task_proven": families_below_task,
+        "families_below_veteran_approved": families_below_veteran,
+        "families_below_gold_ready": families_below_gold,
+    }
+
+
 def build_payload(
     *,
     registry: Dict[str, Any],
@@ -278,10 +310,13 @@ def build_payload(
         or "unknown"
     ).strip()
     readiness_status = str(flagship_readiness.get("status") or "unknown").strip()
+    parity = _flagship_parity_summary(flagship_readiness)
+    parity_gold_ready = parity["release_truth_status"] == "gold_ready"
     launch_allowed = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
         and readiness_status == "pass"
+        and parity_gold_ready
         and journey_state == "ready"
         and local_release_proof == "passed"
         and canary_status == "Canary green on all active lanes"
@@ -298,6 +333,13 @@ def build_payload(
             "ready",
         }
     )
+    measured_loop_ready = (
+        verification["status"] == "pass"
+        and weekly_input_health["status"] == "pass"
+        and readiness_status == "pass"
+        and parity["release_truth_status"] in {"gold_ready", "veteran_ready"}
+        and support["open_non_external_packet_count"] == 0
+    )
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
@@ -311,6 +353,7 @@ def build_payload(
             "weekly_pulse_contract": str(weekly_pulse.get("contract_name") or "").strip(),
             "weekly_pulse_version": _coerce_int(weekly_pulse.get("contract_version"), 0),
             "flagship_readiness_status": readiness_status,
+            "flagship_parity_release_truth": parity,
             "journey_gate_state": journey_state,
             "local_release_proof_status": local_release_proof,
             "provider_canary_status": canary_status,
@@ -323,7 +366,7 @@ def build_payload(
             "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
             "launch_expand": {
                 "state": "allowed" if launch_allowed else "blocked",
-                "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until readiness, local release proof, canary, closure, and support gates are all green.",
+                "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until readiness, parity, local release proof, canary, closure, and support gates are all green.",
             },
             "freeze_launch": {
                 "state": "active" if freeze_active else "available",
@@ -344,9 +387,7 @@ def build_payload(
             },
         },
         "measured_rollout_loop": {
-            "loop_status": "ready"
-            if verification["status"] == "pass" and weekly_input_health["status"] == "pass"
-            else "blocked",
+            "loop_status": "ready" if measured_loop_ready else "blocked",
             "cadence": "weekly",
             "required_decision_actions": [
                 "launch_expand",
@@ -359,6 +400,7 @@ def build_payload(
                 "successor registry and queue item match package authority",
                 "weekly pulse cites journey, local release proof, canary, and closure signals",
                 "flagship readiness remains green before any launch expansion",
+                "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
                 "support packet counts stay clear for non-external closure work",
             ],
         },

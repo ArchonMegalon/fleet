@@ -31,7 +31,7 @@
   },
   "dispatchable_truth_ready": true,
   "lifecycle": "live",
-  "published_at": "2026-04-15T08:25:21Z",
+  "published_at": "2026-04-15T08:40:13Z",
   "schema_version": "2026-03-10.v1",
   "stages": {
     "capacity_compile": true,
