@@ -564,7 +564,7 @@ items:
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-package-closeout.md
       - /docker/EA/feedback/2026-04-15-chummer-governor-packets-successor-guard.md
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-terminal-repeat-prevention.md
-      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=18 failed=0
+      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=19 failed=0
     allowed_paths:
       - skills
       - tests
@@ -624,7 +624,6 @@ items:
       - /docker/chummercomplete/chummer.run-services commit f1ca6c1a pins M107 artifact path guard proof.
       - /docker/chummercomplete/chummer.run-services commit a91ea733 tightens M107 artifact factory receipt refs.
       - /docker/chummercomplete/chummer.run-services commit c31258fa tightens M107 artifact factory proof floor.
-      - /docker/chummercomplete/chummer.run-services commit 45d3d498 tightens M107 artifact factory proof floor.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
