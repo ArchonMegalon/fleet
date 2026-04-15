@@ -22,12 +22,201 @@ fi
 export CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS
 
 common_args=()
+project_config_path="${CHUMMER_DESIGN_SUPERVISOR_PROJECT_CONFIG:-/docker/fleet/config/projects/fleet.yaml}"
+shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-}"
+shard_focus_profile_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_PROFILE_GROUPS:-}"
+shard_focus_text_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS:-}"
+
+load_project_runtime_contract_defaults() {
+  local config_path="${1:-}"
+  if [[ -z "$config_path" || ! -f "$config_path" ]]; then
+    return 0
+  fi
+  python3 - "$config_path" <<'PY'
+import json
+import os
+import shlex
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except Exception:
+    yaml = None
+
+path = Path(sys.argv[1])
+payload = {}
+if yaml is not None:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+contract = {}
+if isinstance(payload, dict):
+    contract = payload.get("supervisor_contract") or payload.get("chummer_design_supervisor") or {}
+runtime_policy = contract.get("runtime_policy") if isinstance(contract, dict) else {}
+if not isinstance(runtime_policy, dict):
+    runtime_policy = {}
+restart_safe_runtime = contract.get("restart_safe_runtime") if isinstance(contract, dict) else {}
+if not isinstance(restart_safe_runtime, dict):
+    restart_safe_runtime = {}
+launcher_defaults = restart_safe_runtime.get("launcher_defaults")
+if not isinstance(launcher_defaults, dict):
+    launcher_defaults = {}
+top_level_resource_policy = contract.get("resource_policy") if isinstance(contract, dict) else {}
+if not isinstance(top_level_resource_policy, dict):
+    top_level_resource_policy = {}
+topology = contract.get("shard_topology") if isinstance(contract, dict) else {}
+configured = topology.get("configured_shards") if isinstance(topology, dict) else []
+if not isinstance(configured, list):
+    configured = []
+
+def list_text(value):
+    if isinstance(value, list):
+        rows = value
+    elif value is None:
+        rows = []
+    else:
+        rows = str(value).replace(";", ",").split(",")
+    return [str(item).strip() for item in rows if str(item).strip()]
+
+def groups_for(key):
+    rows = []
+    for item in configured:
+        if not isinstance(item, dict):
+            rows.append("")
+            continue
+        rows.append(",".join(list_text(item.get(key))))
+    return ";".join(rows)
+
+def scalar(value):
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if value is None:
+        return ""
+    return str(value).strip()
+
+def joined(value):
+    return ",".join(list_text(value))
+
+legacy_resource_policy = runtime_policy.get("resource_policy")
+if not isinstance(legacy_resource_policy, dict):
+    legacy_resource_policy = {}
+
+profiles = top_level_resource_policy.get("operating_profiles")
+if not isinstance(profiles, dict):
+    profiles = {}
+default_profile = scalar(top_level_resource_policy.get("default_operating_profile")) or scalar(
+    legacy_resource_policy.get("operating_profile")
+) or "standard"
+selected_profile = scalar(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_OPERATING_PROFILE")) or default_profile
+selected_resource_profile = profiles.get(selected_profile)
+if not isinstance(selected_resource_profile, dict):
+    selected_resource_profile = profiles.get(default_profile)
+if not isinstance(selected_resource_profile, dict):
+    selected_resource_profile = {}
+resource_profile = {**legacy_resource_policy, **selected_resource_profile}
+
+exports = {
+    "project_contract_shard_focus_profile_groups": groups_for("focus_profile"),
+    "project_contract_shard_owner_groups": groups_for("focus_owner"),
+    "project_contract_shard_focus_text_groups": groups_for("focus_text"),
+    "project_contract_state_root": scalar(launcher_defaults.get("state_root") or runtime_policy.get("state_root")),
+    "project_contract_parallel_shards": scalar(
+        launcher_defaults.get("parallel_shards")
+        or resource_profile.get("max_active_shards")
+        or runtime_policy.get("shard_count")
+    ),
+    "project_contract_clear_lock_on_boot": scalar(
+        launcher_defaults.get("clear_lock_on_boot", runtime_policy.get("clear_lock_on_boot"))
+    ),
+    "project_contract_health_max_age_seconds": scalar(
+        resource_profile.get("health_max_age_seconds") or runtime_policy.get("health_max_age_seconds")
+    ),
+    "project_contract_shard_start_stagger_seconds": scalar(runtime_policy.get("shard_start_stagger_seconds")),
+    "project_contract_frontier_derive_mode": scalar(runtime_policy.get("frontier_derive_mode")),
+    "project_contract_dynamic_account_routing": scalar(runtime_policy.get("dynamic_account_routing")),
+    "project_contract_prefer_full_ea_lanes": scalar(runtime_policy.get("prefer_full_ea_lanes")),
+    "project_contract_pin_account_aliases": scalar(runtime_policy.get("pin_account_aliases")),
+    "project_contract_worker_bin": scalar(runtime_policy.get("worker_bin")),
+    "project_contract_worker_lane": scalar(runtime_policy.get("worker_lane")),
+    "project_contract_worker_model": scalar(runtime_policy.get("worker_model")),
+    "project_contract_fallback_lanes": joined(runtime_policy.get("fallback_lanes")),
+    "project_contract_fallback_models": joined(runtime_policy.get("fallback_models")),
+    "project_contract_operating_profile": scalar(selected_profile),
+    "project_contract_memory_dispatch_reserve_gib": scalar(resource_profile.get("memory_dispatch_reserve_gib")),
+    "project_contract_memory_dispatch_shard_budget_gib": scalar(resource_profile.get("memory_dispatch_shard_budget_gib")),
+    "project_contract_memory_dispatch_warning_available_percent": scalar(
+        resource_profile.get("memory_dispatch_warning_available_percent")
+    ),
+    "project_contract_memory_dispatch_critical_available_percent": scalar(
+        resource_profile.get("memory_dispatch_critical_available_percent")
+    ),
+    "project_contract_memory_dispatch_warning_swap_used_percent": scalar(
+        resource_profile.get("memory_dispatch_warning_swap_used_percent")
+    ),
+    "project_contract_memory_dispatch_critical_swap_used_percent": scalar(
+        resource_profile.get("memory_dispatch_critical_swap_used_percent")
+    ),
+    "project_contract_memory_dispatch_parked_poll_seconds": scalar(
+        top_level_resource_policy.get("memory_dispatch_parked_poll_seconds")
+        or legacy_resource_policy.get("memory_dispatch_parked_poll_seconds")
+    ),
+}
+for key, value in exports.items():
+    print(f"{key}={shlex.quote(value)}")
+PY
+}
+
+apply_env_default() {
+  local name="$1"
+  local value="${2:-}"
+  if [[ -n "${value//[[:space:]]/}" && -z "${!name:-}" ]]; then
+    printf -v "$name" '%s' "$value"
+    export "$name"
+  fi
+}
+
+project_contract_defaults="$(load_project_runtime_contract_defaults "$project_config_path")"
+if [[ -n "$project_contract_defaults" ]]; then
+  eval "$project_contract_defaults"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT "${project_contract_state_root:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS "${project_contract_parallel_shards:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT "${project_contract_clear_lock_on_boot:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS "${project_contract_health_max_age_seconds:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_SHARD_START_STAGGER_SECONDS "${project_contract_shard_start_stagger_seconds:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_FRONTIER_DERIVE_MODE "${project_contract_frontier_derive_mode:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_DYNAMIC_ACCOUNT_ROUTING "${project_contract_dynamic_account_routing:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES "${project_contract_prefer_full_ea_lanes:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_PIN_ACCOUNT_ALIASES "${project_contract_pin_account_aliases:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN "${project_contract_worker_bin:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE "${project_contract_worker_lane:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL "${project_contract_worker_model:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES "${project_contract_fallback_lanes:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS "${project_contract_fallback_models:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_OPERATING_PROFILE "${project_contract_operating_profile:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB "${project_contract_memory_dispatch_reserve_gib:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB "${project_contract_memory_dispatch_shard_budget_gib:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT "${project_contract_memory_dispatch_warning_available_percent:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT "${project_contract_memory_dispatch_critical_available_percent:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT "${project_contract_memory_dispatch_warning_swap_used_percent:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT "${project_contract_memory_dispatch_critical_swap_used_percent:-}"
+  apply_env_default CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_PARKED_POLL_SECONDS "${project_contract_memory_dispatch_parked_poll_seconds:-}"
+  if [[ -z "${shard_focus_profile_groups_raw//[[:space:]]/}" ]]; then
+    shard_focus_profile_groups_raw="${project_contract_shard_focus_profile_groups:-}"
+  fi
+  if [[ -z "${shard_owner_groups_raw//[[:space:]]/}" ]]; then
+    shard_owner_groups_raw="${project_contract_shard_owner_groups:-}"
+  fi
+  if [[ -z "${shard_focus_text_groups_raw//[[:space:]]/}" ]]; then
+    shard_focus_text_groups_raw="${project_contract_shard_focus_text_groups:-}"
+  fi
+fi
+
 state_root_base="${CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT:-}"
 parallel_shards_raw="${CHUMMER_DESIGN_SUPERVISOR_PARALLEL_SHARDS:-1}"
 background_mode="$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_BACKGROUND_MODE:-0}" | tr '[:upper:]' '[:lower:]')"
-shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-}"
+shard_owner_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_OWNER_GROUPS:-${shard_owner_groups_raw:-}}"
+shard_focus_profile_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_PROFILE_GROUPS:-${shard_focus_profile_groups_raw:-}}"
 shard_account_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS:-}"
-shard_focus_text_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS:-}"
+shard_focus_text_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FOCUS_TEXT_GROUPS:-${shard_focus_text_groups_raw:-}}"
 shard_frontier_id_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_FRONTIER_ID_GROUPS:-}"
 shard_worker_bin_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_BINS:-}"
 shard_worker_lane_groups_raw="${CHUMMER_DESIGN_SUPERVISOR_SHARD_WORKER_LANES:-}"
@@ -60,6 +249,38 @@ if [[ ! "$frontier_derive_timeout_seconds" =~ ^[0-9]+$ ]]; then
   frontier_derive_timeout_seconds=15
 fi
 
+case "$(printf '%s' "${CHUMMER_DESIGN_SUPERVISOR_PRINT_RUNTIME_POLICY:-0}" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    printf 'project_config=%s\n' "$project_config_path"
+    printf 'state_root=%s\n' "$state_root_base"
+    printf 'parallel_shards=%s\n' "$parallel_shards"
+    printf 'clear_lock_on_boot=%s\n' "$clear_lock_on_boot"
+    printf 'health_max_age_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS:-}"
+    printf 'operating_profile=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_OPERATING_PROFILE:-}"
+    printf 'memory_dispatch_reserve_gib=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB:-}"
+    printf 'memory_dispatch_shard_budget_gib=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB:-}"
+    printf 'memory_dispatch_warning_available_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT:-}"
+    printf 'memory_dispatch_critical_available_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT:-}"
+    printf 'memory_dispatch_warning_swap_used_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT:-}"
+    printf 'memory_dispatch_critical_swap_used_percent=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT:-}"
+    printf 'memory_dispatch_parked_poll_seconds=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_PARKED_POLL_SECONDS:-}"
+    printf 'dynamic_account_routing=%s\n' "$dynamic_account_routing_mode"
+    printf 'prefer_full_ea_lanes=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_PREFER_FULL_EA_LANES:-}"
+    printf 'pin_account_aliases=%s\n' "$pinned_account_aliases_mode"
+    printf 'worker_bin=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-}"
+    printf 'worker_lane=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}"
+    printf 'worker_model=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL:-}"
+    printf 'fallback_lanes=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_FALLBACK_LANES:-}"
+    printf 'fallback_models=%s\n' "${CHUMMER_DESIGN_SUPERVISOR_FALLBACK_MODELS:-}"
+    printf 'shard_owner_groups=%s\n' "$shard_owner_groups_raw"
+    printf 'shard_focus_profile_groups=%s\n' "$shard_focus_profile_groups_raw"
+    printf 'shard_focus_text_groups=%s\n' "$shard_focus_text_groups_raw"
+    exit 0
+    ;;
+esac
+
+shard_focus_profile_groups_raw="${shard_focus_profile_groups_raw//$'\n'/;}"
+IFS=';' read -r -a shard_focus_profile_groups <<<"$shard_focus_profile_groups_raw"
 shard_owner_groups_raw="${shard_owner_groups_raw//$'\n'/;}"
 IFS=';' read -r -a shard_owner_groups <<<"$shard_owner_groups_raw"
 shard_account_groups_raw="${shard_account_groups_raw//$'\n'/;}"
@@ -262,7 +483,17 @@ for raw_item in sys.argv[2:]:
     parts = item.split("\t")
     while len(parts) < 9:
         parts.append("")
-    name, index, frontier_ids, focus_owner, account_alias, focus_text, worker_bin, worker_lane, worker_model = parts[:9]
+    def looks_like_worker_bin(value: str) -> bool:
+        token = str(value or "").strip().rsplit("/", 1)[-1].lower()
+        return token in {"codex", "codexea"}
+    if len(parts) >= 10:
+        name, index, frontier_ids, focus_profile, focus_owner, account_alias, focus_text, worker_bin, worker_lane, worker_model = parts[:10]
+    elif len(parts) == 9 and (not parts[3].strip() or looks_like_worker_bin(parts[7])):
+        name, index, frontier_ids, focus_profile, focus_owner, account_alias, focus_text, worker_bin, worker_lane = parts[:9]
+        worker_model = ""
+    else:
+        name, index, frontier_ids, focus_owner, account_alias, focus_text, worker_bin, worker_lane, worker_model = parts[:9]
+        focus_profile = ""
     entry = {"name": name.strip()}
     if str(index).strip().isdigit():
         entry["index"] = int(str(index).strip())
@@ -270,6 +501,7 @@ for raw_item in sys.argv[2:]:
     if frontier:
         entry["frontier_ids"] = frontier
     for key, raw_value in (
+        ("focus_profile", focus_profile),
         ("focus_owner", focus_owner),
         ("account_alias", account_alias),
         ("focus_text", focus_text),
@@ -304,13 +536,14 @@ PY
 build_loop_args() {
   local -n dest="$1"
   local shard_index="$2"
-  local shard_group="${3:-}"
-  local shard_accounts="${4:-}"
-  local shard_focus_text="${5:-}"
-  local shard_frontier_ids="${6:-}"
-  local shard_worker_bin="${7:-}"
-  local shard_worker_lane="${8:-}"
-  local shard_worker_model="${9:-}"
+  local shard_focus_profile="${3:-}"
+  local shard_group="${4:-}"
+  local shard_accounts="${5:-}"
+  local shard_focus_text="${6:-}"
+  local shard_frontier_ids="${7:-}"
+  local shard_worker_bin="${8:-}"
+  local shard_worker_lane="${9:-}"
+  local shard_worker_model="${10:-}"
   local effective_worker_bin="${shard_worker_bin:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
   local shard_state_root=""
   IFS='|' read -r shard_worker_lane shard_worker_model <<<"$(resolve_shard_worker_profile "$effective_worker_bin" "$shard_focus_text" "$shard_worker_lane" "$shard_worker_model")"
@@ -328,6 +561,9 @@ build_loop_args() {
   fi
   if [[ -n "$shard_group" ]]; then
     append_split_flags "$1" --focus-owner "$shard_group"
+  fi
+  if [[ -n "$shard_focus_profile" ]]; then
+    append_split_flags "$1" --focus-profile "$shard_focus_profile"
   fi
   if [[ -n "$shard_accounts" ]] && ! use_dynamic_account_routing "$shard_worker_lane" "$shard_worker_model"; then
     append_split_flags "$1" --account-alias "$shard_accounts"
@@ -379,15 +615,15 @@ launch_detached_loop() {
 normalize_shard_worker_model() {
   local shard_worker_lane="${1:-}"
   local shard_worker_model="${2:-}"
-  case "$shard_worker_lane:$shard_worker_model" in
-    core:ea-coder-hard-batch|core:ea-coder-hard|\
-    core_authority:ea-coder-hard-batch|core_authority:ea-coder-hard|\
-    core_booster:ea-coder-hard-batch|core_booster:ea-coder-hard|\
-    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard|\
-    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard|\
-    audit_shard:ea-coder-hard-batch|audit_shard:ea-coder-hard)
-      printf '%s' 'ea-coder-hard'
-      ;;
+	case "$shard_worker_lane:$shard_worker_model" in
+	    core:ea-coder-hard-batch|core:ea-coder-hard|\
+	    core_authority:ea-coder-hard-batch|core_authority:ea-coder-hard|\
+	    core_booster:ea-coder-hard-batch|core_booster:ea-coder-hard|\
+	    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard|\
+	    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard|\
+	    audit_shard:ea-coder-hard-batch|audit_shard:ea-coder-hard)
+	      printf '%s' 'ea-coder-hard-batch'
+	      ;;
     *)
       printf '%s' "$shard_worker_model"
       ;;
@@ -419,11 +655,11 @@ resolve_shard_worker_profile() {
 
   focus_text_lower="$(printf '%s' "$shard_focus_text" | tr '[:upper:]' '[:lower:]')"
 
-  case "$resolved_lane" in
-    core|core_authority|core_booster|core_rescue)
-      if [[ -z "$resolved_model" ]]; then
-        resolved_model="ea-coder-hard"
-      fi
+	  case "$resolved_lane" in
+	    core|core_authority|core_booster|core_rescue)
+	      if [[ -z "$resolved_model" ]]; then
+	        resolved_model="ea-coder-hard-batch"
+	      fi
       resolved_model="$(normalize_shard_worker_model "$resolved_lane" "$resolved_model")"
       printf '%s|%s\n' "$resolved_lane" "$resolved_model"
       return 0
@@ -431,11 +667,11 @@ resolve_shard_worker_profile() {
   esac
 
   case "$resolved_lane" in
-    groundwork|repair|review_shard|audit_shard|survival|easy|jury|review_light)
-      if prefer_full_ea_lanes && [[ "$resolved_lane" =~ ^(repair|survival)$ ]]; then
-        resolved_lane="core"
-        resolved_model="ea-coder-hard"
-      fi
+	    groundwork|repair|review_shard|audit_shard|survival|easy|jury|review_light)
+	      if prefer_full_ea_lanes && [[ "$resolved_lane" =~ ^(repair|survival)$ ]]; then
+	        resolved_lane="core"
+	        resolved_model="ea-coder-hard-batch"
+	      fi
       if [[ "$resolved_lane" == "easy" ]]; then
         resolved_model=""
       fi
@@ -466,20 +702,20 @@ resolve_shard_worker_profile() {
       resolved_lane="survival"
       resolved_model="ea-coder-survival"
       ;;
-    *desktop-exit-gate*|*platform-gates*|*startup-smoke*|*release-gates*|*release-proof*|*flagship-readiness*|*grade-bar*|*materializer*|*proof*)
-      resolved_lane="audit_shard"
-      resolved_model="ea-coder-hard"
-      ;;
-    *visual-similarity*|*parity*)
-      resolved_lane="review_shard"
-      resolved_model="ea-coder-hard"
-      ;;
+	    *desktop-exit-gate*|*platform-gates*|*startup-smoke*|*release-gates*|*release-proof*|*flagship-readiness*|*grade-bar*|*materializer*|*proof*)
+	      resolved_lane="audit_shard"
+	      resolved_model="ea-coder-hard-batch"
+	      ;;
+	    *visual-similarity*|*parity*)
+	      resolved_lane="review_shard"
+	      resolved_model="ea-coder-hard-batch"
+	      ;;
   esac
 
-  if prefer_full_ea_lanes && [[ "$resolved_lane" =~ ^(repair|survival)$ ]]; then
-    resolved_lane="core"
-    resolved_model="ea-coder-hard"
-  fi
+	  if prefer_full_ea_lanes && [[ "$resolved_lane" =~ ^(repair|survival)$ ]]; then
+	    resolved_lane="core"
+	    resolved_model="ea-coder-hard-batch"
+	  fi
 
   resolved_model="$(normalize_shard_worker_model "$resolved_lane" "$resolved_model")"
   printf '%s|%s\n' "$resolved_lane" "$resolved_model"
@@ -577,8 +813,8 @@ filter_shard_passthrough_args passthrough_args "$@"
 
 if (( parallel_shards <= 1 )); then
   args=()
-  write_active_shard_manifest "shard-1"
-  build_loop_args args 1 "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
+  write_active_shard_manifest "shard-1"$'\t'"1"$'\t'"${shard_frontier_id_groups[0]:-}"$'\t'"${shard_focus_profile_groups[0]:-}"$'\t'"${shard_owner_groups[0]:-}"$'\t'"${shard_account_groups[0]:-}"$'\t'"${shard_focus_text_groups[0]:-}"$'\t'"${shard_worker_bins[0]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"$'\t'"${shard_worker_lanes[0]:-}"$'\t'"${shard_worker_models[0]:-}"
+  build_loop_args args 1 "${shard_focus_profile_groups[0]:-}" "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
   if [[ "$background_mode" == "1" || "$background_mode" == "true" || "$background_mode" == "yes" ]]; then
     launch_detached_loop 1 "${passthrough_args[@]}" "${args[@]}"
     sleep 1
@@ -626,7 +862,7 @@ if [[ -n "$state_root_base" ]] && (( parallel_shards > 1 )); then
       normalized_frontier_ids="$(normalize_frontier_fingerprint "$shard_frontier_ids_raw")"
     fi
     preseed_manifest_rows+=(
-      "shard-${shard_index}"$'\t'"${shard_index}"$'\t'"${normalized_frontier_ids}"$'\t'"${shard_owner_groups[$((shard_index - 1))]:-}"$'\t'"${shard_manifest_accounts}"$'\t'"${shard_focus_text_groups[$((shard_index - 1))]:-}"$'\t'"${shard_manifest_worker_bin}"$'\t'"${shard_manifest_worker_lane}"$'\t'"${shard_manifest_worker_model}"
+      "shard-${shard_index}"$'\t'"${shard_index}"$'\t'"${normalized_frontier_ids}"$'\t'"${shard_focus_profile_groups[$((shard_index - 1))]:-}"$'\t'"${shard_owner_groups[$((shard_index - 1))]:-}"$'\t'"${shard_manifest_accounts}"$'\t'"${shard_focus_text_groups[$((shard_index - 1))]:-}"$'\t'"${shard_manifest_worker_bin}"$'\t'"${shard_manifest_worker_lane}"$'\t'"${shard_manifest_worker_model}"
     )
   done
   if (( ${#preseed_manifest_rows[@]} > 0 )); then
@@ -640,11 +876,11 @@ for ((shard_index = 1; shard_index <= parallel_shards; shard_index++)); do
   if [[ -z "${shard_frontier_ids_raw//[[:space:]]/}" ]] && ! frontier_derive_is_forced; then
     shard_frontier_ids_raw="$(published_shard_frontier_ids "$shard_index")"
   fi
-  shard_focus_fingerprint="$(normalize_shard_focus_fingerprint "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE:-}" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}")"
+  shard_focus_fingerprint="$(normalize_shard_focus_fingerprint "${CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE:-},${shard_focus_profile_groups[$((shard_index - 1))]:-}" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}")"
   shard_account_fingerprint="$(normalize_shard_focus_fingerprint "${shard_account_groups[$((shard_index - 1))]:-}")"
   effective_shard_worker_bin="${shard_worker_bins[$((shard_index - 1))]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"
   reset_shard_runtime_state "$shard_index"
-  build_loop_args shard_args "$shard_index" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_account_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}" "$shard_frontier_ids_raw" "${shard_worker_bins[$((shard_index - 1))]:-}" "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}"
+  build_loop_args shard_args "$shard_index" "${shard_focus_profile_groups[$((shard_index - 1))]:-}" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_account_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}" "$shard_frontier_ids_raw" "${shard_worker_bins[$((shard_index - 1))]:-}" "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}"
   frontier_fingerprint=""
   if [[ -n "${shard_frontier_ids_raw//[[:space:]]/}" ]]; then
     frontier_fingerprint="$(normalize_frontier_fingerprint "$shard_frontier_ids_raw")"
@@ -676,13 +912,13 @@ for ((shard_index = 1; shard_index <= parallel_shards; shard_index++)); do
   frontier_fingerprints[$shard_identity_key]="$shard_index"
   active_shard_names+=("shard-${shard_index}")
   active_shard_indexes+=("$shard_index")
-  active_manifest_rows+=("shard-${shard_index}"$'\t'"${shard_index}"$'\t'"${frontier_fingerprint}"$'\t'"${shard_owner_groups[$((shard_index - 1))]:-}"$'\t'"${shard_account_groups[$((shard_index - 1))]:-}"$'\t'"${shard_focus_text_groups[$((shard_index - 1))]:-}"$'\t'"${effective_shard_worker_bin}"$'\t'"${shard_identity_worker_lane}"$'\t'"${normalized_shard_worker_model}")
+  active_manifest_rows+=("shard-${shard_index}"$'\t'"${shard_index}"$'\t'"${frontier_fingerprint}"$'\t'"${shard_focus_profile_groups[$((shard_index - 1))]:-}"$'\t'"${shard_owner_groups[$((shard_index - 1))]:-}"$'\t'"${shard_account_groups[$((shard_index - 1))]:-}"$'\t'"${shard_focus_text_groups[$((shard_index - 1))]:-}"$'\t'"${effective_shard_worker_bin}"$'\t'"${shard_identity_worker_lane}"$'\t'"${normalized_shard_worker_model}")
 done
 
 if (( ${#active_shard_indexes[@]} == 0 )); then
   args=()
-  write_active_shard_manifest "shard-1"
-  build_loop_args args 1 "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
+  write_active_shard_manifest "shard-1"$'\t'"1"$'\t'"${shard_frontier_id_groups[0]:-}"$'\t'"${shard_focus_profile_groups[0]:-}"$'\t'"${shard_owner_groups[0]:-}"$'\t'"${shard_account_groups[0]:-}"$'\t'"${shard_focus_text_groups[0]:-}"$'\t'"${shard_worker_bins[0]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"$'\t'"${shard_worker_lanes[0]:-}"$'\t'"${shard_worker_models[0]:-}"
+  build_loop_args args 1 "${shard_focus_profile_groups[0]:-}" "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
   exec python3 scripts/chummer_design_supervisor.py loop "${passthrough_args[@]}" "${args[@]}"
 fi
 
@@ -693,7 +929,7 @@ for shard_index in "${active_shard_indexes[@]}"; do
     sleep "$shard_start_stagger_seconds"
   fi
   shard_args=()
-  build_loop_args shard_args "$shard_index" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_account_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}" "${shard_frontier_id_groups[$((shard_index - 1))]:-}" "${shard_worker_bins[$((shard_index - 1))]:-}" "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}"
+  build_loop_args shard_args "$shard_index" "${shard_focus_profile_groups[$((shard_index - 1))]:-}" "${shard_owner_groups[$((shard_index - 1))]:-}" "${shard_account_groups[$((shard_index - 1))]:-}" "${shard_focus_text_groups[$((shard_index - 1))]:-}" "${shard_frontier_id_groups[$((shard_index - 1))]:-}" "${shard_worker_bins[$((shard_index - 1))]:-}" "${shard_worker_lanes[$((shard_index - 1))]:-}" "${shard_worker_models[$((shard_index - 1))]:-}"
   if [[ "$background_mode" == "1" || "$background_mode" == "true" || "$background_mode" == "yes" ]]; then
     launch_detached_loop "$shard_index" "${passthrough_args[@]}" "${shard_args[@]}"
     continue

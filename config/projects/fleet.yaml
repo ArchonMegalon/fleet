@@ -3,7 +3,7 @@ lifecycle: live
 dispatch_priority: 260
 path: /docker/fleet
 design_doc: /docker/fleet/README.md
-verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_capacity_plane.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
+verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json && python3 scripts/materialize_proof_orchestration.py --project-config config/projects/fleet.yaml --out .codex-studio/published/PROOF_ORCHESTRATION.generated.json && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py scripts/materialize_proof_orchestration.py && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_materialize_proof_orchestration.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_capacity_plane.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
 feedback_dir: feedback
 state_file: .agent-state.json
 enabled: true
@@ -108,9 +108,504 @@ workflow:
   first_review_required: true
   jury_acceptance_required: true
   core_rescue_after_round: 0
+supervisor_contract:
+  schema_version: 1
+  purpose: Keep Chummer-specific supervisor topology, focus routing, and proof paths in project config instead of launcher-only code or env folklore.
+  scope_roots:
+  - /docker/fleet
+  - /docker/chummercomplete
+  - /docker/fleet/repos
+  - /docker/chummer5a
+  - /docker/EA
+  runtime_policy:
+    source_of_record: config/projects/fleet.yaml
+    restart_safe: true
+    state_root: /docker/fleet/state/chummer_design_supervisor
+    clear_lock_on_boot: true
+    health_max_age_seconds: 900
+    shard_count: 13
+    shard_start_stagger_seconds: 3
+    frontier_derive_mode: auto
+    dynamic_account_routing: auto
+    prefer_full_ea_lanes: true
+    pin_account_aliases: false
+    worker_bin: /docker/fleet/scripts/codex-shims/codexea
+    worker_lane: core
+    worker_model: ea-coder-hard-batch
+    fallback_lanes:
+    - core_rescue
+    fallback_models:
+    - ea-coder-hard-batch
+    - ea-coder-hard
+    resource_policy:
+      operating_profile: standard
+      memory_dispatch_reserve_gib: 2
+      memory_dispatch_shard_budget_gib: 0.28
+      memory_dispatch_warning_available_percent: 10
+      memory_dispatch_critical_available_percent: 6
+      memory_dispatch_warning_swap_used_percent: 75
+      memory_dispatch_critical_swap_used_percent: 90
+      memory_dispatch_parked_poll_seconds: 300
+      health_max_age_seconds: 900
+    queue_posture:
+      source: WORKLIST.md
+      package_queue_source: config/projects/fleet.yaml
+      active_package_statuses:
+      - queued
+      - in_progress
+      - blocked
+      completed_package_statuses:
+      - done
+      stale_completion_receipts_block_closeout: true
+  shard_topology:
+    primary_probe_shard: shard-1
+    configured_shards:
+    - name: shard-1
+      index: 1
+      focus_profile:
+      - top_flagship_grade
+      - whole_project_frontier
+      focus_owner:
+      - fleet
+      - chummer6-design
+      - chummer6-ui
+      focus_text:
+      - flagship-readiness
+      - desktop-client
+      - release-proof
+      - grade-bar
+      - materializer
+    - name: shard-2
+      index: 2
+      focus_owner:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+      focus_text:
+      - desktop
+      - workbench
+      - master index
+      - roster
+      - restore
+    - name: shard-3
+      index: 3
+      focus_owner:
+      - chummer6-hub
+      - chummer6-hub-registry
+      - fleet
+      focus_text:
+      - install
+      - update
+      - recovery
+      - claim
+      - release truth
+    - name: shard-4
+      index: 4
+      focus_owner:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-design
+      focus_text:
+      - sourcebook
+      - settings
+      - custom-data
+      - xml
+      - translator
+    - name: shard-5
+      index: 5
+      focus_owner:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-design
+      focus_text:
+      - import
+      - oracle
+      - chummer5a
+      - hero lab
+      - genesis
+    - name: shard-6
+      index: 6
+      focus_owner:
+      - chummer6-hub
+      - chummer6-ui
+      - chummer6-core
+      focus_text:
+      - campaign
+      - diary
+      - contacts
+      - downtime
+      - aftermath
+    - name: shard-7
+      index: 7
+      focus_owner:
+      - chummer6-hub
+      - chummer6-ui
+      - executive-assistant
+      focus_text:
+      - gm
+      - opposition
+      - roster
+      - prep
+      - event
+    - name: shard-8
+      index: 8
+      focus_owner:
+      - chummer6-mobile
+      - chummer6-hub
+      - chummer6-ui
+      focus_text:
+      - travel
+      - offline
+      - mobile
+      - companion
+      - continuity
+    - name: shard-9
+      index: 9
+      focus_owner:
+      - chummer6-core
+      - chummer6-ui
+      - chummer6-hub
+      focus_text:
+      - build lab
+      - advancement
+      - crew-fit
+      - explain
+      - rule-environment
+    - name: shard-10
+      index: 10
+      focus_owner:
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-hub-registry
+      - chummer6-ui
+      focus_text:
+      - dossier
+      - exchange
+      - replay
+      - recap
+      - export
+    - name: shard-11
+      index: 11
+      focus_owner:
+      - fleet
+      - chummer6-hub
+      - chummer6-design
+      focus_text:
+      - trust
+      - support
+      - pulse
+      - launch
+      - governance
+    - name: shard-12
+      index: 12
+      focus_profile:
+      - top_flagship_grade
+      - whole_project_frontier
+      focus_owner:
+      - fleet
+      - chummer6-design
+      - chummer6-ui
+      focus_text:
+      - feedback
+      - automatic bugfixing
+      - crash
+      - accessibility
+      - localization
+      - flagship-readiness
+      - desktop-client
+      - release-proof
+      - materializer
+    - name: shard-13
+      index: 13
+      focus_owner:
+      - chummer6-ui
+      - chummer6-hub
+      - fleet
+      focus_text:
+      - utility
+      - dice
+      - initiative
+      - dashboard
+      - operator
+  focus_profiles:
+    top_flagship_grade:
+      description: "Apply the hard flagship bar: whole-product frontier, no lowered standards, durable feedback/autofix readiness, and fail-closed desktop proof."
+      owners: []
+      texts: []
+    whole_project_frontier:
+      description: Treat the whole product as the active frontier instead of collapsing the bar to one head or one proof family.
+      owners: []
+      texts: []
+    desktop_client:
+      description: Prioritize desktop-client delivery across UI, core, rules, install, restore, and SR4-SR6 readiness.
+      owners:
+      - chummer6-ui
+      - chummer6-core
+      - chummer6-hub
+      - chummer6-ui-kit
+      - chummer6-hub-registry
+      - chummer6-design
+      texts:
+      - desktop
+      - client
+      - workbench
+      - master index
+      - character roster
+      - restore
+      - installer
+      - avalonia
+      - blazor
+  proof_paths:
+    status_plane: /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml
+    progress_report: /docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json
+    progress_history: /docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json
+    support_packets: /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+    journey_gates: /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+    flagship_product_readiness: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+    completion_review_frontier: /docker/fleet/.codex-studio/published/COMPLETION_REVIEW_FRONTIER.generated.yaml
+    external_proof_runbook: /docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md
+    proof_orchestration: /docker/fleet/.codex-studio/published/PROOF_ORCHESTRATION.generated.json
+    ui_linux_desktop_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+    ui_desktop_executable_exit_gate: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+  restart_safe_runtime:
+    canonical_config_surface: /docker/fleet/config/projects/fleet.yaml
+    documented_at: /docker/fleet/docs/restart-safe-runtime-configuration.md
+    runtime_env_overlays:
+    - /docker/fleet/runtime.ea.env
+    - /docker/fleet/runtime.env
+    launcher_defaults:
+      parallel_shards: 13
+      state_root: /docker/fleet/state/chummer_design_supervisor
+      clear_lock_on_boot: true
+    generated_state:
+      active_shards_manifest: /docker/fleet/state/chummer_design_supervisor/active_shards.json
+      aggregate_state: /docker/fleet/state/chummer_design_supervisor/state.json
+      account_runtime: /docker/fleet/state/chummer_design_supervisor/account_runtime.json
+    cold_restart_validation:
+      command: docker compose -f /docker/fleet/docker-compose.yml up -d --force-recreate fleet-design-supervisor
+      expected:
+      - active_shards.json is regenerated from supervisor_contract.shard_topology and launcher defaults.
+      - host_memory_pressure reports the resource_policy-selected operating profile.
+      - repo_backlog_audit has no active WL-305 queue item after this closeout.
+  resource_policy:
+    default_operating_profile: standard
+    memory_dispatch_parked_poll_seconds: 300
+    operating_profiles:
+      maintenance:
+        description: Conservative keepalive mode for proof refresh, unblock checks, and low-pressure maintenance.
+        max_active_shards: 3
+        memory_dispatch_reserve_gib: 8.0
+        memory_dispatch_shard_budget_gib: 2.0
+        memory_dispatch_warning_available_percent: 20.0
+        memory_dispatch_critical_available_percent: 12.0
+        memory_dispatch_warning_swap_used_percent: 60.0
+        memory_dispatch_critical_swap_used_percent: 80.0
+        promotion_rule: promote only when host memory is ok and the operator explicitly selects standard or burst
+        demotion_rule: demote here when memory is critical, credits are guarded, or external providers are unstable
+      standard:
+        description: Default steady-state mode for closeout plus successor-wave work without exhausting host headroom.
+        max_active_shards: 13
+        memory_dispatch_reserve_gib: 2.0
+        memory_dispatch_shard_budget_gib: 0.28
+        memory_dispatch_warning_available_percent: 10.0
+        memory_dispatch_critical_available_percent: 6.0
+        memory_dispatch_warning_swap_used_percent: 75.0
+        memory_dispatch_critical_swap_used_percent: 90.0
+        promotion_rule: promote to burst only with healthy memory and enough open frontier to keep the wider fleet productive
+        demotion_rule: demote to maintenance when memory pressure or provider instability persists across OODA passes
+      burst:
+        description: Aggressive capacity mode for broad closeout/successor waves when memory and credits are healthy.
+        max_active_shards: 20
+        memory_dispatch_reserve_gib: 2.0
+        memory_dispatch_shard_budget_gib: 1.0
+        memory_dispatch_warning_available_percent: 8.0
+        memory_dispatch_critical_available_percent: 5.0
+        memory_dispatch_warning_swap_used_percent: 90.0
+        memory_dispatch_critical_swap_used_percent: 98.0
+        promotion_rule: enter only when status is unblocked, memory is ok, and active queue breadth exceeds standard capacity
+        demotion_rule: drop back to standard on warning memory pressure, repeated high-demand provider errors, or queue contraction
+  proof_jobs:
+  - id: queue_overlay
+    title: Publish live queue overlay
+    kind: materializer
+    command: python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies: []
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/QUEUE.generated.yaml
+      freshness_window_minutes: 90
+      required: true
+  - id: package_compile_overlay
+    title: Publish package compile overlay
+    kind: materializer
+    command: python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies:
+    - queue_overlay
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/WORKPACKAGES.generated.yaml
+      freshness_window_minutes: 90
+      required: true
+  - id: support_packets
+    title: Materialize support and external proof packets
+    kind: materializer
+    command: python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 3
+      delay_seconds: 15
+      retry_on:
+      - transient_http
+      - transient_io
+    dependencies: []
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+      freshness_window_minutes: 90
+      required: true
+  - id: public_progress
+    title: Materialize public progress and history
+    kind: materializer
+    command: python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies:
+    - support_packets
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json
+      freshness_window_minutes: 90
+      required: true
+    - path: /docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json
+      freshness_window_minutes: 90
+      required: true
+  - id: status_plane
+    title: Materialize fleet status plane
+    kind: materializer
+    command: python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies:
+    - package_compile_overlay
+    - public_progress
+    - support_packets
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml
+      freshness_window_minutes: 90
+      required: true
+  - id: journey_gates
+    title: Materialize golden journey gates
+    kind: gate
+    command: python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies:
+    - status_plane
+    - public_progress
+    - support_packets
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+      freshness_window_minutes: 90
+      required: true
+  - id: flagship_product_readiness
+    title: Materialize flagship product readiness
+    kind: gate
+    command: python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json
+    freshness_window_minutes: 90
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies:
+    - journey_gates
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+      freshness_window_minutes: 90
+      required: true
+      acceptable_statuses:
+      - pass
+      - passed
+      - ready
+  - id: external_proof_runbook
+    title: Materialize external proof runbook
+    kind: parity_proof
+    command: python3 scripts/materialize_external_proof_runbook.py --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands
+    freshness_window_minutes: 1440
+    retry:
+      max_attempts: 2
+      delay_seconds: 15
+      retry_on:
+      - transient_io
+    dependencies:
+    - journey_gates
+    - flagship_product_readiness
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md
+      freshness_window_minutes: 1440
+      required: true
+  - id: ui_linux_desktop_exit_gate
+    title: Verify Linux desktop exit gate freshness
+    kind: external_gate
+    command: ''
+    freshness_window_minutes: 1440
+    retry:
+      max_attempts: 1
+      delay_seconds: 0
+      retry_on: []
+    dependencies:
+    - flagship_product_readiness
+    outputs:
+    - path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json
+      freshness_window_minutes: 1440
+      required: true
+      acceptable_statuses:
+      - pass
+      - passed
+      - ready
+  - id: ui_desktop_executable_exit_gate
+    title: Verify promoted desktop executable exit gate freshness
+    kind: external_gate
+    command: ''
+    freshness_window_minutes: 1440
+    retry:
+      max_attempts: 1
+      delay_seconds: 0
+      retry_on: []
+    dependencies:
+    - flagship_product_readiness
+    outputs:
+    - path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
+      freshness_window_minutes: 1440
+      required: true
+      acceptable_statuses:
+      - pass
+      - passed
+      - ready
 queue:
 - package_id: fleet-postclient-trust-status
   title: Make fleet trust and status publication strictly live-truth so stale aggregate snapshots, poisoned completion receipts, and misleading ETA/currentness states cannot survive into post-client operations.
+  status: done
   package_kind: implementation
   design_owner: fleet-platform
   architecture_sensitive: true
@@ -120,6 +615,7 @@ queue:
   - core_booster
 - package_id: fleet-postclient-project-config-extraction
   title: Extract Chummer-specific shard topology, focus heuristics, proof paths, and owner-group routing out of launcher logic into explicit project configuration contracts.
+  status: done
   package_kind: implementation
   design_owner: fleet-platform
   architecture_sensitive: true
@@ -131,6 +627,7 @@ queue:
   - fleet-postclient-trust-status
 - package_id: fleet-postclient-operating-profiles
   title: Add steady-state fleet operating profiles (`maintenance`, `standard`, `burst`) with explicit shard caps, resource budgets, and safe promotion-demotion rules.
+  status: done
   package_kind: implementation
   design_owner: fleet-platform
   architecture_sensitive: true
@@ -142,6 +639,7 @@ queue:
   - fleet-postclient-trust-status
 - package_id: fleet-postclient-proof-orchestration
   title: Promote executable gates, parity proofs, and flagship-readiness materializers into first-class orchestrated jobs with freshness windows, retries, and dependency edges.
+  status: done
   package_kind: implementation
   design_owner: fleet-platform
   architecture_sensitive: true
@@ -153,6 +651,7 @@ queue:
   - fleet-postclient-project-config-extraction
 - package_id: fleet-postclient-operator-surface
   title: Build a compact operator surface for shard mix, queue health, proof freshness, account health, resource pressure, and blocked milestones.
+  status: done
   package_kind: implementation
   design_owner: fleet-operator-loop
   architecture_sensitive: false
@@ -164,6 +663,7 @@ queue:
   - fleet-postclient-trust-status
 - package_id: fleet-postclient-restart-safe-config
   title: Consolidate restart-safe fleet runtime configuration and validate reboot recovery behavior so policy survives supervisor restarts and host reboots without tribal knowledge.
+  status: done
   package_kind: implementation
   design_owner: fleet-platform
   architecture_sensitive: true
@@ -174,6 +674,7 @@ queue:
   dependencies:
   - fleet-postclient-project-config-extraction
   - fleet-postclient-operating-profiles
+  shipped: Restart-safe runtime policy now lives in supervisor_contract.runtime_policy, the launcher hydrates those defaults, and tests validate cold-start defaults.
 queue_sources:
 - kind: worklist
   path: WORKLIST.md
