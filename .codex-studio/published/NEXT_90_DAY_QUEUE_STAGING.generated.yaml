@@ -400,6 +400,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 28d3e13f tightens M107 artifact factory closeout guard.
       - /docker/chummercomplete/chummer.run-services commit 76b0c410 tightens M107 artifact factory release-bundle output refs.
       - /docker/chummercomplete/chummer.run-services commit e5e2e57f tightens M107 artifact factory telemetry proof guard.
+      - /docker/chummercomplete/chummer.run-services commit f0bdfcb9 tightens M107 artifact factory duplicate queue/package proof guard.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
