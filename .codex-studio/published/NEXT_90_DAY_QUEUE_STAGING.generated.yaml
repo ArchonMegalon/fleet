@@ -172,6 +172,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit a002019a pins the latest M105 workspace proof guard so future shards verify the closed successor package instead of repeating it.
       - /docker/chummercomplete/chummer.run-services commit cb560573 requires the M105 queue proof floor so registry and queue closure cannot regress behind the latest completed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 7c92635e tightens the M105 workspace proof floor so future shards verify the current closed-package guard instead of repeating this completed slice.
+      - /docker/chummercomplete/chummer.run-services commit fcdd1fa5 pins the current M105 workspace proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -198,7 +199,9 @@ items:
     proof:
       - /docker/fleet/scripts/materialize_weekly_governor_packet.py
       - /docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
       - /docker/fleet/tests/test_materialize_weekly_governor_packet.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py
@@ -206,6 +209,7 @@ items:
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
       - verifier rebuilds the decision-critical packet projection from live source inputs
       - forbidden worker proof strings are rejected case-insensitively
+      - no-PYTHONPATH bootstrap guard includes the standalone M106 verifier
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
     allowed_paths:
       - admin
@@ -277,6 +281,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit 5d948b1 pins the latest M101 tuple self-test proof floor into the verifier, proof receipt, and closeout note.
       - /docker/chummercomplete/chummer-hub-registry commit e91fe39 tightens the M101 self-test so completed queue proof fails on wrong successor frontier or non-complete package status.
       - /docker/chummercomplete/chummer-hub-registry commit 1586dfc pins the M101 queue authority guard so future shards verify the completed package proof floor instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit f1d0763 pins the latest M101 queue authority proof so future shards verify the current completed-package floor instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
@@ -359,6 +364,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit d18aa133 pins M104 explain receipt proof anchor for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit 0da2d157 pins M104 explain receipt latest proof anchor for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit f494f32f tightens M104 explain receipt proof anchor for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit 7ddae55e pins the current M104 explain receipt guard for repeat prevention.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
@@ -403,6 +409,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit d220fdb7 pins the M105 restore-continuity current proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 33f5eedd pins the M105 restore-continuity closure verifier to the registry-cited d220fdb7 proof anchor.
       - /docker/chummercomplete/chummer6-ui-finish commit 46729243 pins the registry-cited 33f5eedd closure verifier.
+      - /docker/chummercomplete/chummer6-ui-finish commit 8d577e54 pins the registry-cited 46729243 verifier guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
