@@ -107,6 +107,8 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
         queue,
         {
             "program_wave": "next_90_day_product_advance",
+            "status": "live_parallel_successor",
+            "source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
             "items": [
                 {
                     "title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
@@ -725,6 +727,55 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_wave_drift(t
     assert payload["package_verification"]["status"] == "fail"
     assert "queue staging program_wave is not next_90_day_product_advance" in payload["package_verification"]["issues"]
     assert "queue item wave is not W8" in payload["package_verification"]["issues"]
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_queue_source_drift(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["status"] = "stale"
+    queue["source_registry_path"] = "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "queue staging status is not live_parallel_successor" in payload["package_verification"]["issues"]
+    assert (
+        "queue staging source_registry_path is not the canonical successor registry"
+        in payload["package_verification"]["issues"]
+    )
     assert payload["package_closeout"]["status"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 

@@ -40,6 +40,7 @@ PACKAGE_ID = "next90-m106-fleet-governor-packet"
 MILESTONE_ID = 106
 PROGRAM_WAVE = "next_90_day_product_advance"
 WAVE_ID = "W8"
+QUEUE_STATUS = "live_parallel_successor"
 SUCCESSOR_FRONTIER_IDS = ("2376135131",)
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -310,6 +311,10 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
         issues.append(f"queue item {PACKAGE_ID} is missing from staging queue")
     if str(queue.get("program_wave") or "").strip() != PROGRAM_WAVE:
         issues.append("queue staging program_wave is not next_90_day_product_advance")
+    if str(queue.get("status") or "").strip() != QUEUE_STATUS:
+        issues.append("queue staging status is not live_parallel_successor")
+    if str(queue.get("source_registry_path") or "").strip() != str(SUCCESSOR_REGISTRY):
+        issues.append("queue staging source_registry_path is not the canonical successor registry")
     if item:
         if str(item.get("wave") or "").strip() != WAVE_ID:
             issues.append("queue item wave is not W8")
