@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T16:52:35Z",
+  "generated_at": "2026-04-15T18:53:36Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -618,7 +618,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T16:43:37Z",
+        "generated_at": "2026-04-15T18:52:43Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
