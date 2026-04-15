@@ -64,6 +64,7 @@ items:
   - title: Extract Chummer5a oracle baselines and veteran workflow packs
     task: Capture screenshot baselines, first-minute veteran tasks, and compare artifacts from the Chummer5a oracle repo.
     package_id: next90-m103-ea-parity-lab
+    frontier_id: 4287684466
     milestone_id: 103
     wave: W7
     repo: executive-assistant
