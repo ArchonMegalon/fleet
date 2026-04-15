@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T13:55:57Z",
+  "generated_at": "2026-04-15T14:19:11Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -279,7 +279,15 @@
       "ACTIVE_RUN_HANDOFF.generated.md",
       "run_ooda_design_supervisor_until_quiet",
       "ooda_design_supervisor.py",
-      "TASK_LOCAL_TELEMETRY.generated.json"
+      "TASK_LOCAL_TELEMETRY.generated.json",
+      "operator telemetry",
+      "active-run telemetry",
+      "active-run helper",
+      "active run helper",
+      "--telemetry-answer",
+      "codexea --telemetry",
+      "chummer_design_supervisor.py status",
+      "chummer_design_supervisor.py eta"
     ],
     "issues": [],
     "milestone_id": 106,
@@ -318,6 +326,7 @@
       "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
       "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
       "verifier rebuilds the decision-critical packet projection from live source inputs",
+      "forbidden worker proof strings are rejected case-insensitively",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
     ],
     "required_registry_evidence_markers": [
@@ -330,6 +339,7 @@
       "verify_next90_m106_fleet_governor_packet.py exits 0",
       "tmp_path fixture invocation",
       "decision-critical packet projection",
+      "forbidden worker proof strings",
       "successor frontier 2376135131"
     ],
     "required_resolving_proof_paths": [
@@ -384,7 +394,15 @@
         "ACTIVE_RUN_HANDOFF.generated.md",
         "run_ooda_design_supervisor_until_quiet",
         "ooda_design_supervisor.py",
-        "TASK_LOCAL_TELEMETRY.generated.json"
+        "TASK_LOCAL_TELEMETRY.generated.json",
+        "operator telemetry",
+        "active-run telemetry",
+        "active-run helper",
+        "active run helper",
+        "--telemetry-answer",
+        "codexea --telemetry",
+        "chummer_design_supervisor.py status",
+        "chummer_design_supervisor.py eta"
       ],
       "rule": "Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry or active-run helper commands.",
       "status": "active_run_helpers_forbidden"
@@ -435,6 +453,25 @@
       "queue_staging": {
         "required_key": "items",
         "state": "present"
+      },
+      "source_path_hygiene": {
+        "blocked_markers": [
+          "/var/lib/codex-fleet",
+          "ACTIVE_RUN_HANDOFF.generated.md",
+          "run_ooda_design_supervisor_until_quiet",
+          "ooda_design_supervisor.py",
+          "TASK_LOCAL_TELEMETRY.generated.json",
+          "operator telemetry",
+          "active-run telemetry",
+          "active-run helper",
+          "active run helper",
+          "--telemetry-answer",
+          "codexea --telemetry",
+          "chummer_design_supervisor.py status",
+          "chummer_design_supervisor.py eta"
+        ],
+        "disallowed_source_paths": [],
+        "state": "pass"
       },
       "status_plane": {
         "required_key": "whole_product_final_claim_status",

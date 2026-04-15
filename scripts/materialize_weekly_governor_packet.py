@@ -60,6 +60,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
     "verifier rebuilds the decision-critical packet projection from live source inputs",
+    "forbidden worker proof strings are rejected case-insensitively",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -72,6 +73,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "verify_next90_m106_fleet_governor_packet.py exits 0",
     "tmp_path fixture invocation",
     "decision-critical packet projection",
+    "forbidden worker proof strings",
     "successor frontier 2376135131",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
@@ -85,6 +87,14 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "run_ooda_design_supervisor_until_quiet",
     "ooda_design_supervisor.py",
     "TASK_LOCAL_TELEMETRY.generated.json",
+    "operator telemetry",
+    "active-run telemetry",
+    "active-run helper",
+    "active run helper",
+    "--telemetry-answer",
+    "codexea --telemetry",
+    "chummer_design_supervisor.py status",
+    "chummer_design_supervisor.py eta",
 )
 REQUIRED_LAUNCH_SIGNALS = (
     "journey_gate_state",
@@ -154,8 +164,9 @@ def _norm_list(value: Any) -> List[str]:
 def _disallowed_worker_proof_entries(entries: List[str]) -> List[str]:
     blocked: List[str] = []
     for entry in entries:
+        normalized_entry = entry.lower()
         for marker in DISALLOWED_WORKER_PROOF_COMMAND_MARKERS:
-            if marker in entry:
+            if marker.lower() in normalized_entry:
                 blocked.append(entry)
                 break
     return blocked
@@ -583,6 +594,7 @@ def verify_source_inputs(
     journey_gates: Dict[str, Any],
     support_packets: Dict[str, Any],
     status_plane: Dict[str, Any],
+    source_paths: Dict[str, str],
 ) -> Dict[str, Any]:
     required: Dict[str, tuple[Dict[str, Any], str]] = {
         "successor_registry": (registry, "program_wave"),
@@ -615,6 +627,20 @@ def verify_source_inputs(
         issues.append(
             "support_packets successor_package_verification.status is not pass; "
             "weekly governor support truth must be backed by the M102 receipt-gated package proof"
+        )
+    disallowed_source_paths = _disallowed_worker_proof_entries(
+        [f"{name}: {path}" for name, path in sorted(dict(source_paths or {}).items())]
+    )
+    rows["source_path_hygiene"] = {
+        "state": "pass" if not disallowed_source_paths else "fail",
+        "blocked_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
+        "disallowed_source_paths": disallowed_source_paths,
+    }
+    if disallowed_source_paths:
+        issues.append(
+            "weekly governor source paths include active-run or operator-helper evidence "
+            "that worker packets must not cite: "
+            + ", ".join(disallowed_source_paths)
         )
     return {
         "status": "pass" if not issues else "fail",
@@ -783,6 +809,7 @@ def build_payload(
         journey_gates=journey_gates,
         support_packets=support_packets,
         status_plane=status_plane,
+        source_paths=source_paths,
     )
     launch_signals = _decision_signal_map(launch_decision)
     supporting = dict(weekly_pulse.get("supporting_signals") or {})

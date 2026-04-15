@@ -11,6 +11,21 @@ import yaml
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_weekly_governor_packet.py")
 UTC = dt.timezone.utc
+BLOCKED_WORKER_PROOF_MARKERS = [
+    "/var/lib/codex-fleet",
+    "ACTIVE_RUN_HANDOFF.generated.md",
+    "run_ooda_design_supervisor_until_quiet",
+    "ooda_design_supervisor.py",
+    "TASK_LOCAL_TELEMETRY.generated.json",
+    "operator telemetry",
+    "active-run telemetry",
+    "active-run helper",
+    "active run helper",
+    "--telemetry-answer",
+    "codexea --telemetry",
+    "chummer_design_supervisor.py status",
+    "chummer_design_supervisor.py eta",
+]
 
 
 def _iso_now() -> str:
@@ -84,6 +99,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
+                                "forbidden worker proof strings are rejected case-insensitively.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                             ],
                         },
@@ -135,6 +151,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
+                        "forbidden worker proof strings are rejected case-insensitively",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -381,13 +398,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         payload["repeat_prevention"]["worker_command_guard"]["status"]
         == "active_run_helpers_forbidden"
     )
-    assert payload["repeat_prevention"]["worker_command_guard"]["blocked_markers"] == [
-        "/var/lib/codex-fleet",
-        "ACTIVE_RUN_HANDOFF.generated.md",
-        "run_ooda_design_supervisor_until_quiet",
-        "ooda_design_supervisor.py",
-        "TASK_LOCAL_TELEMETRY.generated.json",
-    ]
+    assert payload["repeat_prevention"]["worker_command_guard"]["blocked_markers"] == BLOCKED_WORKER_PROOF_MARKERS
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "pass"
     assert payload["decision_alignment"]["status"] == "pass"
@@ -446,7 +457,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed successor frontier ids: 2376135131" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
-    assert "- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json" in markdown
+    assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
     assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
     assert "- Queue mirror status: in_sync" in markdown
@@ -1731,13 +1742,7 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence" in issue
         for issue in payload["package_verification"]["issues"]
     )
-    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == [
-        "/var/lib/codex-fleet",
-        "ACTIVE_RUN_HANDOFF.generated.md",
-        "run_ooda_design_supervisor_until_quiet",
-        "ooda_design_supervisor.py",
-        "TASK_LOCAL_TELEMETRY.generated.json",
-    ]
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
 
 
 def test_weekly_governor_packet_rejects_active_run_state_artifact_proof(
@@ -1802,6 +1807,69 @@ def test_weekly_governor_packet_rejects_active_run_state_artifact_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "TASK_LOCAL_TELEMETRY.generated.json" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+
+
+def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append("Operator telemetry says this worker package is complete")
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "codexea --telemetry-answer --json 1min credits"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Operator telemetry says this worker package is complete" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "codexea --telemetry-answer --json 1min credits" in issue
         for issue in payload["package_verification"]["issues"]
     )
 
@@ -1905,6 +1973,69 @@ def test_weekly_governor_packet_blocks_loop_ready_when_required_source_is_missin
     assert payload["source_input_health"]["status"] == "fail"
     assert payload["source_input_health"]["required_inputs"]["journey_gates"]["state"] == "missing_or_unparseable"
     assert "journey_gates" in payload["source_input_health"]["issues"][0]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_loop_ready_when_source_path_cites_active_run_artifact(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    active_run_named_support = (
+        tmp_path
+        / "chummer_design_supervisor"
+        / "shard-6"
+        / "runs"
+        / "20260415T141605Z-shard-6"
+        / "ACTIVE_RUN_HANDOFF.generated.md"
+    )
+    active_run_named_support.parent.mkdir(parents=True, exist_ok=True)
+    active_run_named_support.write_text(paths["support"].read_text(encoding="utf-8"), encoding="utf-8")
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(active_run_named_support),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "fail"
+    assert payload["source_input_health"]["required_inputs"]["support_packets"]["state"] == "present"
+    assert payload["source_input_health"]["required_inputs"]["source_path_hygiene"]["state"] == "fail"
+    assert any(
+        "weekly governor source paths include active-run or operator-helper evidence"
+        in issue
+        and "ACTIVE_RUN_HANDOFF.generated.md" in issue
+        for issue in payload["source_input_health"]["issues"]
+    )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
