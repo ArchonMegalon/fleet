@@ -216,9 +216,16 @@ def _support_packets_payload() -> dict:
             "package_id": "next90-m102-fleet-reporter-receipts",
             "frontier_id": "2454416974",
             "milestone_id": 102,
+            "repo": "fleet",
             "allowed_paths": ["scripts", "tests", ".codex-studio", "feedback"],
             "owned_surfaces": ["feedback_loop_ready:install_receipts", "product_governor:followthrough"],
+            "registry_wave": "W6",
+            "registry_status": "in_progress",
+            "registry_title": "Desktop-native claim, update, rollback, and support followthrough",
+            "registry_dependencies": [101],
             "registry_work_task_status": "complete",
+            "queue_title": "Gate fix followthrough against real install and receipt truth",
+            "queue_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
             "queue_status": "complete",
             "queue_frontier_id": "2454416974",
             "design_queue_source_path": "",
@@ -933,6 +940,52 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_scope_d
                 "feedback_loop_ready:install_receipts",
                 "product_governor:followthrough",
             ],
+        },
+    }
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_assignment_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    payload["successor_package_verification"]["repo"] = "chummer6-hub"
+    payload["successor_package_verification"]["registry_title"] = "Old desktop support loop"
+    payload["successor_package_verification"]["queue_task"] = (
+        "Compile reporter followthrough from queued support state."
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json successor verification closure fields drifted"
+        in result["issues"]
+    )
+    assert result["support_packet_successor_field_mismatches"] == {
+        "queue_task": {
+            "support_packets": "Compile reporter followthrough from queued support state.",
+            "computed_successor_authority": (
+                "Compile feedback, fix-available, please-test, and recovery loops from "
+                "install-aware release receipts instead of queued support state alone."
+            ),
+        },
+        "registry_title": {
+            "support_packets": "Old desktop support loop",
+            "computed_successor_authority": "Desktop-native claim, update, rollback, and support followthrough",
+        },
+        "repo": {
+            "support_packets": "chummer6-hub",
+            "computed_successor_authority": "fleet",
         },
     }
 

@@ -88,6 +88,8 @@ The 2026-04-15 weekly hygiene guard pass now requires `WEEKLY_GOVERNOR_PACKET.ge
 
 The later 2026-04-15 design-source helper proof reporting pass makes design-owned queue-source helper proof a first-class standalone verifier failure, not only a nested successor-authority issue. The generated support-packet verifier receipt must also keep `disallowed_design_queue_source_proof_entries=[]`, so stale generated proof cannot hide a blocked helper command in the design source row.
 
+The later 2026-04-15 generated assignment guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification` must also match the recomputed successor assignment fields: repo, registry wave/status/title/dependencies, queue title/task/status/frontier, allowed paths, owned surfaces, and proof-marker contracts. A stale generated receipt can no longer keep this Fleet M102 package green after the canonical registry or queue retargets the assignment text.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -212,6 +214,9 @@ direct verifier tests passed: design-source helper proof reporting and generated
 direct verifier invocation passed: 25 tests after design-source helper proof reporting
 direct materializer invocation passed: 37 tests after refreshed successor authority fixture proof markers
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py
+python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier invocation passed: 26 tests after generated successor assignment drift became fail-closed
 ```
 
 `python3 -m pytest ...` could not run because this worker image does not have `pytest` installed. The direct invocation above used the repo's existing tmp_path fixture pattern and covered the receipt-gated successor authority, reporter followthrough, recovery, receipt mismatch, installation mismatch, channel mismatch, update-required, and weekly governor projection cases.
