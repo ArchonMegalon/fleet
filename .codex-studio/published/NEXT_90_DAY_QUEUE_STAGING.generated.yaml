@@ -96,6 +96,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit fd15fe87 tightens row-scoped allowed-path authority for src, tests, docs, and scripts.
       - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors; ENGINE_PROOF_PACK.generated.json reports missing_queue_proof_anchors=[].
       - /docker/chummercomplete/chummer-core-engine commit cfc465a5 adds checked-in receipt reproducibility proof for ENGINE_PROOF_PACK.generated.json.
+      - /docker/chummercomplete/chummer-core-engine commit 86040e30 fail-closes unassigned queue allowed paths or owned surfaces for this completed package.
     allowed_paths:
       - src
       - tests
@@ -142,6 +143,7 @@ items:
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
+      - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
     allowed_paths:
       - admin
       - scripts
@@ -190,6 +192,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py
       - /docker/chummercomplete/chummer-hub-registry/scripts/verify_next90_m101_registry_promotion_discipline.py
       - /docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md
+      - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.proof.yaml
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.closeout.md
     allowed_paths:
       - Chummer.Hub.Registry
