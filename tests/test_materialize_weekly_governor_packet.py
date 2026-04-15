@@ -704,6 +704,72 @@ def test_verify_next90_m106_governor_packet_rejects_stale_decision_ledger(
     assert "decision_board" in verifier.stderr
 
 
+def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["repeat_prevention"]["worker_command_guard"]["status"] = "missing"
+    packet["repeat_prevention"]["worker_command_guard"]["blocked_markers"] = []
+    packet["repeat_prevention"]["worker_command_guard"]["rule"] = "proof may cite handoff telemetry"
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "repeat prevention worker command guard is not active_run_helpers_forbidden"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention worker command guard blocked marker list drifted"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention worker command guard rule no longer requires repo-local proof"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(
     tmp_path: Path,
 ) -> None:

@@ -150,6 +150,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     )
     packet_verification = dict(packet.get("package_verification") or {})
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
+    worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
     packet_projection = _decision_projection(packet)
     live_projection = _decision_projection(live_payload)
@@ -188,6 +189,22 @@ def verify(args: argparse.Namespace) -> List[str]:
         repeat_prevention.get("closed_successor_frontier_ids") == [SUCCESSOR_FRONTIER_ID],
         issues,
         "repeat prevention successor frontier pin drifted",
+    )
+    _require(
+        worker_command_guard.get("status") == "active_run_helpers_forbidden",
+        issues,
+        "repeat prevention worker command guard is not active_run_helpers_forbidden",
+    )
+    _require(
+        worker_command_guard.get("blocked_markers")
+        == list(weekly.DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
+        issues,
+        "repeat prevention worker command guard blocked marker list drifted",
+    )
+    _require(
+        "repo-local files" in str(worker_command_guard.get("rule") or ""),
+        issues,
+        "repeat prevention worker command guard rule no longer requires repo-local proof",
     )
     required_packet_markers = packet_verification.get("required_queue_proof_markers") or []
     _require(
