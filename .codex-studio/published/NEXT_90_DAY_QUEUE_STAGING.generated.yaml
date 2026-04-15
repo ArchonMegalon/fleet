@@ -181,8 +181,11 @@ items:
     landed_commit: a4e47da
     proof:
       - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
+      - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json
       - /docker/chummercomplete/chummer-hub-registry/scripts/verify_public_release_channel.py
+      - /docker/chummercomplete/chummer-hub-registry/scripts/verify_next90_m101_registry_promotion_discipline.py
       - /docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md
+      - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.closeout.md
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
