@@ -119,6 +119,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit c88178fa tightens design-owned queue scope proof so canonical allowed-path or owned-surface drift cannot keep M104 passed.
       - /docker/chummercomplete/chummer-core-engine commit 769e7259 pins local commit proof through guard 56048971 so future shards verify the closed package instead of repeating it.
       - /docker/chummercomplete/chummer-core-engine commit d4b3b0ba requires the current 769e7259 guard in the generated proof pack, unit tests, and proof-pack documentation.
+      - /docker/chummercomplete/chummer-core-engine commit a2173476 requires the current d4b3b0ba guard in the generated proof pack, unit tests, and proof-pack documentation.
     allowed_paths:
       - src
       - tests
@@ -176,6 +177,7 @@ items:
       - python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
+      - verifier rebuilds the decision-critical packet projection from live source inputs
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
     allowed_paths:
       - admin
@@ -207,6 +209,7 @@ items:
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
       - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries
+      - generated support-packet proof hygiene requires empty disallowed active-run proof entries
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
       - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
       - design-owned queue source row matches the Fleet completed queue proof assignment
@@ -264,6 +267,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 5d9f1c86 pins M103 queue frontier proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 2bfc7338 pins M103 veteran queue proof anchors.
       - /docker/chummercomplete/chummer6-ui-finish commit 243062ac pins M103 veteran queue proof commit.
+      - /docker/chummercomplete/chummer6-ui-finish commit b8de3f95 tightens the M103 active-run proof guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
