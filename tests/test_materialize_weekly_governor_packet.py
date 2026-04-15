@@ -1075,6 +1075,68 @@ def test_verify_next90_m106_governor_packet_rejects_resolving_proof_path_drift(
     assert "packet required_resolving_proof_paths drifted" in verifier.stderr
 
 
+def test_verify_next90_m106_governor_packet_rejects_compile_manifest_artifact_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    manifest_path = paths["published"] / "compile.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"] = [
+        artifact
+        for artifact in manifest["artifacts"]
+        if artifact != "WEEKLY_GOVERNOR_PACKET.generated.md"
+    ]
+    _write_json(manifest_path, manifest)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "compile manifest does not list weekly governor packet artifact(s): "
+        "WEEKLY_GOVERNOR_PACKET.generated.md"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
     tmp_path: Path,
 ) -> None:

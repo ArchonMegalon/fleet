@@ -123,6 +123,29 @@ def _require_generated_after_source(
         )
 
 
+def _compile_manifest_artifact_issues(
+    *,
+    repo_root: Path,
+    packet_path: Path,
+    markdown_path: Path,
+) -> List[str]:
+    manifest_path = repo_root / ".codex-studio" / "published" / "compile.manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"{manifest_path} is missing or not valid JSON: {exc}"]
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list):
+        return [f"{manifest_path} artifacts must be a list"]
+    artifact_names = {str(item).strip() for item in artifacts if str(item).strip()}
+    missing = [
+        name
+        for name in (packet_path.name, markdown_path.name)
+        if name not in artifact_names
+    ]
+    return missing
+
+
 def verify(args: argparse.Namespace) -> List[str]:
     repo_root = Path(args.repo_root).resolve()
     packet_path = Path(args.packet).resolve()
@@ -252,6 +275,17 @@ def verify(args: argparse.Namespace) -> List[str]:
         not missing_resolving_paths,
         issues,
         "packet resolving proof anchors no longer resolve: " + ", ".join(missing_resolving_paths),
+    )
+    missing_compile_artifacts = _compile_manifest_artifact_issues(
+        repo_root=repo_root,
+        packet_path=packet_path,
+        markdown_path=markdown_path,
+    )
+    _require(
+        not missing_compile_artifacts,
+        issues,
+        "compile manifest does not list weekly governor packet artifact(s): "
+        + ", ".join(missing_compile_artifacts),
     )
     _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
     _require(
