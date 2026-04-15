@@ -90,6 +90,8 @@ The later 2026-04-15 design-source helper proof reporting pass makes design-owne
 
 The later 2026-04-15 generated assignment guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification` must also match the recomputed successor assignment fields: repo, registry wave/status/title/dependencies, queue title/task/status/frontier, allowed paths, owned surfaces, and proof-marker contracts. A stale generated receipt can no longer keep this Fleet M102 package green after the canonical registry or queue retargets the assignment text.
 
+The later 2026-04-15 embedded support timestamp guard pass tightened the standalone verifier so `followthrough_receipt_gates.generated_at` and `reporter_followthrough_plan.generated_at` must match `SUPPORT_CASE_PACKETS.generated.json.generated_at`. A weekly governor packet can no longer summarize a fresh top-level support packet while the embedded receipt-gate or reporter-plan payloads are stale.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -217,6 +219,9 @@ python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py
 python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
 direct verifier invocation passed: 26 tests after generated successor assignment drift became fail-closed
+python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier invocation passed: 27 tests after embedded support receipt-gate and reporter-plan timestamps became fail-closed
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 ```
 
 `python3 -m pytest ...` could not run because this worker image does not have `pytest` installed. The direct invocation above used the repo's existing tmp_path fixture pattern and covered the receipt-gated successor authority, reporter followthrough, recovery, receipt mismatch, installation mismatch, channel mismatch, update-required, and weekly governor projection cases.

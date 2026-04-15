@@ -433,9 +433,27 @@ def verify(
     else:
         issues.append("weekly governor worker command guard is missing")
     support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
+    receipt_gates_generated_at = _parse_iso_utc(receipt_gates.get("generated_at"))
+    reporter_plan_generated_at = _parse_iso_utc(plan.get("generated_at"))
     weekly_generated_at = _parse_iso_utc(weekly.get("generated_at"))
     if not support_generated_at:
         issues.append("SUPPORT_CASE_PACKETS.generated.json generated_at is missing or invalid")
+    if not receipt_gates_generated_at:
+        issues.append("followthrough receipt gates generated_at is missing or invalid")
+    if not reporter_plan_generated_at:
+        issues.append("reporter followthrough plan generated_at is missing or invalid")
+    if (
+        support_generated_at
+        and receipt_gates_generated_at
+        and receipt_gates_generated_at != support_generated_at
+    ):
+        issues.append("followthrough receipt gates generated_at disagrees with support packet")
+    if (
+        support_generated_at
+        and reporter_plan_generated_at
+        and reporter_plan_generated_at != support_generated_at
+    ):
+        issues.append("reporter followthrough plan generated_at disagrees with support packet")
     if not weekly_generated_at:
         issues.append("WEEKLY_GOVERNOR_PACKET.generated.json generated_at is missing or invalid")
     if support_generated_at and weekly_generated_at and weekly_generated_at < support_generated_at:
@@ -543,6 +561,8 @@ def verify(
         "missing_weekly_markdown_labels": missing_markdown_labels,
         "weekly_markdown_count_mismatches": weekly_markdown_count_mismatches,
         "support_packets_generated_at": _normalize_text(support_packets.get("generated_at")),
+        "followthrough_receipt_gates_generated_at": _normalize_text(receipt_gates.get("generated_at")),
+        "reporter_followthrough_plan_generated_at": _normalize_text(plan.get("generated_at")),
         "weekly_governor_packet_generated_at": _normalize_text(weekly.get("generated_at")),
         "weekly_governor_markdown_generated_at": markdown_generated_at,
         "issues": issues,

@@ -166,6 +166,7 @@ def _support_packets_payload() -> dict:
         "followthrough_receipt_gates": {
             "package_id": "next90-m102-fleet-reporter-receipts",
             "milestone_id": 102,
+            "generated_at": "2026-04-15T14:11:15Z",
             "source_rule": (
                 "Fix-available, please-test, and recovery followthrough may leave hold only when install truth, "
                 "installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, "
@@ -197,6 +198,7 @@ def _support_packets_payload() -> dict:
         },
         "reporter_followthrough_plan": {
             "package_id": "next90-m102-fleet-reporter-receipts",
+            "generated_at": "2026-04-15T14:11:15Z",
             "source_rule": (
                 "Reporter followthrough is compiled from support packets only after install truth, "
                 "installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, "
@@ -1129,6 +1131,32 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_weekly_packet(
     assert "weekly governor packet predates support-packet receipt gates" in result["issues"]
     assert result["support_packets_generated_at"] == "2026-04-15T14:11:15Z"
     assert result["weekly_governor_packet_generated_at"] == "2026-04-15T14:00:00Z"
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_embedded_support_timestamps(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    support_payload = _support_packets_payload()
+    support_payload["followthrough_receipt_gates"]["generated_at"] = "2026-04-15T14:00:00Z"
+    support_payload["reporter_followthrough_plan"]["generated_at"] = "2026-04-15T14:10:00Z"
+    _write_json(support, support_payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "followthrough receipt gates generated_at disagrees with support packet" in result["issues"]
+    assert "reporter followthrough plan generated_at disagrees with support packet" in result["issues"]
+    assert result["support_packets_generated_at"] == "2026-04-15T14:11:15Z"
+    assert result["followthrough_receipt_gates_generated_at"] == "2026-04-15T14:00:00Z"
+    assert result["reporter_followthrough_plan_generated_at"] == "2026-04-15T14:10:00Z"
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_markdown_count_drift(
