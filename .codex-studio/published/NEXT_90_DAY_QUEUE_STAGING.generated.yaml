@@ -46,6 +46,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M101ReleaseTrainGuardTests.cs
       - /docker/chummercomplete/chummer6-ui-finish commit 5844ad03 pins successor frontier 2450443084 into the completed M101 proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 2e87dce3 tightens M101 verifier against design-owned queue source drift.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -83,6 +84,7 @@ items:
   - title: Build golden oracle suites and release-bound engine proof packs
     task: Land golden oracle coverage and publish engine proof packs with explain and performance budgets for promoted desktop releases.
     package_id: next90-m104-core-proof-pack
+    frontier_id: 3227666051
     milestone_id: 104
     wave: W7
     repo: chummer6-core
@@ -271,6 +273,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 6b2649d2
       - /docker/chummercomplete/chummer6-ui-finish commit 0d1eafbd
       - /docker/chummercomplete/chummer6-ui-finish commit c63bf96f
+      - /docker/chummercomplete/chummer6-ui-finish commit 007e8985
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
