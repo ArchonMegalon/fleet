@@ -106,6 +106,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
                                 "Verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs.",
+                                "Verifier rejects compile manifest freshness drift after weekly packet refresh.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
@@ -166,6 +167,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
                         "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
+                        "verifier rejects compile manifest freshness drift after weekly packet refresh",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
                         "forbidden worker proof strings are rejected case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
@@ -1336,6 +1338,65 @@ def test_verify_next90_m106_governor_packet_rejects_compile_manifest_artifact_dr
     assert (
         "compile manifest does not list weekly governor packet artifact(s): "
         "WEEKLY_GOVERNOR_PACKET.generated.md"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_stale_compile_manifest(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    manifest_path = paths["published"] / "compile.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["published_at"] = "2026-04-14T00:00:00Z"
+    _write_json(manifest_path, manifest)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "compile.manifest.json published_at predates "
+        "WEEKLY_GOVERNOR_PACKET.generated.json; regenerate compile.manifest.json "
+        "after refreshing the weekly governor packet"
         in verifier.stderr
     )
 

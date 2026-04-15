@@ -149,7 +149,22 @@ def _compile_manifest_artifact_issues(
         for name in (packet_path.name, markdown_path.name)
         if name not in artifact_names
     ]
-    return missing
+    issues = list(missing)
+    packet = _read_json(packet_path)
+    manifest_published_at = str(manifest.get("published_at") or "").strip()
+    packet_generated_at = str(packet.get("generated_at") or "").strip()
+    manifest_time = weekly._parse_iso_utc(manifest_published_at)
+    packet_time = weekly._parse_iso_utc(packet_generated_at)
+    if not manifest_time:
+        issues.append("compile.manifest.json published_at is missing or invalid")
+    elif not packet_time:
+        issues.append("WEEKLY_GOVERNOR_PACKET.generated.json generated_at is missing or invalid")
+    elif manifest_time < packet_time:
+        issues.append(
+            "compile.manifest.json published_at predates WEEKLY_GOVERNOR_PACKET.generated.json; "
+            "regenerate compile.manifest.json after refreshing the weekly governor packet"
+        )
+    return issues
 
 
 def verify(args: argparse.Namespace) -> List[str]:
