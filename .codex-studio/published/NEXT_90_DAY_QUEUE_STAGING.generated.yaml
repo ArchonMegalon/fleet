@@ -329,6 +329,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit e88ac6c tightens the M101 guardrail commit self-test so future shards verify the current completed-package floor instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 8391bdb tightens M101 canonical proof hygiene so future shards reject active-run helper evidence in canonical registry and queue authority rows.
       - /docker/chummercomplete/chummer-hub-registry commit 868f85b pins the M101 closeout headline guard so future shards verify the current completed-package proof floor instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit 87cfff0 pins the current M101 registry proof floor so future shards verify the current completed-package proof floor instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
@@ -513,7 +514,7 @@ items:
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-package-closeout.md
       - /docker/EA/feedback/2026-04-15-chummer-governor-packets-successor-guard.md
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-terminal-repeat-prevention.md
-      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=17 failed=0
+      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=18 failed=0
     allowed_paths:
       - skills
       - tests
