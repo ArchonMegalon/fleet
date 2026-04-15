@@ -1,0 +1,140 @@
+{
+  "as_of": "2026-04-15",
+  "contract_name": "fleet.weekly_governor_packet",
+  "decision_board": {
+    "canary": {
+      "next_decision": "Hold broad promotion until public route canary coverage exists.",
+      "reason": "Canary evidence is still accumulating",
+      "state": "accumulating"
+    },
+    "current_launch_action": "freeze_launch",
+    "current_launch_reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+    "focus_shift": {
+      "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
+      "state": "queued_successor_wave"
+    },
+    "freeze_launch": {
+      "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+      "state": "active"
+    },
+    "launch_expand": {
+      "reason": "Hold expansion until readiness, local release proof, canary, closure, and support gates are all green.",
+      "state": "blocked"
+    },
+    "rollback": {
+      "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
+      "state": "armed"
+    }
+  },
+  "generated_at": "2026-04-15T08:24:36Z",
+  "measured_rollout_loop": {
+    "cadence": "weekly",
+    "evidence_requirements": [
+      "successor registry and queue item match package authority",
+      "weekly pulse cites journey, local release proof, canary, and closure signals",
+      "flagship readiness remains green before any launch expansion",
+      "support packet counts stay clear for non-external closure work"
+    ],
+    "loop_status": "ready",
+    "required_decision_actions": [
+      "launch_expand",
+      "freeze_launch",
+      "canary",
+      "rollback",
+      "focus_shift"
+    ]
+  },
+  "package_verification": {
+    "allowed_paths": [
+      "admin",
+      "scripts",
+      "tests",
+      ".codex-studio"
+    ],
+    "issues": [],
+    "milestone_id": 106,
+    "owned_surfaces": [
+      "weekly_governor_packet",
+      "measured_rollout_loop"
+    ],
+    "package_id": "next90-m106-fleet-governor-packet",
+    "queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
+    "queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
+    "registry_dependencies": [
+      101,
+      102,
+      103,
+      104,
+      105
+    ],
+    "registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
+    "registry_status": "in_progress",
+    "repo": "fleet",
+    "status": "pass"
+  },
+  "program_wave": "next_90_day_product_advance",
+  "risk_clusters": [
+    {
+      "cluster_id": "campaign_os_indispensable_and_launch_scale",
+      "source_paths": [
+        "products/chummer/ROADMAP.md",
+        "products/chummer/NEXT_20_BIG_WINS_AFTER_POST_AUDIT_CLOSEOUT_REGISTRY.yaml"
+      ],
+      "summary": "Campaign Breadth and Promotion is the post-post-audit additive pressure cluster: make the campaign OS indispensable, widen Build and Explain, strengthen exchange and publication, and turn trust plus operator depth into launch-scale product posture."
+    },
+    {
+      "cluster_id": "public_release_follow_through",
+      "source_paths": [
+        "products/chummer/PUBLIC_RELEASE_EXPERIENCE.yaml",
+        "products/chummer/FEEDBACK_AND_CRASH_STATUS_MODEL.md"
+      ],
+      "summary": "Downloads, updates, support closure, and channel-aware trust copy now exist as first-party surfaces and must keep moving in lockstep instead of drifting back into separate promises."
+    },
+    {
+      "cluster_id": "long_pole_visibility",
+      "source_paths": [
+        "products/chummer/PROGRESS_REPORT.generated.json",
+        "products/chummer/RELEASE_EVIDENCE_PACK.md"
+      ],
+      "summary": "The current longest pole is Core Engine, so release, support, and publication decisions should assume that this lane still sets the pacing risk for the broader public product."
+    }
+  ],
+  "schema_version": 1,
+  "source_paths": {
+    "flagship_readiness": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+    "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+    "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "status_plane": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+    "successor_registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+    "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
+  },
+  "truth_inputs": {
+    "closure_health_state": "clear",
+    "flagship_readiness_status": "pass",
+    "journey_gate_state": "ready",
+    "local_release_proof_status": "unknown",
+    "provider_canary_status": "Canary evidence is still accumulating",
+    "status_plane_final_claim": "pass",
+    "support_summary": {
+      "closure_waiting_on_release_truth": 0,
+      "open_non_external_packet_count": 0,
+      "open_packet_count": 0,
+      "update_required_misrouted_case_count": 0
+    },
+    "weekly_pulse_contract": "chummer.weekly_product_pulse",
+    "weekly_pulse_version": 3
+  },
+  "weekly_input_health": {
+    "generated_at": "2026-04-15T08:23:41Z",
+    "issues": [],
+    "max_age_seconds": 691200,
+    "required_launch_signals": [
+      "journey_gate_state",
+      "local_release_proof_status",
+      "provider_canary_status",
+      "closure_health_state"
+    ],
+    "status": "pass"
+  }
+}
