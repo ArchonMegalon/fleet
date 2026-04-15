@@ -170,6 +170,16 @@ items:
     milestone_id: 105
     wave: W8
     repo: chummer6-ui
+    status: complete
+    landed_commit: 7bfb3ee5
+    proof:
+      - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M105_UI_RESTORE_CONTINUITY.generated.json
+      - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m105-ui-restore-continuity-check.sh
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
+      - bash scripts/ai/milestones/next90-m105-ui-restore-continuity-check.sh
     allowed_paths:
       - Chummer.Avalonia
       - Chummer.Desktop.Runtime
