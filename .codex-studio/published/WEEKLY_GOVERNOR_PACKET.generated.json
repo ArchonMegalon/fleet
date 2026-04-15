@@ -132,17 +132,19 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T09:29:02Z",
+  "generated_at": "2026-04-15T10:06:23Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
       "successor registry and queue item match package authority",
+      "successor registry work task 106.1 remains complete with weekly governor evidence markers",
       "successor dependency milestones are complete before launch expansion is allowed",
       "weekly pulse cites journey, local release proof, canary, and closure signals",
       "flagship readiness remains green before any launch expansion",
       "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
       "support packet counts stay clear for non-external closure work",
       "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
+      "queue closeout status remains complete and carries the required weekly governor proof receipts",
       "public status copy is derived from the same measured decision ledger as the governor packet"
     ],
     "loop_status": "ready",
@@ -206,6 +208,7 @@
       "measured_rollout_loop"
     ],
     "package_id": "next90-m106-fleet-governor-packet",
+    "queue_status": "complete",
     "queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
     "queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
     "registry_dependencies": [
@@ -217,7 +220,25 @@
     ],
     "registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
     "registry_status": "in_progress",
+    "registry_work_task_owner": "fleet",
+    "registry_work_task_status": "complete",
     "repo": "fleet",
+    "required_queue_proof_markers": [
+      "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+      "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
+      "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+      "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
+      "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+      "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0"
+    ],
+    "required_registry_evidence_markers": [
+      "scripts/materialize_weekly_governor_packet.py",
+      "tests/test_materialize_weekly_governor_packet.py",
+      "WEEKLY_GOVERNOR_PACKET.generated.json",
+      "WEEKLY_GOVERNOR_PACKET.generated.md",
+      "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+      "tmp_path fixture invocation"
+    ],
     "status": "pass"
   },
   "program_wave": "next_90_day_product_advance",

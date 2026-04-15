@@ -42,6 +42,22 @@ OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
+REQUIRED_QUEUE_PROOF_MARKERS = (
+    "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+    "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
+    "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+    "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
+    "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+    "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+)
+REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
+    "scripts/materialize_weekly_governor_packet.py",
+    "tests/test_materialize_weekly_governor_packet.py",
+    "WEEKLY_GOVERNOR_PACKET.generated.json",
+    "WEEKLY_GOVERNOR_PACKET.generated.md",
+    "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+    "tmp_path fixture invocation",
+)
 REQUIRED_LAUNCH_SIGNALS = (
     "journey_gate_state",
     "local_release_proof_status",
@@ -185,9 +201,17 @@ def _find_queue_item(queue: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _find_registry_work_task(milestone: Dict[str, Any], task_id: str) -> Dict[str, Any]:
+    for row in milestone.get("work_tasks") or []:
+        if isinstance(row, dict) and str(row.get("id") or "").strip() == task_id:
+            return row
+    return {}
+
+
 def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
     item = _find_queue_item(queue)
+    registry_work_task = _find_registry_work_task(milestone, "106.1") if milestone else {}
     dependency_posture = _dependency_posture(registry, milestone) if milestone else {
         "status": "open",
         "dependencies": [],
@@ -208,12 +232,43 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
             issues.append("queue item allowed_paths no longer match package authority")
         if _norm_list(item.get("owned_surfaces")) != list(OWNED_SURFACES):
             issues.append("queue item owned_surfaces no longer match package authority")
+        if str(item.get("status") or "").strip().lower() not in COMPLETE_STATUSES:
+            issues.append("queue item is not marked complete in staging queue")
+        proof_entries = _norm_list(item.get("proof"))
+        missing_proof = [
+            marker
+            for marker in REQUIRED_QUEUE_PROOF_MARKERS
+            if marker not in proof_entries
+        ]
+        if missing_proof:
+            issues.append(
+                "queue item proof is missing required weekly governor receipt(s): "
+                + ", ".join(missing_proof)
+            )
     if milestone:
         if str(milestone.get("status") or "").strip() != "in_progress":
             issues.append("milestone 106 is not in_progress in successor registry")
         owners = set(_norm_list(milestone.get("owners")))
         if "fleet" not in owners:
             issues.append("milestone 106 no longer names fleet as an owner")
+        if not registry_work_task:
+            issues.append("fleet registry work task 106.1 is missing from milestone 106")
+        else:
+            if str(registry_work_task.get("owner") or "").strip() != "fleet":
+                issues.append("registry work task 106.1 is no longer owned by fleet")
+            if str(registry_work_task.get("status") or "").strip().lower() not in COMPLETE_STATUSES:
+                issues.append("registry work task 106.1 is not marked complete")
+            evidence_text = "\n".join(_norm_list(registry_work_task.get("evidence")))
+            missing_registry_evidence = [
+                marker
+                for marker in REQUIRED_REGISTRY_EVIDENCE_MARKERS
+                if marker not in evidence_text
+            ]
+            if missing_registry_evidence:
+                issues.append(
+                    "registry work task 106.1 evidence is missing required weekly governor marker(s): "
+                    + ", ".join(missing_registry_evidence)
+                )
     return {
         "status": "pass" if not issues else "fail",
         "package_id": PACKAGE_ID,
@@ -223,14 +278,19 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
         "allowed_paths": list(ALLOWED_PATHS),
         "registry_milestone_title": str(milestone.get("title") or "").strip(),
         "registry_status": str(milestone.get("status") or "").strip(),
+        "registry_work_task_status": str(registry_work_task.get("status") or "").strip(),
+        "registry_work_task_owner": str(registry_work_task.get("owner") or "").strip(),
         "registry_dependencies": [
             _coerce_int(dep, -1)
             for dep in (milestone.get("dependencies") or [])
             if _coerce_int(dep, -1) >= 0
         ],
         "dependency_posture": dependency_posture,
+        "queue_status": str(item.get("status") or "").strip(),
         "queue_title": str(item.get("title") or "").strip(),
         "queue_task": str(item.get("task") or "").strip(),
+        "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),
+        "required_registry_evidence_markers": list(REQUIRED_REGISTRY_EVIDENCE_MARKERS),
         "issues": issues,
     }
 
@@ -674,12 +734,14 @@ def build_payload(
             ],
             "evidence_requirements": [
                 "successor registry and queue item match package authority",
+                "successor registry work task 106.1 remains complete with weekly governor evidence markers",
                 "successor dependency milestones are complete before launch expansion is allowed",
                 "weekly pulse cites journey, local release proof, canary, and closure signals",
                 "flagship readiness remains green before any launch expansion",
                 "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
                 "support packet counts stay clear for non-external closure work",
                 "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
+                "queue closeout status remains complete and carries the required weekly governor proof receipts",
                 "public status copy is derived from the same measured decision ledger as the governor packet",
             ],
         },
@@ -745,6 +807,10 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Weekly input health: {_markdown_status(weekly.get('status'))}",
             f"- Source input health: {_markdown_status(sources.get('status'))}",
             f"- Measured rollout loop: {_markdown_status(loop.get('loop_status'))}",
+            f"- Registry work task 106.1 status: {_markdown_status(verification.get('registry_work_task_status'))}",
+            f"- Required registry evidence markers: {len(verification.get('required_registry_evidence_markers') or [])}",
+            f"- Queue closeout status: {_markdown_status(verification.get('queue_status'))}",
+            f"- Required queue proof markers: {len(verification.get('required_queue_proof_markers') or [])}",
             f"- Successor dependency posture: {_markdown_status(dependency.get('status'))}",
             f"- Open successor dependencies: {_markdown_list(dependency.get('open_dependency_ids'))}",
             f"- Flagship readiness: {_markdown_status(truth.get('flagship_readiness_status'))}",

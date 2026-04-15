@@ -52,6 +52,22 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "status": "in_progress",
                     "owners": ["fleet", "executive-assistant", "chummer6-design", "chummer6-hub"],
                     "dependencies": [101, 102, 103, 104, 105],
+                    "work_tasks": [
+                        {
+                            "id": "106.1",
+                            "owner": "fleet",
+                            "title": "Publish a weekly governor packet with launch, freeze, canary, rollback, and risk-cluster decisions.",
+                            "status": "complete",
+                            "evidence": [
+                                "/docker/fleet/scripts/materialize_weekly_governor_packet.py compiles readiness inputs.",
+                                "/docker/fleet/tests/test_materialize_weekly_governor_packet.py fail-closes drift.",
+                                "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json reports current decisions.",
+                                "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md mirrors the operator packet.",
+                                "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
+                                "Direct tmp_path fixture invocation exits 0.",
+                            ],
+                        }
+                    ],
                 }
             ],
         },
@@ -67,6 +83,15 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "package_id": "next90-m106-fleet-governor-packet",
                     "milestone_id": 106,
                     "repo": "fleet",
+                    "status": "complete",
+                    "proof": [
+                        "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
+                        "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
+                        "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+                        "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
+                        "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+                        "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+                    ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
                     "owned_surfaces": ["weekly_governor_packet", "measured_rollout_loop"],
                 }
@@ -204,6 +229,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.weekly_governor_packet"
     assert payload["package_verification"]["status"] == "pass"
+    assert payload["package_verification"]["registry_work_task_status"] == "complete"
+    assert payload["package_verification"]["queue_status"] == "complete"
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
@@ -241,6 +268,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "## Launch Gate Ledger" in markdown
     assert "| local_release_proof | blocked | passed | unknown |" in markdown
     assert "- Successor dependency posture: open" in markdown
+    assert "- Registry work task 106.1 status: complete" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
     assert "- Reporter followthrough ready: 2" in markdown
     assert "- Fix-available ready: 1" in markdown
@@ -322,6 +350,85 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
     assert payload["public_status_copy"]["state"] == "freeze_launch"
 
 
+def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates_are_green(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"] = [
+        {
+            "id": dep_id,
+            "title": f"Dependency {dep_id}",
+            "status": "complete",
+            "owners": ["fleet"],
+        }
+        for dep_id in (101, 102, 103, 104, 105)
+    ] + registry["milestones"]
+    _write_yaml(paths["registry"], registry)
+    weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    weekly["governor_decisions"][0]["action"] = "launch_expand"
+    weekly["governor_decisions"][0]["reason"] = "All measured gates are green."
+    weekly["governor_decisions"][0]["cited_signals"] = [
+        "journey_gate_state=ready",
+        "journey_gate_blocked_count=0",
+        "local_release_proof_status=passed",
+        "provider_canary_status=Canary green on all active lanes",
+        "closure_health_state=clear",
+    ]
+    weekly["supporting_signals"]["provider_route_stewardship"] = {
+        "canary_status": "Canary green on all active lanes",
+        "next_decision": "Continue weekly launch expansion.",
+    }
+    weekly["supporting_signals"]["adoption_health"] = {"local_release_proof_status": "passed"}
+    _write_json(paths["weekly"], weekly)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["truth_inputs"]["successor_dependency_status"] == "satisfied"
+    assert payload["decision_board"]["current_launch_action"] == "launch_expand"
+    assert payload["decision_board"]["launch_expand"]["state"] == "allowed"
+    assert payload["decision_board"]["freeze_launch"]["state"] == "available"
+    assert payload["decision_board"]["rollback"]["state"] == "armed"
+    assert payload["public_status_copy"]["state"] == "launch_expand_allowed"
+    launch_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
+    }
+    assert all(row["state"] == "pass" for row in launch_gates.values())
+    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(encoding="utf-8")
+    assert "| Launch expand | allowed |" in markdown
+    assert "- Successor dependency posture: satisfied" in markdown
+
+
 def test_weekly_governor_packet_fails_package_verification_on_queue_authority_drift(tmp_path: Path) -> None:
     paths = _fixture_tree(tmp_path)
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
@@ -362,6 +469,198 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["package_verification"]["status"] == "fail"
     assert "queue item allowed_paths no longer match package authority" in payload["package_verification"]["issues"]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_registry_task_is_not_complete(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["status"] = "in_progress"
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "registry work task 106.1 is not marked complete" in payload["package_verification"]["issues"]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_registry_evidence_is_missing(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"] = [
+        evidence
+        for evidence in registry["milestones"][0]["work_tasks"][0]["evidence"]
+        if "WEEKLY_GOVERNOR_PACKET.generated.json" not in evidence
+    ]
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "registry work task 106.1 evidence is missing required weekly governor marker(s): "
+        "WEEKLY_GOVERNOR_PACKET.generated.json"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_queue_not_complete(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["status"] = "in_progress"
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "queue item is not marked complete in staging queue" in payload["package_verification"]["issues"]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_queue_proof_is_missing(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"] = [
+        proof
+        for proof in queue["items"][0]["proof"]
+        if proof != "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md"
+    ]
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "queue item proof is missing required weekly governor receipt(s): "
+        "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md"
+        in payload["package_verification"]["issues"]
+    )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 

@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T09:29:02Z
+Generated: 2026-04-15T10:06:23Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -21,6 +21,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Weekly input health: pass
 - Source input health: pass
 - Measured rollout loop: ready
+- Registry work task 106.1 status: complete
+- Required registry evidence markers: 6
+- Queue closeout status: complete
+- Required queue proof markers: 6
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
 - Flagship readiness: pass
@@ -70,12 +74,14 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 ## Evidence Requirements
 
 - successor registry and queue item match package authority
+- successor registry work task 106.1 remains complete with weekly governor evidence markers
 - successor dependency milestones are complete before launch expansion is allowed
 - weekly pulse cites journey, local release proof, canary, and closure signals
 - flagship readiness remains green before any launch expansion
 - flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions
 - support packet counts stay clear for non-external closure work
 - fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates
+- queue closeout status remains complete and carries the required weekly governor proof receipts
 - public status copy is derived from the same measured decision ledger as the governor packet
 
 ## Risk Clusters
