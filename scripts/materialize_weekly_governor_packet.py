@@ -48,6 +48,7 @@ REQUIRED_LAUNCH_SIGNALS = (
     "provider_canary_status",
     "closure_health_state",
 )
+COMPLETE_STATUSES = {"complete", "closed", "done"}
 
 
 def iso_now() -> str:
@@ -129,6 +130,49 @@ def _find_milestone(registry: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _milestone_index(registry: Dict[str, Any]) -> Dict[int, Dict[str, Any]]:
+    indexed: Dict[int, Dict[str, Any]] = {}
+    for row in registry.get("milestones") or []:
+        if not isinstance(row, dict):
+            continue
+        milestone_id = _coerce_int(row.get("id"), -1)
+        if milestone_id >= 0:
+            indexed[milestone_id] = row
+    return indexed
+
+
+def _dependency_posture(registry: Dict[str, Any], milestone: Dict[str, Any]) -> Dict[str, Any]:
+    indexed = _milestone_index(registry)
+    dependencies = [
+        _coerce_int(dep, -1)
+        for dep in (milestone.get("dependencies") or [])
+        if _coerce_int(dep, -1) >= 0
+    ]
+    rows: List[Dict[str, Any]] = []
+    open_dependencies: List[int] = []
+    missing_dependencies: List[int] = []
+    for dep in dependencies:
+        dep_row = indexed.get(dep) or {}
+        status = str(dep_row.get("status") or "missing").strip()
+        if not dep_row:
+            missing_dependencies.append(dep)
+        elif status.lower() not in COMPLETE_STATUSES:
+            open_dependencies.append(dep)
+        rows.append(
+            {
+                "id": dep,
+                "title": str(dep_row.get("title") or "").strip(),
+                "status": status,
+            }
+        )
+    return {
+        "status": "satisfied" if not open_dependencies and not missing_dependencies else "open",
+        "dependencies": rows,
+        "open_dependency_ids": open_dependencies,
+        "missing_dependency_ids": missing_dependencies,
+    }
+
+
 def _find_queue_item(queue: Dict[str, Any]) -> Dict[str, Any]:
     for row in queue.get("items") or []:
         if isinstance(row, dict) and str(row.get("package_id") or "").strip() == PACKAGE_ID:
@@ -139,6 +183,12 @@ def _find_queue_item(queue: Dict[str, Any]) -> Dict[str, Any]:
 def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
     item = _find_queue_item(queue)
+    dependency_posture = _dependency_posture(registry, milestone) if milestone else {
+        "status": "open",
+        "dependencies": [],
+        "open_dependency_ids": [],
+        "missing_dependency_ids": [],
+    }
     issues: List[str] = []
     if not milestone:
         issues.append(f"milestone {MILESTONE_ID} is missing from successor registry")
@@ -173,6 +223,7 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
             for dep in (milestone.get("dependencies") or [])
             if _coerce_int(dep, -1) >= 0
         ],
+        "dependency_posture": dependency_posture,
         "queue_title": str(item.get("title") or "").strip(),
         "queue_task": str(item.get("task") or "").strip(),
         "issues": issues,
@@ -312,9 +363,12 @@ def build_payload(
     readiness_status = str(flagship_readiness.get("status") or "unknown").strip()
     parity = _flagship_parity_summary(flagship_readiness)
     parity_gold_ready = parity["release_truth_status"] == "gold_ready"
+    dependency_posture = dict(verification.get("dependency_posture") or {})
+    dependency_status = str(dependency_posture.get("status") or "open").strip()
     launch_allowed = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
+        and dependency_status == "satisfied"
         and readiness_status == "pass"
         and parity_gold_ready
         and journey_state == "ready"
@@ -358,6 +412,8 @@ def build_payload(
             "local_release_proof_status": local_release_proof,
             "provider_canary_status": canary_status,
             "closure_health_state": closure_state,
+            "successor_dependency_status": dependency_status,
+            "successor_dependency_posture": dependency_posture,
             "support_summary": support,
             "status_plane_final_claim": str(status_plane.get("whole_product_final_claim_status") or "").strip(),
         },
@@ -366,7 +422,7 @@ def build_payload(
             "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
             "launch_expand": {
                 "state": "allowed" if launch_allowed else "blocked",
-                "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until readiness, parity, local release proof, canary, closure, and support gates are all green.",
+                "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
             },
             "freeze_launch": {
                 "state": "active" if freeze_active else "available",
@@ -398,6 +454,7 @@ def build_payload(
             ],
             "evidence_requirements": [
                 "successor registry and queue item match package authority",
+                "successor dependency milestones are complete before launch expansion is allowed",
                 "weekly pulse cites journey, local release proof, canary, and closure signals",
                 "flagship readiness remains green before any launch expansion",
                 "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",

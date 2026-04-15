@@ -18,7 +18,7 @@
       "state": "active"
     },
     "launch_expand": {
-      "reason": "Hold expansion until readiness, parity, local release proof, canary, closure, and support gates are all green.",
+      "reason": "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
       "state": "blocked"
     },
     "rollback": {
@@ -26,11 +26,12 @@
       "state": "armed"
     }
   },
-  "generated_at": "2026-04-15T08:40:13Z",
+  "generated_at": "2026-04-15T08:50:26Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
       "successor registry and queue item match package authority",
+      "successor dependency milestones are complete before launch expansion is allowed",
       "weekly pulse cites journey, local release proof, canary, and closure signals",
       "flagship readiness remains green before any launch expansion",
       "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
@@ -52,6 +53,44 @@
       "tests",
       ".codex-studio"
     ],
+    "dependency_posture": {
+      "dependencies": [
+        {
+          "id": 101,
+          "status": "in_progress",
+          "title": "Native-host desktop release train and promotion discipline"
+        },
+        {
+          "id": 102,
+          "status": "in_progress",
+          "title": "Desktop-native claim, update, rollback, and support followthrough"
+        },
+        {
+          "id": 103,
+          "status": "in_progress",
+          "title": "Chummer5a parity lab and veteran migration certification"
+        },
+        {
+          "id": 104,
+          "status": "in_progress",
+          "title": "Engine proof pack, explain budgets, and import-oracle discipline"
+        },
+        {
+          "id": 105,
+          "status": "in_progress",
+          "title": "Workspace restore, entitlement sync, and conflict-safe continuity"
+        }
+      ],
+      "missing_dependency_ids": [],
+      "open_dependency_ids": [
+        101,
+        102,
+        103,
+        104,
+        105
+      ],
+      "status": "open"
+    },
     "issues": [],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -134,6 +173,45 @@
     "local_release_proof_status": "unknown",
     "provider_canary_status": "Canary evidence is still accumulating",
     "status_plane_final_claim": "pass",
+    "successor_dependency_posture": {
+      "dependencies": [
+        {
+          "id": 101,
+          "status": "in_progress",
+          "title": "Native-host desktop release train and promotion discipline"
+        },
+        {
+          "id": 102,
+          "status": "in_progress",
+          "title": "Desktop-native claim, update, rollback, and support followthrough"
+        },
+        {
+          "id": 103,
+          "status": "in_progress",
+          "title": "Chummer5a parity lab and veteran migration certification"
+        },
+        {
+          "id": 104,
+          "status": "in_progress",
+          "title": "Engine proof pack, explain budgets, and import-oracle discipline"
+        },
+        {
+          "id": 105,
+          "status": "in_progress",
+          "title": "Workspace restore, entitlement sync, and conflict-safe continuity"
+        }
+      ],
+      "missing_dependency_ids": [],
+      "open_dependency_ids": [
+        101,
+        102,
+        103,
+        104,
+        105
+      ],
+      "status": "open"
+    },
+    "successor_dependency_status": "open",
     "support_summary": {
       "closure_waiting_on_release_truth": 0,
       "open_non_external_packet_count": 0,

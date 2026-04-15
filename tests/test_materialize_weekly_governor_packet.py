@@ -200,6 +200,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["package_verification"]["status"] == "pass"
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["package_verification"]["registry_dependencies"] == [101, 102, 103, 104, 105]
+    assert payload["truth_inputs"]["successor_dependency_status"] == "open"
     assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
     assert payload["decision_board"]["freeze_launch"]["state"] == "active"
     assert payload["decision_board"]["canary"]["state"] == "accumulating"
@@ -215,6 +216,73 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     ]
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
+
+
+def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies_are_open(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    weekly["governor_decisions"][0]["action"] = "launch_expand"
+    weekly["governor_decisions"][0]["reason"] = "Expand launch only when every measured gate is green."
+    weekly["governor_decisions"][0]["cited_signals"] = [
+        "journey_gate_state=ready",
+        "journey_gate_blocked_count=0",
+        "local_release_proof_status=passed",
+        "provider_canary_status=Canary green on all active lanes",
+        "closure_health_state=clear",
+    ]
+    weekly["supporting_signals"]["provider_route_stewardship"] = {
+        "canary_status": "Canary green on all active lanes",
+        "next_decision": "Expand only after dependency closure is canonical.",
+    }
+    weekly["supporting_signals"]["adoption_health"] = {"local_release_proof_status": "passed"}
+    _write_json(paths["weekly"], weekly)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["truth_inputs"]["successor_dependency_status"] == "open"
+    assert payload["truth_inputs"]["successor_dependency_posture"]["missing_dependency_ids"] == [
+        101,
+        102,
+        103,
+        104,
+        105,
+    ]
+    assert payload["decision_board"]["current_launch_action"] == "launch_expand"
+    assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
+    assert "successor dependencies" in payload["decision_board"]["launch_expand"]["reason"]
 
 
 def test_weekly_governor_packet_fails_package_verification_on_queue_authority_drift(tmp_path: Path) -> None:
