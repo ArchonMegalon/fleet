@@ -575,6 +575,77 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
 
 
+def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["package_verification"]["registry_milestone_title"] = "stale title"
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        [
+            sys.executable,
+            "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+            "--repo-root",
+            str(paths["root"]),
+            "--packet",
+            str(out),
+            "--markdown",
+            str(paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "packet package_verification no longer matches live successor registry and queue verification"
+        in verifier.stderr
+    )
+
+
 def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates_are_green(
     tmp_path: Path,
 ) -> None:

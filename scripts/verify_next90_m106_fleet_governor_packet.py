@@ -77,6 +77,11 @@ def verify(args: argparse.Namespace) -> List[str]:
     _require(verification["status"] == "pass", issues, f"live package verification is not pass: {verification['issues']}")
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
     _require(packet.get("status") == "ready", issues, "packet status is not ready")
+    _require(
+        packet_verification == verification,
+        issues,
+        "packet package_verification no longer matches live successor registry and queue verification",
+    )
     _require(packet_verification.get("status") == "pass", issues, "packet package_verification.status is not pass")
     _require(packet_verification.get("issues") == [], issues, "packet package_verification.issues is not empty")
     _require(packet_verification.get("package_id") == PACKAGE_ID, issues, "packet package_id drifted")
