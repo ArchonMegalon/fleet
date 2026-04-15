@@ -79,6 +79,7 @@ items:
       - /docker/EA/docs/chummer5a_parity_lab/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
       - /docker/EA/.codex-studio/published/CHUMMER5A_PARITY_ORACLE_PACK.generated.json
       - python tests/test_chummer5a_parity_lab_pack.py
+      - python tests/test_chummer5a_parity_lab_pack.py exits with ran=15 failed=0 and blocks operator-owned run-helper proof for the closed EA package.
     allowed_paths:
       - skills
       - tests
@@ -154,10 +155,12 @@ items:
     status: complete
     proof:
       - /docker/fleet/scripts/materialize_weekly_governor_packet.py
+      - /docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py
       - /docker/fleet/tests/test_materialize_weekly_governor_packet.py
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
-      - python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
     allowed_paths:
@@ -316,6 +319,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 85c79fdd
       - /docker/chummercomplete/chummer6-ui-finish commit 0bed530b
       - /docker/chummercomplete/chummer6-ui-finish commit b7908ee8 tightens queue frontier-id repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit 1b590dab tightens blocked helper-command proof exclusion.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
