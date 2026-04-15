@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T15:32:15Z",
+  "generated_at": "2026-04-15T15:43:39Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -330,6 +330,9 @@
       "chummer_design_supervisor.py status",
       "chummer_design_supervisor.py eta"
     ],
+    "expected_queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
+    "expected_queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
+    "expected_registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
     "issues": [],
     "milestone_id": 106,
     "owned_surfaces": [

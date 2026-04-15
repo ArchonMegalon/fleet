@@ -41,6 +41,14 @@ JOURNEY_GATES = PUBLISHED / "JOURNEY_GATES.generated.json"
 SUPPORT_PACKETS = PUBLISHED / "SUPPORT_CASE_PACKETS.generated.json"
 STATUS_PLANE = PUBLISHED / "STATUS_PLANE.generated.yaml"
 PACKAGE_ID = "next90-m106-fleet-governor-packet"
+EXPECTED_PACKAGE_TITLE = (
+    "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions"
+)
+EXPECTED_PACKAGE_TASK = (
+    "Turn readiness, parity, support, and rollout truth into a weekly governor packet "
+    "that drives measured product decisions."
+)
+EXPECTED_MILESTONE_TITLE = "Product-governor weekly adoption and measured rollout loop"
 MILESTONE_ID = 106
 PROGRAM_WAVE = "next_90_day_product_advance"
 WAVE_ID = "W8"
@@ -342,6 +350,10 @@ def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
 
 def _queue_authority_issues(item: Dict[str, Any], prefix: str) -> List[str]:
     issues: List[str] = []
+    if str(item.get("title") or "").strip() != EXPECTED_PACKAGE_TITLE:
+        issues.append(f"{prefix} item title no longer matches package authority")
+    if str(item.get("task") or "").strip() != EXPECTED_PACKAGE_TASK:
+        issues.append(f"{prefix} item task no longer matches package authority")
     frontier_id = str(item.get("frontier_id") or "").strip()
     if frontier_id not in SUCCESSOR_FRONTIER_IDS:
         issues.append(f"{prefix} item frontier_id does not match successor frontier 2376135131")
@@ -496,6 +508,8 @@ def verify_package(
             + ", ".join(row["field"] for row in queue_mirror_drift)
         )
     if milestone:
+        if str(milestone.get("title") or "").strip() != EXPECTED_MILESTONE_TITLE:
+            issues.append("milestone 106 title no longer matches package authority")
         if str(milestone.get("status") or "").strip() != "in_progress":
             issues.append("milestone 106 is not in_progress in successor registry")
         owners = set(_norm_list(milestone.get("owners")))
@@ -554,6 +568,7 @@ def verify_package(
         "owned_surfaces": list(OWNED_SURFACES),
         "allowed_paths": list(ALLOWED_PATHS),
         "registry_milestone_title": str(milestone.get("title") or "").strip(),
+        "expected_registry_milestone_title": EXPECTED_MILESTONE_TITLE,
         "registry_status": str(milestone.get("status") or "").strip(),
         "registry_work_task_status": str(registry_work_task.get("status") or "").strip(),
         "registry_work_task_owner": str(registry_work_task.get("owner") or "").strip(),
@@ -572,6 +587,8 @@ def verify_package(
         "queue_source_design_queue_path": str(queue.get("source_design_queue_path") or "").strip(),
         "queue_title": str(item.get("title") or "").strip(),
         "queue_task": str(item.get("task") or "").strip(),
+        "expected_queue_title": EXPECTED_PACKAGE_TITLE,
+        "expected_queue_task": EXPECTED_PACKAGE_TASK,
         "queue_mirror_status": "in_sync" if not queue_mirror_drift else "drift",
         "queue_mirror_drift": queue_mirror_drift,
         "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),

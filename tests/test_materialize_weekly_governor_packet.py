@@ -720,6 +720,68 @@ def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
     )
 
 
+def test_weekly_governor_packet_fails_package_verification_on_package_meaning_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["title"] = "A different milestone"
+    for payload in (design_queue, queue):
+        item = next(
+            row
+            for row in payload["items"]
+            if row["package_id"] == "next90-m106-fleet-governor-packet"
+        )
+        item["title"] = "A different package title"
+        item["task"] = "A different package task."
+    _write_yaml(paths["registry"], registry)
+    _write_yaml(paths["design_queue"], design_queue)
+    _write_yaml(paths["queue"], queue)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "milestone 106 title no longer matches package authority" in payload["package_verification"]["issues"]
+    assert "design queue item title no longer matches package authority" in payload["package_verification"]["issues"]
+    assert "design queue item task no longer matches package authority" in payload["package_verification"]["issues"]
+    assert "queue item title no longer matches package authority" in payload["package_verification"]["issues"]
+    assert "queue item task no longer matches package authority" in payload["package_verification"]["issues"]
+
+
 def test_verify_next90_m106_governor_packet_rejects_stale_decision_ledger(
     tmp_path: Path,
 ) -> None:
