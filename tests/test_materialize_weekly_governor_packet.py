@@ -309,6 +309,9 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     ]
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "pass"
+    assert payload["decision_alignment"]["status"] == "pass"
+    assert payload["decision_alignment"]["expected_action"] == "freeze_launch"
+    assert payload["decision_alignment"]["actual_action"] == "freeze_launch"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
     assert payload["package_verification"]["registry_dependencies"] == [101, 102, 103, 104, 105]
     assert payload["truth_inputs"]["successor_dependency_status"] == "open"
@@ -351,6 +354,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "| local_release_proof | blocked | passed | unknown |" in markdown
     assert "- Successor dependency posture: open" in markdown
     assert "- Package closeout: fleet_package_complete" in markdown
+    assert "- Decision alignment: pass" in markdown
+    assert "| decision_alignment | pass | freeze_launch | freeze_launch |" in markdown
     assert "- Do not reopen package: True" in markdown
     assert "## Repeat Prevention" in markdown
     assert "- Status: closed_for_fleet_package" in markdown
@@ -426,6 +431,13 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["decision_alignment"]["status"] == "fail"
+    assert payload["decision_alignment"]["expected_action"] == "freeze_launch"
+    assert payload["decision_alignment"]["actual_action"] == "launch_expand"
+    assert (
+        "weekly pulse launch action launch_expand does not match measured gate action freeze_launch"
+        in payload["decision_alignment"]["issues"]
+    )
     assert payload["truth_inputs"]["successor_dependency_status"] == "open"
     assert payload["truth_inputs"]["successor_dependency_posture"]["missing_dependency_ids"] == [
         101,
@@ -441,7 +453,9 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
         row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
     }
     assert launch_gates["successor_dependencies"]["state"] == "blocked"
+    assert launch_gates["decision_alignment"]["state"] == "fail"
     assert payload["public_status_copy"]["state"] == "freeze_launch"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
 def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates_are_green(
@@ -509,6 +523,9 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["truth_inputs"]["successor_dependency_status"] == "satisfied"
+    assert payload["decision_alignment"]["status"] == "pass"
+    assert payload["decision_alignment"]["expected_action"] == "launch_expand"
+    assert payload["decision_alignment"]["actual_action"] == "launch_expand"
     assert payload["decision_board"]["current_launch_action"] == "launch_expand"
     assert payload["decision_board"]["launch_expand"]["state"] == "allowed"
     assert payload["decision_board"]["freeze_launch"]["state"] == "available"

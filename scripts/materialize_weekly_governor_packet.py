@@ -622,6 +622,22 @@ def _status_copy(*, launch_allowed: bool, rollback_watch: bool, launch_reason: s
     }
 
 
+def _decision_alignment(actual_action: str, launch_allowed: bool) -> Dict[str, Any]:
+    expected_action = "launch_expand" if launch_allowed else "freeze_launch"
+    action = str(actual_action or "").strip() or "freeze_launch"
+    issues: List[str] = []
+    if action != expected_action:
+        issues.append(
+            f"weekly pulse launch action {action} does not match measured gate action {expected_action}"
+        )
+    return {
+        "status": "pass" if not issues else "fail",
+        "actual_action": action,
+        "expected_action": expected_action,
+        "issues": issues,
+    }
+
+
 def build_payload(
     *,
     repo_root: Path,
@@ -693,6 +709,8 @@ def build_payload(
         and closure_state == "clear"
         and support["open_non_external_packet_count"] == 0
     )
+    launch_action = str(launch_decision.get("action") or "freeze_launch").strip()
+    decision_alignment = _decision_alignment(launch_action, launch_allowed)
     freeze_active = not launch_allowed
     rollback_watch = (
         support["closure_waiting_on_release_truth"] > 0
@@ -721,6 +739,12 @@ def build_payload(
             "pass" if source_input_health["status"] == "pass" else "fail",
             "pass",
             source_input_health["status"],
+        ),
+        _gate_row(
+            "decision_alignment",
+            "pass" if decision_alignment["status"] == "pass" else "fail",
+            decision_alignment["expected_action"],
+            decision_alignment["actual_action"],
         ),
         _gate_row(
             "successor_dependencies",
@@ -794,6 +818,7 @@ def build_payload(
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
         and source_input_health["status"] == "pass"
+        and decision_alignment["status"] == "pass"
         and readiness_status == "pass"
         and parity["release_truth_status"] in {"gold_ready", "veteran_ready"}
         and support["open_non_external_packet_count"] == 0
@@ -843,6 +868,7 @@ def build_payload(
         "package_verification": verification,
         "weekly_input_health": weekly_input_health,
         "source_input_health": source_input_health,
+        "decision_alignment": decision_alignment,
         "source_paths": source_paths,
         "truth_inputs": {
             "weekly_pulse_contract": str(weekly_pulse.get("contract_name") or "").strip(),
@@ -859,7 +885,7 @@ def build_payload(
             "status_plane_final_claim": str(status_plane.get("whole_product_final_claim_status") or "").strip(),
         },
         "decision_board": {
-            "current_launch_action": str(launch_decision.get("action") or "freeze_launch").strip(),
+            "current_launch_action": launch_action,
             "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
             "launch_expand": {
                 "state": "allowed" if launch_allowed else "blocked",
@@ -980,6 +1006,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     weekly = dict(payload.get("weekly_input_health") or {})
     sources = dict(payload.get("source_input_health") or {})
+    decision_alignment = dict(payload.get("decision_alignment") or {})
     support = dict(truth.get("support_summary") or {})
     dependency = dict(truth.get("successor_dependency_posture") or {})
     parity = dict(truth.get("flagship_parity_release_truth") or {})
@@ -1019,6 +1046,9 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Package verification: {_markdown_status(verification.get('status'))}",
             f"- Weekly input health: {_markdown_status(weekly.get('status'))}",
             f"- Source input health: {_markdown_status(sources.get('status'))}",
+            f"- Decision alignment: {_markdown_status(decision_alignment.get('status'))}",
+            f"- Expected launch action: {_markdown_status(decision_alignment.get('expected_action'))}",
+            f"- Actual launch action: {_markdown_status(decision_alignment.get('actual_action'))}",
             f"- Package closeout: {_markdown_status(closeout.get('status'))}",
             f"- Do not reopen package: {bool(closeout.get('do_not_reopen_package'))}",
             f"- Measured rollout loop: {_markdown_status(loop.get('loop_status'))}",

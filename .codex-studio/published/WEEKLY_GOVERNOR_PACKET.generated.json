@@ -1,6 +1,12 @@
 {
   "as_of": "2026-04-15",
   "contract_name": "fleet.weekly_governor_packet",
+  "decision_alignment": {
+    "actual_action": "freeze_launch",
+    "expected_action": "freeze_launch",
+    "issues": [],
+    "status": "pass"
+  },
   "decision_board": {
     "canary": {
       "next_decision": "Hold broad promotion until public route canary coverage exists.",
@@ -60,6 +66,12 @@
         "name": "source_input_health",
         "observed": "pass",
         "required": "pass",
+        "state": "pass"
+      },
+      {
+        "name": "decision_alignment",
+        "observed": "freeze_launch",
+        "required": "freeze_launch",
         "state": "pass"
       },
       {
@@ -132,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T10:43:17Z",
+  "generated_at": "2026-04-15T10:54:15Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
