@@ -263,6 +263,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 54c27661
       - /docker/chummercomplete/chummer6-ui-finish commit 49036853
       - /docker/chummercomplete/chummer6-ui-finish commit c0960ae9
+      - /docker/chummercomplete/chummer6-ui-finish commit 6b2649d2
       - /docker/chummercomplete/chummer6-ui-finish commit 0d1eafbd
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
