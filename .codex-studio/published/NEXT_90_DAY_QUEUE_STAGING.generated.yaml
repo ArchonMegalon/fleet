@@ -8,6 +8,7 @@ items:
   - title: Unify claim, install, update, and support recovery into one desktop-native flow
     task: Remove browser ritual from claim, install, update, rollback, and support continuation for claimed desktop users.
     package_id: next90-m102-hub-desktop-native-trust
+    frontier_id: 2897065929
     milestone_id: 102
     wave: W6
     repo: chummer6-hub
@@ -49,9 +50,9 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 2e87dce3 tightens M101 verifier against design-owned queue source drift.
       - /docker/chummercomplete/chummer6-ui-finish commit c61a8fb5 pins M101 design queue closure tokens into the verifier, receipt, and compliance guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 79760cc1 refreshes the M101 release train receipt after queue closure proof tightening.
-      - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - /docker/chummercomplete/chummer6-ui-finish commit a3bf058e tightens M101 proof commit resolution so stale proof anchors cannot keep the closed package green.
       - /docker/chummercomplete/chummer6-ui-finish commit 0954e2a1 pins M101 proof resolution guard into verifier, receipt, and compliance proof.
+      - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
       - Chummer.Avalonia
@@ -170,21 +171,25 @@ items:
   - title: Gate fix followthrough against real install and receipt truth
     task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
     package_id: next90-m102-fleet-reporter-receipts
+    frontier_id: 2454416974
     milestone_id: 102
     wave: W6
     repo: fleet
     status: complete
     proof:
       - /docker/fleet/scripts/materialize_support_case_packets.py
+      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
       - /docker/fleet/tests/test_materialize_support_case_packets.py
+      - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
-      - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
       - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
       - design-owned queue source row matches the Fleet completed queue proof assignment
@@ -274,6 +279,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 1df92955 tightens M104 explain receipt frontier guard for the completed package.
       - /docker/chummercomplete/chummer6-ui-finish commit 7556a33b pins M104 explain receipt proof anchors.
       - /docker/chummercomplete/chummer6-ui-finish commit d9e5392d wires the M104 explain receipt guard into standard scripts/ai/verify.sh for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit d4d34e1c requires the standard-verify wiring commit as registry and queue proof for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit cea19d0d tightens M104 explain receipt proof guard for repeat prevention.
       - bash scripts/ai/milestones/next90-m104-ui-explain-receipts-check.sh
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
@@ -287,6 +294,7 @@ items:
   - title: Land restore continuation and conflict-safe UX on the primary desktop route
     task: Keep restore, stale-state visibility, and conflict choices visible and boring on the primary desktop head.
     package_id: next90-m105-ui-restore-continuity
+    frontier_id: 3787618287
     milestone_id: 105
     wave: W8
     repo: chummer6-ui
@@ -307,6 +315,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 4faa2339
       - /docker/chummercomplete/chummer6-ui-finish commit 85c79fdd
       - /docker/chummercomplete/chummer6-ui-finish commit 0bed530b
+      - /docker/chummercomplete/chummer6-ui-finish commit b7908ee8 tightens queue frontier-id repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
@@ -325,6 +334,7 @@ items:
   - title: Synthesize parity, support, and release signals into operator-ready and reporter-ready packets
     task: Produce operator packets and reporter followthrough from the same readiness and parity truth used by the governor loop.
     package_id: next90-m106-ea-governor-packets
+    frontier_id: 1758984842
     milestone_id: 106
     wave: W8
     repo: executive-assistant
@@ -367,6 +377,9 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 7331cd26 tightens artifact-factory queue and registry proof-anchor resolution.
       - /docker/chummercomplete/chummer.run-services commit 0eac80b6 tightens design-owned queue source verification and standard Hub verify wiring for the M107 artifact-factory proof.
       - /docker/chummercomplete/chummer.run-services commit cfd5d208 pins the completed M107 artifact-factory proof guard evidence.
+      - /docker/chummercomplete/chummer.run-services commit 60125d9e tightens M107 artifact factory proof guard.
+      - /docker/chummercomplete/chummer.run-services commit c98a49f2 tightens M107 artifact factory closeout proof.
+      - /docker/chummercomplete/chummer.run-services commit 28d3e13f tightens M107 artifact factory closeout guard.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
