@@ -83,6 +83,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
                                 "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
+                                "Verifier rebuilds the decision-critical packet projection from live source inputs.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                             ],
                         },
@@ -133,6 +134,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
                         "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+                        "verifier rebuilds the decision-critical packet projection from live source inputs",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -250,6 +252,35 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
         "support": support,
         "status": status,
     }
+
+
+def _verifier_args(paths: dict[str, Path], packet: Path) -> list[str]:
+    return [
+        sys.executable,
+        "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+        "--repo-root",
+        str(paths["root"]),
+        "--packet",
+        str(packet),
+        "--markdown",
+        str(paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"),
+        "--successor-registry",
+        str(paths["registry"]),
+        "--design-queue-staging",
+        str(paths["design_queue"]),
+        "--queue-staging",
+        str(paths["queue"]),
+        "--weekly-pulse",
+        str(paths["weekly"]),
+        "--flagship-readiness",
+        str(paths["readiness"]),
+        "--journey-gates",
+        str(paths["journeys"]),
+        "--support-packets",
+        str(paths["support"]),
+        "--status-plane",
+        str(paths["status"]),
+    ]
 
 
 def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proof_are_not_green(tmp_path: Path) -> None:
@@ -550,22 +581,7 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
     assert materialize.returncode == 0, materialize.stderr
 
     verifier = subprocess.run(
-        [
-            sys.executable,
-            "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
-            "--repo-root",
-            str(paths["root"]),
-            "--packet",
-            str(out),
-            "--markdown",
-            str(paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"),
-            "--successor-registry",
-            str(paths["registry"]),
-            "--design-queue-staging",
-            str(paths["design_queue"]),
-            "--queue-staging",
-            str(paths["queue"]),
-        ],
+        _verifier_args(paths, out),
         cwd="/docker/fleet",
         check=False,
         capture_output=True,
@@ -617,22 +633,7 @@ def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
     _write_json(out, packet)
 
     verifier = subprocess.run(
-        [
-            sys.executable,
-            "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
-            "--repo-root",
-            str(paths["root"]),
-            "--packet",
-            str(out),
-            "--markdown",
-            str(paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"),
-            "--successor-registry",
-            str(paths["registry"]),
-            "--design-queue-staging",
-            str(paths["design_queue"]),
-            "--queue-staging",
-            str(paths["queue"]),
-        ],
+        _verifier_args(paths, out),
         cwd="/docker/fleet",
         check=False,
         capture_output=True,
@@ -644,6 +645,63 @@ def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
         "packet package_verification no longer matches live successor registry and queue verification"
         in verifier.stderr
     )
+
+
+def test_verify_next90_m106_governor_packet_rejects_stale_decision_ledger(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["decision_board"]["launch_expand"]["state"] = "allowed"
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "checked-in packet decision ledger no longer matches live source inputs for field(s): "
+        in verifier.stderr
+    )
+    assert "decision_board" in verifier.stderr
 
 
 def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates_are_green(

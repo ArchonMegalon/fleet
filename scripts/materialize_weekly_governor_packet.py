@@ -59,6 +59,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
     "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+    "verifier rebuilds the decision-critical packet projection from live source inputs",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -70,6 +71,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
     "verify_next90_m106_fleet_governor_packet.py exits 0",
     "tmp_path fixture invocation",
+    "decision-critical packet projection",
     "successor frontier 2376135131",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (

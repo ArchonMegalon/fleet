@@ -35,6 +35,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--successor-registry", default=str(weekly.SUCCESSOR_REGISTRY))
     parser.add_argument("--design-queue-staging", default=str(weekly.DESIGN_QUEUE_STAGING))
     parser.add_argument("--queue-staging", default=str(weekly.QUEUE_STAGING))
+    parser.add_argument("--weekly-pulse", default=str(weekly.WEEKLY_PULSE))
+    parser.add_argument("--flagship-readiness", default=str(weekly.FLAGSHIP_READINESS))
+    parser.add_argument("--journey-gates", default=str(weekly.JOURNEY_GATES))
+    parser.add_argument("--support-packets", default=str(weekly.SUPPORT_PACKETS))
+    parser.add_argument("--status-plane", default=str(weekly.STATUS_PLANE))
     return parser.parse_args(argv)
 
 
@@ -53,6 +58,41 @@ def _require(condition: bool, issues: List[str], message: str) -> None:
         issues.append(message)
 
 
+def _stable_weekly_health(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "status": payload.get("status"),
+        "generated_at": payload.get("generated_at"),
+        "max_age_seconds": payload.get("max_age_seconds"),
+        "required_launch_signals": payload.get("required_launch_signals"),
+    }
+
+
+def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "status": payload.get("status"),
+        "status_reason": payload.get("status_reason"),
+        "successor_frontier_ids": payload.get("successor_frontier_ids"),
+        "package_verification": payload.get("package_verification"),
+        "weekly_input_health": _stable_weekly_health(dict(payload.get("weekly_input_health") or {})),
+        "source_input_health": payload.get("source_input_health"),
+        "decision_alignment": payload.get("decision_alignment"),
+        "truth_inputs": payload.get("truth_inputs"),
+        "decision_board": payload.get("decision_board"),
+        "decision_gate_ledger": payload.get("decision_gate_ledger"),
+        "public_status_copy": payload.get("public_status_copy"),
+        "package_closeout": payload.get("package_closeout"),
+        "measured_rollout_loop": payload.get("measured_rollout_loop"),
+        "repeat_prevention": payload.get("repeat_prevention"),
+        "risk_clusters": payload.get("risk_clusters"),
+        "source_paths": payload.get("source_paths"),
+    }
+
+
+def _projection_drift(expected: Dict[str, Any], actual: Dict[str, Any]) -> List[str]:
+    fields = sorted(set(expected) | set(actual))
+    return [field for field in fields if expected.get(field) != actual.get(field)]
+
+
 def verify(args: argparse.Namespace) -> List[str]:
     repo_root = Path(args.repo_root).resolve()
     packet_path = Path(args.packet).resolve()
@@ -60,21 +100,60 @@ def verify(args: argparse.Namespace) -> List[str]:
     registry_path = Path(args.successor_registry).resolve()
     design_queue_path = Path(args.design_queue_staging).resolve()
     queue_path = Path(args.queue_staging).resolve()
+    weekly_pulse_path = Path(args.weekly_pulse).resolve()
+    flagship_readiness_path = Path(args.flagship_readiness).resolve()
+    journey_gates_path = Path(args.journey_gates).resolve()
+    support_packets_path = Path(args.support_packets).resolve()
+    status_plane_path = Path(args.status_plane).resolve()
 
     issues: List[str] = []
     packet = _read_json(packet_path)
     markdown = markdown_path.read_text(encoding="utf-8") if markdown_path.is_file() else ""
+    registry = weekly._read_yaml(registry_path)
+    design_queue = weekly._read_yaml(design_queue_path)
+    queue = weekly._read_yaml(queue_path)
     verification = weekly.verify_package(
-        registry=weekly._read_yaml(registry_path),
-        design_queue=weekly._read_yaml(design_queue_path),
-        queue=weekly._read_yaml(queue_path),
+        registry=registry,
+        design_queue=design_queue,
+        queue=queue,
         repo_root=repo_root,
+    )
+    source_paths = {
+        "successor_registry": str(registry_path),
+        "design_queue_staging": str(design_queue_path),
+        "queue_staging": str(queue_path),
+        "weekly_pulse": str(weekly_pulse_path),
+        "flagship_readiness": str(flagship_readiness_path),
+        "journey_gates": str(journey_gates_path),
+        "support_packets": str(support_packets_path),
+        "status_plane": str(status_plane_path),
+    }
+    live_payload = weekly.build_payload(
+        repo_root=repo_root,
+        registry=registry,
+        design_queue=design_queue,
+        queue=queue,
+        weekly_pulse=weekly._read_json(weekly_pulse_path),
+        flagship_readiness=weekly._read_json(flagship_readiness_path),
+        journey_gates=weekly._read_json(journey_gates_path),
+        support_packets=weekly._read_json(support_packets_path),
+        status_plane=weekly._read_yaml(status_plane_path),
+        source_paths=source_paths,
     )
     packet_verification = dict(packet.get("package_verification") or {})
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
+    packet_projection = _decision_projection(packet)
+    live_projection = _decision_projection(live_payload)
+    projection_drift = _projection_drift(live_projection, packet_projection)
 
     _require(verification["status"] == "pass", issues, f"live package verification is not pass: {verification['issues']}")
+    _require(
+        not projection_drift,
+        issues,
+        "checked-in packet decision ledger no longer matches live source inputs for field(s): "
+        + ", ".join(projection_drift),
+    )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
     _require(packet.get("status") == "ready", issues, "packet status is not ready")
     _require(

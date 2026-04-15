@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T12:04:53Z
+Generated: 2026-04-15T13:55:57Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -27,10 +27,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Registry work task 106.1 status: complete
-- Required registry evidence markers: 9
+- Required registry evidence markers: 10
 - Queue closeout status: complete
 - Queue mirror status: in_sync
-- Required queue proof markers: 9
+- Required queue proof markers: 10
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
 - Remaining sibling work tasks: 106.3, 106.4
