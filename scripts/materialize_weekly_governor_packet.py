@@ -48,6 +48,7 @@ QUEUE_STATUS = "live_parallel_successor"
 SUCCESSOR_FRONTIER_IDS = ("2376135131",)
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
+CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 SUPPORT_PACKETS_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
@@ -1013,6 +1014,15 @@ def build_payload(
             "blocked_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
             "rule": "Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry or active-run helper commands.",
         },
+        "flagship_wave_guard": {
+            "status": "closed_wave_not_reopened",
+            "closed_wave": CLOSED_FLAGSHIP_WAVE,
+            "readiness_inputs": "read-only readiness, parity, journey, and support snapshots",
+            "rule": (
+                "Successor M106 packet work may summarize flagship readiness inputs, "
+                "but must not reopen or re-scope the closed flagship wave."
+            ),
+        },
     }
     packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
     return {
@@ -1170,6 +1180,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     closeout = dict(payload.get("package_closeout") or {})
     repeat_prevention = dict(payload.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
+    flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
     weekly = dict(payload.get("weekly_input_health") or {})
     sources = dict(payload.get("source_input_health") or {})
     decision_alignment = dict(payload.get("decision_alignment") or {})
@@ -1259,6 +1270,9 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Handoff rule: {_markdown_status(repeat_prevention.get('handoff_rule'))}",
             f"- Worker command guard: {_markdown_status(worker_command_guard.get('status'))}",
             f"- Blocked helper markers: {_markdown_list(worker_command_guard.get('blocked_markers'))}",
+            f"- Flagship wave guard: {_markdown_status(flagship_wave_guard.get('status'))}",
+            f"- Closed flagship wave: {_markdown_status(flagship_wave_guard.get('closed_wave'))}",
+            f"- Flagship readiness inputs: {_markdown_status(flagship_wave_guard.get('readiness_inputs'))}",
             "",
             "## Public Status Copy",
             "",

@@ -175,6 +175,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     packet_verification = dict(packet.get("package_verification") or {})
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
+    flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
     required_resolving_paths = packet_verification.get("required_resolving_proof_paths") or []
     packet_projection = _decision_projection(packet)
@@ -258,6 +259,21 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "repeat prevention worker command guard rule no longer requires repo-local proof",
     )
+    _require(
+        flagship_wave_guard.get("status") == "closed_wave_not_reopened",
+        issues,
+        "repeat prevention flagship wave guard is not closed_wave_not_reopened",
+    )
+    _require(
+        flagship_wave_guard.get("closed_wave") == weekly.CLOSED_FLAGSHIP_WAVE,
+        issues,
+        "repeat prevention flagship wave guard closed wave drifted",
+    )
+    _require(
+        "must not reopen" in str(flagship_wave_guard.get("rule") or ""),
+        issues,
+        "repeat prevention flagship wave guard rule no longer blocks reopening the closed flagship wave",
+    )
     required_packet_markers = packet_verification.get("required_queue_proof_markers") or []
     _require(
         "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py" in required_packet_markers,
@@ -280,6 +296,16 @@ def verify(args: argparse.Namespace) -> List[str]:
         "- Closed successor frontier ids: 2376135131" in markdown,
         issues,
         "markdown successor frontier closeout pin is missing",
+    )
+    _require(
+        "- Flagship wave guard: closed_wave_not_reopened" in markdown,
+        issues,
+        "markdown flagship wave guard is missing",
+    )
+    _require(
+        "- Closed flagship wave: next_12_biggest_wins" in markdown,
+        issues,
+        "markdown closed flagship wave pin is missing",
     )
     return issues
 

@@ -400,6 +400,18 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         == "active_run_helpers_forbidden"
     )
     assert payload["repeat_prevention"]["worker_command_guard"]["blocked_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+    assert (
+        payload["repeat_prevention"]["flagship_wave_guard"]["status"]
+        == "closed_wave_not_reopened"
+    )
+    assert (
+        payload["repeat_prevention"]["flagship_wave_guard"]["closed_wave"]
+        == "next_12_biggest_wins"
+    )
+    assert (
+        "must not reopen"
+        in payload["repeat_prevention"]["flagship_wave_guard"]["rule"]
+    )
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "pass"
     assert payload["decision_alignment"]["status"] == "pass"
@@ -459,6 +471,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
+    assert "- Flagship wave guard: closed_wave_not_reopened" in markdown
+    assert "- Closed flagship wave: next_12_biggest_wins" in markdown
     assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
     assert (
@@ -844,6 +858,70 @@ def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
     )
     assert (
         "repeat prevention worker command guard rule no longer requires repo-local proof"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_flagship_reopen_guard_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["repeat_prevention"]["flagship_wave_guard"] = {
+        "status": "reopen_allowed",
+        "closed_wave": "next_12_biggest_wins",
+        "rule": "successor workers may reopen flagship scope",
+    }
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "repeat prevention flagship wave guard is not closed_wave_not_reopened"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention flagship wave guard rule no longer blocks reopening the closed flagship wave"
         in verifier.stderr
     )
 

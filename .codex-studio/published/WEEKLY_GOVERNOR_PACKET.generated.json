@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T14:28:42Z",
+  "generated_at": "2026-04-15T14:40:27Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -371,6 +371,12 @@
     ],
     "closed_work_task_id": "106.1",
     "do_not_reopen_owned_surfaces": true,
+    "flagship_wave_guard": {
+      "closed_wave": "next_12_biggest_wins",
+      "readiness_inputs": "read-only readiness, parity, journey, and support snapshots",
+      "rule": "Successor M106 packet work may summarize flagship readiness inputs, but must not reopen or re-scope the closed flagship wave.",
+      "status": "closed_wave_not_reopened"
+    },
     "handoff_rule": "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.",
     "owned_surfaces": [
       "weekly_governor_packet",
