@@ -23,6 +23,7 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "active run helper",
     "--telemetry-answer",
     "codexea --telemetry",
+    "chummer_design_supervisor.py",
     "chummer_design_supervisor.py status",
     "chummer_design_supervisor.py eta",
 ]
@@ -2189,6 +2190,7 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     paths = _fixture_tree(tmp_path)
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
     queue["items"][0]["proof"].append("python3 scripts/run_ooda_design_supervisor_until_quiet.py --once")
+    queue["items"][0]["proof"].append("python3 scripts/chummer_design_supervisor.py launch-health")
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -2234,6 +2236,11 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     assert payload["package_closeout"]["status"] == "blocked"
     assert payload["package_closeout"]["do_not_reopen_package"] is False
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "python3 scripts/chummer_design_supervisor.py launch-health" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
     assert any(
         "queue item proof includes active-run or operator-helper command evidence" in issue
         for issue in payload["package_verification"]["issues"]

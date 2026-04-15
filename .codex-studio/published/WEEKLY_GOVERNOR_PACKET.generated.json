@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T15:13:11Z",
+  "generated_at": "2026-04-15T15:18:41Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -294,6 +294,7 @@
       "active run helper",
       "--telemetry-answer",
       "codexea --telemetry",
+      "chummer_design_supervisor.py",
       "chummer_design_supervisor.py status",
       "chummer_design_supervisor.py eta"
     ],
@@ -429,6 +430,7 @@
         "active run helper",
         "--telemetry-answer",
         "codexea --telemetry",
+        "chummer_design_supervisor.py",
         "chummer_design_supervisor.py status",
         "chummer_design_supervisor.py eta"
       ],
@@ -495,6 +497,7 @@
           "active run helper",
           "--telemetry-answer",
           "codexea --telemetry",
+          "chummer_design_supervisor.py",
           "chummer_design_supervisor.py status",
           "chummer_design_supervisor.py eta"
         ],
@@ -510,7 +513,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T15:01:48Z",
+        "generated_at": "2026-04-15T15:18:38Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "state": "present",
