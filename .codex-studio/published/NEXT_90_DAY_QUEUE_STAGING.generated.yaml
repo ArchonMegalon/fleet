@@ -432,6 +432,10 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 33f5eedd pins the M105 restore-continuity closure verifier to the registry-cited d220fdb7 proof anchor.
       - /docker/chummercomplete/chummer6-ui-finish commit 46729243 pins the registry-cited 33f5eedd closure verifier.
       - /docker/chummercomplete/chummer6-ui-finish commit 8d577e54 pins the registry-cited 46729243 verifier guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit af39fe7f pins the current M105 restore-continuity proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 96000742 requires the af39fe7f proof floor in the local verifier.
+      - /docker/chummercomplete/chummer6-ui-finish commit 5c9dbbce pins the M105 registry-cited proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 633e6ce9 refreshes the M105 proof-floor guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
