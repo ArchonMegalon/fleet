@@ -15,6 +15,8 @@ SCRIPTS = (
     SCRIPT_DIR / "verify_status_plane_semantics.py",
     SCRIPT_DIR / "materialize_public_progress_report.py",
     SCRIPT_DIR / "materialize_support_case_packets.py",
+    SCRIPT_DIR / "verify_next90_m102_fleet_reporter_receipts.py",
+    SCRIPT_DIR / "verify_next90_m106_fleet_governor_packet.py",
     SCRIPT_DIR / "materialize_flagship_product_readiness.py",
     SCRIPT_DIR / "chummer_design_supervisor.py",
     SCRIPT_DIR / "materialize_package_compile_overlay.py",

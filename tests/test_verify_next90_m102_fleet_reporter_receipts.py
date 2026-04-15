@@ -52,6 +52,7 @@ milestones:
           - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json reports successor_package_verification.status=pass.
           - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json projects fix-available, please-test, and recovery counts.
           - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly/support generated_at freshness drift so WEEKLY_GOVERNOR_PACKET.generated.json cannot predate the SUPPORT_CASE_PACKETS.generated.json receipt gates it summarizes.
+          - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M102 verifier in no-PYTHONPATH bootstrap proof.
 {evidence_tail}
 """.lstrip(),
         encoding="utf-8",
@@ -77,6 +78,8 @@ items:
       - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
@@ -184,6 +187,8 @@ def _support_packets_payload() -> dict:
             "package_id": "next90-m102-fleet-reporter-receipts",
             "frontier_id": "2454416974",
             "milestone_id": 102,
+            "allowed_paths": ["scripts", "tests", ".codex-studio", "feedback"],
+            "owned_surfaces": ["feedback_loop_ready:install_receipts", "product_governor:followthrough"],
             "registry_work_task_status": "complete",
             "queue_status": "complete",
             "queue_frontier_id": "2454416974",
@@ -322,6 +327,33 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_active_run_helper_proo
         "/VAR/LIB/CODEX-FLEET/chummer_design_supervisor/shard-7/active_run_handoff.generated.md"
     ]
     assert result["blocked_proof_entries"] == result["blocked_queue_proof_entries"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_bootstrap_guard_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py\n"
+            "      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert "successor authority reports missing_queue_proof_markers" in result["issues"]
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_active_run_registry_evidence(
@@ -467,6 +499,45 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_closure
         "queue_status": {
             "support_packets": "queued",
             "computed_successor_authority": "complete",
+        },
+    }
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_scope_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    payload["successor_package_verification"]["allowed_paths"] = ["scripts", "tests"]
+    payload["successor_package_verification"]["owned_surfaces"] = ["product_governor:followthrough"]
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json successor verification closure fields drifted"
+        in result["issues"]
+    )
+    assert result["support_packet_successor_field_mismatches"] == {
+        "allowed_paths": {
+            "support_packets": ["scripts", "tests"],
+            "computed_successor_authority": ["scripts", "tests", ".codex-studio", "feedback"],
+        },
+        "owned_surfaces": {
+            "support_packets": ["product_governor:followthrough"],
+            "computed_successor_authority": [
+                "feedback_loop_ready:install_receipts",
+                "product_governor:followthrough",
+            ],
         },
     }
 

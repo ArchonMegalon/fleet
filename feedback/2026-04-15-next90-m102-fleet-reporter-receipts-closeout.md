@@ -70,6 +70,10 @@ The later 2026-04-15 helper-proof casing guard pass tightened both the shared su
 
 The later 2026-04-15 weekly markdown projection guard pass tightened the standalone verifier so `WEEKLY_GOVERNOR_PACKET.generated.md` must carry the same generated timestamp and receipt-gated followthrough counts as the JSON weekly packet and `SUPPORT_CASE_PACKETS.generated.json`. The human governor packet can no longer cite stale reporter followthrough, fix-available, please-test, recovery, missing-install-receipt, receipt-mismatch, or installed-build receipt counts while the machine packet remains green.
 
+The later 2026-04-15 generated scope-drift guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.allowed_paths` and `owned_surfaces` must match the recomputed canonical successor authority. A stale generated support packet can no longer keep this package green after the Fleet queue or design-owned source retargets the package scope.
+
+The later 2026-04-15 bootstrap guard pass now makes `/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py` and `/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py` required queue proof anchors for this package, and the bootstrap guard now exercises `/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py`. The closeout can no longer stay green if the standalone repeat-prevention verifier only works with ambient `PYTHONPATH` state.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -176,6 +180,13 @@ direct focused invocation passed: materializer helper-proof casing guard, standa
 python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
 direct verifier tests passed: 12 after weekly markdown generated timestamp and receipt-count projection became fail-closed
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: 13 after generated support successor scope drift became fail-closed
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 scripts/verify_script_bootstrap_no_pythonpath.py
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+direct verifier tests passed: 14 after no-PYTHONPATH bootstrap proof became required queue evidence
 ```
 
 `python3 -m pytest ...` could not run because this worker image does not have `pytest` installed. The direct invocation above used the repo's existing tmp_path fixture pattern and covered the receipt-gated successor authority, reporter followthrough, recovery, receipt mismatch, installation mismatch, channel mismatch, update-required, and weekly governor projection cases.
