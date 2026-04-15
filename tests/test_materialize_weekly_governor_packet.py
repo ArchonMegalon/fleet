@@ -489,7 +489,9 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "- Required resolving proof paths: "
         "scripts/materialize_weekly_governor_packet.py, "
         "scripts/verify_next90_m106_fleet_governor_packet.py, "
-        "tests/test_materialize_weekly_governor_packet.py"
+        "scripts/verify_script_bootstrap_no_pythonpath.py, "
+        "tests/test_materialize_weekly_governor_packet.py, "
+        "tests/test_fleet_script_bootstrap_without_pythonpath.py"
     ) in markdown
     assert "- Queue mirror status: in_sync" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
@@ -1967,7 +1969,9 @@ def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is
     assert payload["package_verification"]["required_resolving_proof_paths"] == [
         "scripts/materialize_weekly_governor_packet.py",
         "scripts/verify_next90_m106_fleet_governor_packet.py",
+        "scripts/verify_script_bootstrap_no_pythonpath.py",
         "tests/test_materialize_weekly_governor_packet.py",
+        "tests/test_fleet_script_bootstrap_without_pythonpath.py",
     ]
     assert (
         "queue item proof includes source anchor(s) that no longer resolve: "
@@ -1977,6 +1981,62 @@ def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is
     assert (
         "registry work task 106.1 evidence includes source anchor(s) that no longer resolve: "
         "scripts/materialize_weekly_governor_packet.py"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_when_bootstrap_guard_anchor_is_missing(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    (paths["root"] / "scripts" / "verify_script_bootstrap_no_pythonpath.py").unlink()
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert (
+        "queue item proof includes source anchor(s) that no longer resolve: "
+        "scripts/verify_script_bootstrap_no_pythonpath.py"
+        in payload["package_verification"]["issues"]
+    )
+    assert (
+        "registry work task 106.1 evidence includes source anchor(s) that no longer resolve: "
+        "scripts/verify_script_bootstrap_no_pythonpath.py"
         in payload["package_verification"]["issues"]
     )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"

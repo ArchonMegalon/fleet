@@ -89,7 +89,9 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
 REQUIRED_RESOLVING_PROOF_PATHS = (
     "scripts/materialize_weekly_governor_packet.py",
     "scripts/verify_next90_m106_fleet_governor_packet.py",
+    "scripts/verify_script_bootstrap_no_pythonpath.py",
     "tests/test_materialize_weekly_governor_packet.py",
+    "tests/test_fleet_script_bootstrap_without_pythonpath.py",
 )
 DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "/var/lib/codex-fleet",

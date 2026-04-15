@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T14:54:52Z",
+  "generated_at": "2026-04-15T14:58:52Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -353,7 +353,9 @@
     "required_resolving_proof_paths": [
       "scripts/materialize_weekly_governor_packet.py",
       "scripts/verify_next90_m106_fleet_governor_packet.py",
-      "tests/test_materialize_weekly_governor_packet.py"
+      "scripts/verify_script_bootstrap_no_pythonpath.py",
+      "tests/test_materialize_weekly_governor_packet.py",
+      "tests/test_fleet_script_bootstrap_without_pythonpath.py"
     ],
     "status": "pass",
     "successor_frontier_ids": [
