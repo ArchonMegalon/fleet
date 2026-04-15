@@ -250,6 +250,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.proof.yaml
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.closeout.md
+      - /docker/chummercomplete/chummer-hub-registry commit e91fe39 tightens the M101 self-test so completed queue proof fails on wrong successor frontier or non-complete package status.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
