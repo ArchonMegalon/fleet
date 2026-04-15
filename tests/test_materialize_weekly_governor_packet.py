@@ -79,6 +79,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md mirrors the operator packet.",
                                 "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
+                                "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                             ],
                         },
                         {
@@ -122,6 +123,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
                         "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+                        "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
                     "owned_surfaces": ["weekly_governor_packet", "measured_rollout_loop"],
@@ -271,8 +273,11 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
     assert payload["package_verification"]["queue_status"] == "complete"
+    assert payload["successor_frontier_ids"] == ["2376135131"]
+    assert payload["package_verification"]["successor_frontier_ids"] == ["2376135131"]
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
     assert payload["package_closeout"]["do_not_reopen_package"] is True
+    assert payload["package_closeout"]["successor_frontier_ids"] == ["2376135131"]
     assert payload["package_closeout"]["remaining_milestone_dependency_ids"] == [
         101,
         102,
@@ -291,6 +296,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["repeat_prevention"]["status"] == "closed_for_fleet_package"
     assert payload["repeat_prevention"]["closed_package_id"] == "next90-m106-fleet-governor-packet"
     assert payload["repeat_prevention"]["closed_work_task_id"] == "106.1"
+    assert payload["repeat_prevention"]["closed_successor_frontier_ids"] == ["2376135131"]
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
     assert payload["repeat_prevention"]["owned_surfaces"] == [
         "weekly_governor_packet",
@@ -361,6 +367,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Status: closed_for_fleet_package" in markdown
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
+    assert "- Closed successor frontier ids: 2376135131" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert "- Blocked helper markers: run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json" in markdown
@@ -911,6 +918,71 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_proof_is_m
         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md"
         in payload["package_verification"]["issues"]
     )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_frontier_pin_is_missing(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"] = [
+        proof for proof in queue["items"][0]["proof"] if "successor frontier 2376135131" not in proof
+    ]
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"] = [
+        evidence
+        for evidence in registry["milestones"][0]["work_tasks"][0]["evidence"]
+        if "successor frontier 2376135131" not in evidence
+    ]
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "queue item proof is missing required weekly governor receipt(s): "
+        "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
+        in payload["package_verification"]["issues"]
+    )
+    assert (
+        "registry work task 106.1 evidence is missing required weekly governor marker(s): "
+        "successor frontier 2376135131"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 

@@ -40,6 +40,7 @@ PACKAGE_ID = "next90-m106-fleet-governor-packet"
 MILESTONE_ID = 106
 PROGRAM_WAVE = "next_90_day_product_advance"
 WAVE_ID = "W8"
+SUCCESSOR_FRONTIER_IDS = ("2376135131",)
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 UTC = dt.timezone.utc
@@ -51,6 +52,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
     "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+    "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "scripts/materialize_weekly_governor_packet.py",
@@ -59,6 +61,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "WEEKLY_GOVERNOR_PACKET.generated.md",
     "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
     "tmp_path fixture invocation",
+    "successor frontier 2376135131",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
     "scripts/materialize_weekly_governor_packet.py",
@@ -396,6 +399,7 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
         "status": "pass" if not issues else "fail",
         "package_id": PACKAGE_ID,
         "milestone_id": MILESTONE_ID,
+        "successor_frontier_ids": list(SUCCESSOR_FRONTIER_IDS),
         "repo": "fleet",
         "owned_surfaces": list(OWNED_SURFACES),
         "allowed_paths": list(ALLOWED_PATHS),
@@ -841,6 +845,7 @@ def build_payload(
         "status": "closed_for_fleet_package" if package_complete else "blocked",
         "closed_package_id": PACKAGE_ID,
         "closed_work_task_id": "106.1",
+        "closed_successor_frontier_ids": list(SUCCESSOR_FRONTIER_IDS),
         "do_not_reopen_owned_surfaces": package_complete,
         "owned_surfaces": list(OWNED_SURFACES),
         "allowed_paths": list(ALLOWED_PATHS),
@@ -865,6 +870,7 @@ def build_payload(
         "as_of": str(weekly_pulse.get("as_of") or "").strip(),
         "program_wave": "next_90_day_product_advance",
         "wave_id": WAVE_ID,
+        "successor_frontier_ids": list(SUCCESSOR_FRONTIER_IDS),
         "package_verification": verification,
         "weekly_input_health": weekly_input_health,
         "source_input_health": source_input_health,
@@ -938,6 +944,7 @@ def build_payload(
             "status": "fleet_package_complete" if package_complete else "blocked",
             "do_not_reopen_package": package_complete,
             "package_scope": "next90-m106 Fleet weekly governor packet only",
+            "successor_frontier_ids": list(SUCCESSOR_FRONTIER_IDS),
             "owned_surfaces": list(OWNED_SURFACES),
             "closeout_reason": (
                 "Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current."
@@ -1082,6 +1089,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Status: {_markdown_status(repeat_prevention.get('status'))}",
             f"- Closed package: {_markdown_status(repeat_prevention.get('closed_package_id'))}",
             f"- Closed work task: {_markdown_status(repeat_prevention.get('closed_work_task_id'))}",
+            f"- Closed successor frontier ids: {_markdown_list(repeat_prevention.get('closed_successor_frontier_ids'))}",
             f"- Do not reopen owned surfaces: {bool(repeat_prevention.get('do_not_reopen_owned_surfaces'))}",
             f"- Owned surfaces: {_markdown_list(repeat_prevention.get('owned_surfaces'))}",
             f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",

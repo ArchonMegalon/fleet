@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T10:54:15Z",
+  "generated_at": "2026-04-15T10:59:13Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -189,6 +189,9 @@
       "106.4"
     ],
     "status": "fleet_package_complete",
+    "successor_frontier_ids": [
+      "2376135131"
+    ],
     "work_task_posture": {
       "open_sibling_work_task_ids": [
         "106.3",
@@ -300,7 +303,8 @@
       "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
       "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
       "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
-      "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0"
+      "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
+      "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_weekly_governor_packet.py",
@@ -308,13 +312,17 @@
       "WEEKLY_GOVERNOR_PACKET.generated.json",
       "WEEKLY_GOVERNOR_PACKET.generated.md",
       "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
-      "tmp_path fixture invocation"
+      "tmp_path fixture invocation",
+      "successor frontier 2376135131"
     ],
     "required_resolving_proof_paths": [
       "scripts/materialize_weekly_governor_packet.py",
       "tests/test_materialize_weekly_governor_packet.py"
     ],
-    "status": "pass"
+    "status": "pass",
+    "successor_frontier_ids": [
+      "2376135131"
+    ]
   },
   "program_wave": "next_90_day_product_advance",
   "public_status_copy": {
@@ -330,6 +338,9 @@
       ".codex-studio"
     ],
     "closed_package_id": "next90-m106-fleet-governor-packet",
+    "closed_successor_frontier_ids": [
+      "2376135131"
+    ],
     "closed_work_task_id": "106.1",
     "do_not_reopen_owned_surfaces": true,
     "handoff_rule": "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.",
@@ -429,6 +440,9 @@
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
   },
+  "successor_frontier_ids": [
+    "2376135131"
+  ],
   "truth_inputs": {
     "closure_health_state": "clear",
     "flagship_parity_release_truth": {
