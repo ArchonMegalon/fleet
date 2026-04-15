@@ -41,6 +41,14 @@
         "state": "accumulating"
       }
     ],
+    "focus_shift": [
+      {
+        "name": "successor_wave_scope",
+        "observed": "next90-m106-fleet-governor-packet",
+        "required": "closed flagship wave remains read-only and M106 routes only scoped successor work",
+        "state": "queued_successor_wave"
+      }
+    ],
     "freeze_launch": [
       {
         "name": "fail_closed_default",
@@ -144,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T14:58:52Z",
+  "generated_at": "2026-04-15T15:04:43Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -329,6 +337,7 @@
       "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
       "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
       "verifier rebuilds the decision-critical packet projection from live source inputs",
+      "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
       "forbidden worker proof strings are rejected case-insensitively",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
@@ -346,6 +355,7 @@
       "verify_next90_m106_fleet_governor_packet.py exits 0",
       "tmp_path fixture invocation",
       "decision-critical packet projection",
+      "every measured rollout action",
       "forbidden worker proof strings",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131"
@@ -498,7 +508,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T14:46:59Z",
+        "generated_at": "2026-04-15T15:01:48Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "state": "present",

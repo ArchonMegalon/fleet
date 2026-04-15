@@ -65,6 +65,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
     "verifier rebuilds the decision-critical packet projection from live source inputs",
+    "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
     "forbidden worker proof strings are rejected case-insensitively",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
@@ -82,6 +83,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "verify_next90_m106_fleet_governor_packet.py exits 0",
     "tmp_path fixture invocation",
     "decision-critical packet projection",
+    "every measured rollout action",
     "forbidden worker proof strings",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
@@ -1112,6 +1114,14 @@ def build_payload(
                 ),
             ],
             "rollback": rollback_gate_ledger,
+            "focus_shift": [
+                _gate_row(
+                    "successor_wave_scope",
+                    "queued_successor_wave",
+                    "closed flagship wave remains read-only and M106 routes only scoped successor work",
+                    "next90-m106-fleet-governor-packet",
+                ),
+            ],
         },
         "public_status_copy": _status_copy(
             launch_allowed=launch_allowed,

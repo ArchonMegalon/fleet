@@ -104,6 +104,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
+                                "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
@@ -160,6 +161,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
+                        "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
                         "forbidden worker proof strings are rejected case-insensitively",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
@@ -435,6 +437,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["decision_board"]["freeze_launch"]["state"] == "active"
     assert payload["decision_board"]["canary"]["state"] == "accumulating"
     assert payload["decision_board"]["rollback"]["state"] == "armed"
+    assert payload["decision_board"]["focus_shift"]["state"] == "queued_successor_wave"
     assert payload["truth_inputs"]["flagship_parity_release_truth"]["release_truth_status"] == "gold_ready"
     launch_gates = {
         row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
@@ -442,6 +445,14 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert launch_gates["local_release_proof"]["state"] == "blocked"
     assert launch_gates["provider_canary"]["state"] == "blocked"
     assert launch_gates["successor_dependencies"]["observed"] == "open"
+    focus_shift_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["focus_shift"]
+    }
+    assert focus_shift_gates["successor_wave_scope"]["state"] == "queued_successor_wave"
+    assert (
+        focus_shift_gates["successor_wave_scope"]["observed"]
+        == "next90-m106-fleet-governor-packet"
+    )
     assert payload["public_status_copy"]["state"] == "freeze_launch"
     assert payload["public_status_copy"]["headline"] == "Launch expansion remains frozen."
     assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] == 2
@@ -1078,6 +1089,68 @@ def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
         "repeat prevention handoff rule no longer matches the live closeout projection"
         in verifier.stderr
     )
+
+
+def test_verify_next90_m106_governor_packet_rejects_missing_decision_action_ledger(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["measured_rollout_loop"]["required_decision_actions"] = [
+        "launch_expand",
+        "freeze_launch",
+        "canary",
+        "rollback",
+        "focus_shift",
+    ]
+    packet["decision_board"].pop("focus_shift")
+    packet["decision_gate_ledger"].pop("focus_shift")
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert "decision board is missing required action(s): focus_shift" in verifier.stderr
+    assert "decision gate ledger is missing required action(s): focus_shift" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(

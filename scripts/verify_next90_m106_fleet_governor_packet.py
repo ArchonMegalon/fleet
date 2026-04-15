@@ -178,7 +178,10 @@ def verify(args: argparse.Namespace) -> List[str]:
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
+    decision_board = dict(packet.get("decision_board") or {})
+    decision_gate_ledger = dict(packet.get("decision_gate_ledger") or {})
     required_resolving_paths = packet_verification.get("required_resolving_proof_paths") or []
+    required_decision_actions = loop.get("required_decision_actions") or []
     packet_projection = _decision_projection(packet)
     live_projection = _decision_projection(live_payload)
     projection_drift = _projection_drift(live_projection, packet_projection)
@@ -251,6 +254,30 @@ def verify(args: argparse.Namespace) -> List[str]:
         "packet resolving proof anchors no longer resolve: " + ", ".join(missing_resolving_paths),
     )
     _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
+    _require(
+        required_decision_actions
+        == ["launch_expand", "freeze_launch", "canary", "rollback", "focus_shift"],
+        issues,
+        "measured rollout loop required decision actions drifted",
+    )
+    missing_decision_board_actions = [
+        action for action in required_decision_actions if action not in decision_board
+    ]
+    missing_decision_ledger_actions = [
+        action for action in required_decision_actions if not decision_gate_ledger.get(action)
+    ]
+    _require(
+        not missing_decision_board_actions,
+        issues,
+        "decision board is missing required action(s): "
+        + ", ".join(missing_decision_board_actions),
+    )
+    _require(
+        not missing_decision_ledger_actions,
+        issues,
+        "decision gate ledger is missing required action(s): "
+        + ", ".join(missing_decision_ledger_actions),
+    )
     _require(
         package_closeout.get("status") == "fleet_package_complete",
         issues,
