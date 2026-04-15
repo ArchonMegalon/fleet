@@ -497,6 +497,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 5e4bd7ad pins the M105 verifier to the registry-cited 6c428f9c proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit ce6084fd pins the M105 current local proof guard to f3931a16.
       - /docker/chummercomplete/chummer6-ui-finish commit 6236c73e tightens the M105 local proof-target guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 2af46874 tightens the M105 local proof-target guard receipt.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
