@@ -258,6 +258,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 0a2a321f tightens M104 explain receipt guard wiring for the completed package proof chain.
       - /docker/chummercomplete/chummer6-ui-finish commit 2c29f1be tightens M104 explain receipt commit proof for the completed package.
       - /docker/chummercomplete/chummer6-ui-finish commit 1df92955 tightens M104 explain receipt frontier guard for the completed package.
+      - /docker/chummercomplete/chummer6-ui-finish commit 7556a33b pins M104 explain receipt proof anchors.
+      - /docker/chummercomplete/chummer6-ui-finish commit d9e5392d wires the M104 explain receipt guard into standard scripts/ai/verify.sh for repeat prevention.
       - bash scripts/ai/milestones/next90-m104-ui-explain-receipts-check.sh
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
