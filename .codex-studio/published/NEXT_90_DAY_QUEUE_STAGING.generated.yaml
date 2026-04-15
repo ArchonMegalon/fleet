@@ -97,6 +97,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 53b701e2 pins M101 060 proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit a0303d5f pins M101 latest release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 0fa3ce01 pins the current M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit b0c0b732 pins M101 current release train proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
