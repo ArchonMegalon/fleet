@@ -101,6 +101,28 @@ def _stable_markdown(markdown: str) -> str:
     )
 
 
+def _require_generated_after_source(
+    *,
+    packet_generated_at: str,
+    source_generated_at: str,
+    source_name: str,
+    issues: List[str],
+) -> None:
+    packet_time = weekly._parse_iso_utc(packet_generated_at)
+    source_time = weekly._parse_iso_utc(source_generated_at)
+    if not packet_time:
+        issues.append("packet generated_at is missing or invalid")
+        return
+    if not source_time:
+        issues.append(f"{source_name} generated_at is missing or invalid")
+        return
+    if packet_time < source_time:
+        issues.append(
+            "checked-in packet generated_at predates "
+            f"{source_name}; regenerate WEEKLY_GOVERNOR_PACKET.generated.json after refreshing source inputs"
+        )
+
+
 def verify(args: argparse.Namespace) -> List[str]:
     repo_root = Path(args.repo_root).resolve()
     packet_path = Path(args.packet).resolve()
@@ -120,6 +142,8 @@ def verify(args: argparse.Namespace) -> List[str]:
     registry = weekly._read_yaml(registry_path)
     design_queue = weekly._read_yaml(design_queue_path)
     queue = weekly._read_yaml(queue_path)
+    weekly_pulse = weekly._read_json(weekly_pulse_path)
+    support_packets = weekly._read_json(support_packets_path)
     verification = weekly.verify_package(
         registry=registry,
         design_queue=design_queue,
@@ -141,10 +165,10 @@ def verify(args: argparse.Namespace) -> List[str]:
         registry=registry,
         design_queue=design_queue,
         queue=queue,
-        weekly_pulse=weekly._read_json(weekly_pulse_path),
+        weekly_pulse=weekly_pulse,
         flagship_readiness=weekly._read_json(flagship_readiness_path),
         journey_gates=weekly._read_json(journey_gates_path),
-        support_packets=weekly._read_json(support_packets_path),
+        support_packets=support_packets,
         status_plane=weekly._read_yaml(status_plane_path),
         source_paths=source_paths,
     )
@@ -169,6 +193,18 @@ def verify(args: argparse.Namespace) -> List[str]:
         _stable_markdown(markdown) == _stable_markdown(expected_markdown),
         issues,
         "checked-in markdown packet no longer matches the live source-input projection",
+    )
+    _require_generated_after_source(
+        packet_generated_at=str(packet.get("generated_at") or ""),
+        source_generated_at=str(weekly_pulse.get("generated_at") or ""),
+        source_name="weekly_pulse",
+        issues=issues,
+    )
+    _require_generated_after_source(
+        packet_generated_at=str(packet.get("generated_at") or ""),
+        source_generated_at=str(support_packets.get("generated_at") or ""),
+        source_name="support_packets",
+        issues=issues,
     )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
     _require(packet.get("status") == "ready", issues, "packet status is not ready")

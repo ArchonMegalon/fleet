@@ -722,6 +722,66 @@ def test_verify_next90_m106_governor_packet_rejects_stale_decision_ledger(
     assert "decision_board" in verifier.stderr
 
 
+def test_verify_next90_m106_governor_packet_rejects_packet_older_than_support_source(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    support = json.loads(paths["support"].read_text(encoding="utf-8"))
+    packet["generated_at"] = "2026-04-15T10:00:00Z"
+    support["generated_at"] = "2026-04-15T10:00:01Z"
+    _write_json(out, packet)
+    _write_json(paths["support"], support)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "checked-in packet generated_at predates support_packets; regenerate "
+        "WEEKLY_GOVERNOR_PACKET.generated.json after refreshing source inputs"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
     tmp_path: Path,
 ) -> None:
