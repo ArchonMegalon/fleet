@@ -216,8 +216,15 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "rollback",
         "focus_shift",
     ]
+    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(encoding="utf-8")
+    assert "# Weekly Governor Packet" in markdown
+    assert "| Launch expand | blocked |" in markdown
+    assert "| Freeze launch | active |" in markdown
+    assert "- Successor dependency posture: open" in markdown
+    assert "- Provider canary: Canary evidence is still accumulating" in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
+    assert "WEEKLY_GOVERNOR_PACKET.generated.md" in manifest["artifacts"]
 
 
 def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies_are_open(

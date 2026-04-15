@@ -16,6 +16,7 @@
     "SUPPORT_CASE_PACKETS.generated.json",
     "SUPPORT_CASE_SOURCE_MIRROR.generated.json",
     "WEEKLY_GOVERNOR_PACKET.generated.json",
+    "WEEKLY_GOVERNOR_PACKET.generated.md",
     "WEEKLY_PRODUCT_PULSE.generated.json",
     "WORKPACKAGES.generated.yaml",
     "external-proof-capture-pack-20260405T224459Z.tar.gz",
@@ -31,7 +32,7 @@
   },
   "dispatchable_truth_ready": true,
   "lifecycle": "live",
-  "published_at": "2026-04-15T09:01:44Z",
+  "published_at": "2026-04-15T09:12:05Z",
   "schema_version": "2026-03-10.v1",
   "stages": {
     "capacity_compile": true,

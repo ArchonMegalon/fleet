@@ -65,6 +65,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         default=str(PUBLISHED / "WEEKLY_GOVERNOR_PACKET.generated.json"),
         help="output path for WEEKLY_GOVERNOR_PACKET.generated.json",
     )
+    parser.add_argument(
+        "--markdown-out",
+        default=str(PUBLISHED / "WEEKLY_GOVERNOR_PACKET.generated.md"),
+        help="operator-readable Markdown companion for the weekly governor packet",
+    )
     parser.add_argument("--successor-registry", default=str(SUCCESSOR_REGISTRY))
     parser.add_argument("--queue-staging", default=str(QUEUE_STAGING))
     parser.add_argument("--weekly-pulse", default=str(WEEKLY_PULSE))
@@ -515,8 +520,108 @@ def build_payload(
     }
 
 
+def _markdown_status(value: Any) -> str:
+    text = str(value or "").strip()
+    return text if text else "unknown"
+
+
+def _markdown_list(values: Any) -> str:
+    if not isinstance(values, list) or not values:
+        return "none"
+    return ", ".join(str(value) for value in values)
+
+
+def render_markdown_packet(payload: Dict[str, Any]) -> str:
+    verification = dict(payload.get("package_verification") or {})
+    truth = dict(payload.get("truth_inputs") or {})
+    decision_board = dict(payload.get("decision_board") or {})
+    loop = dict(payload.get("measured_rollout_loop") or {})
+    weekly = dict(payload.get("weekly_input_health") or {})
+    sources = dict(payload.get("source_input_health") or {})
+    support = dict(truth.get("support_summary") or {})
+    dependency = dict(truth.get("successor_dependency_posture") or {})
+    parity = dict(truth.get("flagship_parity_release_truth") or {})
+    risk_clusters = payload.get("risk_clusters") if isinstance(payload.get("risk_clusters"), list) else []
+
+    lines = [
+        "# Weekly Governor Packet",
+        "",
+        f"Generated: {_markdown_status(payload.get('generated_at'))}",
+        f"As of: {_markdown_status(payload.get('as_of'))}",
+        f"Package: {_markdown_status(verification.get('package_id'))}",
+        f"Milestone: {verification.get('milestone_id', 'unknown')} - {_markdown_status(verification.get('registry_milestone_title'))}",
+        "",
+        "## Decision Board",
+        "",
+        "| Decision | State | Reason |",
+        "| --- | --- | --- |",
+    ]
+    for key, label in (
+        ("launch_expand", "Launch expand"),
+        ("freeze_launch", "Freeze launch"),
+        ("canary", "Canary"),
+        ("rollback", "Rollback"),
+        ("focus_shift", "Focus shift"),
+    ):
+        row = dict(decision_board.get(key) or {})
+        reason = str(row.get("reason") or row.get("next_decision") or "").strip()
+        lines.append(f"| {label} | {_markdown_status(row.get('state'))} | {reason or 'none'} |")
+
+    lines.extend(
+        [
+            "",
+            "## Measured Truth",
+            "",
+            f"- Package verification: {_markdown_status(verification.get('status'))}",
+            f"- Weekly input health: {_markdown_status(weekly.get('status'))}",
+            f"- Source input health: {_markdown_status(sources.get('status'))}",
+            f"- Measured rollout loop: {_markdown_status(loop.get('loop_status'))}",
+            f"- Successor dependency posture: {_markdown_status(dependency.get('status'))}",
+            f"- Open successor dependencies: {_markdown_list(dependency.get('open_dependency_ids'))}",
+            f"- Flagship readiness: {_markdown_status(truth.get('flagship_readiness_status'))}",
+            f"- Flagship parity release truth: {_markdown_status(parity.get('release_truth_status'))}",
+            f"- Journey gate state: {_markdown_status(truth.get('journey_gate_state'))}",
+            f"- Local release proof: {_markdown_status(truth.get('local_release_proof_status'))}",
+            f"- Provider canary: {_markdown_status(truth.get('provider_canary_status'))}",
+            f"- Closure health: {_markdown_status(truth.get('closure_health_state'))}",
+            f"- Open non-external support packets: {support.get('open_non_external_packet_count', 0)}",
+            "",
+            "## Required Weekly Actions",
+            "",
+        ]
+    )
+    for action in loop.get("required_decision_actions") or []:
+        lines.append(f"- {action}")
+    if not loop.get("required_decision_actions"):
+        lines.append("- none")
+
+    lines.extend(["", "## Evidence Requirements", ""])
+    for requirement in loop.get("evidence_requirements") or []:
+        lines.append(f"- {requirement}")
+    if not loop.get("evidence_requirements"):
+        lines.append("- none")
+
+    lines.extend(["", "## Risk Clusters", ""])
+    for cluster in risk_clusters:
+        if not isinstance(cluster, dict):
+            continue
+        lines.append(
+            f"- {_markdown_status(cluster.get('cluster_id'))}: "
+            f"{_markdown_status(cluster.get('summary'))}"
+        )
+    if not risk_clusters:
+        lines.append("- none")
+
+    lines.extend(["", "## Source Paths", ""])
+    for key, path in sorted(dict(payload.get("source_paths") or {}).items()):
+        lines.append(f"- {key}: {path}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def materialize(args: argparse.Namespace) -> Path:
     out_path = Path(args.out).resolve()
+    markdown_out_path = Path(args.markdown_out).resolve() if str(args.markdown_out or "").strip() else None
     source_paths = {
         "successor_registry": str(Path(args.successor_registry).resolve()),
         "queue_staging": str(Path(args.queue_staging).resolve()),
@@ -537,6 +642,8 @@ def materialize(args: argparse.Namespace) -> Path:
         source_paths=source_paths,
     )
     write_text_atomic(out_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    if markdown_out_path is not None:
+        write_text_atomic(markdown_out_path, render_markdown_packet(payload))
     repo_root = repo_root_for_published_path(out_path)
     if repo_root is not None:
         write_compile_manifest(repo_root)
