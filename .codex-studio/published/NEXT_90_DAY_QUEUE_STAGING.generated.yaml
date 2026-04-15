@@ -176,6 +176,13 @@ items:
     milestone_id: 106
     wave: W8
     repo: executive-assistant
+    status: complete
+    proof:
+      - /docker/EA/docs/chummer_governor_packets/CHUMMER_GOVERNOR_PACKET_PACK.yaml
+      - /docker/EA/docs/chummer_governor_packets/OPERATOR_AND_REPORTER_PACKET_SPECIMENS.yaml
+      - /docker/EA/tests/test_chummer_governor_packet_pack.py
+      - /docker/EA/feedback/2026-04-15-ea-governor-packets-package-closeout.md
+      - python tests/test_chummer_governor_packet_pack.py
     allowed_paths:
       - skills
       - tests
