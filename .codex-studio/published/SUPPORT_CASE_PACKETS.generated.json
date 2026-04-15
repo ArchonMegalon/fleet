@@ -18,7 +18,7 @@
       "installed_build_receipted": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-15T14:46:59Z",
+    "generated_at": "2026-04-15T15:31:46Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -37,7 +37,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-15T14:46:59Z",
+  "generated_at": "2026-04-15T15:31:46Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -50,7 +50,7 @@
     },
     "blocked_missing_install_receipts_count": 0,
     "blocked_receipt_mismatch_count": 0,
-    "generated_at": "2026-04-15T14:46:59Z",
+    "generated_at": "2026-04-15T15:31:46Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -63,7 +63,7 @@
     "materialized_count": 0,
     "operator_packet_count": 0,
     "reported_count": 0,
-    "source_kind": "remote_url"
+    "source_kind": "local_file"
   },
   "successor_package_verification": {
     "allowed_paths": [
@@ -76,11 +76,14 @@
     "design_queue_source_item_found": true,
     "design_queue_source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "design_queue_source_status": "complete",
+    "disallowed_design_queue_source_proof_entries": [],
     "disallowed_queue_proof_entries": [],
     "disallowed_registry_evidence_entries": [],
     "frontier_id": "2454416974",
     "issues": [],
     "milestone_id": 102,
+    "missing_design_queue_source_proof_anchor_paths": [],
+    "missing_design_queue_source_proof_markers": [],
     "missing_queue_proof_anchor_paths": [],
     "missing_queue_proof_markers": [],
     "missing_registry_evidence_markers": [],
@@ -114,8 +117,10 @@
       "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
       "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
       "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+      "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
       "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
       "python3 -m py_compile",
+      "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
       "installation-bound receipt gating",
       "fixed-version receipts",
       "fixed-channel receipts",
@@ -125,7 +130,9 @@
       "generated support-packet proof hygiene",
       "stale generated support proof gaps",
       "weekly/support receipt-count drift",
-      "weekly/support generated_at freshness"
+      "weekly/support generated_at freshness",
+      "weekly governor source-path hygiene and worker command guard",
+      "design-owned queue source proof markers"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_support_case_packets.py",
@@ -139,7 +146,8 @@
       "fixed-channel receipts",
       "release-channel receipts",
       "weekly/support generated_at freshness",
-      "verify_script_bootstrap_no_pythonpath.py"
+      "verify_script_bootstrap_no_pythonpath.py",
+      "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0"
     ],
     "status": "pass"
   },
@@ -189,7 +197,7 @@
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-04-16T08:11:58Z",
-    "generated_at": "2026-04-15T14:46:59Z",
+    "generated_at": "2026-04-15T15:31:46Z",
     "host_groups": {},
     "hosts": [],
     "release_channel_generated_at": "2026-04-15T08:11:58Z",

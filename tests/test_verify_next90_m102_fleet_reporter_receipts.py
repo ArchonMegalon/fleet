@@ -53,6 +53,7 @@ milestones:
           - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json projects fix-available, please-test, and recovery counts.
           - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly/support generated_at freshness drift so WEEKLY_GOVERNOR_PACKET.generated.json cannot predate the SUPPORT_CASE_PACKETS.generated.json receipt gates it summarizes.
           - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M102 verifier in no-PYTHONPATH bootstrap proof.
+          - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0.
 {evidence_tail}
 """.lstrip(),
         encoding="utf-8",
@@ -82,8 +83,10 @@ items:
       - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
@@ -92,6 +95,8 @@ items:
       - stale generated support proof gaps fail the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
+      - design-owned queue source proof markers fail the standalone verifier
       - design-owned queue source row matches the Fleet completed queue proof assignment
 {proof_tail}
     allowed_paths:
@@ -117,6 +122,30 @@ items:
     wave: W6
     repo: fleet
     status: complete
+    proof:
+      - /docker/fleet/scripts/materialize_support_case_packets.py
+      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/tests/test_materialize_support_case_packets.py
+      - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
+      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+      - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
+      - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
+      - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
+      - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
+      - generated support-packet proof hygiene requires empty disallowed active-run proof entries
+      - stale generated support proof gaps fail the standalone verifier
+      - weekly/support receipt-count drift fails the standalone verifier
+      - weekly/support generated_at freshness fails the standalone verifier
+      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
+      - design-owned queue source proof markers fail the standalone verifier
+      - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
       - tests
@@ -198,10 +227,13 @@ def _support_packets_payload() -> dict:
             "design_queue_source_frontier_id": "2454416974",
             "missing_registry_evidence_markers": [],
             "missing_queue_proof_markers": [],
+            "missing_design_queue_source_proof_markers": [],
             "missing_registry_proof_anchor_paths": [],
             "missing_queue_proof_anchor_paths": [],
+            "missing_design_queue_source_proof_anchor_paths": [],
             "disallowed_registry_evidence_entries": [],
             "disallowed_queue_proof_entries": [],
+            "disallowed_design_queue_source_proof_entries": [],
             "required_registry_evidence_markers": [
                 "scripts/materialize_support_case_packets.py",
                 "tests/test_materialize_support_case_packets.py",
@@ -215,6 +247,7 @@ def _support_packets_payload() -> dict:
                 "release-channel receipts",
                 "weekly/support generated_at freshness",
                 "verify_script_bootstrap_no_pythonpath.py",
+                "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
             ],
             "required_queue_proof_markers": [
                 "/docker/fleet/scripts/materialize_support_case_packets.py",
@@ -225,8 +258,10 @@ def _support_packets_payload() -> dict:
                 "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
                 "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
                 "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+                "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
                 "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
                 "python3 -m py_compile",
+                "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
                 "installation-bound receipt gating",
                 "fixed-version receipts",
                 "fixed-channel receipts",
@@ -237,6 +272,8 @@ def _support_packets_payload() -> dict:
                 "stale generated support proof gaps",
                 "weekly/support receipt-count drift",
                 "weekly/support generated_at freshness",
+                "weekly governor source-path hygiene and worker command guard",
+                "design-owned queue source proof markers",
             ],
         },
     }
@@ -247,7 +284,44 @@ def _weekly_payload() -> dict:
         "generated_at": "2026-04-15T14:13:33Z",
         "source_input_health": {
             "required_inputs": {
-                "support_packets": {"successor_package_verification_status": "pass"}
+                "support_packets": {"successor_package_verification_status": "pass"},
+                "source_path_hygiene": {
+                    "state": "pass",
+                    "disallowed_source_paths": [],
+                    "blocked_markers": [
+                        "/var/lib/codex-fleet",
+                        "ACTIVE_RUN_HANDOFF.generated.md",
+                        "TASK_LOCAL_TELEMETRY.generated.json",
+                        "run_ooda_design_supervisor_until_quiet",
+                        "ooda_design_supervisor.py",
+                        "chummer_design_supervisor.py",
+                        "chummer_design_supervisor.py status",
+                        "chummer_design_supervisor.py eta",
+                        "codexea --telemetry",
+                        "--telemetry-answer",
+                    ],
+                },
+            }
+        },
+        "repeat_prevention": {
+            "worker_command_guard": {
+                "status": "active_run_helpers_forbidden",
+                "blocked_markers": [
+                    "/var/lib/codex-fleet",
+                    "ACTIVE_RUN_HANDOFF.generated.md",
+                    "TASK_LOCAL_TELEMETRY.generated.json",
+                    "run_ooda_design_supervisor_until_quiet",
+                    "ooda_design_supervisor.py",
+                    "chummer_design_supervisor.py",
+                    "chummer_design_supervisor.py status",
+                    "chummer_design_supervisor.py eta",
+                    "codexea --telemetry",
+                    "--telemetry-answer",
+                ],
+                "rule": (
+                    "Worker proof must come from repo-local files, generated packets, and tests, "
+                    "not operator telemetry or active-run helper commands."
+                ),
             }
         },
         "truth_inputs": {
@@ -365,6 +439,60 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_active_run_helper_proo
     assert result["blocked_proof_entries"] == result["blocked_queue_proof_entries"]
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_fails_telemetry_command_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    _write_queue(
+        queue,
+        design_queue,
+        proof_tail="      - codexea --telemetry --telemetry-answer remaining\n",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert "successor queue proof cites active-run telemetry or helper commands" in result["issues"]
+    assert result["blocked_queue_proof_entries"] == [
+        "codexea --telemetry --telemetry-answer remaining"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_supervisor_helper_command_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    _write_queue(
+        queue,
+        design_queue,
+        proof_tail="      - python3 scripts/chummer_design_supervisor.py active-runs\n",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert "successor queue proof cites active-run telemetry or helper commands" in result["issues"]
+    assert result["blocked_queue_proof_entries"] == [
+        "python3 scripts/chummer_design_supervisor.py active-runs"
+    ]
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_bootstrap_guard_proof(
     tmp_path: Path,
 ) -> None:
@@ -374,6 +502,122 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_bootstrap_guar
         queue.read_text(encoding="utf-8").replace(
             "      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py\n"
             "      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert "successor authority reports missing_queue_proof_markers" in result["issues"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_design_source_missing_proof_marker(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    design_queue.write_text(
+        design_queue.read_text(encoding="utf-8").replace(
+            "      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert (
+        "successor design queue source proof missing marker: "
+        "/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py"
+        in result["successor_authority_issues"]
+    )
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_design_source_helper_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    design_queue.write_text(
+        design_queue.read_text(encoding="utf-8").replace(
+            "      - design-owned queue source row matches the Fleet completed queue proof assignment\n",
+            "      - design-owned queue source row matches the Fleet completed queue proof assignment\n"
+            "      - python3 scripts/chummer_design_supervisor.py worker-status\n",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert (
+        "successor design queue source proof cites active-run telemetry or helper commands"
+        in result["issues"]
+    )
+    assert result["blocked_design_queue_source_proof_entries"] == [
+        "python3 scripts/chummer_design_supervisor.py worker-status"
+    ]
+    assert result["blocked_proof_entries"] == result["blocked_design_queue_source_proof_entries"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_command_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert "successor authority reports missing_queue_proof_markers" in result["issues"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_weekly_markdown_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md\n",
             "",
         ),
         encoding="utf-8",
@@ -443,6 +687,64 @@ def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_support_inpu
     assert "weekly governor support-packets input is missing" in result["issues"]
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_source_path_hygiene(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _weekly_payload()
+    payload["source_input_health"]["required_inputs"]["source_path_hygiene"] = {
+        "state": "fail",
+        "disallowed_source_paths": [
+            "/var/lib/codex-fleet/chummer_design_supervisor/shard-7/ACTIVE_RUN_HANDOFF.generated.md"
+        ],
+        "blocked_markers": [],
+    }
+    _write_json(weekly, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "weekly governor source-path hygiene is not pass" in result["issues"]
+    assert "weekly governor source-path hygiene reports disallowed source paths" in result["issues"]
+    assert "weekly governor source-path hygiene is missing blocked helper markers" in result["issues"]
+    assert "/var/lib/codex-fleet" in result["missing_weekly_source_path_hygiene_markers"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_worker_command_guard(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _weekly_payload()
+    payload["repeat_prevention"]["worker_command_guard"] = {
+        "status": "missing",
+        "blocked_markers": [],
+        "rule": "proof can cite operator telemetry",
+    }
+    _write_json(weekly, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "weekly governor worker command guard is not active" in result["issues"]
+    assert "weekly governor worker command guard is missing blocked helper markers" in result["issues"]
+    assert "weekly governor worker command guard rule drifted" in result["issues"]
+    assert "codexea --telemetry" in result["missing_weekly_worker_guard_markers"]
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_active_run_proof(
     tmp_path: Path,
 ) -> None:
@@ -469,6 +771,35 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_active_
     )
     assert result["support_packet_blocked_proof_entries"] == [
         "/var/lib/codex-fleet/chummer_design_supervisor/shard-7/ACTIVE_RUN_HANDOFF.generated.md"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_design_source_helper_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["successor_package_verification"]["disallowed_design_queue_source_proof_entries"] = [
+        "codexea --telemetry --telemetry-answer m102"
+    ]
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json exposes active-run telemetry or helper proof entries"
+        in result["issues"]
+    )
+    assert result["support_packet_blocked_proof_entries"] == [
+        "codexea --telemetry --telemetry-answer m102"
     ]
 
 
@@ -501,6 +832,34 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_stale_p
             "/docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py"
         ]
     }
+    assert result["missing_support_packet_proof_gap_fields"] == []
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_generated_proof_gap_field(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["successor_package_verification"].pop("missing_design_queue_source_proof_markers")
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json successor verification carries stale proof gaps"
+        in result["issues"]
+    )
+    assert result["missing_support_packet_proof_gap_fields"] == [
+        "missing_design_queue_source_proof_markers"
+    ]
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_closure_field_drift(

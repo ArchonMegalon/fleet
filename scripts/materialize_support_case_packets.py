@@ -71,6 +71,7 @@ SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS = [
     "release-channel receipts",
     "weekly/support generated_at freshness",
     "verify_script_bootstrap_no_pythonpath.py",
+    "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
 ]
 SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/scripts/materialize_support_case_packets.py",
@@ -81,8 +82,10 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
     "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
+    "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
     "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
     "python3 -m py_compile",
+    "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
     "installation-bound receipt gating",
     "fixed-version receipts",
     "fixed-channel receipts",
@@ -93,6 +96,8 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "stale generated support proof gaps",
     "weekly/support receipt-count drift",
     "weekly/support generated_at freshness",
+    "weekly governor source-path hygiene and worker command guard",
+    "design-owned queue source proof markers",
 ]
 SUCCESSOR_DISALLOWED_PROOF_MARKERS = (
     "/var/lib/codex-fleet",
@@ -100,6 +105,11 @@ SUCCESSOR_DISALLOWED_PROOF_MARKERS = (
     "TASK_LOCAL_TELEMETRY.generated.json",
     "run_ooda_design_supervisor_until_quiet",
     "ooda_design_supervisor.py",
+    "chummer_design_supervisor.py",
+    "chummer_design_supervisor.py status",
+    "chummer_design_supervisor.py eta",
+    "codexea --telemetry",
+    "--telemetry-answer",
 )
 DEFAULT_RUNTIME_ENV_CANDIDATES = (
     ROOT / "runtime.env",
@@ -720,15 +730,19 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
     work_task = _find_successor_work_task(milestone) if milestone else {}
     registry_evidence = _normalize_list(work_task.get("evidence")) if work_task else []
     queue_proof = _normalize_list(queue_item.get("proof")) if queue_item else []
+    source_queue_proof = _normalize_list(queue_source_item.get("proof")) if queue_source_item else []
     missing_registry_evidence = _missing_markers(
         registry_evidence,
         SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS,
     )
     missing_queue_proof = _missing_markers(queue_proof, SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS)
+    missing_source_queue_proof = _missing_markers(source_queue_proof, SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS)
     missing_registry_proof_anchor_paths = _missing_proof_anchor_paths(registry_evidence)
     missing_queue_proof_anchor_paths = _missing_proof_anchor_paths(queue_proof)
+    missing_source_queue_proof_anchor_paths = _missing_proof_anchor_paths(source_queue_proof)
     disallowed_registry_evidence_entries = _disallowed_proof_entries(registry_evidence)
     disallowed_queue_proof_entries = _disallowed_proof_entries(queue_proof)
+    disallowed_source_queue_proof_entries = _disallowed_proof_entries(source_queue_proof)
     issues: List[str] = []
     if not milestone:
         issues.append(f"successor milestone {SUCCESSOR_MILESTONE_ID} missing")
@@ -783,6 +797,15 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             issues.append(f"successor design queue source item {SUCCESSOR_PACKAGE_ID} missing")
         else:
             issues.extend(_source_queue_assignment_issues(queue_source_item, queue_item))
+            for marker in missing_source_queue_proof:
+                issues.append(f"successor design queue source proof missing marker: {marker}")
+            for entry in disallowed_source_queue_proof_entries:
+                issues.append(
+                    "successor design queue source proof cites active-run telemetry/helper proof: "
+                    f"{entry}"
+                )
+            for path in missing_source_queue_proof_anchor_paths:
+                issues.append(f"successor design queue source proof anchor missing on disk: {path}")
     if milestone:
         if not work_task:
             issues.append(f"successor registry work task {SUCCESSOR_WORK_TASK_ID} missing")
@@ -813,6 +836,9 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "design_queue_source_item_found": bool(queue_source_item),
         "design_queue_source_status": _normalize_text(queue_source_item.get("status")),
         "design_queue_source_frontier_id": _normalize_text(queue_source_item.get("frontier_id")),
+        "missing_design_queue_source_proof_markers": missing_source_queue_proof,
+        "missing_design_queue_source_proof_anchor_paths": missing_source_queue_proof_anchor_paths,
+        "disallowed_design_queue_source_proof_entries": disallowed_source_queue_proof_entries,
         "registry_wave": _normalize_text(milestone.get("wave")),
         "registry_status": _normalize_text(milestone.get("status")),
         "registry_title": _normalize_text(milestone.get("title")),

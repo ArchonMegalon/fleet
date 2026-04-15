@@ -70,11 +70,23 @@ The later 2026-04-15 helper-proof casing guard pass tightened both the shared su
 
 The later 2026-04-15 weekly markdown projection guard pass tightened the standalone verifier so `WEEKLY_GOVERNOR_PACKET.generated.md` must carry the same generated timestamp and receipt-gated followthrough counts as the JSON weekly packet and `SUPPORT_CASE_PACKETS.generated.json`. The human governor packet can no longer cite stale reporter followthrough, fix-available, please-test, recovery, missing-install-receipt, receipt-mismatch, or installed-build receipt counts while the machine packet remains green.
 
+The later 2026-04-15 command-proof guard pass tightened repeat prevention so the canonical registry, Fleet queue row, design-owned queue row, generated support-packet verifier receipt, and package tests all require `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0`. The package can no longer stay closed by naming the verifier files or py_compile proof alone.
+
 The later 2026-04-15 generated scope-drift guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.allowed_paths` and `owned_surfaces` must match the recomputed canonical successor authority. A stale generated support packet can no longer keep this package green after the Fleet queue or design-owned source retargets the package scope.
 
 The later 2026-04-15 bootstrap guard pass now makes `/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py` and `/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py` required queue proof anchors for this package, and the bootstrap guard now exercises `/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py`. The closeout can no longer stay green if the standalone repeat-prevention verifier only works with ambient `PYTHONPATH` state.
 
 The later 2026-04-15 generated required-marker drift pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.required_registry_evidence_markers` and `required_queue_proof_markers` must match recomputed successor authority. A stale generated support packet can no longer hide that the proof-marker contract itself changed while carrying otherwise empty gap lists.
+
+The later 2026-04-15 design-source proof guard pass tightened both the materializer authority check and the standalone verifier so the design-owned queue source row must carry the same required M102 proof markers, resolvable Fleet proof anchors, and no active-run telemetry/helper proof entries. Fleet mirror completion can no longer stay green if the design source row keeps the assignment closed but loses the proof contract.
+
+The later 2026-04-15 telemetry-command guard pass tightened the same shared disallowed-proof list so explicit operator telemetry commands such as `codexea --telemetry`, `--telemetry-answer`, and `chummer_design_supervisor.py status` cannot be accepted as registry, queue, design-source, or generated support-packet proof for this closed package.
+
+The later 2026-04-15 active-run helper command guard pass broadens that rejection from named supervisor subcommands to any `chummer_design_supervisor.py` proof marker. Future shards cannot keep this package closed by citing a different active-run supervisor helper command while avoiding the exact `status` or `eta` strings.
+
+The 2026-04-15 weekly hygiene guard pass now requires `WEEKLY_GOVERNOR_PACKET.generated.json` to report `source_input_health.required_inputs.source_path_hygiene.state=pass` with no disallowed source paths and to carry the `repeat_prevention.worker_command_guard` blocked-helper marker set. The M102 receipt closeout can no longer stay green if the product-governor followthrough packet drops the no-operator-helper rule while summarizing the support receipt gates.
+
+The later 2026-04-15 design-source helper proof reporting pass makes design-owned queue-source helper proof a first-class standalone verifier failure, not only a nested successor-authority issue. The generated support-packet verifier receipt must also keep `disallowed_design_queue_source_proof_entries=[]`, so stale generated proof cannot hide a blocked helper command in the design source row.
 
 ## Receipt-Gated Behavior
 
@@ -191,6 +203,14 @@ python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 direct verifier tests passed: 14 after no-PYTHONPATH bootstrap proof became required queue evidence
 python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
 direct verifier tests passed: 16 after generated required-marker drift became fail-closed
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: 21 after generic chummer_design_supervisor.py helper proof markers became fail-closed
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: design-source helper proof reporting and generated support-packet design-source helper proof reporting
+direct verifier invocation passed: 25 tests after design-source helper proof reporting
+direct materializer invocation passed: 37 tests after refreshed successor authority fixture proof markers
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 ```
 

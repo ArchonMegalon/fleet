@@ -17,6 +17,7 @@ try:
         SUCCESSOR_MILESTONE_ID,
         SUCCESSOR_PACKAGE_ID,
         SUCCESSOR_REGISTRY_PATH,
+        SUCCESSOR_DISALLOWED_PROOF_MARKERS,
         _find_successor_queue_item,
         _normalize_list,
         _normalize_text,
@@ -29,6 +30,7 @@ except ModuleNotFoundError:
         SUCCESSOR_MILESTONE_ID,
         SUCCESSOR_PACKAGE_ID,
         SUCCESSOR_REGISTRY_PATH,
+        SUCCESSOR_DISALLOWED_PROOF_MARKERS,
         _find_successor_queue_item,
         _normalize_list,
         _normalize_text,
@@ -77,13 +79,23 @@ REQUIRED_WEEKLY_SUPPORT_KEYS = {
     "reporter_followthrough_plan_blocked_missing_install_receipts_count",
     "reporter_followthrough_plan_blocked_receipt_mismatch_count",
 }
+REQUIRED_WEEKLY_WORKER_GUARD_RULE_MARKERS = (
+    "repo-local files",
+    "generated packets",
+    "tests",
+    "not operator telemetry",
+    "active-run helper commands",
+)
 REQUIRED_SUPPORT_VERIFICATION_EMPTY_LIST_KEYS = {
     "missing_registry_evidence_markers",
     "missing_queue_proof_markers",
+    "missing_design_queue_source_proof_markers",
     "missing_registry_proof_anchor_paths",
     "missing_queue_proof_anchor_paths",
+    "missing_design_queue_source_proof_anchor_paths",
     "disallowed_registry_evidence_entries",
     "disallowed_queue_proof_entries",
+    "disallowed_design_queue_source_proof_entries",
 }
 REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "allowed_paths",
@@ -105,13 +117,8 @@ REQUIRED_RULE_MARKERS = (
     "fixed-channel receipts",
     "release-channel receipts",
 )
-DISALLOWED_WORKER_PROOF_MARKERS = (
-    "/var/lib/codex-fleet",
-    "ACTIVE_RUN_HANDOFF.generated.md",
-    "TASK_LOCAL_TELEMETRY.generated.json",
-    "run_ooda_design_supervisor_until_quiet",
-    "ooda_design_supervisor.py",
-)
+DISALLOWED_WORKER_PROOF_MARKERS = SUCCESSOR_DISALLOWED_PROOF_MARKERS
+REQUIRED_WEEKLY_WORKER_GUARD_MARKERS = set(DISALLOWED_WORKER_PROOF_MARKERS)
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -273,11 +280,20 @@ def verify(
         issues.append("successor queue proof does not name the standalone M102 verifier tests")
     blocked_registry_evidence_entries = _disallowed_proof_entries(registry_evidence)
     blocked_queue_proof_entries = _disallowed_proof_entries(queue_proof)
-    blocked_proof_entries = blocked_registry_evidence_entries + blocked_queue_proof_entries
+    blocked_design_queue_source_proof_entries = _normalize_list(
+        successor.get("disallowed_design_queue_source_proof_entries")
+    )
+    blocked_proof_entries = (
+        blocked_registry_evidence_entries
+        + blocked_queue_proof_entries
+        + blocked_design_queue_source_proof_entries
+    )
     if blocked_registry_evidence_entries:
         issues.append("successor registry evidence cites active-run telemetry or helper commands")
     if blocked_queue_proof_entries:
         issues.append("successor queue proof cites active-run telemetry or helper commands")
+    if blocked_design_queue_source_proof_entries:
+        issues.append("successor design queue source proof cites active-run telemetry or helper commands")
 
     receipt_gates = support_packets.get("followthrough_receipt_gates")
     if not isinstance(receipt_gates, dict):
@@ -302,11 +318,15 @@ def verify(
         for key in REQUIRED_SUPPORT_VERIFICATION_EMPTY_LIST_KEYS
         if _normalize_list(support_verification.get(key))
     }
-    if support_verification_nonempty_lists:
+    missing_support_verification_empty_list_keys = sorted(
+        key for key in REQUIRED_SUPPORT_VERIFICATION_EMPTY_LIST_KEYS if key not in support_verification
+    )
+    if support_verification_nonempty_lists or missing_support_verification_empty_list_keys:
         issues.append("SUPPORT_CASE_PACKETS.generated.json successor verification carries stale proof gaps")
     support_blocked_proof_entries = (
         support_verification_nonempty_lists.get("disallowed_registry_evidence_entries", [])
         + support_verification_nonempty_lists.get("disallowed_queue_proof_entries", [])
+        + support_verification_nonempty_lists.get("disallowed_design_queue_source_proof_entries", [])
     )
     if support_blocked_proof_entries:
         issues.append("SUPPORT_CASE_PACKETS.generated.json exposes active-run telemetry or helper proof entries")
@@ -349,6 +369,7 @@ def verify(
     if not isinstance(weekly_sources, dict):
         weekly_sources = weekly.get("input_health")
     support_input = {}
+    source_path_hygiene = {}
     if isinstance(weekly_sources, dict):
         required_inputs = (
             weekly_sources.get("required_inputs")
@@ -359,10 +380,51 @@ def verify(
             support_input = required_inputs.get("support_packets") or {}
         elif isinstance(weekly_sources.get("support_packets"), dict):
             support_input = weekly_sources.get("support_packets") or {}
+        if isinstance(required_inputs.get("source_path_hygiene"), dict):
+            source_path_hygiene = required_inputs.get("source_path_hygiene") or {}
     if not support_input:
         issues.append("weekly governor support-packets input is missing")
     elif support_input.get("successor_package_verification_status") != "pass":
         issues.append("weekly governor support-packets input does not report successor verification pass")
+    missing_weekly_source_path_markers: List[str] = []
+    if source_path_hygiene:
+        source_path_markers = set(_normalize_list(source_path_hygiene.get("blocked_markers")))
+        missing_weekly_source_path_markers = sorted(
+            marker for marker in REQUIRED_WEEKLY_WORKER_GUARD_MARKERS if marker not in source_path_markers
+        )
+        if _normalize_text(source_path_hygiene.get("state")).lower() != "pass":
+            issues.append("weekly governor source-path hygiene is not pass")
+        if _normalize_list(source_path_hygiene.get("disallowed_source_paths")):
+            issues.append("weekly governor source-path hygiene reports disallowed source paths")
+        if missing_weekly_source_path_markers:
+            issues.append("weekly governor source-path hygiene is missing blocked helper markers")
+    else:
+        issues.append("weekly governor source-path hygiene input is missing")
+
+    repeat_prevention = weekly.get("repeat_prevention") if isinstance(weekly.get("repeat_prevention"), dict) else {}
+    worker_command_guard = (
+        repeat_prevention.get("worker_command_guard")
+        if isinstance(repeat_prevention.get("worker_command_guard"), dict)
+        else {}
+    )
+    missing_weekly_worker_guard_markers: List[str] = []
+    if worker_command_guard:
+        worker_guard_markers = set(_normalize_list(worker_command_guard.get("blocked_markers")))
+        missing_weekly_worker_guard_markers = sorted(
+            marker for marker in REQUIRED_WEEKLY_WORKER_GUARD_MARKERS if marker not in worker_guard_markers
+        )
+        if _normalize_text(worker_command_guard.get("status")) != "active_run_helpers_forbidden":
+            issues.append("weekly governor worker command guard is not active")
+        if missing_weekly_worker_guard_markers:
+            issues.append("weekly governor worker command guard is missing blocked helper markers")
+        missing_worker_guard_rule_markers = _contains_all_markers(
+            _normalize_text(worker_command_guard.get("rule")),
+            REQUIRED_WEEKLY_WORKER_GUARD_RULE_MARKERS,
+        )
+        if missing_worker_guard_rule_markers:
+            issues.append("weekly governor worker command guard rule drifted")
+    else:
+        issues.append("weekly governor worker command guard is missing")
     support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
     weekly_generated_at = _parse_iso_utc(weekly.get("generated_at"))
     if not support_generated_at:
@@ -454,17 +516,22 @@ def verify(
         "successor_registry_path": str(successor_registry_path),
         "queue_staging_path": str(queue_staging_path),
         "successor_authority_status": successor.get("status", ""),
+        "successor_authority_issues": successor.get("issues", []),
         "queue_proof_entry_count": len(queue_proof),
         "blocked_proof_entries": blocked_proof_entries,
         "blocked_registry_evidence_entries": blocked_registry_evidence_entries,
         "blocked_queue_proof_entries": blocked_queue_proof_entries,
+        "blocked_design_queue_source_proof_entries": blocked_design_queue_source_proof_entries,
         "support_packet_blocked_proof_entries": support_blocked_proof_entries,
         "support_packet_stale_proof_gaps": support_verification_nonempty_lists,
+        "missing_support_packet_proof_gap_fields": missing_support_verification_empty_list_keys,
         "support_packet_successor_field_mismatches": support_verification_field_mismatches,
         "missing_gate_names": missing_gate_names,
         "missing_gate_counts": missing_gate_counts,
         "missing_action_groups": missing_action_groups,
         "missing_weekly_support_keys": missing_weekly_keys,
+        "missing_weekly_source_path_hygiene_markers": missing_weekly_source_path_markers,
+        "missing_weekly_worker_guard_markers": missing_weekly_worker_guard_markers,
         "weekly_count_mismatches": weekly_count_mismatches,
         "missing_weekly_markdown_labels": missing_markdown_labels,
         "weekly_markdown_count_mismatches": weekly_markdown_count_mismatches,

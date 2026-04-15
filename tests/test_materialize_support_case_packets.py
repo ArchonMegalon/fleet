@@ -223,6 +223,9 @@ milestones:
           - /docker/fleet/tests/test_materialize_support_case_packets.py covers receipt gating.
           - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json reports successor_package_verification.status=pass.
           - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json projects fix-available, please-test, and recovery counts.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly/support generated_at freshness drift so WEEKLY_GOVERNOR_PACKET.generated.json cannot predate the SUPPORT_CASE_PACKETS.generated.json receipt gates it summarizes.
+          - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M102 verifier in no-PYTHONPATH bootstrap proof.
+          - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0.
 """.lstrip(),
         encoding="utf-8",
     )
@@ -244,16 +247,24 @@ items:
       - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
       - generated support-packet proof hygiene requires empty disallowed active-run proof entries
       - stale generated support proof gaps fail the standalone verifier
+      - weekly/support receipt-count drift fails the standalone verifier
+      - weekly/support generated_at freshness fails the standalone verifier
+      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
+      - design-owned queue source proof markers fail the standalone verifier
       - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
@@ -278,6 +289,30 @@ items:
     wave: W6
     repo: fleet
     status: complete
+    proof:
+      - /docker/fleet/scripts/materialize_support_case_packets.py
+      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/tests/test_materialize_support_case_packets.py
+      - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
+      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+      - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
+      - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
+      - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
+      - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
+      - generated support-packet proof hygiene requires empty disallowed active-run proof entries
+      - stale generated support proof gaps fail the standalone verifier
+      - weekly/support receipt-count drift fails the standalone verifier
+      - weekly/support generated_at freshness fails the standalone verifier
+      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
+      - design-owned queue source proof markers fail the standalone verifier
+      - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
       - tests
@@ -329,6 +364,9 @@ items:
     assert verification["design_queue_source_item_found"] is True
     assert verification["design_queue_source_status"] == "complete"
     assert verification["design_queue_source_frontier_id"] == "2454416974"
+    assert verification["missing_design_queue_source_proof_markers"] == []
+    assert verification["missing_design_queue_source_proof_anchor_paths"] == []
+    assert verification["disallowed_design_queue_source_proof_entries"] == []
     assert verification["missing_queue_proof_markers"] == []
     assert verification["missing_queue_proof_anchor_paths"] == []
     assert verification["disallowed_queue_proof_entries"] == []
@@ -339,8 +377,16 @@ items:
     ]
     assert "fixed-version receipts" in verification["required_registry_evidence_markers"]
     assert "fixed-channel receipts" in verification["required_registry_evidence_markers"]
+    assert (
+        "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0"
+        in verification["required_registry_evidence_markers"]
+    )
     assert "fixed-version receipts" in verification["required_queue_proof_markers"]
     assert "fixed-channel receipts" in verification["required_queue_proof_markers"]
+    assert (
+        "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0"
+        in verification["required_queue_proof_markers"]
+    )
     assert (
         "/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py"
         in verification["required_queue_proof_markers"]
@@ -353,6 +399,7 @@ items:
     assert "design-owned queue source" in verification["required_queue_proof_markers"]
     assert "generated support-packet proof hygiene" in verification["required_queue_proof_markers"]
     assert "stale generated support proof gaps" in verification["required_queue_proof_markers"]
+    assert "design-owned queue source proof markers" in verification["required_queue_proof_markers"]
     assert (
         "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md"
         in verification["required_queue_proof_markers"]
@@ -428,12 +475,16 @@ def test_materialize_support_case_packets_rejects_active_run_proof_markers_case_
         [
             "/VAR/LIB/CODEX-FLEET/chummer_design_supervisor/shard-7/active_run_handoff.generated.md",
             "python3 scripts/RUN_OODA_DESIGN_SUPERVISOR_UNTIL_QUIET.py",
+            "codexea --telemetry --telemetry-answer remaining",
+            "python3 chummer_design_supervisor.py status",
         ]
     )
 
     assert entries == [
         "/VAR/LIB/CODEX-FLEET/chummer_design_supervisor/shard-7/active_run_handoff.generated.md",
         "python3 scripts/RUN_OODA_DESIGN_SUPERVISOR_UNTIL_QUIET.py",
+        "codexea --telemetry --telemetry-answer remaining",
+        "python3 chummer_design_supervisor.py status",
     ]
 
 
@@ -488,6 +539,7 @@ items:
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
@@ -567,6 +619,7 @@ items:
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
@@ -644,6 +697,7 @@ items:
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
@@ -743,6 +797,7 @@ items:
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
@@ -846,6 +901,7 @@ items:
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
@@ -947,6 +1003,7 @@ items:
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - {missing_anchor}
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
