@@ -8,7 +8,6 @@ items:
   - title: Unify claim, install, update, and support recovery into one desktop-native flow
     task: Remove browser ritual from claim, install, update, rollback, and support continuation for claimed desktop users.
     package_id: next90-m102-hub-desktop-native-trust
-    frontier_id: 2897065929
     milestone_id: 102
     wave: W6
     repo: chummer6-hub
@@ -23,6 +22,7 @@ items:
       - /docker/chummercomplete/chummer.run-services/tests/test_desktop_native_trust_receipts.py
       - /docker/chummercomplete/chummer.run-services/.codex-studio/published/HUB_LOCAL_RELEASE_PROOF.generated.json
       - /docker/chummercomplete/chummer.run-services commit e27f24c1 tightens desktop-native continuation fallback-posture proof.
+      - /docker/chummercomplete/chummer.run-services commit b4d761a2 tightens desktop-native trust receipt wording guards.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -50,6 +50,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 2e87dce3 tightens M101 verifier against design-owned queue source drift.
       - /docker/chummercomplete/chummer6-ui-finish commit c61a8fb5 pins M101 design queue closure tokens into the verifier, receipt, and compliance guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 79760cc1 refreshes the M101 release train receipt after queue closure proof tightening.
+      - /docker/chummercomplete/chummer6-ui-finish commit a3bf058e tightens M101 proof commit resolution so stale proof anchors cannot keep the closed package green.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -102,7 +103,6 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors; ENGINE_PROOF_PACK.generated.json reports missing_queue_proof_anchors=[].
       - /docker/chummercomplete/chummer-core-engine commit cfc465a5 adds checked-in receipt reproducibility proof for ENGINE_PROOF_PACK.generated.json.
       - /docker/chummercomplete/chummer-core-engine commit 86040e30 fail-closes unassigned queue allowed paths or owned surfaces for this completed package.
-      - /docker/chummercomplete/chummer-core-engine commit 35cd27b4 pins successor frontier 3227666051 into the completed M104 proof guard.
       - /docker/chummercomplete/chummer-core-engine commit 8dd516ef makes failed engine proof pack generation exit nonzero while still writing diagnostic receipts.
       - /docker/chummercomplete/chummer-core-engine commit c88178fa tightens design-owned queue scope proof so canonical allowed-path or owned-surface drift cannot keep M104 passed.
     allowed_paths:
@@ -168,7 +168,6 @@ items:
   - title: Gate fix followthrough against real install and receipt truth
     task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
     package_id: next90-m102-fleet-reporter-receipts
-    frontier_id: 2454416974
     milestone_id: 102
     wave: W6
     repo: fleet
@@ -363,6 +362,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 7331cd26 tightens artifact-factory queue and registry proof-anchor resolution.
       - /docker/chummercomplete/chummer.run-services commit 0eac80b6 tightens design-owned queue source verification and standard Hub verify wiring for the M107 artifact-factory proof.
       - /docker/chummercomplete/chummer.run-services commit cfd5d208 pins the completed M107 artifact-factory proof guard evidence.
+      - /docker/chummercomplete/chummer.run-services commit 60125d9e tightens M107 artifact factory proof guard.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
