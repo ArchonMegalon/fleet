@@ -57,7 +57,15 @@ PROGRAM_WAVE = "next_90_day_product_advance"
 WAVE_ID = "W8"
 QUEUE_STATUS = "live_parallel_successor"
 SUCCESSOR_FRONTIER_IDS = ("2376135131",)
-LOCAL_PROOF_FLOOR_COMMITS = ("065c653", "fb47ce8", "5e6a468", "f66dbaa", "f490e53", "e9ea391")
+LOCAL_PROOF_FLOOR_COMMITS = (
+    "065c653",
+    "fb47ce8",
+    "5e6a468",
+    "f66dbaa",
+    "f490e53",
+    "e9ea391",
+    "aefd72c",
+)
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
@@ -86,12 +94,13 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rebuilds the decision-critical packet projection from live source inputs",
     "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
     "verifier rejects compile manifest freshness drift after weekly packet refresh",
+    "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
     "forbidden worker proof strings are rejected case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-    "local proof floor commit e9ea391 pinned for M106 governor packet repeat prevention",
+    "local proof floor commit aefd72c pinned for M106 governor packet repeat prevention",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -109,12 +118,13 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "decision-critical packet projection",
     "packet freshness drift against generated readiness",
     "compile manifest freshness drift",
+    "support-packet source_sha256 drift",
     "every measured rollout action",
     "forbidden worker proof strings",
     "proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
-    "local proof floor commit e9ea391",
+    "local proof floor commit aefd72c",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (

@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T19:40:02Z",
+  "generated_at": "2026-04-15T19:44:49Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -361,6 +361,10 @@
         {
           "commit": "e9ea391",
           "status": "present"
+        },
+        {
+          "commit": "aefd72c",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -370,7 +374,8 @@
         "5e6a468",
         "f66dbaa",
         "f490e53",
-        "e9ea391"
+        "e9ea391",
+        "aefd72c"
       ],
       "status": "pass"
     },
@@ -380,7 +385,8 @@
       "5e6a468",
       "f66dbaa",
       "f490e53",
-      "e9ea391"
+      "e9ea391",
+      "aefd72c"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -423,12 +429,13 @@
       "verifier rebuilds the decision-critical packet projection from live source inputs",
       "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
       "verifier rejects compile manifest freshness drift after weekly packet refresh",
+      "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
       "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
       "forbidden worker proof strings are rejected case-insensitively",
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-      "local proof floor commit e9ea391 pinned for M106 governor packet repeat prevention",
+      "local proof floor commit aefd72c pinned for M106 governor packet repeat prevention",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -446,12 +453,13 @@
       "decision-critical packet projection",
       "packet freshness drift against generated readiness",
       "compile manifest freshness drift",
+      "support-packet source_sha256 drift",
       "every measured rollout action",
       "forbidden worker proof strings",
       "proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131",
-      "local proof floor commit e9ea391",
+      "local proof floor commit aefd72c",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -517,6 +525,10 @@
         {
           "commit": "e9ea391",
           "status": "present"
+        },
+        {
+          "commit": "aefd72c",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -526,7 +538,8 @@
         "5e6a468",
         "f66dbaa",
         "f490e53",
-        "e9ea391"
+        "e9ea391",
+        "aefd72c"
       ],
       "status": "pass"
     },
@@ -536,7 +549,8 @@
       "5e6a468",
       "f66dbaa",
       "f490e53",
-      "e9ea391"
+      "e9ea391",
+      "aefd72c"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
