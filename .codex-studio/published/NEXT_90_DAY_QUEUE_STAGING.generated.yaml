@@ -100,6 +100,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors; ENGINE_PROOF_PACK.generated.json reports missing_queue_proof_anchors=[].
       - /docker/chummercomplete/chummer-core-engine commit cfc465a5 adds checked-in receipt reproducibility proof for ENGINE_PROOF_PACK.generated.json.
       - /docker/chummercomplete/chummer-core-engine commit 86040e30 fail-closes unassigned queue allowed paths or owned surfaces for this completed package.
+      - /docker/chummercomplete/chummer-core-engine commit 8dd516ef makes failed engine proof pack generation exit nonzero while still writing diagnostic receipts.
     allowed_paths:
       - src
       - tests
