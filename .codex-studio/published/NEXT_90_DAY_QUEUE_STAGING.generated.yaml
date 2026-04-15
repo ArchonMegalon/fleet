@@ -538,6 +538,10 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 6236c73e tightens the M105 local proof-target guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 2af46874 tightens the M105 local proof-target guard receipt.
       - /docker/chummercomplete/chummer6-ui-finish commit 24d9d27a
+      - /docker/chummercomplete/chummer6-ui-finish commit db97b417 pins the M105 standard verify wiring guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 2d8bc79a refreshes the M105 UI restore continuity proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit 410c827f tightens the M105 restore continuity proof ancestry guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit aa9b7f9b pins the M105 recent proof floor.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
