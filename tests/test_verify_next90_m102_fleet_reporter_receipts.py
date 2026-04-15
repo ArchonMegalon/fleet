@@ -219,12 +219,15 @@ def _support_packets_payload() -> dict:
             "frontier_id": "2454416974",
             "milestone_id": 102,
             "repo": "fleet",
+            "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+            "queue_staging_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
             "allowed_paths": ["scripts", "tests", ".codex-studio", "feedback"],
             "owned_surfaces": ["feedback_loop_ready:install_receipts", "product_governor:followthrough"],
             "registry_wave": "W6",
             "registry_status": "in_progress",
             "registry_title": "Desktop-native claim, update, rollback, and support followthrough",
             "registry_dependencies": [101],
+            "registry_work_task_id": "102.4",
             "registry_work_task_status": "complete",
             "queue_title": "Gate fix followthrough against real install and receipt truth",
             "queue_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
@@ -367,6 +370,19 @@ Generated: 2026-04-15T14:13:33Z
 """.lstrip()
 
 
+def _align_successor_verification_paths(
+    payload: dict,
+    *,
+    registry: Path,
+    queue: Path,
+    design_queue: Path,
+) -> None:
+    verification = payload["successor_package_verification"]
+    verification["registry_path"] = str(registry)
+    verification["queue_staging_path"] = str(queue)
+    verification["design_queue_source_path"] = str(design_queue)
+
+
 def _fixture_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
     support = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     weekly = tmp_path / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -379,7 +395,12 @@ def _fixture_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
     _write_registry(registry)
     _write_queue(queue, design_queue)
     support_payload = _support_packets_payload()
-    support_payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    _align_successor_verification_paths(
+        support_payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
     _write_json(support, support_payload)
     return support, weekly, weekly_markdown, registry, queue, design_queue
 
@@ -877,7 +898,12 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_closure
     module = _load_module()
     support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
     payload = _support_packets_payload()
-    payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
     payload["successor_package_verification"]["queue_status"] = "queued"
     payload["successor_package_verification"]["design_queue_source_frontier_id"] = ""
     _write_json(support, payload)
@@ -913,7 +939,12 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_scope_d
     module = _load_module()
     support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
     payload = _support_packets_payload()
-    payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
     payload["successor_package_verification"]["allowed_paths"] = ["scripts", "tests"]
     payload["successor_package_verification"]["owned_surfaces"] = ["product_governor:followthrough"]
     _write_json(support, payload)
@@ -952,7 +983,12 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_assignm
     module = _load_module()
     support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
     payload = _support_packets_payload()
-    payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
     payload["successor_package_verification"]["repo"] = "chummer6-hub"
     payload["successor_package_verification"]["registry_title"] = "Old desktop support loop"
     payload["successor_package_verification"]["queue_task"] = (
@@ -992,6 +1028,52 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_assignm
     }
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_source_path_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
+    payload["successor_package_verification"]["registry_path"] = "/tmp/stale-registry.yaml"
+    payload["successor_package_verification"]["queue_staging_path"] = "/tmp/stale-queue.yaml"
+    payload["successor_package_verification"]["registry_work_task_id"] = "102.0"
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json successor verification closure fields drifted"
+        in result["issues"]
+    )
+    assert result["support_packet_successor_field_mismatches"] == {
+        "queue_staging_path": {
+            "support_packets": "/tmp/stale-queue.yaml",
+            "computed_successor_authority": str(queue),
+        },
+        "registry_path": {
+            "support_packets": "/tmp/stale-registry.yaml",
+            "computed_successor_authority": str(registry),
+        },
+        "registry_work_task_id": {
+            "support_packets": "102.0",
+            "computed_successor_authority": "102.4",
+        },
+    }
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_fails_generated_required_marker_drift(
     tmp_path: Path,
 ) -> None:
@@ -1004,7 +1086,12 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_generated_required_mar
     expected_required_registry_evidence_markers = list(
         payload["successor_package_verification"]["required_registry_evidence_markers"]
     )
-    payload["successor_package_verification"]["design_queue_source_path"] = str(design_queue)
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
     payload["successor_package_verification"]["required_queue_proof_markers"] = [
         "/docker/fleet/scripts/materialize_support_case_packets.py"
     ]

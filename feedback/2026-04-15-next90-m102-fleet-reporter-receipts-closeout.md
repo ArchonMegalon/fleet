@@ -92,6 +92,8 @@ The later 2026-04-15 generated assignment guard pass tightened the standalone ve
 
 The later 2026-04-15 embedded support timestamp guard pass tightened the standalone verifier so `followthrough_receipt_gates.generated_at` and `reporter_followthrough_plan.generated_at` must match `SUPPORT_CASE_PACKETS.generated.json.generated_at`. A weekly governor packet can no longer summarize a fresh top-level support packet while the embedded receipt-gate or reporter-plan payloads are stale.
 
+The later 2026-04-15 generated source-path guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.registry_path`, `queue_staging_path`, and `registry_work_task_id` must match recomputed successor authority. A copied or stale support-packet receipt from another registry or queue source can no longer keep the closed M102 package green.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
