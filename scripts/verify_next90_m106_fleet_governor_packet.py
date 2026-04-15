@@ -69,6 +69,11 @@ def _stable_weekly_health(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
+        "contract_name": payload.get("contract_name"),
+        "schema_version": payload.get("schema_version"),
+        "as_of": payload.get("as_of"),
+        "program_wave": payload.get("program_wave"),
+        "wave_id": payload.get("wave_id"),
         "status": payload.get("status"),
         "status_reason": payload.get("status_reason"),
         "successor_frontier_ids": payload.get("successor_frontier_ids"),

@@ -722,6 +722,67 @@ def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
     )
 
 
+def test_verify_next90_m106_governor_packet_rejects_packet_identity_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["program_wave"] = "next_12_biggest_wins"
+    packet["wave_id"] = "W5"
+    packet["schema_version"] = 0
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "checked-in packet decision ledger no longer matches live source inputs for field(s): "
+        in verifier.stderr
+    )
+    assert "program_wave" in verifier.stderr
+    assert "wave_id" in verifier.stderr
+    assert "schema_version" in verifier.stderr
+
+
 def test_weekly_governor_packet_fails_package_verification_on_package_meaning_drift(
     tmp_path: Path,
 ) -> None:
