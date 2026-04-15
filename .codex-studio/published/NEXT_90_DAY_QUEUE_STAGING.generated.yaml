@@ -85,6 +85,9 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 9629b207 pins M101 current queue proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 6c032e2c pins M101 current queue proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 5c069924 pins M101 current proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 8115735b pins M101 current proof floor guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 0605657d pins M101 811 proof floor guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 53b701e2 pins M101 060 proof floor guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
