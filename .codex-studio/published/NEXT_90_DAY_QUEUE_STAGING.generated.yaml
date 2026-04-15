@@ -256,6 +256,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.proof.yaml
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.closeout.md
       - /docker/chummercomplete/chummer-hub-registry commit e91fe39 tightens the M101 self-test so completed queue proof fails on wrong successor frontier or non-complete package status.
+      - /docker/chummercomplete/chummer-hub-registry commit 1586dfc pins the M101 queue authority guard so future shards verify the completed package proof floor instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
