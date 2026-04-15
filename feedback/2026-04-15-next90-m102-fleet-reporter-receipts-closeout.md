@@ -74,6 +74,8 @@ The later 2026-04-15 generated scope-drift guard pass tightened the standalone v
 
 The later 2026-04-15 bootstrap guard pass now makes `/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py` and `/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py` required queue proof anchors for this package, and the bootstrap guard now exercises `/docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py`. The closeout can no longer stay green if the standalone repeat-prevention verifier only works with ambient `PYTHONPATH` state.
 
+The later 2026-04-15 generated required-marker drift pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.required_registry_evidence_markers` and `required_queue_proof_markers` must match recomputed successor authority. A stale generated support packet can no longer hide that the proof-marker contract itself changed while carrying otherwise empty gap lists.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -187,6 +189,9 @@ python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/tes
 python3 scripts/verify_script_bootstrap_no_pythonpath.py
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 direct verifier tests passed: 14 after no-PYTHONPATH bootstrap proof became required queue evidence
+python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: 16 after generated required-marker drift became fail-closed
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 ```
 
 `python3 -m pytest ...` could not run because this worker image does not have `pytest` installed. The direct invocation above used the repo's existing tmp_path fixture pattern and covered the receipt-gated successor authority, reporter followthrough, recovery, receipt mismatch, installation mismatch, channel mismatch, update-required, and weekly governor projection cases.

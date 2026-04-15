@@ -88,6 +88,8 @@ REQUIRED_SUPPORT_VERIFICATION_EMPTY_LIST_KEYS = {
 REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "allowed_paths",
     "owned_surfaces",
+    "required_queue_proof_markers",
+    "required_registry_evidence_markers",
     "registry_work_task_status",
     "queue_status",
     "queue_frontier_id",
