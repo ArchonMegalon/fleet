@@ -434,6 +434,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 21ddae58 tightens M104 proof commit citation checks for repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit 8c7d639f tightens M104 canonical queue closure against worker-unsafe proof, queue mirror drift, and widened package scope.
       - /docker/chummercomplete/chummer6-ui-finish commit d2650d0b pins M104 explain receipt queue closure guard for repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit 79b8b594 pins M104 explain receipt current proof floor for repeat prevention.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
