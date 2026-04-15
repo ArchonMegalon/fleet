@@ -229,6 +229,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     _write_json(
         support,
         {
+            "generated_at": _iso_now(),
             "summary": {
                 "open_packet_count": 0,
                 "open_non_external_packet_count": 0,
@@ -2094,6 +2095,63 @@ def test_weekly_governor_packet_blocks_loop_ready_when_support_package_proof_reg
     assert (
         "support_packets successor_package_verification.status is not pass"
         in payload["source_input_health"]["issues"][0]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_loop_ready_when_support_packets_are_stale(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    support = json.loads(paths["support"].read_text(encoding="utf-8"))
+    support["generated_at"] = (
+        dt.datetime.now(UTC) - dt.timedelta(days=9)
+    ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    _write_json(paths["support"], support)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "fail"
+    assert payload["source_input_health"]["required_inputs"]["support_packets"]["state"] == "present"
+    assert (
+        payload["source_input_health"]["required_inputs"]["support_packets"]["max_age_seconds"]
+        == 691200
+    )
+    assert any(
+        issue.startswith("support_packets are stale")
+        for issue in payload["source_input_health"]["issues"]
     )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 

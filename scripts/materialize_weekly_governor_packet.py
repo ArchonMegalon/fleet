@@ -50,6 +50,7 @@ OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
+SUPPORT_PACKETS_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 REQUIRED_QUEUE_PROOF_MARKERS = (
     "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
     "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
@@ -620,14 +621,24 @@ def verify_source_inputs(
             issues.append(f"{name} is missing, empty, unparseable, or lacks {required_key}")
     support_successor_proof = dict(support_packets.get("successor_package_verification") or {})
     support_successor_status = str(support_successor_proof.get("status") or "").strip()
+    support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
     rows["support_packets"]["successor_package_verification_status"] = (
         support_successor_status or "missing"
     )
+    rows["support_packets"]["generated_at"] = str(support_packets.get("generated_at") or "").strip()
+    rows["support_packets"]["max_age_seconds"] = SUPPORT_PACKETS_MAX_AGE_SECONDS
     if rows["support_packets"]["state"] == "present" and support_successor_status != "pass":
         issues.append(
             "support_packets successor_package_verification.status is not pass; "
             "weekly governor support truth must be backed by the M102 receipt-gated package proof"
         )
+    if rows["support_packets"]["state"] == "present":
+        if not support_generated_at:
+            issues.append("support_packets generated_at is missing or invalid")
+        else:
+            support_age_seconds = int((dt.datetime.now(UTC) - support_generated_at).total_seconds())
+            if support_age_seconds > SUPPORT_PACKETS_MAX_AGE_SECONDS:
+                issues.append(f"support_packets are stale ({support_age_seconds}s old)")
     disallowed_source_paths = _disallowed_worker_proof_entries(
         [f"{name}: {path}" for name, path in sorted(dict(source_paths or {}).items())]
     )
