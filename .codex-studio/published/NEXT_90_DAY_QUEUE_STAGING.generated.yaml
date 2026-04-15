@@ -268,6 +268,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit c0960ae9
       - /docker/chummercomplete/chummer6-ui-finish commit 6b2649d2
       - /docker/chummercomplete/chummer6-ui-finish commit 0d1eafbd
+      - /docker/chummercomplete/chummer6-ui-finish commit c63bf96f
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
@@ -325,6 +326,7 @@ items:
       - python3 -m unittest /docker/chummercomplete/chummer.run-services/tests/test_artifact_factory_orchestration.py
       - dotnet test /docker/chummercomplete/chummer.run-services/Chummer.Tests/Chummer.Tests.csproj --filter ArtifactFactoryOrchestrationServiceTests --no-restore
       - /docker/chummercomplete/chummer.run-services commit b9e6b52e tightens recipe-specific public proof shelf route guards.
+      - /docker/chummercomplete/chummer.run-services commit 7331cd26 tightens artifact-factory queue and registry proof-anchor resolution.
     allowed_paths:
       - Chummer.Run.Api
       - scripts
