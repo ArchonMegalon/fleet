@@ -199,6 +199,7 @@ items:
   - title: Publish explicit promotion, fallback, and rollback rationale in registry truth
     task: Make channel truth explain why each desktop head is primary, fallback, promoted, or revoked on each platform tuple.
     package_id: next90-m101-registry-promotion-discipline
+    frontier_id: 3017689961
     milestone_id: 101
     wave: W6
     repo: chummer6-hub-registry
