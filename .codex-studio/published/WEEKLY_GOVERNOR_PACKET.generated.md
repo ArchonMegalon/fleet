@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T09:12:05Z
+Generated: 2026-04-15T09:29:02Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -30,6 +30,34 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Provider canary: Canary evidence is still accumulating
 - Closure health: clear
 - Open non-external support packets: 0
+- Reporter followthrough ready: 0
+- Fix-available ready: 0
+- Please-test ready: 0
+- Recovery-loop ready: 0
+- Followthrough blocked on install receipts: 0
+- Followthrough receipt mismatches: 0
+
+## Public Status Copy
+
+- State: freeze_launch
+- Headline: Launch expansion remains frozen.
+- Body: Freeze launch expansion until fresh local release proof passes on the public edge.
+
+## Launch Gate Ledger
+
+| Gate | State | Required | Observed |
+| --- | --- | --- | --- |
+| package_authority | pass | pass | pass |
+| weekly_input_health | pass | pass | pass |
+| source_input_health | pass | pass | pass |
+| successor_dependencies | blocked | satisfied | open |
+| flagship_readiness | pass | pass | pass |
+| flagship_parity | pass | gold_ready | gold_ready |
+| journey_gates | pass | ready | ready |
+| local_release_proof | blocked | passed | unknown |
+| provider_canary | blocked | Canary green on all active lanes | Canary evidence is still accumulating |
+| closure_health | pass | clear | clear |
+| support_packets | pass | 0 open non-external packets | 0 |
 
 ## Required Weekly Actions
 
@@ -47,6 +75,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - flagship readiness remains green before any launch expansion
 - flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions
 - support packet counts stay clear for non-external closure work
+- fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates
+- public status copy is derived from the same measured decision ledger as the governor packet
 
 ## Risk Clusters
 

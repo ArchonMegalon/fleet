@@ -26,7 +26,113 @@
       "state": "armed"
     }
   },
-  "generated_at": "2026-04-15T09:12:05Z",
+  "decision_gate_ledger": {
+    "canary": [
+      {
+        "name": "provider_canary",
+        "observed": "Canary evidence is still accumulating",
+        "required": "Canary green on all active lanes",
+        "state": "accumulating"
+      }
+    ],
+    "freeze_launch": [
+      {
+        "name": "fail_closed_default",
+        "observed": "active",
+        "required": "active when any launch gate is not pass",
+        "state": "active"
+      }
+    ],
+    "launch_expand": [
+      {
+        "name": "package_authority",
+        "observed": "pass",
+        "required": "pass",
+        "state": "pass"
+      },
+      {
+        "name": "weekly_input_health",
+        "observed": "pass",
+        "required": "pass",
+        "state": "pass"
+      },
+      {
+        "name": "source_input_health",
+        "observed": "pass",
+        "required": "pass",
+        "state": "pass"
+      },
+      {
+        "name": "successor_dependencies",
+        "observed": "open",
+        "required": "satisfied",
+        "state": "blocked"
+      },
+      {
+        "name": "flagship_readiness",
+        "observed": "pass",
+        "required": "pass",
+        "state": "pass"
+      },
+      {
+        "name": "flagship_parity",
+        "observed": "gold_ready",
+        "required": "gold_ready",
+        "state": "pass"
+      },
+      {
+        "name": "journey_gates",
+        "observed": "ready",
+        "required": "ready",
+        "state": "pass"
+      },
+      {
+        "name": "local_release_proof",
+        "observed": "unknown",
+        "required": "passed",
+        "state": "blocked"
+      },
+      {
+        "name": "provider_canary",
+        "observed": "Canary evidence is still accumulating",
+        "required": "Canary green on all active lanes",
+        "state": "blocked"
+      },
+      {
+        "name": "closure_health",
+        "observed": "clear",
+        "required": "clear",
+        "state": "pass"
+      },
+      {
+        "name": "support_packets",
+        "observed": "0",
+        "required": "0 open non-external packets",
+        "state": "pass"
+      }
+    ],
+    "rollback": [
+      {
+        "name": "closure_waiting_on_release_truth",
+        "observed": "0",
+        "required": "0",
+        "state": "clear"
+      },
+      {
+        "name": "update_required_misrouted_cases",
+        "observed": "0",
+        "required": "0",
+        "state": "clear"
+      },
+      {
+        "name": "release_health",
+        "observed": "green_or_explained",
+        "required": "green, green_or_explained, or ready",
+        "state": "clear"
+      }
+    ]
+  },
+  "generated_at": "2026-04-15T09:29:02Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -35,7 +141,9 @@
       "weekly pulse cites journey, local release proof, canary, and closure signals",
       "flagship readiness remains green before any launch expansion",
       "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
-      "support packet counts stay clear for non-external closure work"
+      "support packet counts stay clear for non-external closure work",
+      "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
+      "public status copy is derived from the same measured decision ledger as the governor packet"
     ],
     "loop_status": "ready",
     "required_decision_actions": [
@@ -113,6 +221,11 @@
     "status": "pass"
   },
   "program_wave": "next_90_day_product_advance",
+  "public_status_copy": {
+    "body": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+    "headline": "Launch expansion remains frozen.",
+    "state": "freeze_launch"
+  },
   "risk_clusters": [
     {
       "cluster_id": "campaign_os_indispensable_and_launch_scale",
@@ -248,8 +361,17 @@
     "successor_dependency_status": "open",
     "support_summary": {
       "closure_waiting_on_release_truth": 0,
+      "fix_available_ready_count": 0,
       "open_non_external_packet_count": 0,
       "open_packet_count": 0,
+      "please_test_ready_count": 0,
+      "recovery_loop_ready_count": 0,
+      "reporter_followthrough_blocked_missing_install_receipts_count": 0,
+      "reporter_followthrough_blocked_receipt_mismatch_count": 0,
+      "reporter_followthrough_plan_blocked_missing_install_receipts_count": 0,
+      "reporter_followthrough_plan_blocked_receipt_mismatch_count": 0,
+      "reporter_followthrough_plan_ready_count": 0,
+      "reporter_followthrough_ready_count": 0,
       "update_required_misrouted_case_count": 0
     },
     "weekly_pulse_contract": "chummer.weekly_product_pulse",

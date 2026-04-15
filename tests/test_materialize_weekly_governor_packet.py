@@ -144,6 +144,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                 "open_non_external_packet_count": 0,
                 "closure_waiting_on_release_truth": 0,
                 "update_required_misrouted_case_count": 0,
+                "reporter_followthrough_ready_count": 2,
+                "fix_available_ready_count": 1,
+                "please_test_ready_count": 1,
+                "recovery_loop_ready_count": 0,
+                "reporter_followthrough_blocked_missing_install_receipts_count": 0,
+                "reporter_followthrough_blocked_receipt_mismatch_count": 0,
             }
         },
     )
@@ -208,6 +214,17 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["decision_board"]["canary"]["state"] == "accumulating"
     assert payload["decision_board"]["rollback"]["state"] == "armed"
     assert payload["truth_inputs"]["flagship_parity_release_truth"]["release_truth_status"] == "gold_ready"
+    launch_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
+    }
+    assert launch_gates["local_release_proof"]["state"] == "blocked"
+    assert launch_gates["provider_canary"]["state"] == "blocked"
+    assert launch_gates["successor_dependencies"]["observed"] == "open"
+    assert payload["public_status_copy"]["state"] == "freeze_launch"
+    assert payload["public_status_copy"]["headline"] == "Launch expansion remains frozen."
+    assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] == 2
+    assert payload["truth_inputs"]["support_summary"]["fix_available_ready_count"] == 1
+    assert payload["truth_inputs"]["support_summary"]["please_test_ready_count"] == 1
     assert payload["measured_rollout_loop"]["loop_status"] == "ready"
     assert payload["measured_rollout_loop"]["required_decision_actions"] == [
         "launch_expand",
@@ -220,8 +237,14 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "# Weekly Governor Packet" in markdown
     assert "| Launch expand | blocked |" in markdown
     assert "| Freeze launch | active |" in markdown
+    assert "## Public Status Copy" in markdown
+    assert "## Launch Gate Ledger" in markdown
+    assert "| local_release_proof | blocked | passed | unknown |" in markdown
     assert "- Successor dependency posture: open" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
+    assert "- Reporter followthrough ready: 2" in markdown
+    assert "- Fix-available ready: 1" in markdown
+    assert "- Please-test ready: 1" in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
     assert "WEEKLY_GOVERNOR_PACKET.generated.md" in manifest["artifacts"]
@@ -292,6 +315,11 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
     assert payload["decision_board"]["current_launch_action"] == "launch_expand"
     assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
     assert "successor dependencies" in payload["decision_board"]["launch_expand"]["reason"]
+    launch_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
+    }
+    assert launch_gates["successor_dependencies"]["state"] == "blocked"
+    assert payload["public_status_copy"]["state"] == "freeze_launch"
 
 
 def test_weekly_governor_packet_fails_package_verification_on_queue_authority_drift(tmp_path: Path) -> None:
@@ -384,6 +412,10 @@ def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(
     assert payload["weekly_input_health"]["status"] == "fail"
     assert payload["source_input_health"]["status"] == "pass"
     assert "provider_canary_status" in payload["weekly_input_health"]["issues"][0]
+    launch_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
+    }
+    assert launch_gates["weekly_input_health"]["state"] == "fail"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 

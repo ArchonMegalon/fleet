@@ -67,7 +67,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--markdown-out",
-        default=str(PUBLISHED / "WEEKLY_GOVERNOR_PACKET.generated.md"),
+        default="",
         help="operator-readable Markdown companion for the weekly governor packet",
     )
     parser.add_argument("--successor-registry", default=str(SUCCESSOR_REGISTRY))
@@ -325,11 +325,33 @@ def verify_source_inputs(
 
 def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     summary = dict(support_packets.get("summary") or {})
+    followthrough = dict(support_packets.get("reporter_followthrough_plan") or {})
     return {
         "open_packet_count": _coerce_int(summary.get("open_packet_count"), 0),
         "open_non_external_packet_count": _coerce_int(summary.get("open_non_external_packet_count"), 0),
         "closure_waiting_on_release_truth": _coerce_int(summary.get("closure_waiting_on_release_truth"), 0),
         "update_required_misrouted_case_count": _coerce_int(summary.get("update_required_misrouted_case_count"), 0),
+        "reporter_followthrough_ready_count": _coerce_int(summary.get("reporter_followthrough_ready_count"), 0),
+        "fix_available_ready_count": _coerce_int(summary.get("fix_available_ready_count"), 0),
+        "please_test_ready_count": _coerce_int(summary.get("please_test_ready_count"), 0),
+        "recovery_loop_ready_count": _coerce_int(summary.get("recovery_loop_ready_count"), 0),
+        "reporter_followthrough_blocked_missing_install_receipts_count": _coerce_int(
+            summary.get("reporter_followthrough_blocked_missing_install_receipts_count"),
+            0,
+        ),
+        "reporter_followthrough_blocked_receipt_mismatch_count": _coerce_int(
+            summary.get("reporter_followthrough_blocked_receipt_mismatch_count"),
+            0,
+        ),
+        "reporter_followthrough_plan_ready_count": _coerce_int(followthrough.get("ready_count"), 0),
+        "reporter_followthrough_plan_blocked_missing_install_receipts_count": _coerce_int(
+            followthrough.get("blocked_missing_install_receipts_count"),
+            0,
+        ),
+        "reporter_followthrough_plan_blocked_receipt_mismatch_count": _coerce_int(
+            followthrough.get("blocked_receipt_mismatch_count"),
+            0,
+        ),
     }
 
 
@@ -362,6 +384,37 @@ def _flagship_parity_summary(flagship_readiness: Dict[str, Any]) -> Dict[str, An
         "families_below_task_proven": families_below_task,
         "families_below_veteran_approved": families_below_veteran,
         "families_below_gold_ready": families_below_gold,
+    }
+
+
+def _gate_row(name: str, state: str, required: str, observed: Any) -> Dict[str, str]:
+    return {
+        "name": name,
+        "state": state,
+        "required": required,
+        "observed": str(observed if observed is not None else "unknown").strip() or "unknown",
+    }
+
+
+def _status_copy(*, launch_allowed: bool, rollback_watch: bool, launch_reason: str) -> Dict[str, str]:
+    if launch_allowed:
+        return {
+            "state": "launch_expand_allowed",
+            "headline": "Measured launch expansion is allowed.",
+            "body": "Readiness, parity, support, canary, dependency, and release-proof gates are green for this weekly packet.",
+        }
+    if rollback_watch:
+        return {
+            "state": "freeze_with_rollback_watch",
+            "headline": "Launch expansion is frozen with rollback watch active.",
+            "body": launch_reason
+            or "Release or support truth requires rollback watch before any broader launch move.",
+        }
+    return {
+        "state": "freeze_launch",
+        "headline": "Launch expansion remains frozen.",
+        "body": launch_reason
+        or "Measured launch gates are incomplete, so the weekly governor packet holds broad promotion.",
     }
 
 
@@ -440,6 +493,93 @@ def build_payload(
             "ready",
         }
     )
+    launch_gate_ledger = [
+        _gate_row(
+            "package_authority",
+            "pass" if verification["status"] == "pass" else "fail",
+            "pass",
+            verification["status"],
+        ),
+        _gate_row(
+            "weekly_input_health",
+            "pass" if weekly_input_health["status"] == "pass" else "fail",
+            "pass",
+            weekly_input_health["status"],
+        ),
+        _gate_row(
+            "source_input_health",
+            "pass" if source_input_health["status"] == "pass" else "fail",
+            "pass",
+            source_input_health["status"],
+        ),
+        _gate_row(
+            "successor_dependencies",
+            "pass" if dependency_status == "satisfied" else "blocked",
+            "satisfied",
+            dependency_status,
+        ),
+        _gate_row(
+            "flagship_readiness",
+            "pass" if readiness_status == "pass" else "blocked",
+            "pass",
+            readiness_status,
+        ),
+        _gate_row(
+            "flagship_parity",
+            "pass" if parity_gold_ready else "blocked",
+            "gold_ready",
+            parity["release_truth_status"],
+        ),
+        _gate_row(
+            "journey_gates",
+            "pass" if journey_state == "ready" else "blocked",
+            "ready",
+            journey_state,
+        ),
+        _gate_row(
+            "local_release_proof",
+            "pass" if local_release_proof == "passed" else "blocked",
+            "passed",
+            local_release_proof,
+        ),
+        _gate_row(
+            "provider_canary",
+            "pass" if canary_status == "Canary green on all active lanes" else "blocked",
+            "Canary green on all active lanes",
+            canary_status,
+        ),
+        _gate_row("closure_health", "pass" if closure_state == "clear" else "blocked", "clear", closure_state),
+        _gate_row(
+            "support_packets",
+            "pass" if support["open_non_external_packet_count"] == 0 else "blocked",
+            "0 open non-external packets",
+            support["open_non_external_packet_count"],
+        ),
+    ]
+    rollback_gate_ledger = [
+        _gate_row(
+            "closure_waiting_on_release_truth",
+            "watch" if support["closure_waiting_on_release_truth"] > 0 else "clear",
+            "0",
+            support["closure_waiting_on_release_truth"],
+        ),
+        _gate_row(
+            "update_required_misrouted_cases",
+            "watch" if support["update_required_misrouted_case_count"] > 0 else "clear",
+            "0",
+            support["update_required_misrouted_case_count"],
+        ),
+        _gate_row(
+            "release_health",
+            "clear"
+            if str((weekly_pulse.get("release_health") or {}).get("state") or "").strip()
+            in {"green", "green_or_explained", "ready"}
+            else "watch",
+            "green, green_or_explained, or ready",
+            (weekly_pulse.get("release_health") or {}).get("state"),
+        ),
+    ]
+    launch_reason = str(launch_decision.get("reason") or "").strip()
     measured_loop_ready = (
         verification["status"] == "pass"
         and weekly_input_health["status"] == "pass"
@@ -497,6 +637,31 @@ def build_payload(
                 "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
             },
         },
+        "decision_gate_ledger": {
+            "launch_expand": launch_gate_ledger,
+            "freeze_launch": [
+                _gate_row(
+                    "fail_closed_default",
+                    "active" if freeze_active else "available",
+                    "active when any launch gate is not pass",
+                    "active" if freeze_active else "available",
+                ),
+            ],
+            "canary": [
+                _gate_row(
+                    "provider_canary",
+                    "ready" if canary_status == "Canary green on all active lanes" else "accumulating",
+                    "Canary green on all active lanes",
+                    canary_status,
+                ),
+            ],
+            "rollback": rollback_gate_ledger,
+        },
+        "public_status_copy": _status_copy(
+            launch_allowed=launch_allowed,
+            rollback_watch=rollback_watch,
+            launch_reason=launch_reason,
+        ),
         "measured_rollout_loop": {
             "loop_status": "ready" if measured_loop_ready else "blocked",
             "cadence": "weekly",
@@ -514,6 +679,8 @@ def build_payload(
                 "flagship readiness remains green before any launch expansion",
                 "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
                 "support packet counts stay clear for non-external closure work",
+                "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
+                "public status copy is derived from the same measured decision ledger as the governor packet",
             ],
         },
         "risk_clusters": weekly_pulse.get("top_support_or_feedback_clusters") or [],
@@ -541,6 +708,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     support = dict(truth.get("support_summary") or {})
     dependency = dict(truth.get("successor_dependency_posture") or {})
     parity = dict(truth.get("flagship_parity_release_truth") or {})
+    public_copy = dict(payload.get("public_status_copy") or {})
+    gate_ledger = dict(payload.get("decision_gate_ledger") or {})
     risk_clusters = payload.get("risk_clusters") if isinstance(payload.get("risk_clusters"), list) else []
 
     lines = [
@@ -585,6 +754,37 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Provider canary: {_markdown_status(truth.get('provider_canary_status'))}",
             f"- Closure health: {_markdown_status(truth.get('closure_health_state'))}",
             f"- Open non-external support packets: {support.get('open_non_external_packet_count', 0)}",
+            f"- Reporter followthrough ready: {support.get('reporter_followthrough_ready_count', 0)}",
+            f"- Fix-available ready: {support.get('fix_available_ready_count', 0)}",
+            f"- Please-test ready: {support.get('please_test_ready_count', 0)}",
+            f"- Recovery-loop ready: {support.get('recovery_loop_ready_count', 0)}",
+            f"- Followthrough blocked on install receipts: {support.get('reporter_followthrough_blocked_missing_install_receipts_count', 0)}",
+            f"- Followthrough receipt mismatches: {support.get('reporter_followthrough_blocked_receipt_mismatch_count', 0)}",
+            "",
+            "## Public Status Copy",
+            "",
+            f"- State: {_markdown_status(public_copy.get('state'))}",
+            f"- Headline: {_markdown_status(public_copy.get('headline'))}",
+            f"- Body: {_markdown_status(public_copy.get('body'))}",
+            "",
+            "## Launch Gate Ledger",
+            "",
+            "| Gate | State | Required | Observed |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for row in gate_ledger.get("launch_expand") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_markdown_status(row.get('name'))} | {_markdown_status(row.get('state'))} | "
+            f"{_markdown_status(row.get('required'))} | {_markdown_status(row.get('observed'))} |"
+        )
+    if not gate_ledger.get("launch_expand"):
+        lines.append("| none | unknown | unknown | unknown |")
+
+    lines.extend(
+        [
             "",
             "## Required Weekly Actions",
             "",
@@ -621,7 +821,11 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
 
 def materialize(args: argparse.Namespace) -> Path:
     out_path = Path(args.out).resolve()
-    markdown_out_path = Path(args.markdown_out).resolve() if str(args.markdown_out or "").strip() else None
+    markdown_out_path = (
+        Path(args.markdown_out).resolve()
+        if str(args.markdown_out or "").strip()
+        else out_path.with_name("WEEKLY_GOVERNOR_PACKET.generated.md")
+    )
     source_paths = {
         "successor_registry": str(Path(args.successor_registry).resolve()),
         "queue_staging": str(Path(args.queue_staging).resolve()),

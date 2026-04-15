@@ -79,6 +79,14 @@ items:
     milestone_id: 106
     wave: W8
     repo: fleet
+    status: complete
+    proof:
+      - /docker/fleet/scripts/materialize_weekly_governor_packet.py
+      - /docker/fleet/tests/test_materialize_weekly_governor_packet.py
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+      - python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
     allowed_paths:
       - admin
       - scripts
