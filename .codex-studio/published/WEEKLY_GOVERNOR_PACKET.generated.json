@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:39:52Z",
+  "generated_at": "2026-04-15T11:43:16Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -453,6 +453,8 @@
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
   },
+  "status": "ready",
+  "status_reason": "Fleet package is closed and the weekly measured rollout loop is ready.",
   "successor_frontier_ids": [
     "2376135131"
   ],

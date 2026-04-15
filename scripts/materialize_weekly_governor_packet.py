@@ -961,9 +961,16 @@ def build_payload(
             "rule": "Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry or active-run helper commands.",
         },
     }
+    packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
+        "status": packet_status,
+        "status_reason": (
+            "Fleet package is closed and the weekly measured rollout loop is ready."
+            if packet_status == "ready"
+            else "Fleet package closeout or measured rollout loop verification is blocked."
+        ),
         "generated_at": iso_now(),
         "as_of": str(weekly_pulse.get("as_of") or "").strip(),
         "program_wave": "next_90_day_product_advance",

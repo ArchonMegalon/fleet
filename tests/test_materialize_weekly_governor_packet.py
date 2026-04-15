@@ -284,6 +284,11 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["contract_name"] == "fleet.weekly_governor_packet"
+    assert payload["status"] == "ready"
+    assert (
+        payload["status_reason"]
+        == "Fleet package is closed and the weekly measured rollout loop is ready."
+    )
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
     assert payload["package_verification"]["queue_status"] == "complete"
@@ -623,6 +628,11 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked"
+    assert (
+        payload["status_reason"]
+        == "Fleet package closeout or measured rollout loop verification is blocked."
+    )
     assert payload["package_verification"]["status"] == "fail"
     assert payload["package_closeout"]["status"] == "blocked"
     assert payload["package_closeout"]["do_not_reopen_package"] is False

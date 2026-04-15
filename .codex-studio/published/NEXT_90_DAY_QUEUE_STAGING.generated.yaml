@@ -181,6 +181,9 @@ items:
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
+      - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
+      - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
       - tests
@@ -226,6 +229,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit fb6eb62e
       - /docker/chummercomplete/chummer6-ui-finish commit 3bba8754 tightens the M103 verifier receipt and standard-verify proof alignment.
       - /docker/chummercomplete/chummer6-ui-finish commit 6eafef39 tightens the M103 verifier against design-owned queue source drift.
+      - /docker/chummercomplete/chummer6-ui-finish commit 1e5557f9 pins the M103 design queue source proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit 9e8d494b tightens the M103 successor registry guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
