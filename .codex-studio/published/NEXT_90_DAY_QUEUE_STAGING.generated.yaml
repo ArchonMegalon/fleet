@@ -223,6 +223,7 @@ items:
   - title: Run screenshot-backed parity review on the promoted desktop head
     task: Prove menu, toolstrip, roster, master index, settings, and import familiarity against Chummer5a on the promoted head.
     package_id: next90-m103-ui-veteran-certification
+    frontier_id: 2257965187
     milestone_id: 103
     wave: W7
     repo: chummer6-ui
@@ -238,6 +239,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 9e8d494b tightens the M103 successor registry guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 0d2e357e pins the M103 veteran proof successor commit.
       - /docker/chummercomplete/chummer6-ui-finish commit b42416b8 pins the M103 veteran proof hardening commit.
+      - /docker/chummercomplete/chummer6-ui-finish commit 5d9f1c86 pins M103 queue frontier proof.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
