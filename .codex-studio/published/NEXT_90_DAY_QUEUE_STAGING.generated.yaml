@@ -37,6 +37,7 @@ items:
   - title: Keep native-host release proof independent for the primary desktop head
     task: Prove Avalonia as the primary desktop route on Windows, macOS, and Linux without leaning on Blazor fallback receipts.
     package_id: next90-m101-ui-release-train
+    frontier_id: 2450443084
     milestone_id: 101
     wave: W6
     repo: chummer6-ui
@@ -252,6 +253,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 0d2e357e pins the M103 veteran proof successor commit.
       - /docker/chummercomplete/chummer6-ui-finish commit b42416b8 pins the M103 veteran proof hardening commit.
       - /docker/chummercomplete/chummer6-ui-finish commit 5d9f1c86 pins M103 queue frontier proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit 2bfc7338 pins M103 veteran queue proof anchors.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
