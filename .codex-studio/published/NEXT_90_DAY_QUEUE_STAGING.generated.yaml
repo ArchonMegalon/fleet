@@ -527,6 +527,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit f0142482 pins M107 artifact factory output shelf proof.
       - /docker/chummercomplete/chummer.run-services commit a66a06bb tightens M107 artifact output shelf proof pin.
       - /docker/chummercomplete/chummer.run-services commit 9a8e56f0 tightens M107 artifact shelf proof floor.
+      - /docker/chummercomplete/chummer.run-services commit a929cc7d pins M107 artifact shelf proof floor.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
