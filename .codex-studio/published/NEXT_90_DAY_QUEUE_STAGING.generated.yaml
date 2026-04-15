@@ -181,6 +181,11 @@ items:
       - /docker/chummercomplete/chummer.run-services commit cb560573 requires the M105 queue proof floor so registry and queue closure cannot regress behind the latest completed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 7c92635e tightens the M105 workspace proof floor so future shards verify the current closed-package guard instead of repeating this completed slice.
       - /docker/chummercomplete/chummer.run-services commit fcdd1fa5 pins the current M105 workspace proof floor so future shards verify the latest closed-package guard.
+      - /docker/chummercomplete/chummer.run-services commit 021de48a requires the current M105 queue proof guard so stale registry and queue evidence cannot keep the completed package green.
+      - /docker/chummercomplete/chummer.run-services commit 5bf1a11e pins the current M105 workspace queue guard so future shards verify the latest closed-package proof floor.
+      - /docker/chummercomplete/chummer.run-services commit db002589 pins the M105 workspace queue guard proof so future shards verify the current closed-package proof floor.
+      - /docker/chummercomplete/chummer.run-services commit f6db9d91 pins the M105 workspace proof floor after the queue guard proof tightening.
+      - /docker/chummercomplete/chummer.run-services commit b1270fd0 pins the M105 workspace verifier to the canonical f6db9d91 proof floor.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
