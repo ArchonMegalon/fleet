@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T16:46:59Z",
+  "generated_at": "2026-04-15T16:48:25Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -339,16 +339,22 @@
         {
           "commit": "065c653",
           "status": "present"
+        },
+        {
+          "commit": "fb47ce8",
+          "status": "present"
         }
       ],
       "missing_commits": [],
       "required_commits": [
-        "065c653"
+        "065c653",
+        "fb47ce8"
       ],
       "status": "pass"
     },
     "local_proof_floor_commits": [
-      "065c653"
+      "065c653",
+      "fb47ce8"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -463,16 +469,22 @@
         {
           "commit": "065c653",
           "status": "present"
+        },
+        {
+          "commit": "fb47ce8",
+          "status": "present"
         }
       ],
       "missing_commits": [],
       "required_commits": [
-        "065c653"
+        "065c653",
+        "fb47ce8"
       ],
       "status": "pass"
     },
     "local_proof_floor_commits": [
-      "065c653"
+      "065c653",
+      "fb47ce8"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
