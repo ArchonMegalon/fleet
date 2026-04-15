@@ -400,6 +400,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit ba914e9a pins the current M103 veteran proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit de5837b9 tightens the M103 veteran proof token guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 762aaedb pins the M103 veteran proof token guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 8ce865c4 tightens M103 no-reopen proof posture.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
