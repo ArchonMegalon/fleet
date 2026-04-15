@@ -337,6 +337,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit a4d93e27 pins M103 current queue mirror proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 15e4d474 pins M103 current queue mirror proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 075b292b tightens the M103 registry proof item guard so canonical successor evidence must match completed queue proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit d9bfcff5 pins M103 current veteran proof floor.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
