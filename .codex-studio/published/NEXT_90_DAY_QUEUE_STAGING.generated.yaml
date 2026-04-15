@@ -92,6 +92,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine/tests/test_engine_proof_pack_generator.py
       - /docker/chummercomplete/chummer-core-engine/docs/ENGINE_PROOF_PACK.md
       - /docker/chummercomplete/chummer-core-engine commit fd15fe87 tightens row-scoped allowed-path authority for src, tests, docs, and scripts.
+      - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors; ENGINE_PROOF_PACK.generated.json reports missing_queue_proof_anchors=[].
     allowed_paths:
       - src
       - tests
