@@ -385,6 +385,10 @@ items:
       - scripts
       - docs
     owned_surfaces:
+      - /docker/chummercomplete/chummer-hub-registry commit 5c799e0 pins M101 design queue proof floor so future shards verify the current completed-package proof floor instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit 572b677 pins the repo-local M101 proof receipt and closeout to the 5c799e0 proof floor.
+      - /docker/chummercomplete/chummer-hub-registry commit f2b4ef6 tightens M101 queue scope guard so future shards verify exact allowed paths and owned surfaces instead of repeating or widening this completed package.
+      - /docker/chummercomplete/chummer-hub-registry commit d1c9a12 pins the M101 queue-scope proof floor into the verifier, proof receipt, and closeout note.
       - release_channel_truth:desktop
       - rollback_and_revoke_reasoning
   - title: Run screenshot-backed parity review on the promoted desktop head
