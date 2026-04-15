@@ -585,7 +585,7 @@ items:
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-package-closeout.md
       - /docker/EA/feedback/2026-04-15-chummer-governor-packets-successor-guard.md
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-terminal-repeat-prevention.md
-      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=19 failed=0
+      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=20 failed=0
     allowed_paths:
       - skills
       - tests
