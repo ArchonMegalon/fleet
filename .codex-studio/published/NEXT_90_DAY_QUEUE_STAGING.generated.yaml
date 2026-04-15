@@ -572,6 +572,11 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 2d8bc79a refreshes the M105 UI restore continuity proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 410c827f tightens the M105 restore continuity proof ancestry guard.
       - /docker/chummercomplete/chummer6-ui-finish commit aa9b7f9b pins the M105 recent proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit aff84cf0 tightens M105 sibling-package proof isolation.
+      - /docker/chummercomplete/chummer6-ui-finish commit c63b38d2 pins the M105 restore-continuity verifier and receipt to the latest registry-cited proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 741afbb9 tightens the M105 registry-cited proof floor guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit e797befd pins the M105 restore-continuity local proof floor guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit ca4b3485 pins the M105 restore-continuity verifier, compliance guard, and receipt to local proof floor e797befd.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
