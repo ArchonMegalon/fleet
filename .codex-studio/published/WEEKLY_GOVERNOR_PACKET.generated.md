@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T19:22:55Z
+Generated: 2026-04-15T19:30:47Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -67,7 +67,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Remaining sibling work tasks: 106.3, 106.4
 - Handoff rule: Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.
 - Worker command guard: active_run_helpers_forbidden
-- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json, operator telemetry, active-run telemetry, active-run helper, active run helper, --telemetry-answer, codexea --telemetry, chummer_design_supervisor.py, chummer_design_supervisor.py status, chummer_design_supervisor.py eta
+- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json, operator telemetry, active-run telemetry, active-run helper, active run helper, --telemetry-answer, codexea --telemetry, chummer_design_supervisor status, chummer_design_supervisor eta, chummer_design_supervisor.py, chummer_design_supervisor.py status, chummer_design_supervisor.py eta
 - Flagship wave guard: closed_wave_not_reopened
 - Closed flagship wave: next_12_biggest_wins
 - Flagship readiness inputs: read-only readiness, parity, journey, and support snapshots

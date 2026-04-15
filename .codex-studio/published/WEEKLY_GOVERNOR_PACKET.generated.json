@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T19:22:55Z",
+  "generated_at": "2026-04-15T19:30:47Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -326,6 +326,8 @@
       "active run helper",
       "--telemetry-answer",
       "codexea --telemetry",
+      "chummer_design_supervisor status",
+      "chummer_design_supervisor eta",
       "chummer_design_supervisor.py",
       "chummer_design_supervisor.py status",
       "chummer_design_supervisor.py eta"
@@ -553,6 +555,8 @@
         "active run helper",
         "--telemetry-answer",
         "codexea --telemetry",
+        "chummer_design_supervisor status",
+        "chummer_design_supervisor eta",
         "chummer_design_supervisor.py",
         "chummer_design_supervisor.py status",
         "chummer_design_supervisor.py eta"
@@ -624,6 +628,8 @@
           "active run helper",
           "--telemetry-answer",
           "codexea --telemetry",
+          "chummer_design_supervisor status",
+          "chummer_design_supervisor eta",
           "chummer_design_supervisor.py",
           "chummer_design_supervisor.py status",
           "chummer_design_supervisor.py eta"
@@ -642,7 +648,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T19:21:29Z",
+        "generated_at": "2026-04-15T19:30:42Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",

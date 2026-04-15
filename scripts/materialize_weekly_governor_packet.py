@@ -135,6 +135,8 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "active run helper",
     "--telemetry-answer",
     "codexea --telemetry",
+    "chummer_design_supervisor status",
+    "chummer_design_supervisor eta",
     "chummer_design_supervisor.py",
     "chummer_design_supervisor.py status",
     "chummer_design_supervisor.py eta",
