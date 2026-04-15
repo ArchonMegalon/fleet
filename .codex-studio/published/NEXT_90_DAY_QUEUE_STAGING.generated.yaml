@@ -371,6 +371,10 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 783ac00b pins M103 veteran proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 827d3546 pins M103 veteran certification proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 89ab0ec0 pins M103 veteran certification proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 594aa3cd pins M103 current veteran proof floor guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit eb11fde4 binds the M103 veteran proof guard to the current queue anchor.
+      - /docker/chummercomplete/chummer6-ui-finish commit fa07f2bb pins M103 queue anchor proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 680deb43 pins M103 veteran certification proof floor.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
