@@ -37,6 +37,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 2017cdfe requires the latest M102 desktop trust proof guard.
       - /docker/chummercomplete/chummer.run-services commit 24432002 tightens the current M102 desktop trust proof guard.
       - /docker/chummercomplete/chummer.run-services commit 4afd6c3e pins the current M102 desktop trust proof floor.
+      - /docker/chummercomplete/chummer.run-services commit d99d080e pins the M102 desktop trust proof floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -72,6 +73,12 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit a8944fa5 pins the M101 blocked-helper proof anchor into the verifier, receipt, and compliance guard.
       - /docker/chummercomplete/chummer6-ui-finish commit b481d3ef refreshes the M101 release train receipt after blocked-helper anchor proof tightening.
       - /docker/chummercomplete/chummer6-ui-finish commit 52b118ff pins the latest M101 release train proof anchors.
+      - /docker/chummercomplete/chummer6-ui-finish commit 24eb3732 tightens the M101 queue source-fingerprint proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit 48970414 pins M101 queue fingerprint proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 2ef1a22d pins M101 latest queue proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 8bc1fb02 pins M101 latest queue proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 9629b207 pins M101 current queue proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 6c032e2c pins M101 current queue proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -197,6 +204,7 @@ items:
       - python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
       - verifier rebuilds the decision-critical packet projection from live source inputs
+      - forbidden worker proof strings are rejected case-insensitively
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
     allowed_paths:
       - admin
@@ -219,6 +227,8 @@ items:
       - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
       - /docker/fleet/tests/test_materialize_support_case_packets.py
       - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
@@ -229,6 +239,12 @@ items:
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
       - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries
       - generated support-packet proof hygiene requires empty disallowed active-run proof entries
+      - stale generated support proof gaps fail the standalone verifier
+      - generated support successor scope drift fails the standalone verifier
+      - generated support successor closure-field drift fails the standalone verifier
+      - weekly/support receipt-count drift fails the standalone verifier
+      - weekly/support generated_at freshness fails the standalone verifier
+      - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
       - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
       - design-owned queue source row matches the Fleet completed queue proof assignment
@@ -257,6 +273,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry/docs/RELEASE_CHANNEL_PIPELINE.md
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.proof.yaml
       - /docker/chummercomplete/chummer-hub-registry/docs/next90-m101-registry-promotion-discipline.closeout.md
+      - /docker/chummercomplete/chummer-hub-registry commit 5d948b1 pins the latest M101 tuple self-test proof floor into the verifier, proof receipt, and closeout note.
       - /docker/chummercomplete/chummer-hub-registry commit e91fe39 tightens the M101 self-test so completed queue proof fails on wrong successor frontier or non-complete package status.
       - /docker/chummercomplete/chummer-hub-registry commit 1586dfc pins the M101 queue authority guard so future shards verify the completed package proof floor instead of repeating it.
     allowed_paths:
@@ -294,6 +311,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 22758a4c pins the latest M103 queue proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit fd93bb8a tightens M103 queue mirror proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit e9f92d0d pins M103 queue mirror proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit a4d93e27 pins M103 current queue mirror proof.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
@@ -431,6 +449,7 @@ items:
     wave: W9
     repo: chummer6-hub
     status: complete
+    frontier_id: 1421219975
     landed_commit: b9e6b52e
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/ArtifactFactoryOrchestrationService.cs
@@ -454,6 +473,10 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 66b1a1c7 tightens M107 artifact factory duplicate queue proof guard.
       - /docker/chummercomplete/chummer.run-services commit 51623cd3 pins M107 artifact factory duplicate queue guard proof.
       - /docker/chummercomplete/chummer.run-services commit a20aa910 tightens M107 artifact factory public shelf ref safety.
+      - /docker/chummercomplete/chummer.run-services commit 7ce86602 pins M107 artifact factory shelf safety proof.
+      - /docker/chummercomplete/chummer.run-services commit 326db197 tightens M107 artifact factory source-pack proof.
+      - /docker/chummercomplete/chummer.run-services commit bd67b5ff tightens M107 artifact factory structured frontier proof.
+      - /docker/chummercomplete/chummer.run-services commit 6851982b tightens M107 artifact factory proof hygiene.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
