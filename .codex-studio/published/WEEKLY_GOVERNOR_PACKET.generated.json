@@ -132,7 +132,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T10:20:16Z",
+  "generated_at": "2026-04-15T10:38:05Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -298,6 +298,10 @@
       "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
       "tmp_path fixture invocation"
     ],
+    "required_resolving_proof_paths": [
+      "scripts/materialize_weekly_governor_packet.py",
+      "tests/test_materialize_weekly_governor_packet.py"
+    ],
     "status": "pass"
   },
   "program_wave": "next_90_day_product_advance",
@@ -305,6 +309,43 @@
     "body": "Freeze launch expansion until fresh local release proof passes on the public edge.",
     "headline": "Launch expansion remains frozen.",
     "state": "freeze_launch"
+  },
+  "repeat_prevention": {
+    "allowed_paths": [
+      "admin",
+      "scripts",
+      "tests",
+      ".codex-studio"
+    ],
+    "closed_package_id": "next90-m106-fleet-governor-packet",
+    "closed_work_task_id": "106.1",
+    "do_not_reopen_owned_surfaces": true,
+    "handoff_rule": "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.",
+    "owned_surfaces": [
+      "weekly_governor_packet",
+      "measured_rollout_loop"
+    ],
+    "remaining_dependency_ids": [
+      101,
+      102,
+      103,
+      104,
+      105
+    ],
+    "remaining_sibling_work_task_ids": [
+      "106.3",
+      "106.4"
+    ],
+    "status": "closed_for_fleet_package",
+    "worker_command_guard": {
+      "blocked_markers": [
+        "run_ooda_design_supervisor_until_quiet",
+        "ooda_design_supervisor.py",
+        "TASK_LOCAL_TELEMETRY.generated.json"
+      ],
+      "rule": "Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry or active-run helper commands.",
+      "status": "active_run_helpers_forbidden"
+    }
   },
   "risk_clusters": [
     {
@@ -442,6 +483,11 @@
     "support_summary": {
       "closure_waiting_on_release_truth": 0,
       "fix_available_ready_count": 0,
+      "followthrough_receipt_gates_blocked_missing_install_receipts_count": 0,
+      "followthrough_receipt_gates_blocked_receipt_mismatch_count": 0,
+      "followthrough_receipt_gates_installation_bound_count": 0,
+      "followthrough_receipt_gates_installed_build_receipted_count": 0,
+      "followthrough_receipt_gates_ready_count": 0,
       "open_non_external_packet_count": 0,
       "open_packet_count": 0,
       "please_test_ready_count": 0,

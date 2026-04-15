@@ -40,6 +40,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     projects = root / "config" / "projects"
     projects.mkdir(parents=True, exist_ok=True)
     _write_yaml(projects / "fleet.yaml", {"id": "fleet", "path": str(root), "queue": []})
+    for proof_anchor in (
+        root / "scripts" / "materialize_weekly_governor_packet.py",
+        root / "tests" / "test_materialize_weekly_governor_packet.py",
+    ):
+        proof_anchor.parent.mkdir(parents=True, exist_ok=True)
+        proof_anchor.write_text("# fixture proof anchor\n", encoding="utf-8")
     _write_yaml(
         registry,
         {
@@ -191,6 +197,15 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                 "recovery_loop_ready_count": 0,
                 "reporter_followthrough_blocked_missing_install_receipts_count": 0,
                 "reporter_followthrough_blocked_receipt_mismatch_count": 0,
+            },
+            "followthrough_receipt_gates": {
+                "ready_count": 2,
+                "blocked_missing_install_receipts_count": 0,
+                "blocked_receipt_mismatch_count": 0,
+                "gate_counts": {
+                    "installed_build_receipted": 2,
+                    "installed_build_receipt_installation_bound": 2,
+                },
             }
         },
     )
@@ -264,6 +279,25 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         payload["package_closeout"]["milestone_106_still_open_because"]
         == "successor dependencies and sibling work tasks remain outside this Fleet package"
     )
+    assert payload["repeat_prevention"]["status"] == "closed_for_fleet_package"
+    assert payload["repeat_prevention"]["closed_package_id"] == "next90-m106-fleet-governor-packet"
+    assert payload["repeat_prevention"]["closed_work_task_id"] == "106.1"
+    assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
+    assert payload["repeat_prevention"]["owned_surfaces"] == [
+        "weekly_governor_packet",
+        "measured_rollout_loop",
+    ]
+    assert payload["repeat_prevention"]["remaining_dependency_ids"] == [101, 102, 103, 104, 105]
+    assert payload["repeat_prevention"]["remaining_sibling_work_task_ids"] == ["106.3", "106.4"]
+    assert (
+        payload["repeat_prevention"]["worker_command_guard"]["status"]
+        == "active_run_helpers_forbidden"
+    )
+    assert payload["repeat_prevention"]["worker_command_guard"]["blocked_markers"] == [
+        "run_ooda_design_supervisor_until_quiet",
+        "ooda_design_supervisor.py",
+        "TASK_LOCAL_TELEMETRY.generated.json",
+    ]
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
@@ -285,6 +319,12 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] == 2
     assert payload["truth_inputs"]["support_summary"]["fix_available_ready_count"] == 1
     assert payload["truth_inputs"]["support_summary"]["please_test_ready_count"] == 1
+    assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_ready_count"] == 2
+    assert (
+        payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installed_build_receipted_count"]
+        == 2
+    )
+    assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installation_bound_count"] == 2
     assert payload["measured_rollout_loop"]["loop_status"] == "ready"
     assert payload["measured_rollout_loop"]["required_decision_actions"] == [
         "launch_expand",
@@ -303,12 +343,21 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Successor dependency posture: open" in markdown
     assert "- Package closeout: fleet_package_complete" in markdown
     assert "- Do not reopen package: True" in markdown
+    assert "## Repeat Prevention" in markdown
+    assert "- Status: closed_for_fleet_package" in markdown
+    assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
+    assert "- Closed work task: 106.1" in markdown
+    assert "- Do not reopen owned surfaces: True" in markdown
+    assert "- Worker command guard: active_run_helpers_forbidden" in markdown
+    assert "- Blocked helper markers: run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json" in markdown
     assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
     assert "- Reporter followthrough ready: 2" in markdown
     assert "- Fix-available ready: 1" in markdown
     assert "- Please-test ready: 1" in markdown
+    assert "- Receipt-gated followthrough ready: 2" in markdown
+    assert "- Receipt-gated installed-build receipts: 2" in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
     assert "WEEKLY_GOVERNOR_PACKET.generated.md" in manifest["artifacts"]
@@ -506,6 +555,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert payload["package_verification"]["status"] == "fail"
     assert payload["package_closeout"]["status"] == "blocked"
     assert payload["package_closeout"]["do_not_reopen_package"] is False
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is False
     assert "queue item allowed_paths no longer match package authority" in payload["package_verification"]["issues"]
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
@@ -697,6 +748,64 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_proof_is_m
     assert (
         "queue item proof is missing required weekly governor receipt(s): "
         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is_missing(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    (paths["root"] / "scripts" / "materialize_weekly_governor_packet.py").unlink()
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["package_verification"]["required_resolving_proof_paths"] == [
+        "scripts/materialize_weekly_governor_packet.py",
+        "tests/test_materialize_weekly_governor_packet.py",
+    ]
+    assert (
+        "queue item proof includes source anchor(s) that no longer resolve: "
+        "scripts/materialize_weekly_governor_packet.py"
+        in payload["package_verification"]["issues"]
+    )
+    assert (
+        "registry work task 106.1 evidence includes source anchor(s) that no longer resolve: "
+        "scripts/materialize_weekly_governor_packet.py"
         in payload["package_verification"]["issues"]
     )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"

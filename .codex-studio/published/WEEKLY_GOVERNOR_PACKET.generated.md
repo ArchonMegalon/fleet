@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T10:20:16Z
+Generated: 2026-04-15T10:38:05Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -43,8 +43,24 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Recovery-loop ready: 0
 - Followthrough blocked on install receipts: 0
 - Followthrough receipt mismatches: 0
+- Receipt-gated followthrough ready: 0
+- Receipt-gated installed-build receipts: 0
 - Closeout reason: Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.
 - Milestone 106 still open because: successor dependencies and sibling work tasks remain outside this Fleet package
+
+## Repeat Prevention
+
+- Status: closed_for_fleet_package
+- Closed package: next90-m106-fleet-governor-packet
+- Closed work task: 106.1
+- Do not reopen owned surfaces: True
+- Owned surfaces: weekly_governor_packet, measured_rollout_loop
+- Allowed paths: admin, scripts, tests, .codex-studio
+- Remaining dependency packages: 101, 102, 103, 104, 105
+- Remaining sibling work tasks: 106.3, 106.4
+- Handoff rule: Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.
+- Worker command guard: active_run_helpers_forbidden
+- Blocked helper markers: run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json
 
 ## Public Status Copy
 

@@ -58,6 +58,10 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
     "tmp_path fixture invocation",
 )
+REQUIRED_RESOLVING_PROOF_PATHS = (
+    "scripts/materialize_weekly_governor_packet.py",
+    "tests/test_materialize_weekly_governor_packet.py",
+)
 DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "run_ooda_design_supervisor_until_quiet",
     "ooda_design_supervisor.py",
@@ -135,6 +139,22 @@ def _disallowed_worker_proof_entries(entries: List[str]) -> List[str]:
                 blocked.append(entry)
                 break
     return blocked
+
+
+def _resolve_fleet_proof_path(repo_root: Path, marker: str) -> Path:
+    text = str(marker or "").strip()
+    prefix = "/docker/fleet/"
+    if text.startswith(prefix):
+        text = text[len(prefix):]
+    return repo_root / text
+
+
+def _missing_resolving_proof_paths(repo_root: Path) -> List[str]:
+    missing: List[str] = []
+    for marker in REQUIRED_RESOLVING_PROOF_PATHS:
+        if not _resolve_fleet_proof_path(repo_root, marker).is_file():
+            missing.append(marker)
+    return missing
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -248,7 +268,7 @@ def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str, Any]:
+def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: Path) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
     item = _find_queue_item(queue)
     registry_work_task = _find_registry_work_task(milestone, "106.1") if milestone else {}
@@ -292,6 +312,17 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
                 "that worker packages must not invoke: "
                 + ", ".join(disallowed_proof)
             )
+        missing_resolving_paths = _missing_resolving_proof_paths(repo_root)
+        missing_from_queue = [
+            marker
+            for marker in missing_resolving_paths
+            if f"/docker/fleet/{marker}" in proof_entries or marker in proof_entries
+        ]
+        if missing_from_queue:
+            issues.append(
+                "queue item proof includes source anchor(s) that no longer resolve: "
+                + ", ".join(missing_from_queue)
+            )
     if milestone:
         if str(milestone.get("status") or "").strip() != "in_progress":
             issues.append("milestone 106 is not in_progress in successor registry")
@@ -324,6 +355,17 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
                     "command evidence that worker packages must not invoke: "
                     + ", ".join(disallowed_registry_evidence)
                 )
+            missing_resolving_paths = _missing_resolving_proof_paths(repo_root)
+            missing_from_registry = [
+                marker
+                for marker in missing_resolving_paths
+                if marker in evidence_text or f"/docker/fleet/{marker}" in evidence_text
+            ]
+            if missing_from_registry:
+                issues.append(
+                    "registry work task 106.1 evidence includes source anchor(s) that no longer resolve: "
+                    + ", ".join(missing_from_registry)
+                )
     return {
         "status": "pass" if not issues else "fail",
         "package_id": PACKAGE_ID,
@@ -346,6 +388,7 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str,
         "queue_task": str(item.get("task") or "").strip(),
         "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),
         "required_registry_evidence_markers": list(REQUIRED_REGISTRY_EVIDENCE_MARKERS),
+        "required_resolving_proof_paths": list(REQUIRED_RESOLVING_PROOF_PATHS),
         "disallowed_worker_proof_command_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
         "issues": issues,
     }
@@ -442,6 +485,8 @@ def verify_source_inputs(
 def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     summary = dict(support_packets.get("summary") or {})
     followthrough = dict(support_packets.get("reporter_followthrough_plan") or {})
+    receipt_gates = dict(support_packets.get("followthrough_receipt_gates") or {})
+    gate_counts = dict(receipt_gates.get("gate_counts") or {})
     return {
         "open_packet_count": _coerce_int(summary.get("open_packet_count"), 0),
         "open_non_external_packet_count": _coerce_int(summary.get("open_non_external_packet_count"), 0),
@@ -466,6 +511,23 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "reporter_followthrough_plan_blocked_receipt_mismatch_count": _coerce_int(
             followthrough.get("blocked_receipt_mismatch_count"),
+            0,
+        ),
+        "followthrough_receipt_gates_ready_count": _coerce_int(receipt_gates.get("ready_count"), 0),
+        "followthrough_receipt_gates_blocked_missing_install_receipts_count": _coerce_int(
+            receipt_gates.get("blocked_missing_install_receipts_count"),
+            0,
+        ),
+        "followthrough_receipt_gates_blocked_receipt_mismatch_count": _coerce_int(
+            receipt_gates.get("blocked_receipt_mismatch_count"),
+            0,
+        ),
+        "followthrough_receipt_gates_installed_build_receipted_count": _coerce_int(
+            gate_counts.get("installed_build_receipted"),
+            0,
+        ),
+        "followthrough_receipt_gates_installation_bound_count": _coerce_int(
+            gate_counts.get("installed_build_receipt_installation_bound"),
             0,
         ),
     }
@@ -536,6 +598,7 @@ def _status_copy(*, launch_allowed: bool, rollback_watch: bool, launch_reason: s
 
 def build_payload(
     *,
+    repo_root: Path,
     registry: Dict[str, Any],
     queue: Dict[str, Any],
     weekly_pulse: Dict[str, Any],
@@ -545,7 +608,7 @@ def build_payload(
     status_plane: Dict[str, Any],
     source_paths: Dict[str, str],
 ) -> Dict[str, Any]:
-    verification = verify_package(registry, queue)
+    verification = verify_package(registry, queue, repo_root)
     milestone = _find_milestone(registry)
     work_task_posture = _work_task_posture(milestone) if milestone else {
         "work_tasks": [],
@@ -723,6 +786,27 @@ def build_payload(
         if _coerce_int(dep, -1) >= 0
     ]
     open_sibling_work_task_ids = _norm_list(work_task_posture.get("open_sibling_work_task_ids"))
+    repeat_prevention = {
+        "status": "closed_for_fleet_package" if package_complete else "blocked",
+        "closed_package_id": PACKAGE_ID,
+        "closed_work_task_id": "106.1",
+        "do_not_reopen_owned_surfaces": package_complete,
+        "owned_surfaces": list(OWNED_SURFACES),
+        "allowed_paths": list(ALLOWED_PATHS),
+        "remaining_dependency_ids": remaining_dependency_ids,
+        "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
+        "handoff_rule": (
+            "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; "
+            "route remaining M106 work to the listed dependency or sibling packages."
+            if package_complete
+            else "Package verification is blocked; fix package_verification.issues before treating this slice as closed."
+        ),
+        "worker_command_guard": {
+            "status": "active_run_helpers_forbidden",
+            "blocked_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
+            "rule": "Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry or active-run helper commands.",
+        },
+    }
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
@@ -843,6 +927,7 @@ def build_payload(
                 "public status copy is derived from the same measured decision ledger as the governor packet",
             ],
         },
+        "repeat_prevention": repeat_prevention,
         "risk_clusters": weekly_pulse.get("top_support_or_feedback_clusters") or [],
     }
 
@@ -864,6 +949,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     decision_board = dict(payload.get("decision_board") or {})
     loop = dict(payload.get("measured_rollout_loop") or {})
     closeout = dict(payload.get("package_closeout") or {})
+    repeat_prevention = dict(payload.get("repeat_prevention") or {})
+    worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     weekly = dict(payload.get("weekly_input_health") or {})
     sources = dict(payload.get("source_input_health") or {})
     support = dict(truth.get("support_summary") or {})
@@ -928,8 +1015,24 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Recovery-loop ready: {support.get('recovery_loop_ready_count', 0)}",
             f"- Followthrough blocked on install receipts: {support.get('reporter_followthrough_blocked_missing_install_receipts_count', 0)}",
             f"- Followthrough receipt mismatches: {support.get('reporter_followthrough_blocked_receipt_mismatch_count', 0)}",
+            f"- Receipt-gated followthrough ready: {support.get('followthrough_receipt_gates_ready_count', 0)}",
+            f"- Receipt-gated installed-build receipts: {support.get('followthrough_receipt_gates_installed_build_receipted_count', 0)}",
             f"- Closeout reason: {_markdown_status(closeout.get('closeout_reason'))}",
             f"- Milestone 106 still open because: {_markdown_status(closeout.get('milestone_106_still_open_because'))}",
+            "",
+            "## Repeat Prevention",
+            "",
+            f"- Status: {_markdown_status(repeat_prevention.get('status'))}",
+            f"- Closed package: {_markdown_status(repeat_prevention.get('closed_package_id'))}",
+            f"- Closed work task: {_markdown_status(repeat_prevention.get('closed_work_task_id'))}",
+            f"- Do not reopen owned surfaces: {bool(repeat_prevention.get('do_not_reopen_owned_surfaces'))}",
+            f"- Owned surfaces: {_markdown_list(repeat_prevention.get('owned_surfaces'))}",
+            f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",
+            f"- Remaining dependency packages: {_markdown_list(repeat_prevention.get('remaining_dependency_ids'))}",
+            f"- Remaining sibling work tasks: {_markdown_list(repeat_prevention.get('remaining_sibling_work_task_ids'))}",
+            f"- Handoff rule: {_markdown_status(repeat_prevention.get('handoff_rule'))}",
+            f"- Worker command guard: {_markdown_status(worker_command_guard.get('status'))}",
+            f"- Blocked helper markers: {_markdown_list(worker_command_guard.get('blocked_markers'))}",
             "",
             "## Public Status Copy",
             "",
@@ -1006,6 +1109,7 @@ def materialize(args: argparse.Namespace) -> Path:
         "status_plane": str(Path(args.status_plane).resolve()),
     }
     payload = build_payload(
+        repo_root=Path(args.repo_root).resolve(),
         registry=_read_yaml(Path(args.successor_registry).resolve()),
         queue=_read_yaml(Path(args.queue_staging).resolve()),
         weekly_pulse=_read_json(Path(args.weekly_pulse).resolve()),
