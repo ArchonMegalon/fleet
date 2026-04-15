@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T19:01:34Z",
+  "generated_at": "2026-04-15T19:21:29Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -351,6 +351,10 @@
         {
           "commit": "f66dbaa",
           "status": "present"
+        },
+        {
+          "commit": "f490e53",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -358,7 +362,8 @@
         "065c653",
         "fb47ce8",
         "5e6a468",
-        "f66dbaa"
+        "f66dbaa",
+        "f490e53"
       ],
       "status": "pass"
     },
@@ -366,7 +371,8 @@
       "065c653",
       "fb47ce8",
       "5e6a468",
-      "f66dbaa"
+      "f66dbaa",
+      "f490e53"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -414,7 +420,7 @@
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-      "local proof floor commit f66dbaa pinned for M106 governor packet repeat prevention",
+      "local proof floor commit f490e53 pinned for M106 governor packet repeat prevention",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -437,7 +443,7 @@
       "proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131",
-      "local proof floor commit f66dbaa",
+      "local proof floor commit f490e53",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -495,6 +501,10 @@
         {
           "commit": "f66dbaa",
           "status": "present"
+        },
+        {
+          "commit": "f490e53",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -502,7 +512,8 @@
         "065c653",
         "fb47ce8",
         "5e6a468",
-        "f66dbaa"
+        "f66dbaa",
+        "f490e53"
       ],
       "status": "pass"
     },
@@ -510,7 +521,8 @@
       "065c653",
       "fb47ce8",
       "5e6a468",
-      "f66dbaa"
+      "f66dbaa",
+      "f490e53"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -630,7 +642,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T18:52:43Z",
+        "generated_at": "2026-04-15T19:14:08Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
