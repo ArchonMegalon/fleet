@@ -27,10 +27,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Registry work task 106.1 status: complete
-- Required registry evidence markers: 19
+- Required registry evidence markers: 20
 - Queue closeout status: complete
 - Queue mirror status: in_sync
-- Required queue proof markers: 19
+- Required queue proof markers: 20
 - Required resolving proof paths: scripts/materialize_weekly_governor_packet.py, scripts/verify_next90_m106_fleet_governor_packet.py, scripts/verify_script_bootstrap_no_pythonpath.py, tests/test_materialize_weekly_governor_packet.py, tests/test_fleet_script_bootstrap_without_pythonpath.py
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
