@@ -350,6 +350,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 1b590dab tightens blocked helper-command proof exclusion.
       - /docker/chummercomplete/chummer6-ui-finish commit b0d32e72 pins M105 helper-proof repeat prevention.
       - /docker/chummercomplete/chummer6-ui-finish commit 3bbc3a12 pins latest M105 helper-proof repeat prevention.
+      - /docker/chummercomplete/chummer6-ui-finish commit 256f2228 pins the latest M105 restore-continuity guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
