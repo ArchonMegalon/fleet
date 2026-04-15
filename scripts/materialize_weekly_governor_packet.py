@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -230,16 +231,24 @@ def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
     issues: List[str] = []
     allowed_prefixes = tuple(f"{root}/" for root in ALLOWED_PATHS)
     for entry in entries:
-        first_token = str(entry or "").strip().split(maxsplit=1)[0]
-        if not first_token:
-            continue
-        relative = ""
-        if first_token.startswith("/docker/fleet/"):
-            relative = first_token.removeprefix("/docker/fleet/")
-        elif first_token.startswith(tuple(f"{root}/" for root in ALLOWED_PATHS)):
-            relative = first_token
-        if relative and not relative.startswith(allowed_prefixes):
-            issues.append(first_token)
+        text = str(entry or "").strip()
+        first_token = text.split(maxsplit=1)[0] if text else ""
+        candidates: List[str] = []
+        if first_token:
+            candidates.append(first_token)
+        candidates.extend(re.findall(r"/docker/fleet/[^\s,;:]+", text))
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            relative = ""
+            if candidate.startswith("/docker/fleet/"):
+                relative = candidate.removeprefix("/docker/fleet/")
+            elif candidate.startswith(tuple(f"{root}/" for root in ALLOWED_PATHS)):
+                relative = candidate
+            if relative and not relative.startswith(allowed_prefixes):
+                issues.append(candidate)
     return issues
 
 
