@@ -132,7 +132,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T10:38:05Z",
+  "generated_at": "2026-04-15T10:43:17Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -503,6 +503,7 @@
     "weekly_pulse_contract": "chummer.weekly_product_pulse",
     "weekly_pulse_version": 3
   },
+  "wave_id": "W8",
   "weekly_input_health": {
     "generated_at": "2026-04-15T08:25:28Z",
     "issues": [],

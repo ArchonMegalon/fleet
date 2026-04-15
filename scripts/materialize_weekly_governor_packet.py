@@ -38,6 +38,8 @@ SUPPORT_PACKETS = PUBLISHED / "SUPPORT_CASE_PACKETS.generated.json"
 STATUS_PLANE = PUBLISHED / "STATUS_PLANE.generated.yaml"
 PACKAGE_ID = "next90-m106-fleet-governor-packet"
 MILESTONE_ID = 106
+PROGRAM_WAVE = "next_90_day_product_advance"
+WAVE_ID = "W8"
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 UTC = dt.timezone.utc
@@ -186,6 +188,13 @@ def _find_milestone(registry: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _find_wave(registry: Dict[str, Any]) -> Dict[str, Any]:
+    for row in registry.get("waves") or []:
+        if isinstance(row, dict) and str(row.get("id") or "").strip() == WAVE_ID:
+            return row
+    return {}
+
+
 def _milestone_index(registry: Dict[str, Any]) -> Dict[int, Dict[str, Any]]:
     indexed: Dict[int, Dict[str, Any]] = {}
     for row in registry.get("milestones") or []:
@@ -270,6 +279,7 @@ def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
 
 def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: Path) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
+    wave = _find_wave(registry)
     item = _find_queue_item(queue)
     registry_work_task = _find_registry_work_task(milestone, "106.1") if milestone else {}
     dependency_posture = _dependency_posture(registry, milestone) if milestone else {
@@ -281,9 +291,25 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
     issues: List[str] = []
     if not milestone:
         issues.append(f"milestone {MILESTONE_ID} is missing from successor registry")
+    if str(registry.get("program_wave") or "").strip() != PROGRAM_WAVE:
+        issues.append("successor registry program_wave is not next_90_day_product_advance")
+    if not wave:
+        issues.append("successor registry wave W8 is missing")
+    else:
+        wave_milestone_ids = [
+            _coerce_int(row, -1)
+            for row in (wave.get("milestone_ids") or [])
+            if _coerce_int(row, -1) >= 0
+        ]
+        if MILESTONE_ID not in wave_milestone_ids:
+            issues.append("successor registry wave W8 does not include milestone 106")
     if not item:
         issues.append(f"queue item {PACKAGE_ID} is missing from staging queue")
+    if str(queue.get("program_wave") or "").strip() != PROGRAM_WAVE:
+        issues.append("queue staging program_wave is not next_90_day_product_advance")
     if item:
+        if str(item.get("wave") or "").strip() != WAVE_ID:
+            issues.append("queue item wave is not W8")
         if _coerce_int(item.get("milestone_id"), -1) != MILESTONE_ID:
             issues.append("queue item milestone_id does not match milestone 106")
         if str(item.get("repo") or "").strip() != "fleet":
@@ -813,6 +839,7 @@ def build_payload(
         "generated_at": iso_now(),
         "as_of": str(weekly_pulse.get("as_of") or "").strip(),
         "program_wave": "next_90_day_product_advance",
+        "wave_id": WAVE_ID,
         "package_verification": verification,
         "weekly_input_health": weekly_input_health,
         "source_input_health": source_input_health,

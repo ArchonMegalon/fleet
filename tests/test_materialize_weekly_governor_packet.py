@@ -51,6 +51,14 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
         {
             "product": "chummer",
             "program_wave": "next_90_day_product_advance",
+            "waves": [
+                {
+                    "id": "W8",
+                    "name": "Make continuity and product-governor boring",
+                    "status": "in_progress",
+                    "milestone_ids": [105, 106],
+                }
+            ],
             "milestones": [
                 {
                     "id": 106,
@@ -104,6 +112,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
                     "package_id": "next90-m106-fleet-governor-packet",
                     "milestone_id": 106,
+                    "wave": "W8",
                     "repo": "fleet",
                     "status": "complete",
                     "proof": [
@@ -558,6 +567,141 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert payload["repeat_prevention"]["status"] == "blocked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is False
     assert "queue item allowed_paths no longer match package authority" in payload["package_verification"]["issues"]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_successor_wave_drift(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["program_wave"] = "next_12_biggest_wins"
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "successor registry program_wave is not next_90_day_product_advance" in payload["package_verification"]["issues"]
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_when_m106_leaves_w8(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["waves"][0]["milestone_ids"] = [105]
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "successor registry wave W8 does not include milestone 106" in payload["package_verification"]["issues"]
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_queue_wave_drift(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["program_wave"] = "next_12_biggest_wins"
+    queue["items"][0]["wave"] = "W5"
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "queue staging program_wave is not next_90_day_product_advance" in payload["package_verification"]["issues"]
+    assert "queue item wave is not W8" in payload["package_verification"]["issues"]
+    assert payload["package_closeout"]["status"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
