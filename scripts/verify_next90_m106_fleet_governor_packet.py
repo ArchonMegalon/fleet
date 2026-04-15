@@ -79,6 +79,7 @@ def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
         "truth_inputs": payload.get("truth_inputs"),
         "decision_board": payload.get("decision_board"),
         "decision_gate_ledger": payload.get("decision_gate_ledger"),
+        "governor_decisions": payload.get("governor_decisions"),
         "public_status_copy": payload.get("public_status_copy"),
         "package_closeout": payload.get("package_closeout"),
         "measured_rollout_loop": payload.get("measured_rollout_loop"),
@@ -203,6 +204,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     loop = dict(packet.get("measured_rollout_loop") or {})
     decision_board = dict(packet.get("decision_board") or {})
     decision_gate_ledger = dict(packet.get("decision_gate_ledger") or {})
+    governor_decisions = packet.get("governor_decisions") or []
     required_resolving_paths = packet_verification.get("required_resolving_proof_paths") or []
     required_decision_actions = loop.get("required_decision_actions") or []
     packet_projection = _decision_projection(packet)
@@ -300,6 +302,17 @@ def verify(args: argparse.Namespace) -> List[str]:
     missing_decision_ledger_actions = [
         action for action in required_decision_actions if not decision_gate_ledger.get(action)
     ]
+    if isinstance(governor_decisions, list):
+        governor_decision_actions = {
+            str(row.get("action") or "").strip()
+            for row in governor_decisions
+            if isinstance(row, dict)
+        }
+    else:
+        governor_decision_actions = set()
+    missing_governor_decision_actions = [
+        action for action in required_decision_actions if action not in governor_decision_actions
+    ]
     _require(
         not missing_decision_board_actions,
         issues,
@@ -311,6 +324,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "decision gate ledger is missing required action(s): "
         + ", ".join(missing_decision_ledger_actions),
+    )
+    _require(
+        not missing_governor_decision_actions,
+        issues,
+        "governor decision projection is missing required action(s): "
+        + ", ".join(missing_governor_decision_actions),
     )
     _require(
         package_closeout.get("status") == "fleet_package_complete",

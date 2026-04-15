@@ -837,6 +837,24 @@ def _decision_alignment(actual_action: str, launch_allowed: bool) -> Dict[str, A
     }
 
 
+def _governor_decision_rows(
+    decision_board: Dict[str, Any],
+    decision_gate_ledger: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for action in ("launch_expand", "freeze_launch", "canary", "rollback", "focus_shift"):
+        board = dict(decision_board.get(action) or {})
+        rows.append(
+            {
+                "action": action,
+                "state": str(board.get("state") or "unknown").strip() or "unknown",
+                "reason": str(board.get("reason") or "").strip(),
+                "gate_count": len(decision_gate_ledger.get(action) or []),
+            }
+        )
+    return rows
+
+
 def build_payload(
     *,
     repo_root: Path,
@@ -1071,6 +1089,59 @@ def build_payload(
         },
     }
     packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
+    decision_board = {
+        "current_launch_action": launch_action,
+        "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
+        "launch_expand": {
+            "state": "allowed" if launch_allowed else "blocked",
+            "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
+        },
+        "freeze_launch": {
+            "state": "active" if freeze_active else "available",
+            "reason": str(launch_decision.get("reason") or "Freeze remains the fail-closed default when launch gates are incomplete.").strip(),
+        },
+        "canary": {
+            "state": "ready" if canary_status == "Canary green on all active lanes" else "accumulating",
+            "reason": canary_status or "Canary evidence is unavailable.",
+            "next_decision": str(provider.get("next_decision") or "").strip(),
+        },
+        "rollback": {
+            "state": "watch" if rollback_watch else "armed",
+            "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
+        },
+        "focus_shift": {
+            "state": "queued_successor_wave",
+            "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
+        },
+    }
+    decision_gate_ledger = {
+        "launch_expand": launch_gate_ledger,
+        "freeze_launch": [
+            _gate_row(
+                "fail_closed_default",
+                "active" if freeze_active else "available",
+                "active when any launch gate is not pass",
+                "active" if freeze_active else "available",
+            ),
+        ],
+        "canary": [
+            _gate_row(
+                "provider_canary",
+                "ready" if canary_status == "Canary green on all active lanes" else "accumulating",
+                "Canary green on all active lanes",
+                canary_status,
+            ),
+        ],
+        "rollback": rollback_gate_ledger,
+        "focus_shift": [
+            _gate_row(
+                "successor_wave_scope",
+                "queued_successor_wave",
+                "closed flagship wave remains read-only and M106 routes only scoped successor work",
+                "next90-m106-fleet-governor-packet",
+            ),
+        ],
+    }
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
@@ -1104,59 +1175,9 @@ def build_payload(
             "support_summary": support,
             "status_plane_final_claim": str(status_plane.get("whole_product_final_claim_status") or "").strip(),
         },
-        "decision_board": {
-            "current_launch_action": launch_action,
-            "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
-            "launch_expand": {
-                "state": "allowed" if launch_allowed else "blocked",
-                "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
-            },
-            "freeze_launch": {
-                "state": "active" if freeze_active else "available",
-                "reason": str(launch_decision.get("reason") or "Freeze remains the fail-closed default when launch gates are incomplete.").strip(),
-            },
-            "canary": {
-                "state": "ready" if canary_status == "Canary green on all active lanes" else "accumulating",
-                "reason": canary_status or "Canary evidence is unavailable.",
-                "next_decision": str(provider.get("next_decision") or "").strip(),
-            },
-            "rollback": {
-                "state": "watch" if rollback_watch else "armed",
-                "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
-            },
-            "focus_shift": {
-                "state": "queued_successor_wave",
-                "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
-            },
-        },
-        "decision_gate_ledger": {
-            "launch_expand": launch_gate_ledger,
-            "freeze_launch": [
-                _gate_row(
-                    "fail_closed_default",
-                    "active" if freeze_active else "available",
-                    "active when any launch gate is not pass",
-                    "active" if freeze_active else "available",
-                ),
-            ],
-            "canary": [
-                _gate_row(
-                    "provider_canary",
-                    "ready" if canary_status == "Canary green on all active lanes" else "accumulating",
-                    "Canary green on all active lanes",
-                    canary_status,
-                ),
-            ],
-            "rollback": rollback_gate_ledger,
-            "focus_shift": [
-                _gate_row(
-                    "successor_wave_scope",
-                    "queued_successor_wave",
-                    "closed flagship wave remains read-only and M106 routes only scoped successor work",
-                    "next90-m106-fleet-governor-packet",
-                ),
-            ],
-        },
+        "decision_board": decision_board,
+        "decision_gate_ledger": decision_gate_ledger,
+        "governor_decisions": _governor_decision_rows(decision_board, decision_gate_ledger),
         "public_status_copy": _status_copy(
             launch_allowed=launch_allowed,
             rollback_watch=rollback_watch,

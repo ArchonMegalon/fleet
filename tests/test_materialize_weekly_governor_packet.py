@@ -475,6 +475,21 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "rollback",
         "focus_shift",
     ]
+    assert [row["action"] for row in payload["governor_decisions"]] == [
+        "launch_expand",
+        "freeze_launch",
+        "canary",
+        "rollback",
+        "focus_shift",
+    ]
+    governor_decisions = {
+        row["action"]: row for row in payload["governor_decisions"]
+    }
+    assert governor_decisions["launch_expand"]["state"] == "blocked"
+    assert governor_decisions["freeze_launch"]["state"] == "active"
+    assert governor_decisions["canary"]["state"] == "accumulating"
+    assert governor_decisions["rollback"]["gate_count"] == 3
+    assert governor_decisions["focus_shift"]["gate_count"] == 1
     markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(encoding="utf-8")
     assert "# Weekly Governor Packet" in markdown
     assert "| Launch expand | blocked |" in markdown
@@ -1271,6 +1286,9 @@ def test_verify_next90_m106_governor_packet_rejects_missing_decision_action_ledg
     ]
     packet["decision_board"].pop("focus_shift")
     packet["decision_gate_ledger"].pop("focus_shift")
+    packet["governor_decisions"] = [
+        row for row in packet["governor_decisions"] if row["action"] != "focus_shift"
+    ]
     _write_json(out, packet)
 
     verifier = subprocess.run(
@@ -1284,6 +1302,10 @@ def test_verify_next90_m106_governor_packet_rejects_missing_decision_action_ledg
     assert verifier.returncode == 1
     assert "decision board is missing required action(s): focus_shift" in verifier.stderr
     assert "decision gate ledger is missing required action(s): focus_shift" in verifier.stderr
+    assert (
+        "governor decision projection is missing required action(s): focus_shift"
+        in verifier.stderr
+    )
 
 
 def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(
@@ -1422,6 +1444,15 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
     assert payload["decision_board"]["freeze_launch"]["state"] == "available"
     assert payload["decision_board"]["rollback"]["state"] == "armed"
     assert payload["public_status_copy"]["state"] == "launch_expand_allowed"
+    assert {
+        row["action"]: row["state"] for row in payload["governor_decisions"]
+    } == {
+        "launch_expand": "allowed",
+        "freeze_launch": "available",
+        "canary": "ready",
+        "rollback": "armed",
+        "focus_shift": "queued_successor_wave",
+    }
     launch_gates = {
         row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
     }

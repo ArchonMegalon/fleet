@@ -152,7 +152,39 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T15:18:41Z",
+  "generated_at": "2026-04-15T15:32:15Z",
+  "governor_decisions": [
+    {
+      "action": "launch_expand",
+      "gate_count": 12,
+      "reason": "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
+      "state": "blocked"
+    },
+    {
+      "action": "freeze_launch",
+      "gate_count": 1,
+      "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+      "state": "active"
+    },
+    {
+      "action": "canary",
+      "gate_count": 1,
+      "reason": "Canary evidence is still accumulating",
+      "state": "accumulating"
+    },
+    {
+      "action": "rollback",
+      "gate_count": 3,
+      "reason": "Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear.",
+      "state": "armed"
+    },
+    {
+      "action": "focus_shift",
+      "gate_count": 1,
+      "reason": "Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice.",
+      "state": "queued_successor_wave"
+    }
+  ],
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -513,7 +545,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T15:18:38Z",
+        "generated_at": "2026-04-15T15:31:46Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "state": "present",
