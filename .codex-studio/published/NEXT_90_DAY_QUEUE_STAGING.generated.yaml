@@ -45,6 +45,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M101_UI_RELEASE_TRAIN.generated.json
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M101ReleaseTrainGuardTests.cs
+      - /docker/chummercomplete/chummer6-ui-finish commit 5844ad03 pins successor frontier 2450443084 into the completed M101 proof guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
