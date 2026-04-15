@@ -93,6 +93,14 @@ def _projection_drift(expected: Dict[str, Any], actual: Dict[str, Any]) -> List[
     return [field for field in fields if expected.get(field) != actual.get(field)]
 
 
+def _stable_markdown(markdown: str) -> str:
+    lines = markdown.splitlines()
+    return "\n".join(
+        "Generated: <ignored>" if line.startswith("Generated: ") else line
+        for line in lines
+    )
+
+
 def verify(args: argparse.Namespace) -> List[str]:
     repo_root = Path(args.repo_root).resolve()
     packet_path = Path(args.packet).resolve()
@@ -146,6 +154,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     packet_projection = _decision_projection(packet)
     live_projection = _decision_projection(live_payload)
     projection_drift = _projection_drift(live_projection, packet_projection)
+    expected_markdown = weekly.render_markdown_packet(live_payload)
 
     _require(verification["status"] == "pass", issues, f"live package verification is not pass: {verification['issues']}")
     _require(
@@ -153,6 +162,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "checked-in packet decision ledger no longer matches live source inputs for field(s): "
         + ", ".join(projection_drift),
+    )
+    _require(
+        _stable_markdown(markdown) == _stable_markdown(expected_markdown),
+        issues,
+        "checked-in markdown packet no longer matches the live source-input projection",
     )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
     _require(packet.get("status") == "ready", issues, "packet status is not ready")
