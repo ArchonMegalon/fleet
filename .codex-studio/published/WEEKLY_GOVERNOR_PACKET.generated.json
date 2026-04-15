@@ -132,7 +132,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T10:06:23Z",
+  "generated_at": "2026-04-15T10:13:05Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -155,6 +155,60 @@
       "rollback",
       "focus_shift"
     ]
+  },
+  "package_closeout": {
+    "closeout_reason": "Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.",
+    "do_not_reopen_package": true,
+    "milestone_106_still_open_because": "successor dependencies and sibling work tasks remain outside this Fleet package",
+    "owned_surfaces": [
+      "weekly_governor_packet",
+      "measured_rollout_loop"
+    ],
+    "package_scope": "next90-m106 Fleet weekly governor packet only",
+    "remaining_milestone_dependency_ids": [
+      101,
+      102,
+      103,
+      104,
+      105
+    ],
+    "remaining_sibling_work_task_ids": [
+      "106.3",
+      "106.4"
+    ],
+    "status": "fleet_package_complete",
+    "work_task_posture": {
+      "open_sibling_work_task_ids": [
+        "106.3",
+        "106.4"
+      ],
+      "work_tasks": [
+        {
+          "id": "106.1",
+          "owner": "fleet",
+          "status": "complete",
+          "title": "Publish a weekly governor packet with launch, freeze, canary, rollback, and risk-cluster decisions."
+        },
+        {
+          "id": "106.2",
+          "owner": "executive-assistant",
+          "status": "complete",
+          "title": "Synthesize support, parity, and release signals into operator-ready packets and reporter followthrough mail."
+        },
+        {
+          "id": "106.3",
+          "owner": "chummer6-hub",
+          "status": "",
+          "title": "Expose install-aware support, status, and recovery surfaces downstream of the same release truth."
+        },
+        {
+          "id": "106.4",
+          "owner": "chummer6-design",
+          "status": "",
+          "title": "Keep the successor wave registry current and prune closed work without reopening architecture-cleanup debt."
+        }
+      ]
+    }
   },
   "package_verification": {
     "allowed_paths": [

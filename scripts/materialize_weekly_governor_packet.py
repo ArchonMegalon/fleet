@@ -208,6 +208,31 @@ def _find_registry_work_task(milestone: Dict[str, Any], task_id: str) -> Dict[st
     return {}
 
 
+def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
+    rows: List[Dict[str, str]] = []
+    open_sibling_ids: List[str] = []
+    for row in milestone.get("work_tasks") or []:
+        if not isinstance(row, dict):
+            continue
+        task_id = str(row.get("id") or "").strip()
+        status = str(row.get("status") or "").strip()
+        owner = str(row.get("owner") or "").strip()
+        rows.append(
+            {
+                "id": task_id,
+                "owner": owner,
+                "status": status,
+                "title": str(row.get("title") or "").strip(),
+            }
+        )
+        if task_id != "106.1" and status.lower() not in COMPLETE_STATUSES:
+            open_sibling_ids.append(task_id)
+    return {
+        "work_tasks": rows,
+        "open_sibling_work_task_ids": open_sibling_ids,
+    }
+
+
 def verify_package(registry: Dict[str, Any], queue: Dict[str, Any]) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
     item = _find_queue_item(queue)
@@ -490,6 +515,11 @@ def build_payload(
     source_paths: Dict[str, str],
 ) -> Dict[str, Any]:
     verification = verify_package(registry, queue)
+    milestone = _find_milestone(registry)
+    work_task_posture = _work_task_posture(milestone) if milestone else {
+        "work_tasks": [],
+        "open_sibling_work_task_ids": [],
+    }
     launch_decision = _launch_decision(weekly_pulse)
     weekly_input_health = verify_weekly_inputs(weekly_pulse, launch_decision)
     source_input_health = verify_source_inputs(
@@ -648,6 +678,20 @@ def build_payload(
         and parity["release_truth_status"] in {"gold_ready", "veteran_ready"}
         and support["open_non_external_packet_count"] == 0
     )
+    package_complete = (
+        verification["status"] == "pass"
+        and str(verification.get("queue_status") or "").strip().lower() in COMPLETE_STATUSES
+        and str(verification.get("registry_work_task_status") or "").strip().lower() in COMPLETE_STATUSES
+    )
+    remaining_dependency_ids = [
+        _coerce_int(dep, -1)
+        for dep in (
+            list(dependency_posture.get("open_dependency_ids") or [])
+            + list(dependency_posture.get("missing_dependency_ids") or [])
+        )
+        if _coerce_int(dep, -1) >= 0
+    ]
+    open_sibling_work_task_ids = _norm_list(work_task_posture.get("open_sibling_work_task_ids"))
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
@@ -722,6 +766,29 @@ def build_payload(
             rollback_watch=rollback_watch,
             launch_reason=launch_reason,
         ),
+        "package_closeout": {
+            "status": "fleet_package_complete" if package_complete else "blocked",
+            "do_not_reopen_package": package_complete,
+            "package_scope": "next90-m106 Fleet weekly governor packet only",
+            "owned_surfaces": list(OWNED_SURFACES),
+            "closeout_reason": (
+                "Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current."
+                if package_complete
+                else "Fleet package authority or proof is not complete; inspect package_verification issues before reusing this slice."
+            ),
+            "remaining_milestone_dependency_ids": remaining_dependency_ids,
+            "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
+            "milestone_106_still_open_because": (
+                "successor dependencies and sibling work tasks remain outside this Fleet package"
+                if remaining_dependency_ids and open_sibling_work_task_ids
+                else "successor dependencies remain outside this Fleet package"
+                if remaining_dependency_ids
+                else "sibling work tasks remain outside this Fleet package"
+                if open_sibling_work_task_ids
+                else "no open dependency or sibling task remains visible in the successor registry"
+            ),
+            "work_task_posture": work_task_posture,
+        },
         "measured_rollout_loop": {
             "loop_status": "ready" if measured_loop_ready else "blocked",
             "cadence": "weekly",
@@ -765,6 +832,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     truth = dict(payload.get("truth_inputs") or {})
     decision_board = dict(payload.get("decision_board") or {})
     loop = dict(payload.get("measured_rollout_loop") or {})
+    closeout = dict(payload.get("package_closeout") or {})
     weekly = dict(payload.get("weekly_input_health") or {})
     sources = dict(payload.get("source_input_health") or {})
     support = dict(truth.get("support_summary") or {})
@@ -806,6 +874,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Package verification: {_markdown_status(verification.get('status'))}",
             f"- Weekly input health: {_markdown_status(weekly.get('status'))}",
             f"- Source input health: {_markdown_status(sources.get('status'))}",
+            f"- Package closeout: {_markdown_status(closeout.get('status'))}",
+            f"- Do not reopen package: {bool(closeout.get('do_not_reopen_package'))}",
             f"- Measured rollout loop: {_markdown_status(loop.get('loop_status'))}",
             f"- Registry work task 106.1 status: {_markdown_status(verification.get('registry_work_task_status'))}",
             f"- Required registry evidence markers: {len(verification.get('required_registry_evidence_markers') or [])}",
@@ -813,6 +883,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Required queue proof markers: {len(verification.get('required_queue_proof_markers') or [])}",
             f"- Successor dependency posture: {_markdown_status(dependency.get('status'))}",
             f"- Open successor dependencies: {_markdown_list(dependency.get('open_dependency_ids'))}",
+            f"- Remaining sibling work tasks: {_markdown_list(closeout.get('remaining_sibling_work_task_ids'))}",
             f"- Flagship readiness: {_markdown_status(truth.get('flagship_readiness_status'))}",
             f"- Flagship parity release truth: {_markdown_status(parity.get('release_truth_status'))}",
             f"- Journey gate state: {_markdown_status(truth.get('journey_gate_state'))}",
@@ -826,6 +897,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Recovery-loop ready: {support.get('recovery_loop_ready_count', 0)}",
             f"- Followthrough blocked on install receipts: {support.get('reporter_followthrough_blocked_missing_install_receipts_count', 0)}",
             f"- Followthrough receipt mismatches: {support.get('reporter_followthrough_blocked_receipt_mismatch_count', 0)}",
+            f"- Closeout reason: {_markdown_status(closeout.get('closeout_reason'))}",
+            f"- Milestone 106 still open because: {_markdown_status(closeout.get('milestone_106_still_open_because'))}",
             "",
             "## Public Status Copy",
             "",

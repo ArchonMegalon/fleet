@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T10:06:23Z
+Generated: 2026-04-15T10:13:05Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,6 +20,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
+- Package closeout: fleet_package_complete
+- Do not reopen package: True
 - Measured rollout loop: ready
 - Registry work task 106.1 status: complete
 - Required registry evidence markers: 6
@@ -27,6 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Required queue proof markers: 6
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
+- Remaining sibling work tasks: 106.3, 106.4
 - Flagship readiness: pass
 - Flagship parity release truth: gold_ready
 - Journey gate state: ready
@@ -40,6 +43,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Recovery-loop ready: 0
 - Followthrough blocked on install receipts: 0
 - Followthrough receipt mismatches: 0
+- Closeout reason: Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.
+- Milestone 106 still open because: successor dependencies and sibling work tasks remain outside this Fleet package
 
 ## Public Status Copy
 

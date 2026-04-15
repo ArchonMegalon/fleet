@@ -66,7 +66,23 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "python3 -m py_compile scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                             ],
-                        }
+                        },
+                        {
+                            "id": "106.2",
+                            "owner": "executive-assistant",
+                            "title": "Synthesize support, parity, and release signals into operator-ready packets and reporter followthrough mail.",
+                            "status": "complete",
+                        },
+                        {
+                            "id": "106.3",
+                            "owner": "chummer6-hub",
+                            "title": "Expose install-aware support, status, and recovery surfaces downstream of the same release truth.",
+                        },
+                        {
+                            "id": "106.4",
+                            "owner": "chummer6-design",
+                            "title": "Keep the successor wave registry current and prune closed work without reopening architecture-cleanup debt.",
+                        },
                     ],
                 }
             ],
@@ -231,6 +247,23 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
     assert payload["package_verification"]["queue_status"] == "complete"
+    assert payload["package_closeout"]["status"] == "fleet_package_complete"
+    assert payload["package_closeout"]["do_not_reopen_package"] is True
+    assert payload["package_closeout"]["remaining_milestone_dependency_ids"] == [
+        101,
+        102,
+        103,
+        104,
+        105,
+    ]
+    assert payload["package_closeout"]["remaining_sibling_work_task_ids"] == [
+        "106.3",
+        "106.4",
+    ]
+    assert (
+        payload["package_closeout"]["milestone_106_still_open_because"]
+        == "successor dependencies and sibling work tasks remain outside this Fleet package"
+    )
     assert payload["weekly_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "pass"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
@@ -268,6 +301,9 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "## Launch Gate Ledger" in markdown
     assert "| local_release_proof | blocked | passed | unknown |" in markdown
     assert "- Successor dependency posture: open" in markdown
+    assert "- Package closeout: fleet_package_complete" in markdown
+    assert "- Do not reopen package: True" in markdown
+    assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
     assert "- Reporter followthrough ready: 2" in markdown
@@ -468,6 +504,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["package_closeout"]["do_not_reopen_package"] is False
     assert "queue item allowed_paths no longer match package authority" in payload["package_verification"]["issues"]
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
