@@ -38,11 +38,12 @@ items:
     wave: W6
     repo: chummer6-ui
     status: complete
-    landed_commit: 69df9be4
+    landed_commit: c9c0d84f
     proof:
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M101_UI_RELEASE_TRAIN.generated.json
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M101ReleaseTrainGuardTests.cs
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -59,6 +60,16 @@ items:
     milestone_id: 103
     wave: W7
     repo: executive-assistant
+    status: complete
+    proof:
+      - /docker/EA/docs/chummer5a_parity_lab/CHUMMER5A_PARITY_LAB_PACK.yaml
+      - /docker/EA/docs/chummer5a_parity_lab/oracle_baselines.yaml
+      - /docker/EA/docs/chummer5a_parity_lab/veteran_workflow_pack.yaml
+      - /docker/EA/docs/chummer5a_parity_lab/compare_packs.yaml
+      - /docker/EA/docs/chummer5a_parity_lab/import_export_fixture_inventory.yaml
+      - /docker/EA/docs/chummer5a_parity_lab/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
+      - /docker/EA/.codex-studio/published/CHUMMER5A_PARITY_ORACLE_PACK.generated.json
+      - python tests/test_chummer5a_parity_lab_pack.py
     allowed_paths:
       - skills
       - tests
@@ -73,6 +84,14 @@ items:
     milestone_id: 104
     wave: W7
     repo: chummer6-core
+    status: complete
+    landed_commit: 00800059
+    proof:
+      - /docker/chummercomplete/chummer-core-engine/.codex-studio/published/ENGINE_PROOF_PACK.generated.json
+      - /docker/chummercomplete/chummer-core-engine/scripts/generate-engine-proof-pack.py
+      - /docker/chummercomplete/chummer-core-engine/tests/test_engine_proof_pack_generator.py
+      - /docker/chummercomplete/chummer-core-engine/docs/ENGINE_PROOF_PACK.md
+      - /docker/chummercomplete/chummer-core-engine commit fd15fe87 tightens row-scoped allowed-path authority for src, tests, docs, and scripts.
     allowed_paths:
       - src
       - tests
@@ -92,6 +111,7 @@ items:
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs
+      - /docker/chummercomplete/chummer.run-services commit b39147dc tightens the Hub local release proof guard for package next90-m105-hub-workspace-continuity and frontier 4623636482.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/tests/test_workspace_restore_receipts.py
       - python3 scripts/verify_workspace_restore_receipts.py
@@ -132,6 +152,16 @@ items:
     milestone_id: 102
     wave: W6
     repo: fleet
+    status: complete
+    proof:
+      - /docker/fleet/scripts/materialize_support_case_packets.py
+      - /docker/fleet/tests/test_materialize_support_case_packets.py
+      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+      - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
+      - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
     allowed_paths:
       - scripts
       - tests
@@ -165,6 +195,12 @@ items:
     milestone_id: 103
     wave: W7
     repo: chummer6-ui
+    status: complete
+    landed_commit: a8e4f92c
+    proof:
+      - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M103_UI_VETERAN_CERTIFICATION.generated.json
+      - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
+      - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
       - Chummer.Avalonia
       - Chummer.Blazor
@@ -179,6 +215,19 @@ items:
     milestone_id: 104
     wave: W7
     repo: chummer6-ui
+    status: complete
+    landed_commit: 63f57d62
+    proof:
+      - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M104_UI_EXPLAIN_RECEIPTS.generated.json
+      - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m104-ui-explain-receipts-check.sh
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopTrustReceiptText.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/DialogTrustReceiptText.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/DialogHost.razor
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/SectionPane.razor
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Presentation/BlazorShellComponentTests.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
+      - bash scripts/ai/milestones/next90-m104-ui-explain-receipts-check.sh
+      - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
       - Chummer.Blazor
@@ -223,9 +272,12 @@ items:
     proof:
       - /docker/EA/docs/chummer_governor_packets/CHUMMER_GOVERNOR_PACKET_PACK.yaml
       - /docker/EA/docs/chummer_governor_packets/OPERATOR_AND_REPORTER_PACKET_SPECIMENS.yaml
+      - /docker/EA/docs/chummer_governor_packets/README.md
+      - /docker/EA/docs/chummer_governor_packets/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
       - /docker/EA/tests/test_chummer_governor_packet_pack.py
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-package-closeout.md
-      - python tests/test_chummer_governor_packet_pack.py
+      - /docker/EA/feedback/2026-04-15-chummer-governor-packets-successor-guard.md
+      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=16 failed=0
     allowed_paths:
       - skills
       - tests
@@ -234,4 +286,406 @@ items:
     owned_surfaces:
       - operator_packets:weekly_governor
       - reporter_followthrough:release_truth
-source_queue_fingerprint: next90-staging-20260413
+  - title: Stand up artifact-factory orchestration for release, support, and publication bundles
+    task: Launch recipe-backed release, fix, support, and publication artifact jobs from approved source packs instead of one-off provider flows.
+    package_id: next90-m107-hub-artifact-factory
+    milestone_id: 107
+    wave: W9
+    repo: chummer6-hub
+    status: complete
+    landed_commit: e25842ac
+    proof:
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/ArtifactFactoryOrchestrationService.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Tests/ArtifactFactoryOrchestrationServiceTests.cs
+      - /docker/chummercomplete/chummer.run-services/scripts/verify_artifact_factory_orchestration.py
+      - python3 /docker/chummercomplete/chummer.run-services/scripts/verify_artifact_factory_orchestration.py
+      - python3 -m unittest /docker/chummercomplete/chummer.run-services/tests/test_artifact_factory_orchestration.py
+      - dotnet test /docker/chummercomplete/chummer.run-services/Chummer.Tests/Chummer.Tests.csproj --filter ArtifactFactoryOrchestrationServiceTests --no-restore
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - artifact_factory:orchestration
+      - public_proof_shelf:release_bundles
+  - title: Execute structured media recipes with receipts, captions, and preview refs
+    task: Make media-factory emit video, audio, preview, and packet bundles with first-class receipts and publication-ready refs.
+    package_id: next90-m107-media-factory-recipe-execution
+    milestone_id: 107
+    wave: W9
+    repo: chummer6-media-factory
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - structured_media_recipe_execution
+      - artifact_factory:receipts
+  - title: Compose campaign cold-open and mission-briefing bundles from approved packs
+    task: Turn approved campaign primer and mission packs into locale-matched cold-open and briefing requests with audience-safe proof anchors.
+    package_id: next90-m108-hub-campaign-briefing-bundles
+    milestone_id: 108
+    wave: W10
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - campaign_cold_open_pack
+      - mission_briefing_reel
+  - title: Launch primer and briefing artifacts from mobile campaign home
+    task: Surface campaign cold-open and mission-briefing artifacts on mobile and travel shells without browser ritual.
+    package_id: next90-m108-mobile-campaign-artifacts
+    milestone_id: 108
+    wave: W10
+    repo: chummer6-mobile
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - campaign_home:artifact_launch
+      - mission_briefing:mobile
+  - title: Expose approved Build Lab explain packets and proof anchors for companion artifact generation
+    task: Turn Build Lab explain output into approved packet anchors the artifact factory can render without losing engine truth.
+    package_id: next90-m109-core-build-explain-packets
+    milestone_id: 109
+    wave: W9
+    repo: chummer6-core
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - build_lab_explain_packets
+      - engine_truth:artifact_anchors
+  - title: Launch build explain companions from compare, import, and blocker surfaces
+    task: Make desktop compare, import, and blocker surfaces open inspectable explain companions instead of plain receipts alone.
+    package_id: next90-m109-ui-build-explain-artifacts
+    milestone_id: 109
+    wave: W9
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - build_explain:artifact_launch
+      - explain_receipts:desktop
+  - title: Render runsite host clips, route previews, and orientation bundle receipts
+    task: Make runsite orientation a first-class artifact bundle with host clips, previews, and route-linked receipts.
+    package_id: next90-m110-media-factory-runsite-bundles
+    milestone_id: 110
+    wave: W10
+    repo: chummer6-media-factory
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - runsite_orientation_bundle
+      - route_preview:artifact_receipts
+  - title: Surface runsite orientation entry points before session on mobile and travel shells
+    task: Launch runsite host mode from campaign and travel shells before live play without replacing inspectable route truth.
+    package_id: next90-m110-mobile-runsite-orientation
+    milestone_id: 110
+    wave: W10
+    repo: chummer6-mobile
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - runsite_host_mode:mobile
+      - campaign_orientation:mobile
+  - title: Emit install-aware release and support concierge packets from installed-build truth
+    task: Compile support closure and release explainer packets from installed build, channel, and support-case truth.
+    package_id: next90-m111-hub-support-concierge
+    milestone_id: 111
+    wave: W9
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - install_aware_support_concierge
+      - release_concierge:hub
+  - title: Publish install-aware artifact identities and channel rationale for concierge bundles
+    task: Store why this release, fix, or recovery artifact is correct for this installed build and channel.
+    package_id: next90-m111-registry-install-aware-concierge
+    milestone_id: 111
+    wave: W9
+    repo: chummer6-hub-registry
+    allowed_paths:
+      - Chummer.Hub.Registry
+      - scripts
+      - docs
+    owned_surfaces:
+      - install_aware_artifact_registry
+      - release_channel_truth:concierge
+  - title: Gate followthrough mail and public proof promotion against install-aware receipts
+    task: Promote release and support concierge artifacts only when install-aware recovery receipts and publication refs agree.
+    package_id: next90-m111-fleet-install-aware-followthrough
+    milestone_id: 111
+    wave: W9
+    repo: fleet
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - install_aware_followthrough
+      - product_governor:artifact_promotion
+  - title: Promote campaign consequence state into governed campaign APIs
+    task: Land downtime, aftermath, heat, faction, contact, and reputation state with receipts and return-loop actions.
+    package_id: next90-m112-hub-campaign-consequence-truth
+    milestone_id: 112
+    wave: W11
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - campaign_memory:consequence_truth
+      - downtime_aftermath:api
+  - title: Surface campaign memory and consequences on desktop
+    task: Make campaign consequences, stale state, and next-session return actions visible on the promoted desktop route.
+    package_id: next90-m112-ui-campaign-memory
+    milestone_id: 112
+    wave: W11
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - campaign_workspace:memory
+      - campaign_return_loop:desktop
+  - title: Land crew, roster, and event movement APIs
+    task: Make dossiers move between rosters, campaigns, groups, and events with ownership and audit receipts.
+    package_id: next90-m113-hub-roster-ops
+    milestone_id: 113
+    wave: W11
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - crew_roster_ops
+      - campaign_group_event_movement
+  - title: Render opposition and GM prep packets from governed source packs
+    task: Produce packet, preview, and optional briefing artifacts for opposition, scenes, and prep-library entries.
+    package_id: next90-m113-media-factory-gm-prep-packets
+    milestone_id: 113
+    wave: W11
+    repo: chummer6-media-factory
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - gm_prep_packets
+      - opposition_packet_artifacts
+  - title: Publish rule-environment studio contracts and explain receipts
+    task: Build amend-package lifecycle, promotion, diff, and explain-receipt contracts for downstream UI and support surfaces.
+    package_id: next90-m114-core-rule-environment-studio
+    milestone_id: 114
+    wave: W12
+    repo: chummer6-core
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - rule_environment_studio
+      - explain_receipts:engine
+  - title: Add rule-environment studio entry points to desktop workflows
+    task: Surface amend-package lifecycle, before-after diffs, and explain receipts in mechanical desktop workflows.
+    package_id: next90-m114-ui-rule-studio
+    milestone_id: 114
+    wave: W12
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - rule_environment_studio:desktop
+      - explain_receipts:desktop
+  - title: Define portable dossier, replay, recap, and exchange contracts
+    task: Add lineage, compatibility, loss, provenance, and portability receipts for dossier, campaign, replay, recap, and external exchange outputs.
+    package_id: next90-m115-core-exchange-contracts
+    milestone_id: 115
+    wave: W12
+    repo: chummer6-core
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - portable_dossier_contracts
+      - replay_recap_exchange_contracts
+  - title: Store lineage and publication refs for exchange artifacts
+    task: Normalize provenance, compatibility, bounded-loss, and publication refs for dossier, campaign, replay, recap, and exchange artifacts.
+    package_id: next90-m115-registry-exchange-lineage
+    milestone_id: 115
+    wave: W12
+    repo: chummer6-hub-registry
+    allowed_paths:
+      - Chummer.Hub.Registry
+      - scripts
+      - docs
+    owned_surfaces:
+      - exchange_lineage_registry
+      - portability_truth
+  - title: Build creator publication discovery and moderation orchestration
+    task: Make creator publication discovery, submission, moderation, trust ranking, and correction flows run from approved manifests.
+    package_id: next90-m116-hub-creator-publication
+    milestone_id: 116
+    wave: W13
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - creator_publication:discovery
+      - creator_publication:moderation
+  - title: Publish creator lineage, moderation, ranking, and revocation facts
+    task: Store creator artifact lineage, moderation, ranking, compatibility, and revocation facts in registry truth.
+    package_id: next90-m116-registry-creator-trust
+    milestone_id: 116
+    wave: W13
+    repo: chummer6-hub-registry
+    allowed_paths:
+      - Chummer.Hub.Registry
+      - scripts
+      - docs
+    owned_surfaces:
+      - creator_trust_registry
+      - publication_revocation_truth
+  - title: Build artifact shelf APIs and audience filters
+    task: Serve personal, campaign, creator, and public artifact shelves with proof, preview, captions, sibling packets, audience, locale, retention, and publication state.
+    package_id: next90-m117-hub-artifact-shelf-v2
+    milestone_id: 117
+    wave: W13
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - artifact_shelf:v2
+      - artifact_audience_filters
+  - title: Add artifact shelf entry points to desktop surfaces
+    task: Expose artifact shelves from desktop home, campaign, build, and publication surfaces without hiding source truth.
+    package_id: next90-m117-ui-artifact-shelf
+    milestone_id: 117
+    wave: W13
+    repo: chummer6-ui
+    allowed_paths:
+      - Chummer.Avalonia
+      - Chummer.Desktop.Runtime
+      - Chummer.Tests
+      - scripts
+    owned_surfaces:
+      - artifact_shelf:desktop
+      - public_proof_shelf:desktop
+  - title: Land organizer, league, convention, and season contracts
+    task: Add roles, rosters, events, permissions, artifact publication, and support escalation contracts for community-scale operations.
+    package_id: next90-m118-hub-organizer-ops
+    milestone_id: 118
+    wave: W13
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - organizer_ops
+      - league_convention_season_ops
+  - title: Compile organizer health and publication readiness packets
+    task: Add fleet and EA operator-loop packets for organizer health, event prep, support risk, and publication readiness.
+    package_id: next90-m118-fleet-ea-organizer-packets
+    milestone_id: 118
+    wave: W13
+    repo: fleet
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - organizer_health_packets
+      - publication_readiness:operator
+  - title: Orchestrate guided first-playable-session onboarding
+    task: Join install, claim, campaign primer, starter build, briefing, and support-safe recovery into a measured first-session lane.
+    package_id: next90-m119-hub-first-session-onboarding
+    milestone_id: 119
+    wave: W14
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - first_playable_session:onboarding
+      - starter_lane:hub
+  - title: Render starter primer and first-session companion artifacts
+    task: Produce localized starter primers, first-session briefings, and support-safe onboarding artifacts from approved source packs.
+    package_id: next90-m119-media-factory-starter-artifacts
+    milestone_id: 119
+    wave: W14
+    repo: chummer6-media-factory
+    allowed_paths:
+      - src
+      - tests
+      - docs
+      - scripts
+    owned_surfaces:
+      - starter_primer_artifacts
+      - first_session_briefing_artifacts
+  - title: Publish public trust, status, release, and proof-shelf surfaces from governor truth
+    task: Compile live, preview, fallback, revoked, fixed, blocked, proof freshness, support pulse, and adoption health into public status surfaces.
+    package_id: next90-m120-hub-public-launch-health
+    milestone_id: 120
+    wave: W14
+    repo: chummer6-hub
+    allowed_paths:
+      - Chummer.Run.Api
+      - scripts
+      - tests
+    owned_surfaces:
+      - public_trust_surface:v3
+      - launch_health:public
+  - title: Compile launch pulse and adoption health into governor packets
+    task: Produce launch pulse, adoption health, support risk, proof freshness, and public followthrough packets from governed release truth.
+    package_id: next90-m120-fleet-launch-pulse
+    milestone_id: 120
+    wave: W14
+    repo: fleet
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - launch_pulse
+      - adoption_health:governor
+source_queue_fingerprint: next90-staging-20260415-next-big-wins-widening
