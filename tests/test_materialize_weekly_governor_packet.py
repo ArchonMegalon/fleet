@@ -106,6 +106,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
+                                "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                             ],
@@ -163,6 +164,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
                         "forbidden worker proof strings are rejected case-insensitively",
+                        "verifier rejects Fleet proof paths outside package allowed path roots",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                     ],
@@ -883,6 +885,74 @@ def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
         "repeat prevention worker command guard rule no longer requires repo-local proof"
         in verifier.stderr
     )
+
+
+def test_verify_next90_m106_governor_packet_rejects_out_of_scope_fleet_proof_paths(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    for payload in (design_queue, queue):
+        item = next(
+            row
+            for row in payload["items"]
+            if row["package_id"] == "next90-m106-fleet-governor-packet"
+        )
+        item["proof"].append("/docker/fleet/README.md is not inside this package scope")
+    registry_task = registry["milestones"][0]["work_tasks"][0]
+    registry_task["evidence"].append(
+        "/docker/fleet/README.md is not inside this package scope"
+    )
+    _write_yaml(paths["design_queue"], design_queue)
+    _write_yaml(paths["queue"], queue)
+    _write_yaml(paths["registry"], registry)
+
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert "outside allowed package roots" in verifier.stderr
+    assert "/docker/fleet/README.md" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_flagship_reopen_guard_drift(

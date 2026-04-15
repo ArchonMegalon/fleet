@@ -67,6 +67,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rebuilds the decision-critical packet projection from live source inputs",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
     "forbidden worker proof strings are rejected case-insensitively",
+    "verifier rejects Fleet proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
 )
@@ -85,6 +86,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "decision-critical packet projection",
     "every measured rollout action",
     "forbidden worker proof strings",
+    "proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
 )
@@ -200,6 +202,23 @@ def _missing_resolving_proof_paths(repo_root: Path) -> List[str]:
         if not _resolve_fleet_proof_path(repo_root, marker).is_file():
             missing.append(marker)
     return missing
+
+
+def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
+    issues: List[str] = []
+    allowed_prefixes = tuple(f"{root}/" for root in ALLOWED_PATHS)
+    for entry in entries:
+        first_token = str(entry or "").strip().split(maxsplit=1)[0]
+        if not first_token:
+            continue
+        relative = ""
+        if first_token.startswith("/docker/fleet/"):
+            relative = first_token.removeprefix("/docker/fleet/")
+        elif first_token.startswith(tuple(f"{root}/" for root in ALLOWED_PATHS)):
+            relative = first_token
+        if relative and not relative.startswith(allowed_prefixes):
+            issues.append(first_token)
+    return issues
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -363,6 +382,13 @@ def _queue_proof_issues(item: Dict[str, Any], prefix: str, repo_root: Path) -> L
             "that worker packages must not invoke: "
             + ", ".join(disallowed_proof)
         )
+    out_of_scope_paths = _fleet_proof_path_scope_issues(proof_entries)
+    if out_of_scope_paths:
+        issues.append(
+            f"{prefix} item proof includes Fleet proof path(s) outside allowed package roots "
+            f"{', '.join(ALLOWED_PATHS)}: "
+            + ", ".join(out_of_scope_paths)
+        )
     missing_resolving_paths = _missing_resolving_proof_paths(repo_root)
     missing_from_queue = [
         marker
@@ -499,6 +525,13 @@ def verify_package(
                     "registry work task 106.1 evidence includes active-run or operator-helper "
                     "command evidence that worker packages must not invoke: "
                     + ", ".join(disallowed_registry_evidence)
+                )
+            out_of_scope_evidence_paths = _fleet_proof_path_scope_issues(evidence_entries)
+            if out_of_scope_evidence_paths:
+                issues.append(
+                    "registry work task 106.1 evidence includes Fleet proof path(s) outside "
+                    f"allowed package roots {', '.join(ALLOWED_PATHS)}: "
+                    + ", ".join(out_of_scope_evidence_paths)
                 )
             missing_resolving_paths = _missing_resolving_proof_paths(repo_root)
             missing_from_registry = [
