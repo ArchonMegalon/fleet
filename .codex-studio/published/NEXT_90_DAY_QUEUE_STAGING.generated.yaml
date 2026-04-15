@@ -50,6 +50,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit c61a8fb5 pins M101 design queue closure tokens into the verifier, receipt, and compliance guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 79760cc1 refreshes the M101 release train receipt after queue closure proof tightening.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
+      - /docker/chummercomplete/chummer6-ui-finish commit a3bf058e tightens M101 proof commit resolution so stale proof anchors cannot keep the closed package green.
+      - /docker/chummercomplete/chummer6-ui-finish commit 0954e2a1 pins M101 proof resolution guard into verifier, receipt, and compliance proof.
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
       - Chummer.Avalonia
