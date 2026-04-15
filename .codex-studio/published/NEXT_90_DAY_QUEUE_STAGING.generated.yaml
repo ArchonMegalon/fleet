@@ -254,10 +254,14 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m105-ui-restore-continuity-check.sh
       - /docker/chummercomplete/chummer6-ui-finish commit 54c27661
       - /docker/chummercomplete/chummer6-ui-finish commit 49036853
+      - /docker/chummercomplete/chummer6-ui-finish commit c0960ae9
+      - /docker/chummercomplete/chummer6-ui-finish commit 0d1eafbd
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/DesktopInstallLinkingRuntimeTests.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M105RestoreContinuityGuardTests.cs
       - bash scripts/ai/milestones/next90-m105-ui-restore-continuity-check.sh
     allowed_paths:
       - Chummer.Avalonia
