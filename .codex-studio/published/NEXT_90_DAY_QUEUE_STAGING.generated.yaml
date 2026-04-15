@@ -24,6 +24,14 @@ items:
     milestone_id: 101
     wave: W6
     repo: chummer6-ui
+    status: complete
+    landed_commit: 69df9be4
+    proof:
+      - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m101-ui-release-train-check.sh
+      - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M101_UI_RELEASE_TRAIN.generated.json
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/DesktopExecutableGateComplianceTests.cs
+      - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
+      - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
       - Chummer.Avalonia
       - Chummer.Desktop.Runtime
