@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -87,16 +89,21 @@ items:
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
+      - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
       - generated support-packet proof hygiene requires empty disallowed active-run proof entries
       - stale generated support proof gaps fail the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - weekly support-packet source-path drift fails the standalone verifier
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
+      - telemetry command proof markers fail the standalone verifier and shared successor authority check
       - design-owned queue source row matches the Fleet completed queue proof assignment
 {proof_tail}
     allowed_paths:
@@ -135,16 +142,21 @@ items:
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
+      - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
       - generated support-packet proof hygiene requires empty disallowed active-run proof entries
       - stale generated support proof gaps fail the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - weekly support-packet source-path drift fails the standalone verifier
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
+      - telemetry command proof markers fail the standalone verifier and shared successor authority check
       - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
@@ -228,13 +240,22 @@ def _support_packets_payload() -> dict:
             "registry_title": "Desktop-native claim, update, rollback, and support followthrough",
             "registry_dependencies": [101],
             "registry_work_task_id": "102.4",
+            "registry_work_task_title": "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.",
             "registry_work_task_status": "complete",
             "queue_title": "Gate fix followthrough against real install and receipt truth",
             "queue_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
+            "queue_wave": "W6",
+            "queue_repo": "fleet",
+            "queue_milestone_id": 102,
             "queue_status": "complete",
             "queue_frontier_id": "2454416974",
             "design_queue_source_path": "",
             "design_queue_source_item_found": True,
+            "design_queue_source_title": "Gate fix followthrough against real install and receipt truth",
+            "design_queue_source_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
+            "design_queue_source_wave": "W6",
+            "design_queue_source_repo": "fleet",
+            "design_queue_source_milestone_id": 102,
             "design_queue_source_status": "complete",
             "design_queue_source_frontier_id": "2454416974",
             "missing_registry_evidence_markers": [],
@@ -274,6 +295,7 @@ def _support_packets_payload() -> dict:
                 "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
                 "python3 -m py_compile",
                 "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+                "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
                 "installation-bound receipt gating",
                 "fixed-version receipts",
                 "fixed-channel receipts",
@@ -284,8 +306,10 @@ def _support_packets_payload() -> dict:
                 "stale generated support proof gaps",
                 "weekly/support receipt-count drift",
                 "weekly/support generated_at freshness",
+                "weekly support-packet source-path drift",
                 "weekly governor source-path hygiene and worker command guard",
                 "design-owned queue source proof markers",
+                "telemetry command proof markers fail the standalone verifier and shared successor authority check",
             ],
         },
     }
@@ -296,7 +320,10 @@ def _weekly_payload() -> dict:
         "generated_at": "2026-04-15T14:13:33Z",
         "source_input_health": {
             "required_inputs": {
-                "support_packets": {"successor_package_verification_status": "pass"},
+                "support_packets": {
+                    "successor_package_verification_status": "pass",
+                    "source_path": "",
+                },
                 "source_path_hygiene": {
                     "state": "pass",
                     "disallowed_source_paths": [],
@@ -304,6 +331,10 @@ def _weekly_payload() -> dict:
                         "/var/lib/codex-fleet",
                         "ACTIVE_RUN_HANDOFF.generated.md",
                         "TASK_LOCAL_TELEMETRY.generated.json",
+                        "operator telemetry",
+                        "active-run telemetry",
+                        "active-run helper",
+                        "active run helper",
                         "run_ooda_design_supervisor_until_quiet",
                         "ooda_design_supervisor.py",
                         "chummer_design_supervisor.py",
@@ -322,6 +353,10 @@ def _weekly_payload() -> dict:
                     "/var/lib/codex-fleet",
                     "ACTIVE_RUN_HANDOFF.generated.md",
                     "TASK_LOCAL_TELEMETRY.generated.json",
+                    "operator telemetry",
+                    "active-run telemetry",
+                    "active-run helper",
+                    "active run helper",
                     "run_ooda_design_supervisor_until_quiet",
                     "ooda_design_supervisor.py",
                     "chummer_design_supervisor.py",
@@ -383,6 +418,10 @@ def _align_successor_verification_paths(
     verification["design_queue_source_path"] = str(design_queue)
 
 
+def _align_weekly_support_path(payload: dict, *, support: Path) -> None:
+    payload["source_input_health"]["required_inputs"]["support_packets"]["source_path"] = str(support)
+
+
 def _fixture_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
     support = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     weekly = tmp_path / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -390,7 +429,9 @@ def _fixture_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
     registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
     queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     design_queue = tmp_path / "DESIGN_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
-    _write_json(weekly, _weekly_payload())
+    weekly_payload = _weekly_payload()
+    _align_weekly_support_path(weekly_payload, support=support)
+    _write_json(weekly, weekly_payload)
     weekly_markdown.write_text(_weekly_markdown(), encoding="utf-8")
     _write_registry(registry)
     _write_queue(queue, design_queue)
@@ -640,6 +681,34 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_command_proof(
     assert "successor authority reports missing_queue_proof_markers" in result["issues"]
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_negative_proof_marker(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - telemetry command proof markers fail the standalone verifier and shared successor authority check\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "successor queue proof is missing standalone verifier negative-proof markers" in result["issues"]
+    assert result["missing_queue_negative_proof_markers"] == [
+        "telemetry command proof markers fail the standalone verifier and shared successor authority check"
+    ]
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_weekly_markdown_proof(
     tmp_path: Path,
 ) -> None:
@@ -696,6 +765,30 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_active_run_registry_ev
     assert result["blocked_proof_entries"] == result["blocked_registry_evidence_entries"]
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_fails_active_run_input_paths(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+
+    result = module.verify(
+        support_packets_path=Path(
+            "/var/lib/codex-fleet/chummer_design_supervisor/shard-7/ACTIVE_RUN_HANDOFF.generated.md"
+        ),
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "verifier inputs cite active-run telemetry or helper paths" in result["issues"]
+    assert result["blocked_input_paths"] == [
+        "/var/lib/codex-fleet/chummer_design_supervisor/shard-7/ACTIVE_RUN_HANDOFF.generated.md"
+    ]
+    assert "weekly governor support-packets input path disagrees with verified support packet" in result["issues"]
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_support_input(
     tmp_path: Path,
 ) -> None:
@@ -715,6 +808,66 @@ def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_support_inpu
 
     assert result["status"] == "fail"
     assert "weekly governor support-packets input is missing" in result["issues"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_support_input_path_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _weekly_payload()
+    _align_weekly_support_path(
+        payload,
+        support=support.parent / "OTHER_SUPPORT_CASE_PACKETS.generated.json",
+    )
+    _write_json(weekly, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "weekly governor support-packets input path disagrees with verified support packet"
+        in result["issues"]
+    )
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_support_input_helper_path(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _weekly_payload()
+    _align_weekly_support_path(
+        payload,
+        support=Path(
+            "/var/lib/codex-fleet/chummer_design_supervisor/shard-7/TASK_LOCAL_TELEMETRY.generated.json"
+        ),
+    )
+    _write_json(weekly, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "weekly governor support-packets input path cites active-run telemetry or helper paths"
+        in result["issues"]
+    )
+    assert (
+        "weekly governor support-packets input path disagrees with verified support packet"
+        not in result["issues"]
+    )
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_source_path_hygiene(
@@ -1074,6 +1227,72 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_support_packet_source_
     }
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_fails_generated_queue_assignment_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=design_queue,
+    )
+    payload["successor_package_verification"]["queue_repo"] = "chummer6-hub"
+    payload["successor_package_verification"]["queue_wave"] = "W7"
+    payload["successor_package_verification"]["queue_milestone_id"] = 103
+    payload["successor_package_verification"]["design_queue_source_repo"] = "chummer6-ui"
+    payload["successor_package_verification"]["design_queue_source_wave"] = "W8"
+    payload["successor_package_verification"]["design_queue_source_milestone_id"] = 105
+    payload["successor_package_verification"]["registry_work_task_title"] = "Old reporter loop"
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json successor verification closure fields drifted"
+        in result["issues"]
+    )
+    assert result["support_packet_successor_field_mismatches"] == {
+        "design_queue_source_milestone_id": {
+            "support_packets": 105,
+            "computed_successor_authority": 102,
+        },
+        "design_queue_source_repo": {
+            "support_packets": "chummer6-ui",
+            "computed_successor_authority": "fleet",
+        },
+        "design_queue_source_wave": {
+            "support_packets": "W8",
+            "computed_successor_authority": "W6",
+        },
+        "queue_milestone_id": {
+            "support_packets": 103,
+            "computed_successor_authority": 102,
+        },
+        "queue_repo": {
+            "support_packets": "chummer6-hub",
+            "computed_successor_authority": "fleet",
+        },
+        "queue_wave": {
+            "support_packets": "W7",
+            "computed_successor_authority": "W6",
+        },
+        "registry_work_task_title": {
+            "support_packets": "Old reporter loop",
+            "computed_successor_authority": "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.",
+        },
+    }
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_fails_generated_required_marker_drift(
     tmp_path: Path,
 ) -> None:
@@ -1321,3 +1540,32 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_markdown_timest
     assert result["status"] == "fail"
     assert "weekly governor markdown generated timestamp disagrees with JSON packet" in result["issues"]
     assert result["weekly_governor_markdown_generated_at"] == "2026-04-15T14:12:00Z"
+
+
+def _run_direct_tests() -> int:
+    failures: list[str] = []
+    test_functions = [
+        (name, value)
+        for name, value in sorted(globals().items())
+        if name.startswith("test_") and callable(value)
+    ]
+    for name, test_function in test_functions:
+        signature = inspect.signature(test_function)
+        try:
+            if "tmp_path" in signature.parameters:
+                with tempfile.TemporaryDirectory(prefix=f"{name}-") as tmp_dir:
+                    test_function(Path(tmp_dir))
+            else:
+                test_function()
+        except Exception as exc:  # pragma: no cover - only used by direct test harness.
+            failures.append(f"{name}: {exc!r}")
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {failure}", file=sys.stderr)
+        return 1
+    print(f"direct verifier tests passed: {len(test_functions)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_run_direct_tests())

@@ -110,13 +110,22 @@ REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "registry_title",
     "registry_wave",
     "registry_work_task_id",
+    "registry_work_task_title",
     "registry_work_task_status",
     "queue_task",
+    "queue_wave",
+    "queue_repo",
+    "queue_milestone_id",
     "queue_status",
     "queue_title",
     "queue_frontier_id",
     "design_queue_source_path",
     "design_queue_source_item_found",
+    "design_queue_source_title",
+    "design_queue_source_task",
+    "design_queue_source_wave",
+    "design_queue_source_repo",
+    "design_queue_source_milestone_id",
     "design_queue_source_status",
     "design_queue_source_frontier_id",
 }
@@ -129,6 +138,19 @@ REQUIRED_RULE_MARKERS = (
 )
 DISALLOWED_WORKER_PROOF_MARKERS = SUCCESSOR_DISALLOWED_PROOF_MARKERS
 REQUIRED_WEEKLY_WORKER_GUARD_MARKERS = set(DISALLOWED_WORKER_PROOF_MARKERS)
+REQUIRED_WEEKLY_WORKER_GUARD_MARKERS.update(
+    {
+        "operator telemetry",
+        "active-run telemetry",
+        "active-run helper",
+        "active run helper",
+    }
+)
+REQUIRED_QUEUE_NEGATIVE_PROOF_MARKERS = {
+    "standalone verifier rejects missing receipt-gate names",
+    "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
+    "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+}
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -256,6 +278,10 @@ def _disallowed_proof_entries(entries: Iterable[str]) -> List[str]:
     return blocked
 
 
+def _disallowed_input_paths(paths: Iterable[Path]) -> List[str]:
+    return _disallowed_proof_entries(str(path) for path in paths)
+
+
 def verify(
     *,
     support_packets_path: Path,
@@ -271,6 +297,16 @@ def verify(
     successor = _successor_package_verification(successor_registry_path, queue_staging_path)
     registry_evidence = _registry_evidence_entries(successor_registry_path)
     queue_proof = _queue_proof_entries(queue_staging_path)
+    blocked_input_paths = _disallowed_input_paths(
+        (
+            support_packets_path,
+            weekly_governor_packet_path,
+            weekly_governor_markdown_path,
+        )
+    )
+
+    if blocked_input_paths:
+        issues.append("verifier inputs cite active-run telemetry or helper paths")
 
     if successor.get("status") != "pass":
         issues.append("successor package authority is not pass")
@@ -288,6 +324,12 @@ def verify(
         issues.append("successor queue proof does not name the standalone M102 verifier")
     if TEST_PROOF_MARKER not in "\n".join(queue_proof):
         issues.append("successor queue proof does not name the standalone M102 verifier tests")
+    missing_queue_negative_proof_markers = _contains_all_markers(
+        "\n".join(queue_proof),
+        REQUIRED_QUEUE_NEGATIVE_PROOF_MARKERS,
+    )
+    if missing_queue_negative_proof_markers:
+        issues.append("successor queue proof is missing standalone verifier negative-proof markers")
     blocked_registry_evidence_entries = _disallowed_proof_entries(registry_evidence)
     blocked_queue_proof_entries = _disallowed_proof_entries(queue_proof)
     blocked_design_queue_source_proof_entries = _normalize_list(
@@ -396,6 +438,10 @@ def verify(
         issues.append("weekly governor support-packets input is missing")
     elif support_input.get("successor_package_verification_status") != "pass":
         issues.append("weekly governor support-packets input does not report successor verification pass")
+    elif _disallowed_input_paths((Path(_normalize_text(support_input.get("source_path"))),)):
+        issues.append("weekly governor support-packets input path cites active-run telemetry or helper paths")
+    elif _normalize_text(support_input.get("source_path")) != str(support_packets_path):
+        issues.append("weekly governor support-packets input path disagrees with verified support packet")
     missing_weekly_source_path_markers: List[str] = []
     if source_path_hygiene:
         source_path_markers = set(_normalize_list(source_path_hygiene.get("blocked_markers")))
@@ -547,6 +593,7 @@ def verify(
         "successor_authority_issues": successor.get("issues", []),
         "queue_proof_entry_count": len(queue_proof),
         "blocked_proof_entries": blocked_proof_entries,
+        "blocked_input_paths": blocked_input_paths,
         "blocked_registry_evidence_entries": blocked_registry_evidence_entries,
         "blocked_queue_proof_entries": blocked_queue_proof_entries,
         "blocked_design_queue_source_proof_entries": blocked_design_queue_source_proof_entries,
@@ -560,6 +607,7 @@ def verify(
         "missing_weekly_support_keys": missing_weekly_keys,
         "missing_weekly_source_path_hygiene_markers": missing_weekly_source_path_markers,
         "missing_weekly_worker_guard_markers": missing_weekly_worker_guard_markers,
+        "missing_queue_negative_proof_markers": missing_queue_negative_proof_markers,
         "weekly_count_mismatches": weekly_count_mismatches,
         "missing_weekly_markdown_labels": missing_markdown_labels,
         "weekly_markdown_count_mismatches": weekly_markdown_count_mismatches,
