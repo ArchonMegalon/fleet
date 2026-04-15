@@ -506,7 +506,7 @@ def verify(args: argparse.Namespace) -> List[str]:
         "markdown successor frontier closeout pin is missing",
     )
     _require(
-        "- Local proof floor commits: 065c653, fb47ce8" in markdown,
+        "- Local proof floor commits: 065c653, fb47ce8, 5e6a468" in markdown,
         issues,
         "markdown local proof floor commit pin is missing",
     )

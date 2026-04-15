@@ -104,6 +104,7 @@ items:
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
       - design-owned queue source row matches the Fleet completed queue proof assignment
 {proof_tail}
     allowed_paths:
@@ -157,6 +158,7 @@ items:
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
       - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
@@ -267,6 +269,7 @@ def _support_packets_payload() -> dict:
             "disallowed_registry_evidence_entries": [],
             "disallowed_queue_proof_entries": [],
             "disallowed_design_queue_source_proof_entries": [],
+            "issues": [],
             "required_registry_evidence_markers": [
                 "scripts/materialize_support_case_packets.py",
                 "tests/test_materialize_support_case_packets.py",
@@ -310,6 +313,7 @@ def _support_packets_payload() -> dict:
                 "weekly governor source-path hygiene and worker command guard",
                 "design-owned queue source proof markers",
                 "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+                "distinct queue proof anti-collapse guard",
             ],
         },
     }
@@ -480,6 +484,38 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_gate_names(tmp
     assert result["status"] == "fail"
     assert "followthrough receipt gates are missing required gate names" in result["issues"]
     assert result["missing_gate_names"] == ["fixed_channel_receipted"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_successor_issues(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    _align_successor_verification_paths(
+        payload,
+        registry=registry,
+        queue=queue,
+        design_queue=tmp_path / "DESIGN_NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    )
+    payload["successor_package_verification"]["issues"] = [
+        "successor queue item proof missing marker: receipt gate drift"
+    ]
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "SUPPORT_CASE_PACKETS.generated.json successor verification carries stale proof gaps" in result["issues"]
+    assert result["support_packet_stale_proof_gaps"]["issues"] == [
+        "successor queue item proof missing marker: receipt gate drift"
+    ]
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_active_run_helper_proof(
@@ -706,6 +742,43 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_negative_proof
     assert "successor queue proof is missing standalone verifier negative-proof markers" in result["issues"]
     assert result["missing_queue_negative_proof_markers"] == [
         "telemetry command proof markers fail the standalone verifier and shared successor authority check"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_collapsed_queue_proof_entries(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue_text = queue.read_text(encoding="utf-8")
+    collapsed_marker = (
+        "standalone verifier rejects missing receipt-gate names; "
+        "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier; "
+        "telemetry command proof markers fail the standalone verifier and shared successor authority check"
+    )
+    queue_text = queue_text.replace(
+        "      - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries\n"
+        "      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention\n"
+        "      - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier\n",
+        "      - " + collapsed_marker + "\n"
+        "      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention\n",
+    )
+    queue.write_text(queue_text, encoding="utf-8")
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "successor queue proof collapses required command or negative-proof entries" in result["issues"]
+    assert result["missing_queue_negative_proof_markers"] == []
+    assert result["missing_distinct_queue_proof_entries"] == [
+        "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
+        "standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries",
     ]
 
 

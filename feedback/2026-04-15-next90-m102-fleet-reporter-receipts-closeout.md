@@ -94,6 +94,14 @@ The later 2026-04-15 embedded support timestamp guard pass tightened the standal
 
 The later 2026-04-15 generated source-path guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.registry_path`, `queue_staging_path`, and `registry_work_task_id` must match recomputed successor authority. A copied or stale support-packet receipt from another registry or queue source can no longer keep the closed M102 package green.
 
+The later 2026-04-15 generated queue-assignment guard pass tightened the generated successor receipt further: `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification` now records and the standalone verifier compares queue repo, queue wave, queue milestone id, design-owned queue-source repo/wave/milestone id, and registry work-task title against recomputed canonical authority. Stale generated support proof can no longer keep the package green after the assignment is retargeted while old source paths still resolve.
+
+The later 2026-04-15 weekly support-source guard pass now emits `source_input_health.required_inputs.support_packets.source_path` in `WEEKLY_GOVERNOR_PACKET.generated.json`, and the standalone verifier fail-closes when that path differs from the support packet under verification. A weekly governor packet can no longer summarize receipt-gated followthrough from a sibling or stale support-packet file while the canonical M102 support receipt stays green.
+
+The later 2026-04-15 queue proof anti-collapse guard pass tightened the standalone verifier so required M102 verifier command rows and negative-proof rows must appear as distinct Fleet queue proof entries, not only as substrings inside one broad prose line. Future shards cannot keep this package closed by collapsing receipt-gate, bootstrap, and telemetry-helper proof into one ambiguous marker.
+
+The later 2026-04-15 stale successor-issues guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.issues` must be present and empty. A hand-edited or stale generated support packet can no longer report `status=pass` while still carrying successor-authority issues from an older registry or queue proof state.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -224,6 +232,29 @@ direct verifier invocation passed: 26 tests after generated successor assignment
 python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
 direct verifier invocation passed: 27 tests after embedded support receipt-gate and reporter-plan timestamps became fail-closed
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 scripts/materialize_support_case_packets.py
+python3 scripts/materialize_weekly_governor_packet.py
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py
+python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct fixture invocation passed: 106 focused M102 support, verifier, and weekly-governor tests after queue negative-proof markers and weekly blocked-helper marker vocabulary became fail-closed
+python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py
+direct fixture invocation passed: 30 verifier tests after generated queue-assignment guard coverage
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 scripts/materialize_support_case_packets.py --source .codex-studio/published/SUPPORT_CASE_SOURCE_MIRROR.generated.json --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+direct verifier invocation passed: 30 tests after standalone verifier tests gained a repo-local self-runner and queue proof required `python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0`
+python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: 31 after weekly support-packet source-path drift became fail-closed
+python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed after distinct queue proof anti-collapse guard coverage
 ```
 
 `python3 -m pytest ...` could not run because this worker image does not have `pytest` installed. The direct invocation above used the repo's existing tmp_path fixture pattern and covered the receipt-gated successor authority, reporter followthrough, recovery, receipt mismatch, installation mismatch, channel mismatch, update-required, and weekly governor projection cases.

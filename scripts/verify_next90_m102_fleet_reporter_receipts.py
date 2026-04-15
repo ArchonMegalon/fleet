@@ -87,6 +87,7 @@ REQUIRED_WEEKLY_WORKER_GUARD_RULE_MARKERS = (
     "active-run helper commands",
 )
 REQUIRED_SUPPORT_VERIFICATION_EMPTY_LIST_KEYS = {
+    "issues",
     "missing_registry_evidence_markers",
     "missing_queue_proof_markers",
     "missing_design_queue_source_proof_markers",
@@ -148,6 +149,15 @@ REQUIRED_WEEKLY_WORKER_GUARD_MARKERS.update(
 )
 REQUIRED_QUEUE_NEGATIVE_PROOF_MARKERS = {
     "standalone verifier rejects missing receipt-gate names",
+    "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
+    "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+}
+REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES = {
+    VERIFIER_PROOF_MARKER,
+    TEST_PROOF_MARKER,
+    "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+    "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
+    "standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries",
     "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
     "telemetry command proof markers fail the standalone verifier and shared successor authority check",
 }
@@ -282,6 +292,11 @@ def _disallowed_input_paths(paths: Iterable[Path]) -> List[str]:
     return _disallowed_proof_entries(str(path) for path in paths)
 
 
+def _missing_distinct_queue_proof_entries(entries: Iterable[str]) -> List[str]:
+    normalized_entries = {_normalize_text(entry) for entry in entries if _normalize_text(entry)}
+    return sorted(marker for marker in REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES if marker not in normalized_entries)
+
+
 def verify(
     *,
     support_packets_path: Path,
@@ -330,6 +345,9 @@ def verify(
     )
     if missing_queue_negative_proof_markers:
         issues.append("successor queue proof is missing standalone verifier negative-proof markers")
+    missing_distinct_queue_proof_entries = _missing_distinct_queue_proof_entries(queue_proof)
+    if missing_distinct_queue_proof_entries:
+        issues.append("successor queue proof collapses required command or negative-proof entries")
     blocked_registry_evidence_entries = _disallowed_proof_entries(registry_evidence)
     blocked_queue_proof_entries = _disallowed_proof_entries(queue_proof)
     blocked_design_queue_source_proof_entries = _normalize_list(
@@ -608,6 +626,7 @@ def verify(
         "missing_weekly_source_path_hygiene_markers": missing_weekly_source_path_markers,
         "missing_weekly_worker_guard_markers": missing_weekly_worker_guard_markers,
         "missing_queue_negative_proof_markers": missing_queue_negative_proof_markers,
+        "missing_distinct_queue_proof_entries": missing_distinct_queue_proof_entries,
         "weekly_count_mismatches": weekly_count_mismatches,
         "missing_weekly_markdown_labels": missing_markdown_labels,
         "weekly_markdown_count_mismatches": weekly_markdown_count_mismatches,

@@ -56,7 +56,7 @@ PROGRAM_WAVE = "next_90_day_product_advance"
 WAVE_ID = "W8"
 QUEUE_STATUS = "live_parallel_successor"
 SUCCESSOR_FRONTIER_IDS = ("2376135131",)
-LOCAL_PROOF_FLOOR_COMMITS = ("065c653", "fb47ce8")
+LOCAL_PROOF_FLOOR_COMMITS = ("065c653", "fb47ce8", "5e6a468")
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
@@ -90,6 +90,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
+    "local proof floor commit 5e6a468 pinned for M106 governor packet repeat prevention",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -112,6 +113,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
+    "local proof floor commit 5e6a468",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
