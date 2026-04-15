@@ -353,6 +353,9 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit df3587f tightens M101 authority helper proof self-test so future shards prove canonical registry, Fleet queue, and design queue rows all reject active-run helper evidence.
       - /docker/chummercomplete/chummer-hub-registry commit 2cd1872 pins the M101 authority helper proof guard so future shards verify the current completed-package floor instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit d8f3911 pins the M101 authority helper proof floor so future shards verify the latest completed-package guard instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit 894c200 pins the M101 authority proof floor so future shards verify the latest completed-package guard instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit 061cc27 tightens the M101 helper proof casing guard so canonical registry, Fleet queue, design queue, proof receipt, and closeout helper-evidence scans are case-insensitive.
+      - /docker/chummercomplete/chummer-hub-registry commit 66564d4 pins the M101 mixed-case helper proof guard so future shards verify the current completed-package proof floor instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
