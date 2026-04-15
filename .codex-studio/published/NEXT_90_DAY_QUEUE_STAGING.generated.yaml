@@ -285,6 +285,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 258fed08 tightens M103 successor queue header proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 6c3c93e9 pins M103 queue-header proof commit.
       - /docker/chummercomplete/chummer6-ui-finish commit 22758a4c pins the latest M103 queue proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit fd93bb8a tightens M103 queue mirror proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit e9f92d0d pins M103 queue mirror proof guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
