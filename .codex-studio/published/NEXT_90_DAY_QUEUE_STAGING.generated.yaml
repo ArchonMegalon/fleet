@@ -57,6 +57,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 51c46e74 pins the M102 desktop trust proof floor.
       - /docker/chummercomplete/chummer.run-services commit ed3989d9 pins the M102 desktop trust proof floor guard.
       - /docker/chummercomplete/chummer.run-services commit 653b23f0 tightens M102 desktop trust proof floor guard.
+      - /docker/chummercomplete/chummer.run-services commit 1a1c5615 pins M102 desktop trust current proof floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -624,6 +625,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit f1ca6c1a pins M107 artifact path guard proof.
       - /docker/chummercomplete/chummer.run-services commit a91ea733 tightens M107 artifact factory receipt refs.
       - /docker/chummercomplete/chummer.run-services commit c31258fa tightens M107 artifact factory proof floor.
+      - /docker/chummercomplete/chummer.run-services commit 45d3d498 tightens M107 artifact factory proof floor.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
