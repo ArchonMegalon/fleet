@@ -288,6 +288,9 @@ def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
 
 def _queue_authority_issues(item: Dict[str, Any], prefix: str) -> List[str]:
     issues: List[str] = []
+    frontier_id = str(item.get("frontier_id") or "").strip()
+    if frontier_id not in SUCCESSOR_FRONTIER_IDS:
+        issues.append(f"{prefix} item frontier_id does not match successor frontier 2376135131")
     if str(item.get("wave") or "").strip() != WAVE_ID:
         issues.append(f"{prefix} item wave is not W8")
     if _coerce_int(item.get("milestone_id"), -1) != MILESTONE_ID:
@@ -346,6 +349,7 @@ def _queue_mirror_drift(design_item: Dict[str, Any], item: Dict[str, Any]) -> Li
         "title",
         "task",
         "package_id",
+        "frontier_id",
         "milestone_id",
         "wave",
         "repo",
@@ -493,6 +497,8 @@ def verify_package(
         "dependency_posture": dependency_posture,
         "queue_status": str(item.get("status") or "").strip(),
         "design_queue_status": str(design_item.get("status") or "").strip(),
+        "queue_frontier_id": str(item.get("frontier_id") or "").strip(),
+        "design_queue_frontier_id": str(design_item.get("frontier_id") or "").strip(),
         "design_queue_source_registry_path": str(design_queue.get("source_registry_path") or "").strip(),
         "queue_source_registry_path": str(queue.get("source_registry_path") or "").strip(),
         "queue_source_design_queue_path": str(queue.get("source_design_queue_path") or "").strip(),

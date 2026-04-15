@@ -116,6 +116,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
                     "task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
                     "package_id": "next90-m106-fleet-governor-packet",
+                    "frontier_id": 2376135131,
                     "milestone_id": 106,
                     "wave": "W8",
                     "repo": "fleet",
@@ -301,6 +302,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     )
     assert payload["package_verification"]["design_queue_status"] == "complete"
+    assert payload["package_verification"]["queue_frontier_id"] == "2376135131"
+    assert payload["package_verification"]["design_queue_frontier_id"] == "2376135131"
     assert payload["package_verification"]["queue_mirror_status"] == "in_sync"
     assert payload["package_verification"]["queue_mirror_drift"] == []
     assert (
@@ -697,6 +700,64 @@ def test_weekly_governor_packet_fails_package_verification_on_design_queue_drift
         in payload["package_verification"]["issues"]
     )
     assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_missing_structured_frontier_id(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    design_queue["items"][0].pop("frontier_id")
+    queue["items"][0].pop("frontier_id")
+    _write_yaml(paths["design_queue"], design_queue)
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "design queue item frontier_id does not match successor frontier 2376135131"
+        in payload["package_verification"]["issues"]
+    )
+    assert (
+        "queue item frontier_id does not match successor frontier 2376135131"
+        in payload["package_verification"]["issues"]
+    )
     assert payload["repeat_prevention"]["status"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 

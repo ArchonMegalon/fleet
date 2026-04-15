@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:43:16Z",
+  "generated_at": "2026-04-15T11:47:12Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -271,6 +271,7 @@
       ],
       "status": "open"
     },
+    "design_queue_frontier_id": "2376135131",
     "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "design_queue_status": "complete",
     "disallowed_worker_proof_command_markers": [
@@ -285,6 +286,7 @@
       "measured_rollout_loop"
     ],
     "package_id": "next90-m106-fleet-governor-packet",
+    "queue_frontier_id": "2376135131",
     "queue_mirror_drift": [],
     "queue_mirror_status": "in_sync",
     "queue_source_design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",

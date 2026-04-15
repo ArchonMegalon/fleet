@@ -143,6 +143,7 @@ items:
   - title: Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions
     task: Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.
     package_id: next90-m106-fleet-governor-packet
+    frontier_id: 2376135131
     milestone_id: 106
     wave: W8
     repo: fleet
