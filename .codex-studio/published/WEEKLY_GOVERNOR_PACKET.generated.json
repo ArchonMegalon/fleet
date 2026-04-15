@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T15:43:39Z",
+  "generated_at": "2026-04-15T15:52:27Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -377,7 +377,8 @@
       "forbidden worker proof strings are rejected case-insensitively",
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
-      "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
+      "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
+      "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_weekly_governor_packet.py",
@@ -396,7 +397,8 @@
       "forbidden worker proof strings",
       "proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
-      "successor frontier 2376135131"
+      "successor frontier 2376135131",
+      "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
       "scripts/materialize_weekly_governor_packet.py",

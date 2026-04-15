@@ -110,6 +110,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
+                                "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages.",
                             ],
                         },
                         {
@@ -168,6 +169,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
+                        "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
                     "owned_surfaces": ["weekly_governor_packet", "measured_rollout_loop"],
