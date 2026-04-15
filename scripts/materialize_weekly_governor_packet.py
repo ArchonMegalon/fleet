@@ -73,6 +73,8 @@ REQUIRED_RESOLVING_PROOF_PATHS = (
     "tests/test_materialize_weekly_governor_packet.py",
 )
 DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
+    "/var/lib/codex-fleet",
+    "ACTIVE_RUN_HANDOFF.generated.md",
     "run_ooda_design_supervisor_until_quiet",
     "ooda_design_supervisor.py",
     "TASK_LOCAL_TELEMETRY.generated.json",

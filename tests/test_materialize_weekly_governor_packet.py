@@ -346,6 +346,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         == "active_run_helpers_forbidden"
     )
     assert payload["repeat_prevention"]["worker_command_guard"]["blocked_markers"] == [
+        "/var/lib/codex-fleet",
+        "ACTIVE_RUN_HANDOFF.generated.md",
         "run_ooda_design_supervisor_until_quiet",
         "ooda_design_supervisor.py",
         "TASK_LOCAL_TELEMETRY.generated.json",
@@ -408,7 +410,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed successor frontier ids: 2376135131" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
-    assert "- Blocked helper markers: run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json" in markdown
+    assert "- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json" in markdown
     assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
     assert "- Queue mirror status: in_sync" in markdown
@@ -1407,10 +1409,78 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == [
+        "/var/lib/codex-fleet",
+        "ACTIVE_RUN_HANDOFF.generated.md",
         "run_ooda_design_supervisor_until_quiet",
         "ooda_design_supervisor.py",
         "TASK_LOCAL_TELEMETRY.generated.json",
     ]
+
+
+def test_weekly_governor_packet_rejects_active_run_state_artifact_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "/var/lib/codex-fleet/chummer_design_supervisor/shard-6/ACTIVE_RUN_HANDOFF.generated.md"
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "/var/lib/codex-fleet/chummer_design_supervisor/shard-6/runs/20260415T114918Z-shard-6/TASK_LOCAL_TELEMETRY.generated.json"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "ACTIVE_RUN_HANDOFF.generated.md" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "TASK_LOCAL_TELEMETRY.generated.json" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
 
 
 def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(tmp_path: Path) -> None:

@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:47:12Z",
+  "generated_at": "2026-04-15T11:52:15Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -275,6 +275,8 @@
     "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "design_queue_status": "complete",
     "disallowed_worker_proof_command_markers": [
+      "/var/lib/codex-fleet",
+      "ACTIVE_RUN_HANDOFF.generated.md",
       "run_ooda_design_supervisor_until_quiet",
       "ooda_design_supervisor.py",
       "TASK_LOCAL_TELEMETRY.generated.json"
@@ -371,6 +373,8 @@
     "status": "closed_for_fleet_package",
     "worker_command_guard": {
       "blocked_markers": [
+        "/var/lib/codex-fleet",
+        "ACTIVE_RUN_HANDOFF.generated.md",
         "run_ooda_design_supervisor_until_quiet",
         "ooda_design_supervisor.py",
         "TASK_LOCAL_TELEMETRY.generated.json"

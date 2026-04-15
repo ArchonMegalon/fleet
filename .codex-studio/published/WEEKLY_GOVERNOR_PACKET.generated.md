@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T11:47:12Z
+Generated: 2026-04-15T11:52:15Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -65,7 +65,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Remaining sibling work tasks: 106.3, 106.4
 - Handoff rule: Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.
 - Worker command guard: active_run_helpers_forbidden
-- Blocked helper markers: run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json
+- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json
 
 ## Public Status Copy
 
