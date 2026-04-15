@@ -87,6 +87,16 @@ items:
     milestone_id: 105
     wave: W8
     repo: chummer6-hub
+    status: complete
+    landed_commit: 4d4b3856
+    proof:
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
+      - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs
+      - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
+      - /docker/chummercomplete/chummer.run-services/tests/test_workspace_restore_receipts.py
+      - python3 scripts/verify_workspace_restore_receipts.py
+      - python3 -m unittest tests/test_workspace_restore_receipts.py
+      - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "CampaignSpineRestoreReceiptTests|CampaignWorkspaceServerPlaneServiceTests|CampaignOsLocalProofMaterializerTests" --no-restore
     allowed_paths:
       - Chummer.Run.Api
       - scripts
