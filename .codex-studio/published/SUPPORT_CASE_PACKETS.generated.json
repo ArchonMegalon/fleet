@@ -18,7 +18,7 @@
       "installed_build_receipted": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-15T15:31:46Z",
+    "generated_at": "2026-04-15T18:52:43Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -37,7 +37,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-15T15:31:46Z",
+  "generated_at": "2026-04-15T18:52:43Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -50,7 +50,7 @@
     },
     "blocked_missing_install_receipts_count": 0,
     "blocked_receipt_mismatch_count": 0,
-    "generated_at": "2026-04-15T15:31:46Z",
+    "generated_at": "2026-04-15T18:52:43Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -74,8 +74,13 @@
     ],
     "design_queue_source_frontier_id": "2454416974",
     "design_queue_source_item_found": true,
+    "design_queue_source_milestone_id": 102,
     "design_queue_source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "design_queue_source_repo": "fleet",
     "design_queue_source_status": "complete",
+    "design_queue_source_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
+    "design_queue_source_title": "Gate fix followthrough against real install and receipt truth",
+    "design_queue_source_wave": "W6",
     "disallowed_design_queue_source_proof_entries": [],
     "disallowed_queue_proof_entries": [],
     "disallowed_registry_evidence_entries": [],
@@ -94,10 +99,13 @@
     ],
     "package_id": "next90-m102-fleet-reporter-receipts",
     "queue_frontier_id": "2454416974",
+    "queue_milestone_id": 102,
+    "queue_repo": "fleet",
     "queue_staging_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "queue_status": "complete",
     "queue_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
     "queue_title": "Gate fix followthrough against real install and receipt truth",
+    "queue_wave": "W6",
     "registry_dependencies": [
       101
     ],
@@ -107,6 +115,7 @@
     "registry_wave": "W6",
     "registry_work_task_id": "102.4",
     "registry_work_task_status": "complete",
+    "registry_work_task_title": "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.",
     "repo": "fleet",
     "required_queue_proof_markers": [
       "/docker/fleet/scripts/materialize_support_case_packets.py",
@@ -121,6 +130,7 @@
       "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
       "python3 -m py_compile",
       "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+      "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
       "installation-bound receipt gating",
       "fixed-version receipts",
       "fixed-channel receipts",
@@ -131,8 +141,12 @@
       "stale generated support proof gaps",
       "weekly/support receipt-count drift",
       "weekly/support generated_at freshness",
+      "weekly support-packet source-path drift",
+      "design queue source path rejects active-run helper paths",
       "weekly governor source-path hygiene and worker command guard",
-      "design-owned queue source proof markers"
+      "design-owned queue source proof markers",
+      "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+      "distinct queue proof anti-collapse guard"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_support_case_packets.py",
@@ -197,7 +211,7 @@
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-04-16T08:11:58Z",
-    "generated_at": "2026-04-15T15:31:46Z",
+    "generated_at": "2026-04-15T18:52:43Z",
     "host_groups": {},
     "hosts": [],
     "release_channel_generated_at": "2026-04-15T08:11:58Z",

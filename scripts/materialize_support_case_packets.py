@@ -86,6 +86,7 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
     "python3 -m py_compile",
     "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+    "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
     "installation-bound receipt gating",
     "fixed-version receipts",
     "fixed-channel receipts",
@@ -96,8 +97,12 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "stale generated support proof gaps",
     "weekly/support receipt-count drift",
     "weekly/support generated_at freshness",
+    "weekly support-packet source-path drift",
+    "design queue source path rejects active-run helper paths",
     "weekly governor source-path hygiene and worker command guard",
     "design-owned queue source proof markers",
+    "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+    "distinct queue proof anti-collapse guard",
 ]
 SUCCESSOR_DISALLOWED_PROOF_MARKERS = (
     "/var/lib/codex-fleet",
@@ -789,6 +794,8 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             issues.append(f"successor queue item proof cites active-run telemetry/helper proof: {entry}")
         for path in missing_queue_proof_anchor_paths:
             issues.append(f"successor queue item proof anchor missing on disk: {path}")
+        if queue_source_path and _disallowed_proof_entries([str(queue_source_path)]):
+            issues.append("successor queue staging source_design_queue_path cites active-run telemetry/helper path")
         if not queue_source_path:
             issues.append("successor queue staging source_design_queue_path missing")
         elif not queue_source_path.exists():
@@ -834,6 +841,11 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "queue_staging_path": str(queue_path),
         "design_queue_source_path": str(queue_source_path) if queue_source_path else "",
         "design_queue_source_item_found": bool(queue_source_item),
+        "design_queue_source_title": _normalize_text(queue_source_item.get("title")),
+        "design_queue_source_task": _normalize_text(queue_source_item.get("task")),
+        "design_queue_source_wave": _normalize_text(queue_source_item.get("wave")),
+        "design_queue_source_repo": _normalize_text(queue_source_item.get("repo")),
+        "design_queue_source_milestone_id": _coerce_int(queue_source_item.get("milestone_id"), -1),
         "design_queue_source_status": _normalize_text(queue_source_item.get("status")),
         "design_queue_source_frontier_id": _normalize_text(queue_source_item.get("frontier_id")),
         "missing_design_queue_source_proof_markers": missing_source_queue_proof,
@@ -848,6 +860,7 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             if _coerce_int(dep, -1) >= 0
         ],
         "registry_work_task_id": SUCCESSOR_WORK_TASK_ID,
+        "registry_work_task_title": _normalize_text(work_task.get("title")),
         "registry_work_task_status": _normalize_text(work_task.get("status")),
         "required_registry_evidence_markers": list(SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS),
         "missing_registry_evidence_markers": missing_registry_evidence,
@@ -855,6 +868,9 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "disallowed_registry_evidence_entries": disallowed_registry_evidence_entries,
         "queue_title": _normalize_text(queue_item.get("title")),
         "queue_task": _normalize_text(queue_item.get("task")),
+        "queue_wave": _normalize_text(queue_item.get("wave")),
+        "queue_repo": _normalize_text(queue_item.get("repo")),
+        "queue_milestone_id": _coerce_int(queue_item.get("milestone_id"), -1),
         "queue_status": _normalize_text(queue_item.get("status")),
         "queue_frontier_id": _normalize_text(queue_item.get("frontier_id")),
         "required_queue_proof_markers": list(SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS),

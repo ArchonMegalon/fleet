@@ -101,6 +101,7 @@ items:
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
       - weekly support-packet source-path drift fails the standalone verifier
+      - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
@@ -155,6 +156,7 @@ items:
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
       - weekly support-packet source-path drift fails the standalone verifier
+      - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
@@ -310,6 +312,7 @@ def _support_packets_payload() -> dict:
                 "weekly/support receipt-count drift",
                 "weekly/support generated_at freshness",
                 "weekly support-packet source-path drift",
+                "design queue source path rejects active-run helper paths",
                 "weekly governor source-path hygiene and worker command guard",
                 "design-owned queue source proof markers",
                 "telemetry command proof markers fail the standalone verifier and shared successor authority check",
@@ -940,6 +943,34 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_support_input_h
     assert (
         "weekly governor support-packets input path disagrees with verified support packet"
         not in result["issues"]
+    )
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_design_queue_source_helper_path(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue_text = queue.read_text(encoding="utf-8")
+    queue_text = queue_text.replace(
+        "source_design_queue_path: " + str(tmp_path / "DESIGN_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"),
+        "source_design_queue_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-7/ACTIVE_RUN_HANDOFF.generated.md",
+    )
+    queue.write_text(queue_text, encoding="utf-8")
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert (
+        "successor queue staging source_design_queue_path cites active-run telemetry/helper path"
+        in result["successor_authority_issues"]
     )
 
 

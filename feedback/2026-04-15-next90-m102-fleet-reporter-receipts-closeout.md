@@ -102,6 +102,8 @@ The later 2026-04-15 queue proof anti-collapse guard pass tightened the standalo
 
 The later 2026-04-15 stale successor-issues guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.successor_package_verification.issues` must be present and empty. A hand-edited or stale generated support packet can no longer report `status=pass` while still carrying successor-authority issues from an older registry or queue proof state.
 
+The later 2026-04-15 design-queue source-path guard pass tightened the shared successor authority check so `source_design_queue_path` itself cannot cite `/var/lib/codex-fleet` handoffs, task-local telemetry, or active-run helper paths. Future shards cannot keep this closed package green by pointing Fleet queue proof at an operator-owned active-run artifact while the proof entries remain clean.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -255,6 +257,12 @@ python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py test
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
 python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
 direct verifier tests passed after distinct queue proof anti-collapse guard coverage
+python3 scripts/materialize_support_case_packets.py --source .codex-studio/published/SUPPORT_CASE_SOURCE_MIRROR.generated.json --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: 36 after design queue source paths that cite active-run helpers became fail-closed
+direct materialize support packet tests passed: 37 after the required queue proof marker list was refreshed
 ```
 
 `python3 -m pytest ...` could not run because this worker image does not have `pytest` installed. The direct invocation above used the repo's existing tmp_path fixture pattern and covered the receipt-gated successor authority, reporter followthrough, recovery, receipt mismatch, installation mismatch, channel mismatch, update-required, and weekly governor projection cases.

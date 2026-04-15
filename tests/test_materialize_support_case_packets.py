@@ -255,6 +255,7 @@ items:
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
@@ -263,8 +264,12 @@ items:
       - stale generated support proof gaps fail the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - weekly support-packet source-path drift fails the standalone verifier
+      - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
+      - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
       - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
@@ -302,6 +307,7 @@ items:
       - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
       - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
@@ -310,8 +316,12 @@ items:
       - stale generated support proof gaps fail the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - weekly support-packet source-path drift fails the standalone verifier
+      - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
+      - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
       - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
@@ -400,6 +410,7 @@ items:
     assert "generated support-packet proof hygiene" in verification["required_queue_proof_markers"]
     assert "stale generated support proof gaps" in verification["required_queue_proof_markers"]
     assert "design-owned queue source proof markers" in verification["required_queue_proof_markers"]
+    assert "distinct queue proof anti-collapse guard" in verification["required_queue_proof_markers"]
     assert (
         "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md"
         in verification["required_queue_proof_markers"]

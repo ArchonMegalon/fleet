@@ -316,6 +316,7 @@ items:
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
       - weekly support-packet source-path drift fails the standalone verifier
+      - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
       - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
@@ -623,6 +624,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit f1ca6c1a pins M107 artifact path guard proof.
       - /docker/chummercomplete/chummer.run-services commit a91ea733 tightens M107 artifact factory receipt refs.
       - /docker/chummercomplete/chummer.run-services commit c31258fa tightens M107 artifact factory proof floor.
+      - /docker/chummercomplete/chummer.run-services commit 45d3d498 tightens M107 artifact factory proof floor.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
