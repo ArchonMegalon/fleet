@@ -93,6 +93,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 0605657d pins M101 811 proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 53b701e2 pins M101 060 proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit a0303d5f pins M101 latest release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 0fa3ce01 pins the current M101 release train proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -200,6 +201,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 691c625f requires the current M105 workspace proof floor.
       - /docker/chummercomplete/chummer.run-services commit f8226de9 pins the M105 workspace proof floor.
       - /docker/chummercomplete/chummer.run-services commit f8f3ce8e requires the latest M105 workspace proof floor.
+      - /docker/chummercomplete/chummer.run-services commit 70b6f382 tightens the M105 served workspace proof guard so public served receipts cannot drift from the local proof shelf.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -360,6 +362,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit d9bfcff5 pins M103 current veteran proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 783ac00b pins M103 veteran proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 827d3546 pins M103 veteran certification proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 89ab0ec0 pins M103 veteran certification proof floor.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
