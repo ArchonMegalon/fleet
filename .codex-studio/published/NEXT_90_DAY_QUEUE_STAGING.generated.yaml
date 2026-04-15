@@ -366,6 +366,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit 061cc27 tightens the M101 helper proof casing guard so canonical registry, Fleet queue, design queue, proof receipt, and closeout helper-evidence scans are case-insensitive.
       - /docker/chummercomplete/chummer-hub-registry commit 66564d4 pins the M101 mixed-case helper proof guard so future shards verify the current completed-package proof floor instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 800b65d pins M101 mixed-case helper proof floor so future shards verify the current completed-package proof floor instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit e16f6aa tightens M101 design queue proof guard so future shards verify the current completed-package proof floor instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
