@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T16:26:47Z",
+  "generated_at": "2026-04-15T16:46:59Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -334,6 +334,22 @@
     "expected_queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
     "expected_registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
     "issues": [],
+    "local_commit_resolution": {
+      "commits": [
+        {
+          "commit": "065c653",
+          "status": "present"
+        }
+      ],
+      "missing_commits": [],
+      "required_commits": [
+        "065c653"
+      ],
+      "status": "pass"
+    },
+    "local_proof_floor_commits": [
+      "065c653"
+    ],
     "milestone_id": 106,
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -442,6 +458,22 @@
       "status": "closed_wave_not_reopened"
     },
     "handoff_rule": "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.",
+    "local_commit_resolution": {
+      "commits": [
+        {
+          "commit": "065c653",
+          "status": "present"
+        }
+      ],
+      "missing_commits": [],
+      "required_commits": [
+        "065c653"
+      ],
+      "status": "pass"
+    },
+    "local_proof_floor_commits": [
+      "065c653"
+    ],
     "owned_surfaces": [
       "weekly_governor_packet",
       "measured_rollout_loop"
@@ -560,7 +592,7 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-15T16:17:04Z",
+        "generated_at": "2026-04-15T16:43:37Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",

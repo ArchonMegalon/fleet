@@ -388,6 +388,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     )
     assert payload["successor_frontier_ids"] == ["2376135131"]
     assert payload["package_verification"]["successor_frontier_ids"] == ["2376135131"]
+    assert payload["package_verification"]["local_proof_floor_commits"] == ["065c653"]
+    assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
     assert payload["package_closeout"]["do_not_reopen_package"] is True
     assert payload["package_closeout"]["successor_frontier_ids"] == ["2376135131"]
@@ -410,6 +412,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["repeat_prevention"]["closed_package_id"] == "next90-m106-fleet-governor-packet"
     assert payload["repeat_prevention"]["closed_work_task_id"] == "106.1"
     assert payload["repeat_prevention"]["closed_successor_frontier_ids"] == ["2376135131"]
+    assert payload["repeat_prevention"]["local_proof_floor_commits"] == ["065c653"]
+    assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
     assert payload["repeat_prevention"]["owned_surfaces"] == [
         "weekly_governor_packet",
@@ -514,6 +518,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
     assert "- Closed successor frontier ids: 2376135131" in markdown
+    assert "- Local proof floor commits: 065c653" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
@@ -1343,6 +1348,61 @@ def test_verify_next90_m106_governor_packet_rejects_resolving_proof_path_drift(
 
     assert verifier.returncode == 1
     assert "packet required_resolving_proof_paths drifted" in verifier.stderr
+
+
+def test_verify_next90_m106_governor_packet_rejects_local_proof_floor_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["package_verification"]["local_proof_floor_commits"] = ["stale"]
+    packet["repeat_prevention"]["local_proof_floor_commits"] = ["stale"]
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert "packet local proof floor commit list drifted" in verifier.stderr
+    assert "repeat prevention local proof floor commit list drifted" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_compile_manifest_artifact_drift(

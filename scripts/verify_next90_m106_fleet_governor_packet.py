@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -223,6 +224,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     repeat_prevention = dict(packet.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
+    local_commit_resolution = dict(packet_verification.get("local_commit_resolution") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
     decision_board = dict(packet.get("decision_board") or {})
@@ -309,6 +311,36 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "packet required_resolving_proof_paths drifted",
     )
+    _require(
+        packet_verification.get("local_proof_floor_commits")
+        == list(weekly.LOCAL_PROOF_FLOOR_COMMITS),
+        issues,
+        "packet local proof floor commit list drifted",
+    )
+    _require(
+        repeat_prevention.get("local_proof_floor_commits")
+        == list(weekly.LOCAL_PROOF_FLOOR_COMMITS),
+        issues,
+        "repeat prevention local proof floor commit list drifted",
+    )
+    if (repo_root / ".git").exists():
+        _require(
+            local_commit_resolution.get("status") == "pass",
+            issues,
+            "packet local proof floor commit resolution is not pass",
+        )
+        for commit in weekly.LOCAL_PROOF_FLOOR_COMMITS:
+            resolves = subprocess.run(
+                ["git", "-C", str(repo_root), "cat-file", "-e", f"{commit}^{{commit}}"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            _require(
+                resolves.returncode == 0,
+                issues,
+                f"local proof floor commit {commit} no longer resolves in Fleet repo",
+            )
     missing_resolving_paths = [
         marker
         for marker in weekly.REQUIRED_RESOLVING_PROOF_PATHS
@@ -472,6 +504,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         "- Closed successor frontier ids: 2376135131" in markdown,
         issues,
         "markdown successor frontier closeout pin is missing",
+    )
+    _require(
+        "- Local proof floor commits: 065c653" in markdown,
+        issues,
+        "markdown local proof floor commit pin is missing",
     )
     _require(
         "- Flagship wave guard: closed_wave_not_reopened" in markdown,

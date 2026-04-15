@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List
@@ -55,6 +56,7 @@ PROGRAM_WAVE = "next_90_day_product_advance"
 WAVE_ID = "W8"
 QUEUE_STATUS = "live_parallel_successor"
 SUCCESSOR_FRONTIER_IDS = ("2376135131",)
+LOCAL_PROOF_FLOOR_COMMITS = ("065c653",)
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
@@ -225,6 +227,36 @@ def _missing_resolving_proof_paths(repo_root: Path) -> List[str]:
         if not _resolve_fleet_proof_path(repo_root, marker).is_file():
             missing.append(marker)
     return missing
+
+
+def _local_commit_resolution(repo_root: Path) -> Dict[str, Any]:
+    rows: List[Dict[str, str]] = []
+    missing: List[str] = []
+    if not (repo_root / ".git").exists():
+        return {
+            "status": "not_checked",
+            "reason": "repo_root is not a git checkout",
+            "required_commits": list(LOCAL_PROOF_FLOOR_COMMITS),
+            "commits": [],
+            "missing_commits": [],
+        }
+    for commit in LOCAL_PROOF_FLOOR_COMMITS:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "cat-file", "-e", f"{commit}^{{commit}}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        status = "present" if result.returncode == 0 else "missing"
+        rows.append({"commit": commit, "status": status})
+        if status != "present":
+            missing.append(commit)
+    return {
+        "status": "pass" if not missing else "fail",
+        "required_commits": list(LOCAL_PROOF_FLOOR_COMMITS),
+        "commits": rows,
+        "missing_commits": missing,
+    }
 
 
 def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
@@ -484,6 +516,7 @@ def verify_package(
         "open_dependency_ids": [],
         "missing_dependency_ids": [],
     }
+    local_commit_resolution = _local_commit_resolution(repo_root)
     issues: List[str] = []
     if not milestone:
         issues.append(f"milestone {MILESTONE_ID} is missing from successor registry")
@@ -581,6 +614,11 @@ def verify_package(
                     "registry work task 106.1 evidence includes source anchor(s) that no longer resolve: "
                     + ", ".join(missing_from_registry)
                 )
+    if local_commit_resolution["status"] == "fail":
+        issues.append(
+            "local M106 proof floor commit(s) no longer resolve in Fleet repo: "
+            + ", ".join(local_commit_resolution["missing_commits"])
+        )
     return {
         "status": "pass" if not issues else "fail",
         "package_id": PACKAGE_ID,
@@ -616,6 +654,8 @@ def verify_package(
         "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),
         "required_registry_evidence_markers": list(REQUIRED_REGISTRY_EVIDENCE_MARKERS),
         "required_resolving_proof_paths": list(REQUIRED_RESOLVING_PROOF_PATHS),
+        "local_proof_floor_commits": list(LOCAL_PROOF_FLOOR_COMMITS),
+        "local_commit_resolution": local_commit_resolution,
         "disallowed_worker_proof_command_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
         "issues": issues,
     }
@@ -1106,6 +1146,8 @@ def build_payload(
         "closed_package_id": PACKAGE_ID,
         "closed_work_task_id": "106.1",
         "closed_successor_frontier_ids": list(SUCCESSOR_FRONTIER_IDS),
+        "local_proof_floor_commits": list(LOCAL_PROOF_FLOOR_COMMITS),
+        "local_commit_resolution": verification.get("local_commit_resolution"),
         "do_not_reopen_owned_surfaces": package_complete,
         "owned_surfaces": list(OWNED_SURFACES),
         "allowed_paths": list(ALLOWED_PATHS),
@@ -1381,6 +1423,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Closed package: {_markdown_status(repeat_prevention.get('closed_package_id'))}",
             f"- Closed work task: {_markdown_status(repeat_prevention.get('closed_work_task_id'))}",
             f"- Closed successor frontier ids: {_markdown_list(repeat_prevention.get('closed_successor_frontier_ids'))}",
+            f"- Local proof floor commits: {_markdown_list(repeat_prevention.get('local_proof_floor_commits'))}",
             f"- Do not reopen owned surfaces: {bool(repeat_prevention.get('do_not_reopen_owned_surfaces'))}",
             f"- Owned surfaces: {_markdown_list(repeat_prevention.get('owned_surfaces'))}",
             f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",
