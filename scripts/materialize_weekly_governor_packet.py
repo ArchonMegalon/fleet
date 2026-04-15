@@ -340,6 +340,34 @@ def _queue_proof_issues(item: Dict[str, Any], prefix: str, repo_root: Path) -> L
     return issues
 
 
+def _queue_mirror_drift(design_item: Dict[str, Any], item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    drift: List[Dict[str, Any]] = []
+    comparable_fields = (
+        "title",
+        "task",
+        "package_id",
+        "milestone_id",
+        "wave",
+        "repo",
+        "status",
+        "proof",
+        "allowed_paths",
+        "owned_surfaces",
+    )
+    for field in comparable_fields:
+        design_value = design_item.get(field)
+        mirror_value = item.get(field)
+        if design_value != mirror_value:
+            drift.append(
+                {
+                    "field": field,
+                    "design_queue": design_value,
+                    "fleet_queue": mirror_value,
+                }
+            )
+    return drift
+
+
 def verify_package(
     registry: Dict[str, Any],
     design_queue: Dict[str, Any],
@@ -396,6 +424,12 @@ def verify_package(
     if item:
         issues.extend(_queue_authority_issues(item, "queue"))
         issues.extend(_queue_proof_issues(item, "queue", repo_root))
+    queue_mirror_drift = _queue_mirror_drift(design_item, item) if design_item and item else []
+    if queue_mirror_drift:
+        issues.append(
+            "Fleet queue mirror package row diverges from design-owned queue staging for field(s): "
+            + ", ".join(row["field"] for row in queue_mirror_drift)
+        )
     if milestone:
         if str(milestone.get("status") or "").strip() != "in_progress":
             issues.append("milestone 106 is not in_progress in successor registry")
@@ -464,6 +498,8 @@ def verify_package(
         "queue_source_design_queue_path": str(queue.get("source_design_queue_path") or "").strip(),
         "queue_title": str(item.get("title") or "").strip(),
         "queue_task": str(item.get("task") or "").strip(),
+        "queue_mirror_status": "in_sync" if not queue_mirror_drift else "drift",
+        "queue_mirror_drift": queue_mirror_drift,
         "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),
         "required_registry_evidence_markers": list(REQUIRED_REGISTRY_EVIDENCE_MARKERS),
         "required_resolving_proof_paths": list(REQUIRED_RESOLVING_PROOF_PATHS),
@@ -1115,6 +1151,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Registry work task 106.1 status: {_markdown_status(verification.get('registry_work_task_status'))}",
             f"- Required registry evidence markers: {len(verification.get('required_registry_evidence_markers') or [])}",
             f"- Queue closeout status: {_markdown_status(verification.get('queue_status'))}",
+            f"- Queue mirror status: {_markdown_status(verification.get('queue_mirror_status'))}",
             f"- Required queue proof markers: {len(verification.get('required_queue_proof_markers') or [])}",
             f"- Successor dependency posture: {_markdown_status(dependency.get('status'))}",
             f"- Open successor dependencies: {_markdown_list(dependency.get('open_dependency_ids'))}",

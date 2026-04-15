@@ -292,6 +292,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     )
     assert payload["package_verification"]["design_queue_status"] == "complete"
+    assert payload["package_verification"]["queue_mirror_status"] == "in_sync"
+    assert payload["package_verification"]["queue_mirror_drift"] == []
     assert (
         payload["package_verification"]["design_queue_source_registry_path"]
         == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
@@ -397,6 +399,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Blocked helper markers: run_ooda_design_supervisor_until_quiet, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json" in markdown
     assert "- Remaining sibling work tasks: 106.3, 106.4" in markdown
     assert "- Registry work task 106.1 status: complete" in markdown
+    assert "- Queue mirror status: in_sync" in markdown
     assert "- Provider canary: Canary evidence is still accumulating" in markdown
     assert "- Reporter followthrough ready: 2" in markdown
     assert "- Fix-available ready: 1" in markdown
@@ -677,6 +680,69 @@ def test_weekly_governor_packet_fails_package_verification_on_design_queue_drift
     assert (
         "design queue item proof is missing required weekly governor receipt(s): "
         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_fleet_queue_mirror_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["task"] = "Locally edited task text must not override design-owned staging."
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_verification"]["queue_mirror_status"] == "drift"
+    assert payload["package_verification"]["queue_mirror_drift"] == [
+        {
+            "field": "task",
+            "design_queue": (
+                "Turn readiness, parity, support, and rollout truth into a weekly governor "
+                "packet that drives measured product decisions."
+            ),
+            "fleet_queue": "Locally edited task text must not override design-owned staging.",
+        }
+    ]
+    assert (
+        "Fleet queue mirror package row diverges from design-owned queue staging for field(s): task"
         in payload["package_verification"]["issues"]
     )
     assert payload["package_closeout"]["status"] == "blocked"
@@ -1257,11 +1323,13 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     assert payload["package_closeout"]["status"] == "blocked"
     assert payload["package_closeout"]["do_not_reopen_package"] is False
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
-    assert "queue item proof includes active-run or operator-helper command evidence" in (
-        payload["package_verification"]["issues"][0]
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        for issue in payload["package_verification"]["issues"]
     )
-    assert "registry work task 106.1 evidence includes active-run or operator-helper command evidence" in (
-        payload["package_verification"]["issues"][1]
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence" in issue
+        for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == [
         "run_ooda_design_supervisor_until_quiet",
