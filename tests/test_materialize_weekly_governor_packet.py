@@ -398,6 +398,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "5e6a468",
         "f66dbaa",
         "f490e53",
+        "e9ea391",
     ]
     assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -428,6 +429,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "5e6a468",
         "f66dbaa",
         "f490e53",
+        "e9ea391",
     ]
     assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
@@ -534,7 +536,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
     assert "- Closed successor frontier ids: 2376135131" in markdown
-    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53" in markdown
+    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown

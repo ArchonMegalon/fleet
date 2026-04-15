@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T19:30:47Z
+Generated: 2026-04-15T19:32:54Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -59,7 +59,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Closed package: next90-m106-fleet-governor-packet
 - Closed work task: 106.1
 - Closed successor frontier ids: 2376135131
-- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53
+- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391
 - Do not reopen owned surfaces: True
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio
