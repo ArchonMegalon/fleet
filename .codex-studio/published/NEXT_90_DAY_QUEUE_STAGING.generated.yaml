@@ -8,6 +8,7 @@ items:
   - title: Unify claim, install, update, and support recovery into one desktop-native flow
     task: Remove browser ritual from claim, install, update, rollback, and support continuation for claimed desktop users.
     package_id: next90-m102-hub-desktop-native-trust
+    frontier_id: 2897065929
     milestone_id: 102
     wave: W6
     repo: chummer6-hub
@@ -101,6 +102,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors; ENGINE_PROOF_PACK.generated.json reports missing_queue_proof_anchors=[].
       - /docker/chummercomplete/chummer-core-engine commit cfc465a5 adds checked-in receipt reproducibility proof for ENGINE_PROOF_PACK.generated.json.
       - /docker/chummercomplete/chummer-core-engine commit 86040e30 fail-closes unassigned queue allowed paths or owned surfaces for this completed package.
+      - /docker/chummercomplete/chummer-core-engine commit 35cd27b4 pins successor frontier 3227666051 into the completed M104 proof guard.
       - /docker/chummercomplete/chummer-core-engine commit 8dd516ef makes failed engine proof pack generation exit nonzero while still writing diagnostic receipts.
       - /docker/chummercomplete/chummer-core-engine commit c88178fa tightens design-owned queue scope proof so canonical allowed-path or owned-surface drift cannot keep M104 passed.
     allowed_paths:
@@ -166,6 +168,7 @@ items:
   - title: Gate fix followthrough against real install and receipt truth
     task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
     package_id: next90-m102-fleet-reporter-receipts
+    frontier_id: 2454416974
     milestone_id: 102
     wave: W6
     repo: fleet
@@ -231,6 +234,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 6eafef39 tightens the M103 verifier against design-owned queue source drift.
       - /docker/chummercomplete/chummer6-ui-finish commit 1e5557f9 pins the M103 design queue source proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 9e8d494b tightens the M103 successor registry guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit 0d2e357e pins the M103 veteran proof successor commit.
+      - /docker/chummercomplete/chummer6-ui-finish commit b42416b8 pins the M103 veteran proof hardening commit.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
