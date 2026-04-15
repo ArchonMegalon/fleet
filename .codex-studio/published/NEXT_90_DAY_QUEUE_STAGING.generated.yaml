@@ -163,8 +163,10 @@ items:
       - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+      - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
       - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
       - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
+      - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
       - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
     allowed_paths:
       - scripts
@@ -292,7 +294,7 @@ items:
       - /docker/EA/tests/test_chummer_governor_packet_pack.py
       - /docker/EA/feedback/2026-04-15-ea-governor-packets-package-closeout.md
       - /docker/EA/feedback/2026-04-15-chummer-governor-packets-successor-guard.md
-      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=16 failed=0
+      - python tests/test_chummer_governor_packet_pack.py exits 0 with ran=17 failed=0
     allowed_paths:
       - skills
       - tests
@@ -308,7 +310,7 @@ items:
     wave: W9
     repo: chummer6-hub
     status: complete
-    landed_commit: e25842ac
+    landed_commit: b9e6b52e
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/ArtifactFactoryOrchestrationService.cs
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Controllers/InternalArtifactFactoryController.cs
@@ -318,6 +320,7 @@ items:
       - python3 /docker/chummercomplete/chummer.run-services/scripts/verify_artifact_factory_orchestration.py
       - python3 -m unittest /docker/chummercomplete/chummer.run-services/tests/test_artifact_factory_orchestration.py
       - dotnet test /docker/chummercomplete/chummer.run-services/Chummer.Tests/Chummer.Tests.csproj --filter ArtifactFactoryOrchestrationServiceTests --no-restore
+      - /docker/chummercomplete/chummer.run-services commit b9e6b52e tightens recipe-specific public proof shelf route guards.
     allowed_paths:
       - Chummer.Run.Api
       - scripts
