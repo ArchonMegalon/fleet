@@ -109,6 +109,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
             "program_wave": "next_90_day_product_advance",
             "status": "live_parallel_successor",
             "source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+            "source_design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
             "items": [
                 {
                     "title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
@@ -275,6 +276,14 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
     assert payload["package_verification"]["queue_status"] == "complete"
+    assert (
+        payload["package_verification"]["queue_source_registry_path"]
+        == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    )
+    assert (
+        payload["package_verification"]["queue_source_design_queue_path"]
+        == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    )
     assert payload["successor_frontier_ids"] == ["2376135131"]
     assert payload["package_verification"]["successor_frontier_ids"] == ["2376135131"]
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -736,6 +745,7 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_source_drift
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
     queue["status"] = "stale"
     queue["source_registry_path"] = "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
+    queue["source_design_queue_path"] = "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_QUEUE_STAGING.generated.yaml"
     _write_yaml(paths["queue"], queue)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
 
@@ -774,6 +784,10 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_source_drift
     assert "queue staging status is not live_parallel_successor" in payload["package_verification"]["issues"]
     assert (
         "queue staging source_registry_path is not the canonical successor registry"
+        in payload["package_verification"]["issues"]
+    )
+    assert (
+        "queue staging source_design_queue_path is not the canonical design staging queue"
         in payload["package_verification"]["issues"]
     )
     assert payload["package_closeout"]["status"] == "blocked"

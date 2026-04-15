@@ -30,6 +30,10 @@ SUCCESSOR_REGISTRY = (
     Path("/docker/chummercomplete/chummer-design/products/chummer")
     / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
 )
+DESIGN_QUEUE_STAGING = (
+    Path("/docker/chummercomplete/chummer-design/products/chummer")
+    / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+)
 QUEUE_STAGING = PUBLISHED / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
 WEEKLY_PULSE = PUBLISHED / "WEEKLY_PRODUCT_PULSE.generated.json"
 FLAGSHIP_READINESS = PUBLISHED / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -315,6 +319,8 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
         issues.append("queue staging status is not live_parallel_successor")
     if str(queue.get("source_registry_path") or "").strip() != str(SUCCESSOR_REGISTRY):
         issues.append("queue staging source_registry_path is not the canonical successor registry")
+    if str(queue.get("source_design_queue_path") or "").strip() != str(DESIGN_QUEUE_STAGING):
+        issues.append("queue staging source_design_queue_path is not the canonical design staging queue")
     if item:
         if str(item.get("wave") or "").strip() != WAVE_ID:
             issues.append("queue item wave is not W8")
@@ -419,6 +425,8 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
         ],
         "dependency_posture": dependency_posture,
         "queue_status": str(item.get("status") or "").strip(),
+        "queue_source_registry_path": str(queue.get("source_registry_path") or "").strip(),
+        "queue_source_design_queue_path": str(queue.get("source_design_queue_path") or "").strip(),
         "queue_title": str(item.get("title") or "").strip(),
         "queue_task": str(item.get("task") or "").strip(),
         "required_queue_proof_markers": list(REQUIRED_QUEUE_PROOF_MARKERS),

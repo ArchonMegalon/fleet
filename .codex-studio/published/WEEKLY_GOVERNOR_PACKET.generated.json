@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:12:22Z",
+  "generated_at": "2026-04-15T11:16:25Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -282,6 +282,8 @@
       "measured_rollout_loop"
     ],
     "package_id": "next90-m106-fleet-governor-packet",
+    "queue_source_design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
+    "queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "queue_status": "complete",
     "queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
     "queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
