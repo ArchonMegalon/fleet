@@ -591,6 +591,16 @@ def verify_source_inputs(
         }
         if state != "present":
             issues.append(f"{name} is missing, empty, unparseable, or lacks {required_key}")
+    support_successor_proof = dict(support_packets.get("successor_package_verification") or {})
+    support_successor_status = str(support_successor_proof.get("status") or "").strip()
+    rows["support_packets"]["successor_package_verification_status"] = (
+        support_successor_status or "missing"
+    )
+    if rows["support_packets"]["state"] == "present" and support_successor_status != "pass":
+        issues.append(
+            "support_packets successor_package_verification.status is not pass; "
+            "weekly governor support truth must be backed by the M102 receipt-gated package proof"
+        )
     return {
         "status": "pass" if not issues else "fail",
         "required_inputs": rows,

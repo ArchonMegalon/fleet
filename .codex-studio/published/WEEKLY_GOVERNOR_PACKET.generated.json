@@ -144,7 +144,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:31:43Z",
+  "generated_at": "2026-04-15T11:39:52Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
@@ -433,7 +433,8 @@
       },
       "support_packets": {
         "required_key": "summary",
-        "state": "present"
+        "state": "present",
+        "successor_package_verification_status": "pass"
       },
       "weekly_pulse": {
         "required_key": "contract_name",

@@ -224,7 +224,11 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "installed_build_receipted": 2,
                     "installed_build_receipt_installation_bound": 2,
                 },
-            }
+            },
+            "successor_package_verification": {
+                "status": "pass",
+                "package_id": "next90-m102-fleet-reporter-receipts",
+            },
         },
     )
     _write_yaml(status, {"whole_product_final_claim_status": "pass"})
@@ -1437,6 +1441,65 @@ def test_weekly_governor_packet_blocks_loop_ready_when_required_source_is_missin
     assert payload["source_input_health"]["status"] == "fail"
     assert payload["source_input_health"]["required_inputs"]["journey_gates"]["state"] == "missing_or_unparseable"
     assert "journey_gates" in payload["source_input_health"]["issues"][0]
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_loop_ready_when_support_package_proof_regresses(tmp_path: Path) -> None:
+    paths = _fixture_tree(tmp_path)
+    support = json.loads(paths["support"].read_text(encoding="utf-8"))
+    support["successor_package_verification"] = {
+        "status": "fail",
+        "issues": ["queue proof missing WEEKLY_GOVERNOR_PACKET.generated.json"],
+    }
+    _write_json(paths["support"], support)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["weekly_input_health"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "fail"
+    assert (
+        payload["source_input_health"]["required_inputs"]["support_packets"][
+            "successor_package_verification_status"
+        ]
+        == "fail"
+    )
+    assert (
+        "support_packets successor_package_verification.status is not pass"
+        in payload["source_input_health"]["issues"][0]
+    )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
