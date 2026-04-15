@@ -106,6 +106,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         help="operator-readable Markdown companion for the weekly governor packet",
     )
     parser.add_argument("--successor-registry", default=str(SUCCESSOR_REGISTRY))
+    parser.add_argument("--design-queue-staging", default=str(DESIGN_QUEUE_STAGING))
     parser.add_argument("--queue-staging", default=str(QUEUE_STAGING))
     parser.add_argument("--weekly-pulse", default=str(WEEKLY_PULSE))
     parser.add_argument("--flagship-readiness", default=str(FLAGSHIP_READINESS))
@@ -285,9 +286,69 @@ def _work_task_posture(milestone: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: Path) -> Dict[str, Any]:
+def _queue_authority_issues(item: Dict[str, Any], prefix: str) -> List[str]:
+    issues: List[str] = []
+    if str(item.get("wave") or "").strip() != WAVE_ID:
+        issues.append(f"{prefix} item wave is not W8")
+    if _coerce_int(item.get("milestone_id"), -1) != MILESTONE_ID:
+        issues.append(f"{prefix} item milestone_id does not match milestone 106")
+    if str(item.get("repo") or "").strip() != "fleet":
+        issues.append(f"{prefix} item repo is not fleet")
+    if _norm_list(item.get("allowed_paths")) != list(ALLOWED_PATHS):
+        issues.append(f"{prefix} item allowed_paths no longer match package authority")
+    if _norm_list(item.get("owned_surfaces")) != list(OWNED_SURFACES):
+        issues.append(f"{prefix} item owned_surfaces no longer match package authority")
+    if str(item.get("status") or "").strip().lower() not in COMPLETE_STATUSES:
+        if prefix == "queue":
+            issues.append("queue item is not marked complete in staging queue")
+        else:
+            issues.append(f"{prefix} item is not marked complete")
+    return issues
+
+
+def _queue_proof_issues(item: Dict[str, Any], prefix: str, repo_root: Path) -> List[str]:
+    issues: List[str] = []
+    proof_entries = _norm_list(item.get("proof"))
+    missing_proof = [
+        marker
+        for marker in REQUIRED_QUEUE_PROOF_MARKERS
+        if marker not in proof_entries
+    ]
+    if missing_proof:
+        issues.append(
+            f"{prefix} item proof is missing required weekly governor receipt(s): "
+            + ", ".join(missing_proof)
+        )
+    disallowed_proof = _disallowed_worker_proof_entries(proof_entries)
+    if disallowed_proof:
+        issues.append(
+            f"{prefix} item proof includes active-run or operator-helper command evidence "
+            "that worker packages must not invoke: "
+            + ", ".join(disallowed_proof)
+        )
+    missing_resolving_paths = _missing_resolving_proof_paths(repo_root)
+    missing_from_queue = [
+        marker
+        for marker in missing_resolving_paths
+        if f"/docker/fleet/{marker}" in proof_entries or marker in proof_entries
+    ]
+    if missing_from_queue:
+        issues.append(
+            f"{prefix} item proof includes source anchor(s) that no longer resolve: "
+            + ", ".join(missing_from_queue)
+        )
+    return issues
+
+
+def verify_package(
+    registry: Dict[str, Any],
+    design_queue: Dict[str, Any],
+    queue: Dict[str, Any],
+    repo_root: Path,
+) -> Dict[str, Any]:
     milestone = _find_milestone(registry)
     wave = _find_wave(registry)
+    design_item = _find_queue_item(design_queue)
     item = _find_queue_item(queue)
     registry_work_task = _find_registry_work_task(milestone, "106.1") if milestone else {}
     dependency_posture = _dependency_posture(registry, milestone) if milestone else {
@@ -313,6 +374,14 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
             issues.append("successor registry wave W8 does not include milestone 106")
     if not item:
         issues.append(f"queue item {PACKAGE_ID} is missing from staging queue")
+    if not design_item:
+        issues.append(f"design queue item {PACKAGE_ID} is missing from canonical staging queue")
+    if str(design_queue.get("program_wave") or "").strip() != PROGRAM_WAVE:
+        issues.append("design queue staging program_wave is not next_90_day_product_advance")
+    if str(design_queue.get("status") or "").strip() != QUEUE_STATUS:
+        issues.append("design queue staging status is not live_parallel_successor")
+    if str(design_queue.get("source_registry_path") or "").strip() != str(SUCCESSOR_REGISTRY):
+        issues.append("design queue staging source_registry_path is not the canonical successor registry")
     if str(queue.get("program_wave") or "").strip() != PROGRAM_WAVE:
         issues.append("queue staging program_wave is not next_90_day_product_advance")
     if str(queue.get("status") or "").strip() != QUEUE_STATUS:
@@ -321,48 +390,12 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
         issues.append("queue staging source_registry_path is not the canonical successor registry")
     if str(queue.get("source_design_queue_path") or "").strip() != str(DESIGN_QUEUE_STAGING):
         issues.append("queue staging source_design_queue_path is not the canonical design staging queue")
+    if design_item:
+        issues.extend(_queue_authority_issues(design_item, "design queue"))
+        issues.extend(_queue_proof_issues(design_item, "design queue", repo_root))
     if item:
-        if str(item.get("wave") or "").strip() != WAVE_ID:
-            issues.append("queue item wave is not W8")
-        if _coerce_int(item.get("milestone_id"), -1) != MILESTONE_ID:
-            issues.append("queue item milestone_id does not match milestone 106")
-        if str(item.get("repo") or "").strip() != "fleet":
-            issues.append("queue item repo is not fleet")
-        if _norm_list(item.get("allowed_paths")) != list(ALLOWED_PATHS):
-            issues.append("queue item allowed_paths no longer match package authority")
-        if _norm_list(item.get("owned_surfaces")) != list(OWNED_SURFACES):
-            issues.append("queue item owned_surfaces no longer match package authority")
-        if str(item.get("status") or "").strip().lower() not in COMPLETE_STATUSES:
-            issues.append("queue item is not marked complete in staging queue")
-        proof_entries = _norm_list(item.get("proof"))
-        missing_proof = [
-            marker
-            for marker in REQUIRED_QUEUE_PROOF_MARKERS
-            if marker not in proof_entries
-        ]
-        if missing_proof:
-            issues.append(
-                "queue item proof is missing required weekly governor receipt(s): "
-                + ", ".join(missing_proof)
-            )
-        disallowed_proof = _disallowed_worker_proof_entries(proof_entries)
-        if disallowed_proof:
-            issues.append(
-                "queue item proof includes active-run or operator-helper command evidence "
-                "that worker packages must not invoke: "
-                + ", ".join(disallowed_proof)
-            )
-        missing_resolving_paths = _missing_resolving_proof_paths(repo_root)
-        missing_from_queue = [
-            marker
-            for marker in missing_resolving_paths
-            if f"/docker/fleet/{marker}" in proof_entries or marker in proof_entries
-        ]
-        if missing_from_queue:
-            issues.append(
-                "queue item proof includes source anchor(s) that no longer resolve: "
-                + ", ".join(missing_from_queue)
-            )
+        issues.extend(_queue_authority_issues(item, "queue"))
+        issues.extend(_queue_proof_issues(item, "queue", repo_root))
     if milestone:
         if str(milestone.get("status") or "").strip() != "in_progress":
             issues.append("milestone 106 is not in_progress in successor registry")
@@ -425,6 +458,8 @@ def verify_package(registry: Dict[str, Any], queue: Dict[str, Any], repo_root: P
         ],
         "dependency_posture": dependency_posture,
         "queue_status": str(item.get("status") or "").strip(),
+        "design_queue_status": str(design_item.get("status") or "").strip(),
+        "design_queue_source_registry_path": str(design_queue.get("source_registry_path") or "").strip(),
         "queue_source_registry_path": str(queue.get("source_registry_path") or "").strip(),
         "queue_source_design_queue_path": str(queue.get("source_design_queue_path") or "").strip(),
         "queue_title": str(item.get("title") or "").strip(),
@@ -490,6 +525,7 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
 def verify_source_inputs(
     *,
     registry: Dict[str, Any],
+    design_queue: Dict[str, Any],
     queue: Dict[str, Any],
     weekly_pulse: Dict[str, Any],
     flagship_readiness: Dict[str, Any],
@@ -499,6 +535,7 @@ def verify_source_inputs(
 ) -> Dict[str, Any]:
     required: Dict[str, tuple[Dict[str, Any], str]] = {
         "successor_registry": (registry, "program_wave"),
+        "design_queue_staging": (design_queue, "items"),
         "queue_staging": (queue, "items"),
         "weekly_pulse": (weekly_pulse, "contract_name"),
         "flagship_readiness": (flagship_readiness, "status"),
@@ -659,6 +696,7 @@ def build_payload(
     *,
     repo_root: Path,
     registry: Dict[str, Any],
+    design_queue: Dict[str, Any],
     queue: Dict[str, Any],
     weekly_pulse: Dict[str, Any],
     flagship_readiness: Dict[str, Any],
@@ -667,7 +705,7 @@ def build_payload(
     status_plane: Dict[str, Any],
     source_paths: Dict[str, str],
 ) -> Dict[str, Any]:
-    verification = verify_package(registry, queue, repo_root)
+    verification = verify_package(registry, design_queue, queue, repo_root)
     milestone = _find_milestone(registry)
     work_task_posture = _work_task_posture(milestone) if milestone else {
         "work_tasks": [],
@@ -677,6 +715,7 @@ def build_payload(
     weekly_input_health = verify_weekly_inputs(weekly_pulse, launch_decision)
     source_input_health = verify_source_inputs(
         registry=registry,
+        design_queue=design_queue,
         queue=queue,
         weekly_pulse=weekly_pulse,
         flagship_readiness=flagship_readiness,
@@ -989,6 +1028,7 @@ def build_payload(
             ],
             "evidence_requirements": [
                 "successor registry and queue item match package authority",
+                "design-owned queue staging and Fleet queue mirror both carry the completed package proof",
                 "successor registry work task 106.1 remains complete with weekly governor evidence markers",
                 "successor dependency milestones are complete before launch expansion is allowed",
                 "weekly pulse cites journey, local release proof, canary, and closure signals",
@@ -1179,6 +1219,7 @@ def materialize(args: argparse.Namespace) -> Path:
     )
     source_paths = {
         "successor_registry": str(Path(args.successor_registry).resolve()),
+        "design_queue_staging": str(Path(args.design_queue_staging).resolve()),
         "queue_staging": str(Path(args.queue_staging).resolve()),
         "weekly_pulse": str(Path(args.weekly_pulse).resolve()),
         "flagship_readiness": str(Path(args.flagship_readiness).resolve()),
@@ -1189,6 +1230,7 @@ def materialize(args: argparse.Namespace) -> Path:
     payload = build_payload(
         repo_root=Path(args.repo_root).resolve(),
         registry=_read_yaml(Path(args.successor_registry).resolve()),
+        design_queue=_read_yaml(Path(args.design_queue_staging).resolve()),
         queue=_read_yaml(Path(args.queue_staging).resolve()),
         weekly_pulse=_read_json(Path(args.weekly_pulse).resolve()),
         flagship_readiness=_read_json(Path(args.flagship_readiness).resolve()),

@@ -144,11 +144,12 @@
       }
     ]
   },
-  "generated_at": "2026-04-15T11:16:25Z",
+  "generated_at": "2026-04-15T11:26:28Z",
   "measured_rollout_loop": {
     "cadence": "weekly",
     "evidence_requirements": [
       "successor registry and queue item match package authority",
+      "design-owned queue staging and Fleet queue mirror both carry the completed package proof",
       "successor registry work task 106.1 remains complete with weekly governor evidence markers",
       "successor dependency milestones are complete before launch expansion is allowed",
       "weekly pulse cites journey, local release proof, canary, and closure signals",
@@ -270,6 +271,8 @@
       ],
       "status": "open"
     },
+    "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
+    "design_queue_status": "complete",
     "disallowed_worker_proof_command_markers": [
       "run_ooda_design_supervisor_until_quiet",
       "ooda_design_supervisor.py",
@@ -402,6 +405,10 @@
   "source_input_health": {
     "issues": [],
     "required_inputs": {
+      "design_queue_staging": {
+        "required_key": "items",
+        "state": "present"
+      },
       "flagship_readiness": {
         "required_key": "status",
         "state": "present"
@@ -434,6 +441,7 @@
     "status": "pass"
   },
   "source_paths": {
+    "design_queue_staging": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "flagship_readiness": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
     "queue_staging": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",

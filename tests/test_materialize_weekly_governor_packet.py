@@ -31,6 +31,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     root = tmp_path / "repo"
     published = root / ".codex-studio" / "published"
     registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    design_queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     queue = published / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     weekly = published / "WEEKLY_PRODUCT_PULSE.generated.json"
     readiness = published / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -134,6 +135,9 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
             ],
         },
     )
+    design_queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    design_queue_payload.pop("source_design_queue_path", None)
+    _write_yaml(design_queue, design_queue_payload)
     _write_json(
         weekly,
         {
@@ -228,6 +232,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
         "root": root,
         "published": published,
         "registry": registry,
+        "design_queue": design_queue,
         "queue": queue,
         "weekly": weekly,
         "readiness": readiness,
@@ -251,6 +256,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -283,6 +290,11 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert (
         payload["package_verification"]["queue_source_design_queue_path"]
         == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    )
+    assert payload["package_verification"]["design_queue_status"] == "complete"
+    assert (
+        payload["package_verification"]["design_queue_source_registry_path"]
+        == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
     )
     assert payload["successor_frontier_ids"] == ["2376135131"]
     assert payload["package_verification"]["successor_frontier_ids"] == ["2376135131"]
@@ -330,6 +342,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["decision_alignment"]["expected_action"] == "freeze_launch"
     assert payload["decision_alignment"]["actual_action"] == "freeze_launch"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
+    assert payload["source_input_health"]["required_inputs"]["design_queue_staging"]["state"] == "present"
     assert payload["package_verification"]["registry_dependencies"] == [101, 102, 103, 104, 105]
     assert payload["truth_inputs"]["successor_dependency_status"] == "open"
     assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
@@ -390,6 +403,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Please-test ready: 1" in markdown
     assert "- Receipt-gated followthrough ready: 2" in markdown
     assert "- Receipt-gated installed-build receipts: 2" in markdown
+    assert "- design-owned queue staging and Fleet queue mirror both carry the completed package proof" in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
     assert "WEEKLY_GOVERNOR_PACKET.generated.md" in manifest["artifacts"]
@@ -427,6 +441,8 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -519,6 +535,8 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -575,6 +593,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -605,6 +625,65 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
+def test_weekly_governor_packet_fails_package_verification_on_design_queue_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    design_queue["items"][0]["status"] = "in_progress"
+    design_queue["items"][0]["proof"] = [
+        proof
+        for proof in design_queue["items"][0]["proof"]
+        if "successor frontier 2376135131" not in proof
+    ]
+    _write_yaml(paths["design_queue"], design_queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert "design queue item is not marked complete" in payload["package_verification"]["issues"]
+    assert (
+        "design queue item proof is missing required weekly governor receipt(s): "
+        "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
 def test_weekly_governor_packet_fails_package_verification_on_successor_wave_drift(tmp_path: Path) -> None:
     paths = _fixture_tree(tmp_path)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
@@ -622,6 +701,8 @@ def test_weekly_governor_packet_fails_package_verification_on_successor_wave_dri
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -667,6 +748,8 @@ def test_weekly_governor_packet_fails_package_verification_when_m106_leaves_w8(t
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -712,6 +795,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_wave_drift(t
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -759,6 +844,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_source_drift
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -813,6 +900,8 @@ def test_weekly_governor_packet_fails_package_verification_when_registry_task_is
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -862,6 +951,8 @@ def test_weekly_governor_packet_fails_package_verification_when_registry_evidenc
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -909,6 +1000,8 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_not_comple
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -956,6 +1049,8 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_proof_is_m
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -1014,6 +1109,8 @@ def test_weekly_governor_packet_fails_package_verification_when_frontier_pin_is_
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -1068,6 +1165,8 @@ def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -1131,6 +1230,8 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -1191,6 +1292,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -1238,6 +1341,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_required_source_is_missin
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",
@@ -1295,6 +1400,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_parity_truth_drops_below_
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
             "--queue-staging",
             str(paths["queue"]),
             "--weekly-pulse",

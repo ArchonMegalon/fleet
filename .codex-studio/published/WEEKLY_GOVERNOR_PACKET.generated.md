@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-15T11:16:25Z
+Generated: 2026-04-15T11:26:28Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -100,6 +100,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 ## Evidence Requirements
 
 - successor registry and queue item match package authority
+- design-owned queue staging and Fleet queue mirror both carry the completed package proof
 - successor registry work task 106.1 remains complete with weekly governor evidence markers
 - successor dependency milestones are complete before launch expansion is allowed
 - weekly pulse cites journey, local release proof, canary, and closure signals
@@ -118,6 +119,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 ## Source Paths
 
+- design_queue_staging: /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
 - flagship_readiness: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
 - journey_gates: /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
 - queue_staging: /docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
