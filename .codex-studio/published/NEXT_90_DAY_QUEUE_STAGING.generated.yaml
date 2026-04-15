@@ -206,6 +206,9 @@ items:
     proof:
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M103_UI_VETERAN_CERTIFICATION.generated.json
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
+      - /docker/chummercomplete/chummer6-ui-finish commit fb6eb62e
+      - /docker/chummercomplete/chummer6-ui-finish commit 3bba8754 tightens the M103 verifier receipt and standard-verify proof alignment.
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
       - Chummer.Avalonia
