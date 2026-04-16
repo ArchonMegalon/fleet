@@ -28,6 +28,8 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "polling_disabled",
     "runtime_handoff_path",
     "status_query_supported",
+    "task-local telemetry file",
+    "local machine-readable context",
     "remaining milestones",
     "remaining queue items",
     "critical path",
@@ -38,6 +40,9 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "operator telemetry",
     "supervisor status polling",
     "supervisor eta polling",
+    "do not query supervisor status",
+    "do not query supervisor status or eta",
+    "polling the supervisor again",
     "active-run telemetry",
     "active-run helper",
     "active-run helper commands",
@@ -156,6 +161,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "successor-wave telemetry summary strings are rejected as worker proof strings.",
                                 "frontier-detail prompt strings are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
+                                "control-plane polling prohibition guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
                                 "worker-run supervisor launcher guard is enforced case-insensitively.",
                                 "run-helper failure proof strings are rejected case-insensitively.",
@@ -263,6 +269,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "successor-wave telemetry summary strings are rejected as worker proof strings",
                         "frontier-detail prompt strings are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
+                        "control-plane polling prohibition guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
                         "worker-run supervisor launcher guard is enforced case-insensitively",
                         "run-helper failure proof strings are rejected case-insensitively",
@@ -3796,10 +3803,16 @@ def test_weekly_governor_packet_rejects_task_local_telemetry_field_proof(
     queue["items"][0]["proof"].append(
         "polling_disabled=true and status_query_supported=false in the task-local packet"
     )
+    queue["items"][0]["proof"].append(
+        "The task-local telemetry file is the local machine-readable context for this closure"
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "runtime_handoff_path and frontier_briefs from the active worker run prove closure"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Do not query supervisor status or eta; polling the supervisor again proved closure"
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -3853,6 +3866,19 @@ def test_weekly_governor_packet_rejects_task_local_telemetry_field_proof(
         in issue
         and "runtime_handoff_path" in issue
         and "frontier_briefs" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "task-local telemetry file" in issue
+        and "local machine-readable context" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Do not query supervisor status or eta" in issue
+        and "polling the supervisor again" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
