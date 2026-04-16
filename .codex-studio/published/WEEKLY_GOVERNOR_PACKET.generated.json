@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T21:49:04Z",
+  "generated_at": "2026-04-16T21:50:54Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -448,6 +448,10 @@
         {
           "commit": "543dfd5",
           "status": "present"
+        },
+        {
+          "commit": "f16f13b",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -470,7 +474,8 @@
         "ade57ae",
         "55d8282",
         "144eae5",
-        "543dfd5"
+        "543dfd5",
+        "f16f13b"
       ],
       "status": "pass"
     },
@@ -493,7 +498,8 @@
       "ade57ae",
       "55d8282",
       "144eae5",
-      "543dfd5"
+      "543dfd5",
+      "f16f13b"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -556,6 +562,7 @@
       "local proof floor commit 55d8282 pinned for M106 source-authority guard",
       "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
       "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
+      "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -593,6 +600,7 @@
       "local proof floor commit 55d8282",
       "local proof floor commit 144eae5",
       "local proof floor commit 543dfd5",
+      "local proof floor commit f16f13b",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -717,6 +725,10 @@
         {
           "commit": "543dfd5",
           "status": "present"
+        },
+        {
+          "commit": "f16f13b",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -739,7 +751,8 @@
         "ade57ae",
         "55d8282",
         "144eae5",
-        "543dfd5"
+        "543dfd5",
+        "f16f13b"
       ],
       "status": "pass"
     },
@@ -762,7 +775,8 @@
       "ade57ae",
       "55d8282",
       "144eae5",
-      "543dfd5"
+      "543dfd5",
+      "f16f13b"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
