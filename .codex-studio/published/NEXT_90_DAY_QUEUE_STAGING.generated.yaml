@@ -318,7 +318,7 @@ items:
       - verifier rejects Fleet proof paths outside package allowed path roots
       - no-PYTHONPATH bootstrap guard includes the standalone M106 verifier
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
-      - local proof floor commit 3eec697 pinned for M106 governor packet repeat prevention
+      - local proof floor commit 6fd5bfe pinned for M106 governor packet repeat prevention
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin

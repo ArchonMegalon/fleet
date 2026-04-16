@@ -67,6 +67,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "aefd72c",
     "21e00dd",
     "3eec697",
+    "6fd5bfe",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -102,7 +103,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-    "local proof floor commit 3eec697 pinned for M106 governor packet repeat prevention",
+    "local proof floor commit 6fd5bfe pinned for M106 governor packet repeat prevention",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -126,7 +127,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
-    "local proof floor commit 3eec697",
+    "local proof floor commit 6fd5bfe",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
