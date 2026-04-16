@@ -37,6 +37,12 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "eta ",
     "successor frontier detail:",
     "successor frontier ids to prioritize first",
+    "current steering focus",
+    "assigned successor queue package",
+    "assigned slice authority",
+    "execution rules inside this run",
+    "first action rule",
+    "writable scope roots",
     "operator telemetry",
     "supervisor status polling",
     "supervisor eta polling",
@@ -161,6 +167,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "task-local telemetry field names are rejected as worker proof strings.",
                                 "successor-wave telemetry summary strings are rejected as worker proof strings.",
                                 "frontier-detail prompt strings are rejected as worker proof strings.",
+                                "run-prompt authority labels are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "control-plane polling prohibition guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
@@ -272,6 +279,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "task-local telemetry field names are rejected as worker proof strings",
                         "successor-wave telemetry summary strings are rejected as worker proof strings",
                         "frontier-detail prompt strings are rejected as worker proof strings",
+                        "run-prompt authority labels are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "control-plane polling prohibition guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
@@ -3974,6 +3982,85 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Successor frontier detail" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+
+
+def test_weekly_governor_packet_rejects_run_prompt_authority_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "Current steering focus and assigned successor queue package prove this package is closed"
+    )
+    queue["items"][0]["proof"].append(
+        "Execution rules inside this run and the first action rule prove the verifier path"
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Assigned slice authority and writable scope roots prove the closeout boundary"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Current steering focus" in issue
+        and "assigned successor queue package" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Execution rules inside this run" in issue
+        and "first action rule" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Assigned slice authority" in issue
+        and "writable scope roots" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS

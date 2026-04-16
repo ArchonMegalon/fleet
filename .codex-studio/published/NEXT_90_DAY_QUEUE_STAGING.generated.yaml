@@ -447,6 +447,7 @@ items:
       - task-local telemetry field names are rejected as worker proof strings
       - successor-wave telemetry summary strings are rejected as worker proof strings
       - frontier-detail prompt strings are rejected as worker proof strings
+      - run-prompt authority labels are rejected as worker proof strings
       - handoff polling phrase guard is enforced case-insensitively
       - control-plane polling prohibition guard is enforced case-insensitively
       - worker-run OODA helper guard is enforced case-insensitively
