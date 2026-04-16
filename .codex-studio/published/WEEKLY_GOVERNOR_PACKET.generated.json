@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T16:23:02Z",
+  "generated_at": "2026-04-16T16:30:45Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -626,13 +626,13 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-16T16:22:16Z",
+        "generated_at": "2026-04-16T16:29:59Z",
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-16T16:22:16Z",
+        "generated_at": "2026-04-16T16:29:59Z",
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
         "state": "present"
@@ -674,11 +674,11 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-16T16:22:15Z",
+        "generated_at": "2026-04-16T16:29:58Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "5c21d70bcea91c16363cd57f9e3cf13b93ebc0565da25fcc904bcfa932b65641",
+        "source_sha256": "53230fa2a5c0c4bf8fb8c58a67c2871e452adbbb6a0d1a478f88d0dab5026f89",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
