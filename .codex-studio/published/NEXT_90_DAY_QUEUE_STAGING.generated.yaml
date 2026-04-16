@@ -90,6 +90,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 1870132d pins the latest M102 desktop trust proof floor.
       - /docker/chummercomplete/chummer.run-services commit 6b811ca2 pins the latest M102 desktop trust guard floor.
       - /docker/chummercomplete/chummer.run-services commit b7107364 pins the M102 desktop trust guard floor.
+      - /docker/chummercomplete/chummer.run-services commit f49c64a9 pins the M102 current desktop trust guard floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -393,6 +394,7 @@ items:
       - local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention
       - local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard
       - local proof floor commit ade57ae pinned for M106 task-local telemetry field guard
+      - local proof floor commit 55d8282 pinned for M106 source-authority guard
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin

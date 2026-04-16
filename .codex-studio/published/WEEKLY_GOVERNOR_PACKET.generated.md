@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-16T20:19:41Z
+Generated: 2026-04-16T20:20:55Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -27,10 +27,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: blocked
 - Registry work task 106.1 status: complete
-- Required registry evidence markers: 28
+- Required registry evidence markers: 29
 - Queue closeout status: complete
 - Queue mirror status: in_sync
-- Required queue proof markers: 28
+- Required queue proof markers: 29
 - Required resolving proof paths: scripts/materialize_weekly_governor_packet.py, scripts/verify_next90_m106_fleet_governor_packet.py, scripts/verify_script_bootstrap_no_pythonpath.py, tests/test_materialize_weekly_governor_packet.py, tests/test_fleet_script_bootstrap_without_pythonpath.py
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
@@ -59,7 +59,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Closed package: next90-m106-fleet-governor-packet
 - Closed work task: 106.1
 - Closed successor frontier ids: 2376135131
-- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae
+- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282
 - Do not reopen owned surfaces: True
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio
