@@ -434,6 +434,7 @@ items:
       - local proof floor commit 144eae5 pinned for M106 worker-run helper guard
       - local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard
       - local proof floor commit f16f13b pinned for M106 run-helper failure guard
+      - local proof floor commit 999231f pinned for M106 source-input refresh guard
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
