@@ -908,6 +908,34 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
 
 
+def test_verify_next90_m106_governor_packet_rejects_ready_status_reason_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["status_reason"] = "Ready because no work remains anywhere in milestone 106."
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "ready packet status_reason no longer confirms closed package and ready measured rollout"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_production_source_path_override(
     tmp_path: Path,
 ) -> None:
@@ -977,6 +1005,40 @@ def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet
 
     assert verifier.returncode == 0, verifier.stderr
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
+
+
+def test_verify_next90_m106_governor_packet_rejects_source_blocked_status_reason_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    support = json.loads(paths["support"].read_text(encoding="utf-8"))
+    support["successor_package_verification"] = {
+        "status": "fail",
+        "issues": ["queue proof missing receipt-gated M102 marker"],
+    }
+    _write_json(paths["support"], support)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["status_reason"] = "Fleet package still needs weekly governor implementation."
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "source-blocked packet status_reason no longer distinguishes closed package proof from rollout blockage"
+        in verifier.stderr
+    )
 
 
 def test_verify_next90_m106_governor_packet_rejects_active_run_source_path(

@@ -350,6 +350,15 @@ def verify(args: argparse.Namespace) -> List[str]:
     if source_input_blocked:
         _require(source_health.get("issues") != [], issues, "blocked source_input_health does not name its blocking issue")
         _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite source input failure")
+        _require(
+            str(packet.get("status_reason") or "")
+            == (
+                "Fleet package is closed; measured rollout remains blocked by current "
+                "source, dependency, or sibling gates."
+            ),
+            issues,
+            "source-blocked packet status_reason no longer distinguishes closed package proof from rollout blockage",
+        )
         source_issues = [str(issue) for issue in source_health.get("issues") or []]
         support_dependency_blocked = any(
             "support_packets successor_package_verification.status" in issue
@@ -391,6 +400,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         )
     else:
         _require(packet.get("status") == "ready", issues, "packet status is not ready")
+        _require(
+            str(packet.get("status_reason") or "")
+            == "Fleet package is closed and the weekly measured rollout loop is ready.",
+            issues,
+            "ready packet status_reason no longer confirms closed package and ready measured rollout",
+        )
     support_source_sha256 = str(support_input_health.get("source_sha256") or "").strip().lower()
     actual_support_source_sha256 = _sha256_file(support_packets_path)
     _require(
