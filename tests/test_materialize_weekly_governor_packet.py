@@ -19,9 +19,12 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "ooda_design_supervisor.py",
     "TASK_LOCAL_TELEMETRY.generated.json",
     "operator telemetry",
+    "supervisor status polling",
+    "supervisor eta polling",
     "active-run telemetry",
     "active-run helper",
     "active run helper",
+    "active worker run",
     "--telemetry-answer",
     "codexea --telemetry",
     "chummer_design_supervisor status",
@@ -3145,6 +3148,7 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
     paths = _fixture_tree(tmp_path)
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
     queue["items"][0]["proof"].append("Operator telemetry says this worker package is complete")
+    queue["items"][0]["proof"].append("Supervisor status polling was observed from inside the active worker run")
     queue["items"][0]["proof"].append("chummer_design_supervisor status --json reported green")
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
@@ -3196,6 +3200,11 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
     assert any(
         "queue item proof includes active-run or operator-helper command evidence" in issue
         and "Operator telemetry says this worker package is complete" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Supervisor status polling was observed from inside the active worker run" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
