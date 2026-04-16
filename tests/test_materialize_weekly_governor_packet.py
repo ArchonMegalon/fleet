@@ -150,6 +150,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
                                 "Verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs.",
+                                "Future-dated weekly and source generated_at receipts are rejected.",
                                 "Verifier rejects compile manifest freshness drift after weekly packet refresh.",
                                 "Verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
@@ -258,6 +259,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
                         "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
+                        "future-dated weekly and source generated_at receipts are rejected",
                         "verifier rejects compile manifest freshness drift after weekly packet refresh",
                         "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
@@ -4420,6 +4422,114 @@ def test_weekly_governor_packet_blocks_loop_ready_when_support_packets_are_stale
     assert any(
         issue.startswith("support_packets are stale")
         for issue in payload["source_input_health"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_loop_ready_when_source_generated_at_is_future_dated(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    readiness = json.loads(paths["readiness"].read_text(encoding="utf-8"))
+    readiness["generated_at"] = (
+        dt.datetime.now(UTC) + dt.timedelta(hours=1)
+    ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    _write_json(paths["readiness"], readiness)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["source_input_health"]["status"] == "fail"
+    assert any(
+        issue.startswith("flagship_readiness generated_at is future-dated")
+        for issue in payload["source_input_health"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_rejects_future_dated_weekly_pulse(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    weekly["generated_at"] = (
+        dt.datetime.now(UTC) + dt.timedelta(hours=1)
+    ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    _write_json(paths["weekly"], weekly)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["weekly_input_health"]["status"] == "fail"
+    assert any(
+        issue.startswith("weekly pulse generated_at is future-dated")
+        for issue in payload["weekly_input_health"]["issues"]
     )
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 

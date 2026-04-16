@@ -103,6 +103,7 @@ CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 SUPPORT_PACKETS_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
+GENERATED_AT_MAX_FUTURE_SKEW_SECONDS = 5 * 60
 REQUIRED_GENERATED_SOURCE_INPUTS = (
     "weekly_pulse",
     "flagship_readiness",
@@ -124,6 +125,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
     "verifier rebuilds the decision-critical packet projection from live source inputs",
     "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
+    "future-dated weekly and source generated_at receipts are rejected",
     "verifier rejects compile manifest freshness drift after weekly packet refresh",
     "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
@@ -170,6 +172,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "tmp_path fixture invocation",
     "decision-critical packet projection",
     "packet freshness drift against generated readiness",
+    "future-dated weekly and source generated_at receipts",
     "compile manifest freshness drift",
     "support-packet source_sha256 drift",
     "every measured rollout action",
@@ -863,6 +866,7 @@ def _launch_decision(weekly_pulse: Dict[str, Any]) -> Dict[str, Any]:
 def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str, Any]) -> Dict[str, Any]:
     issues: List[str] = []
     generated_at = _parse_iso_utc(weekly_pulse.get("generated_at"))
+    now = dt.datetime.now(UTC)
     decision_actions = [
         str(row.get("action") or "").strip()
         for row in weekly_pulse.get("governor_decisions") or []
@@ -885,7 +889,10 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
     if not generated_at:
         issues.append("weekly pulse generated_at is missing or invalid")
     else:
-        age_seconds = int((dt.datetime.now(UTC) - generated_at).total_seconds())
+        future_skew_seconds = int((generated_at - now).total_seconds())
+        if future_skew_seconds > GENERATED_AT_MAX_FUTURE_SKEW_SECONDS:
+            issues.append(f"weekly pulse generated_at is future-dated ({future_skew_seconds}s ahead)")
+        age_seconds = int((now - generated_at).total_seconds())
         if age_seconds > WEEKLY_PULSE_MAX_AGE_SECONDS:
             issues.append(f"weekly pulse is stale ({age_seconds}s old)")
     if not launch_decision:
@@ -941,6 +948,7 @@ def verify_source_inputs(
     }
     rows: Dict[str, Dict[str, Any]] = {}
     issues: List[str] = []
+    now = dt.datetime.now(UTC)
     for name, (payload, required_key) in required.items():
         present = bool(payload)
         has_required_key = bool(payload.get(required_key)) if present else False
@@ -955,8 +963,13 @@ def verify_source_inputs(
             generated_at = str(payload.get("generated_at") or "").strip() if present else ""
             rows[name]["generated_at"] = generated_at
             rows[name]["source_path"] = str(dict(source_paths or {}).get(name) or "").strip()
-            if state == "present" and not _parse_iso_utc(generated_at):
+            parsed_generated_at = _parse_iso_utc(generated_at)
+            if state == "present" and not parsed_generated_at:
                 issues.append(f"{name} generated_at is missing or invalid")
+            elif state == "present" and parsed_generated_at:
+                future_skew_seconds = int((parsed_generated_at - now).total_seconds())
+                if future_skew_seconds > GENERATED_AT_MAX_FUTURE_SKEW_SECONDS:
+                    issues.append(f"{name} generated_at is future-dated ({future_skew_seconds}s ahead)")
     support_successor_proof = dict(support_packets.get("successor_package_verification") or {})
     support_successor_status = str(support_successor_proof.get("status") or "").strip()
     support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
@@ -981,7 +994,7 @@ def verify_source_inputs(
         if not support_generated_at:
             issues.append("support_packets generated_at is missing or invalid")
         else:
-            support_age_seconds = int((dt.datetime.now(UTC) - support_generated_at).total_seconds())
+            support_age_seconds = int((now - support_generated_at).total_seconds())
             if support_age_seconds > SUPPORT_PACKETS_MAX_AGE_SECONDS:
                 issues.append(f"support_packets are stale ({support_age_seconds}s old)")
     closed_flagship_status = str(closed_flagship_registry.get("status") or "").strip()
