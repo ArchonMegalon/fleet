@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-16T17:05:26Z
+Generated: 2026-04-16T17:13:18Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -9,7 +9,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Decision | State | Reason |
 | --- | --- | --- |
-| Launch expand | blocked | Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green. |
+| Launch expand | blocked | Hold expansion until successor dependencies, readiness, parity, status-plane final claim, local release proof, canary, closure, and support gates are all green. |
 | Freeze launch | active | Freeze launch expansion until fresh local release proof passes on the public edge. |
 | Canary | accumulating | Canary evidence is still accumulating |
 | Rollback | armed | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
@@ -27,10 +27,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: blocked
 - Registry work task 106.1 status: complete
-- Required registry evidence markers: 22
+- Required registry evidence markers: 23
 - Queue closeout status: complete
 - Queue mirror status: in_sync
-- Required queue proof markers: 22
+- Required queue proof markers: 23
 - Required resolving proof paths: scripts/materialize_weekly_governor_packet.py, scripts/verify_next90_m106_fleet_governor_packet.py, scripts/verify_script_bootstrap_no_pythonpath.py, tests/test_materialize_weekly_governor_packet.py, tests/test_fleet_script_bootstrap_without_pythonpath.py
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
@@ -89,6 +89,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 | successor_dependencies | blocked | satisfied | open |
 | flagship_readiness | pass | pass | pass |
 | flagship_parity | pass | gold_ready | gold_ready |
+| status_plane_final_claim | pass | pass | pass |
 | journey_gates | pass | ready | ready |
 | local_release_proof | blocked | passed | unknown |
 | provider_canary | blocked | Canary green on all active lanes | Canary evidence is still accumulating |
@@ -112,6 +113,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - weekly pulse cites journey, local release proof, canary, and closure signals
 - flagship readiness remains green before any launch expansion
 - flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions
+- status-plane final claim remains pass before launch expansion or measured rollout readiness
 - support packet counts stay clear for non-external closure work
 - fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates
 - queue closeout status remains complete and carries the required weekly governor proof receipts

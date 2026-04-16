@@ -101,6 +101,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rejects compile manifest freshness drift after weekly packet refresh",
     "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+    "status-plane final claim drift blocks launch expansion and measured rollout readiness",
     "forbidden worker proof strings are rejected case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
@@ -125,6 +126,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "compile manifest freshness drift",
     "support-packet source_sha256 drift",
     "every measured rollout action",
+    "status-plane final claim drift",
     "forbidden worker proof strings",
     "proof paths outside package allowed path roots",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
@@ -1046,6 +1048,9 @@ def build_payload(
     closure_state = str(
         launch_signals.get("closure_health_state") or closure.get("state") or "unknown"
     ).strip()
+    status_plane_final_claim = str(
+        status_plane.get("whole_product_final_claim_status") or ""
+    ).strip()
     journey_state = str(
         launch_signals.get("journey_gate_state")
         or journey_summary.get("overall_state")
@@ -1064,6 +1069,7 @@ def build_payload(
         and dependency_status == "satisfied"
         and readiness_status == "pass"
         and parity_gold_ready
+        and status_plane_final_claim == "pass"
         and journey_state == "ready"
         and local_release_proof == "passed"
         and canary_status == "Canary green on all active lanes"
@@ -1126,6 +1132,12 @@ def build_payload(
             parity["release_truth_status"],
         ),
         _gate_row(
+            "status_plane_final_claim",
+            "pass" if status_plane_final_claim == "pass" else "blocked",
+            "pass",
+            status_plane_final_claim or "unknown",
+        ),
+        _gate_row(
             "journey_gates",
             "pass" if journey_state == "ready" else "blocked",
             "ready",
@@ -1182,6 +1194,7 @@ def build_payload(
         and decision_alignment["status"] == "pass"
         and readiness_status == "pass"
         and parity["release_truth_status"] in {"gold_ready", "veteran_ready"}
+        and status_plane_final_claim == "pass"
         and support["open_non_external_packet_count"] == 0
     )
     package_complete = (
@@ -1237,7 +1250,7 @@ def build_payload(
         "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
         "launch_expand": {
             "state": "allowed" if launch_allowed else "blocked",
-            "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
+            "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
         },
         "freeze_launch": {
             "state": "active" if freeze_active else "available",
@@ -1316,7 +1329,7 @@ def build_payload(
             "successor_dependency_status": dependency_status,
             "successor_dependency_posture": dependency_posture,
             "support_summary": support,
-            "status_plane_final_claim": str(status_plane.get("whole_product_final_claim_status") or "").strip(),
+            "status_plane_final_claim": status_plane_final_claim,
         },
         "decision_board": decision_board,
         "decision_gate_ledger": decision_gate_ledger,
@@ -1368,6 +1381,7 @@ def build_payload(
                 "weekly pulse cites journey, local release proof, canary, and closure signals",
                 "flagship readiness remains green before any launch expansion",
                 "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
+                "status-plane final claim remains pass before launch expansion or measured rollout readiness",
                 "support packet counts stay clear for non-external closure work",
                 "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
                 "queue closeout status remains complete and carries the required weekly governor proof receipts",

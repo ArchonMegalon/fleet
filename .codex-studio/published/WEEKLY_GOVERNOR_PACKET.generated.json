@@ -24,7 +24,7 @@
       "state": "active"
     },
     "launch_expand": {
-      "reason": "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
+      "reason": "Hold expansion until successor dependencies, readiness, parity, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
       "state": "blocked"
     },
     "rollback": {
@@ -101,6 +101,12 @@
         "state": "pass"
       },
       {
+        "name": "status_plane_final_claim",
+        "observed": "pass",
+        "required": "pass",
+        "state": "pass"
+      },
+      {
         "name": "journey_gates",
         "observed": "ready",
         "required": "ready",
@@ -152,12 +158,12 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T17:05:26Z",
+  "generated_at": "2026-04-16T17:13:18Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
-      "gate_count": 12,
-      "reason": "Hold expansion until successor dependencies, readiness, parity, local release proof, canary, closure, and support gates are all green.",
+      "gate_count": 13,
+      "reason": "Hold expansion until successor dependencies, readiness, parity, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
       "state": "blocked"
     },
     {
@@ -195,6 +201,7 @@
       "weekly pulse cites journey, local release proof, canary, and closure signals",
       "flagship readiness remains green before any launch expansion",
       "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
+      "status-plane final claim remains pass before launch expansion or measured rollout readiness",
       "support packet counts stay clear for non-external closure work",
       "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
       "queue closeout status remains complete and carries the required weekly governor proof receipts",
@@ -461,6 +468,7 @@
       "verifier rejects compile manifest freshness drift after weekly packet refresh",
       "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
       "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+      "status-plane final claim drift blocks launch expansion and measured rollout readiness",
       "forbidden worker proof strings are rejected case-insensitively",
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
@@ -485,6 +493,7 @@
       "compile manifest freshness drift",
       "support-packet source_sha256 drift",
       "every measured rollout action",
+      "status-plane final claim drift",
       "forbidden worker proof strings",
       "proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",

@@ -112,6 +112,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier rejects compile manifest freshness drift after weekly packet refresh.",
                                 "Verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
+                                "status-plane final claim drift blocks launch expansion and measured rollout readiness.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
@@ -175,6 +176,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier rejects compile manifest freshness drift after weekly packet refresh",
                         "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+                        "status-plane final claim drift blocks launch expansion and measured rollout readiness",
                         "forbidden worker proof strings are rejected case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
@@ -529,6 +531,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert launch_gates["local_release_proof"]["state"] == "blocked"
     assert launch_gates["provider_canary"]["state"] == "blocked"
     assert launch_gates["successor_dependencies"]["observed"] == "open"
+    assert launch_gates["status_plane_final_claim"]["state"] == "pass"
     focus_shift_gates = {
         row["name"]: row for row in payload["decision_gate_ledger"]["focus_shift"]
     }
@@ -612,6 +615,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Receipt-gated followthrough ready: 2" in markdown
     assert "- Receipt-gated installed-build receipts: 2" in markdown
     assert "- design-owned queue staging and Fleet queue mirror both carry the completed package proof" in markdown
+    assert "- status-plane final claim remains pass before launch expansion or measured rollout readiness" in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
     assert "WEEKLY_GOVERNOR_PACKET.generated.md" in manifest["artifacts"]
@@ -697,6 +701,59 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
     assert launch_gates["successor_dependencies"]["state"] == "blocked"
     assert launch_gates["decision_alignment"]["state"] == "fail"
     assert payload["public_status_copy"]["state"] == "freeze_launch"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_blocks_launch_expand_when_status_plane_final_claim_regresses(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"] = [
+        {
+            "id": dep_id,
+            "title": f"Dependency {dep_id}",
+            "status": "complete",
+            "owners": ["fleet"],
+        }
+        for dep_id in (101, 102, 103, 104, 105)
+    ] + registry["milestones"]
+    _write_yaml(paths["registry"], registry)
+    weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    weekly["governor_decisions"][0]["action"] = "launch_expand"
+    weekly["governor_decisions"][0]["reason"] = "All measured gates are green."
+    weekly["governor_decisions"][0]["cited_signals"] = [
+        "journey_gate_state=ready",
+        "journey_gate_blocked_count=0",
+        "local_release_proof_status=passed",
+        "provider_canary_status=Canary green on all active lanes",
+        "closure_health_state=clear",
+    ]
+    weekly["supporting_signals"]["provider_route_stewardship"] = {
+        "canary_status": "Canary green on all active lanes",
+        "next_decision": "Continue weekly launch expansion.",
+    }
+    weekly["supporting_signals"]["adoption_health"] = {"local_release_proof_status": "passed"}
+    _write_json(paths["weekly"], weekly)
+    status = yaml.safe_load(paths["status"].read_text(encoding="utf-8"))
+    status["whole_product_final_claim_status"] = "fail"
+    _write_yaml(paths["status"], status)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["truth_inputs"]["status_plane_final_claim"] == "fail"
+    assert payload["decision_alignment"]["status"] == "fail"
+    assert payload["decision_alignment"]["expected_action"] == "freeze_launch"
+    assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
+    assert "status-plane final claim" in payload["decision_board"]["launch_expand"]["reason"]
+    launch_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
+    }
+    assert launch_gates["status_plane_final_claim"]["state"] == "blocked"
+    assert launch_gates["status_plane_final_claim"]["observed"] == "fail"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
