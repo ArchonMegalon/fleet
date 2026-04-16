@@ -129,6 +129,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "task-local telemetry field names are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
+                                "Production verifier rejects non-canonical source path overrides.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                                 "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention.",
@@ -220,6 +221,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "task-local telemetry field names are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
+                        "production verifier rejects non-canonical source path overrides",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                         "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -572,6 +574,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["decision_alignment"]["actual_action"] == "freeze_launch"
     assert payload["source_input_health"]["required_inputs"]["flagship_readiness"]["state"] == "present"
     assert payload["source_input_health"]["required_inputs"]["design_queue_staging"]["state"] == "present"
+    assert payload["source_input_health"]["required_inputs"]["source_path_authority"]["state"] == "pass"
     assert (
         payload["source_input_health"]["required_inputs"]["support_packets"]["source_sha256"]
         == hashlib.sha256(paths["support"].read_bytes()).hexdigest()
@@ -864,6 +867,31 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
     )
     assert verifier.returncode == 0, verifier.stderr
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
+
+
+def test_verify_next90_m106_governor_packet_rejects_production_source_path_override(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+
+    verifier = subprocess.run(
+        [
+            sys.executable,
+            "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+            "--repo-root",
+            "/docker/fleet",
+            "--successor-registry",
+            str(paths["registry"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode != 0
+    assert "production verifier source paths are not canonical" in verifier.stderr
+    assert "successor_registry" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet(

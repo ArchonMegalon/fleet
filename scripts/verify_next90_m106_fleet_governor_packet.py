@@ -174,6 +174,17 @@ def _compile_manifest_artifact_issues(
     return issues
 
 
+def _production_source_path_drift(repo_root: Path, source_paths: Dict[str, str]) -> List[str]:
+    if repo_root.resolve() != weekly.ROOT.resolve():
+        return []
+    drift: List[str] = []
+    for name, expected_path in weekly.EXPECTED_PRODUCTION_SOURCE_PATHS.items():
+        actual_path = str(source_paths.get(name) or "").strip()
+        if actual_path != expected_path:
+            drift.append(f"{name}: expected {expected_path}, got {actual_path or '<missing>'}")
+    return drift
+
+
 def verify(args: argparse.Namespace) -> List[str]:
     repo_root = Path(args.repo_root).resolve()
     packet_path = Path(args.packet).resolve()
@@ -220,6 +231,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     disallowed_source_paths = weekly._disallowed_worker_proof_entries(
         [f"{name}: {path}" for name, path in sorted(source_paths.items())]
     )
+    production_source_path_drift = _production_source_path_drift(repo_root, source_paths)
     live_payload = weekly.build_payload(
         repo_root=repo_root,
         registry=registry,
@@ -239,6 +251,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
     required_inputs = dict(dict(packet.get("source_input_health") or {}).get("required_inputs") or {})
     closed_flagship_input = dict(required_inputs.get("closed_flagship_registry") or {})
+    source_path_authority = dict(required_inputs.get("source_path_authority") or {})
     support_input_health = dict(required_inputs.get("support_packets") or {})
     local_commit_resolution = dict(packet_verification.get("local_commit_resolution") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
@@ -276,6 +289,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         "verifier source paths include active-run or operator-helper evidence that "
         "worker package proof must not cite: "
         + ", ".join(disallowed_source_paths),
+    )
+    _require(
+        not production_source_path_drift,
+        issues,
+        "production verifier source paths are not canonical: "
+        + "; ".join(production_source_path_drift),
     )
     _require(verification["status"] == "pass", issues, f"live package verification is not pass: {verification['issues']}")
     _require(
@@ -598,6 +617,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         closed_flagship_input.get("open_milestone_ids") == [],
         issues,
         "closed flagship registry input reports reopened milestone ids",
+    )
+    _require(
+        source_path_authority.get("state") == "pass",
+        issues,
+        "source input health no longer proves canonical production source path authority",
     )
     _require(
         "must not reopen" in str(flagship_wave_guard.get("rule") or ""),

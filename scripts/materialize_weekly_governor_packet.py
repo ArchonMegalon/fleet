@@ -47,6 +47,17 @@ FLAGSHIP_READINESS = PUBLISHED / "FLAGSHIP_PRODUCT_READINESS.generated.json"
 JOURNEY_GATES = PUBLISHED / "JOURNEY_GATES.generated.json"
 SUPPORT_PACKETS = PUBLISHED / "SUPPORT_CASE_PACKETS.generated.json"
 STATUS_PLANE = PUBLISHED / "STATUS_PLANE.generated.yaml"
+EXPECTED_PRODUCTION_SOURCE_PATHS = {
+    "successor_registry": str(SUCCESSOR_REGISTRY),
+    "closed_flagship_registry": str(CLOSED_FLAGSHIP_REGISTRY_PATH),
+    "design_queue_staging": str(DESIGN_QUEUE_STAGING),
+    "queue_staging": str(QUEUE_STAGING),
+    "weekly_pulse": str(WEEKLY_PULSE),
+    "flagship_readiness": str(FLAGSHIP_READINESS),
+    "journey_gates": str(JOURNEY_GATES),
+    "support_packets": str(SUPPORT_PACKETS),
+    "status_plane": str(STATUS_PLANE),
+}
 PACKAGE_ID = "next90-m106-fleet-governor-packet"
 EXPECTED_PACKAGE_TITLE = (
     "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions"
@@ -114,6 +125,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "task-local telemetry field names are rejected as worker proof strings",
     "handoff polling phrase guard is enforced case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
+    "production verifier rejects non-canonical source path overrides",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
     "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -143,6 +155,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "task-local telemetry field names",
     "handoff polling phrase guard",
     "proof paths outside package allowed path roots",
+    "non-canonical source path overrides",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
     "local proof floor commit 1ba508e",
@@ -793,6 +806,7 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
 
 def verify_source_inputs(
     *,
+    repo_root: Path,
     registry: Dict[str, Any],
     closed_flagship_registry: Dict[str, Any],
     design_queue: Dict[str, Any],
@@ -922,6 +936,26 @@ def verify_source_inputs(
             "weekly governor source paths include active-run or operator-helper evidence "
             "that worker packets must not cite: "
             + ", ".join(disallowed_source_paths)
+        )
+    production_path_drift: Dict[str, Dict[str, str]] = {}
+    if repo_root.resolve() == ROOT.resolve():
+        for name, expected_path in EXPECTED_PRODUCTION_SOURCE_PATHS.items():
+            actual_path = str(dict(source_paths or {}).get(name) or "").strip()
+            if actual_path != expected_path:
+                production_path_drift[name] = {
+                    "expected": expected_path,
+                    "actual": actual_path,
+                }
+    rows["source_path_authority"] = {
+        "state": "pass" if not production_path_drift else "fail",
+        "expected_paths": dict(EXPECTED_PRODUCTION_SOURCE_PATHS),
+        "production_path_drift": production_path_drift,
+    }
+    if production_path_drift:
+        issues.append(
+            "weekly governor production source paths must use canonical registry, queue, "
+            "and generated artifact inputs; non-canonical override(s): "
+            + ", ".join(sorted(production_path_drift))
         )
     return {
         "status": "pass" if not issues else "fail",
@@ -1109,6 +1143,7 @@ def build_payload(
     launch_decision = _launch_decision(weekly_pulse)
     weekly_input_health = verify_weekly_inputs(weekly_pulse, launch_decision)
     source_input_health = verify_source_inputs(
+        repo_root=repo_root,
         registry=registry,
         closed_flagship_registry=closed_flagship_registry,
         design_queue=design_queue,
