@@ -16,6 +16,8 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "/var/lib/codex-fleet",
     "ACTIVE_RUN_HANDOFF.generated.md",
     "run_ooda_design_supervisor_until_quiet",
+    "run_chummer_design_supervisor.sh",
+    "run_ooda_design_supervisor.sh",
     "ooda_design_supervisor.py",
     "TASK_LOCAL_TELEMETRY.generated.json",
     "first_commands",
@@ -26,6 +28,13 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "polling_disabled",
     "runtime_handoff_path",
     "status_query_supported",
+    "remaining milestones",
+    "remaining queue items",
+    "critical path",
+    "eta:",
+    "eta ",
+    "successor frontier detail:",
+    "successor frontier ids to prioritize first",
     "operator telemetry",
     "supervisor status polling",
     "supervisor eta polling",
@@ -139,12 +148,16 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier rejects compile manifest freshness drift after weekly packet refresh.",
                                 "Verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
+                                "weekly pulse duplicate or ambiguous launch governance actions are rejected.",
                                 "status-plane final claim drift blocks launch expansion and measured rollout readiness.",
                                 "status_reason distinguishes closed Fleet package proof from blocked rollout gates.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "task-local telemetry field names are rejected as worker proof strings.",
+                                "successor-wave telemetry summary strings are rejected as worker proof strings.",
+                                "frontier-detail prompt strings are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
+                                "worker-run supervisor launcher guard is enforced case-insensitively.",
                                 "run-helper failure proof strings are rejected case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "Production verifier rejects non-canonical source path overrides.",
@@ -159,6 +172,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard.",
                                 "local proof floor commit f16f13b pinned for M106 run-helper failure guard.",
                                 "local proof floor commit 999231f pinned for M106 source-input refresh guard.",
+                                "local proof floor commit 25836f6 pinned for M106 source refresh proof floor.",
                                 "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages.",
                             ],
                         },
@@ -240,12 +254,16 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier rejects compile manifest freshness drift after weekly packet refresh",
                         "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+                        "weekly pulse duplicate or ambiguous launch governance actions are rejected",
                         "status-plane final claim drift blocks launch expansion and measured rollout readiness",
                         "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
                         "forbidden worker proof strings are rejected case-insensitively",
                         "task-local telemetry field names are rejected as worker proof strings",
+                        "successor-wave telemetry summary strings are rejected as worker proof strings",
+                        "frontier-detail prompt strings are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
+                        "worker-run supervisor launcher guard is enforced case-insensitively",
                         "run-helper failure proof strings are rejected case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "production verifier rejects non-canonical source path overrides",
@@ -260,6 +278,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
                         "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
                         "local proof floor commit 999231f pinned for M106 source-input refresh guard",
+                        "local proof floor commit 25836f6 pinned for M106 source refresh proof floor",
                         "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -448,6 +467,35 @@ def _run_materializer(paths: dict[str, Path], out: Path) -> subprocess.Completed
     )
 
 
+def test_weekly_governor_packet_rejects_duplicate_or_ambiguous_launch_decisions(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    weekly = json.loads(paths["weekly"].read_text(encoding="utf-8"))
+    duplicate_freeze = dict(weekly["governor_decisions"][0])
+    ambiguous_launch = dict(weekly["governor_decisions"][0])
+    ambiguous_launch["action"] = "launch_expand"
+    weekly["governor_decisions"].extend([duplicate_freeze, ambiguous_launch])
+    _write_json(paths["weekly"], weekly)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["weekly_input_health"]["status"] == "fail"
+    assert (
+        "weekly pulse governor_decisions has duplicate action row(s): freeze_launch"
+        in payload["weekly_input_health"]["issues"]
+    )
+    assert (
+        "weekly pulse must contain exactly one launch governance action (freeze_launch or launch_expand); found 3"
+        in payload["weekly_input_health"]["issues"]
+    )
+    assert payload["status"] == "blocked"
+    assert payload["decision_board"]["launch_expand"]["state"] == "blocked"
+
+
 def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proof_are_not_green(tmp_path: Path) -> None:
     paths = _fixture_tree(tmp_path)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -537,6 +585,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "543dfd5",
         "f16f13b",
         "999231f",
+        "25836f6",
     ]
     assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -583,6 +632,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "543dfd5",
         "f16f13b",
         "999231f",
+        "25836f6",
     ]
     assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
@@ -696,7 +746,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
     assert "- Closed successor frontier ids: 2376135131" in markdown
-    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f" in markdown
+    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
@@ -2086,7 +2136,7 @@ def test_verify_next90_m106_governor_packet_rejects_markdown_proof_floor_prefix(
     markdown_path = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"
     markdown = markdown_path.read_text(encoding="utf-8")
     markdown_path.write_text(
-        markdown.replace(", 999231f\n", "\n"),
+        markdown.replace(", 25836f6\n", "\n"),
         encoding="utf-8",
     )
 
@@ -3511,10 +3561,14 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
     queue["items"][0]["proof"].append("python3 scripts/run_ooda_design_supervisor_until_quiet.py --once")
     queue["items"][0]["proof"].append("python3 scripts/chummer_design_supervisor.py launch-health")
+    queue["items"][0]["proof"].append("bash scripts/run_chummer_design_supervisor.sh")
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "python3 scripts/ooda_design_supervisor.py --telemetry"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "bash scripts/run_ooda_design_supervisor.sh"
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -3561,6 +3615,7 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     assert any(
         "queue item proof includes active-run or operator-helper command evidence" in issue
         and "python3 scripts/chummer_design_supervisor.py launch-health" in issue
+        and "bash scripts/run_chummer_design_supervisor.sh" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
@@ -3569,6 +3624,7 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     )
     assert any(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence" in issue
+        and "bash scripts/run_ooda_design_supervisor.sh" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
@@ -3793,6 +3849,93 @@ def test_weekly_governor_packet_rejects_task_local_telemetry_field_proof(
         in issue
         and "runtime_handoff_path" in issue
         and "frontier_briefs" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+
+
+def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "Successor-wave telemetry eta: 5.6d-2w, remaining milestones: 20, "
+        "remaining queue items: 41"
+    )
+    queue["items"][0]["proof"].append(
+        "Successor frontier ids to prioritize first: 2376135131"
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "critical path: 101, 102, 103, 104, 105 proves this package is ready"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Successor frontier detail: 2376135131 [W8] Publish weekly governor packets"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Successor-wave telemetry" in issue
+        and "remaining milestones" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "critical path" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Successor frontier ids to prioritize first" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Successor frontier detail" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS

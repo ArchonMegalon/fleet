@@ -94,6 +94,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "543dfd5",
     "f16f13b",
     "999231f",
+    "25836f6",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -125,12 +126,16 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rejects compile manifest freshness drift after weekly packet refresh",
     "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
+    "weekly pulse duplicate or ambiguous launch governance actions are rejected",
     "status-plane final claim drift blocks launch expansion and measured rollout readiness",
     "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
     "forbidden worker proof strings are rejected case-insensitively",
     "task-local telemetry field names are rejected as worker proof strings",
+    "successor-wave telemetry summary strings are rejected as worker proof strings",
+    "frontier-detail prompt strings are rejected as worker proof strings",
     "handoff polling phrase guard is enforced case-insensitively",
     "worker-run OODA helper guard is enforced case-insensitively",
+    "worker-run supervisor launcher guard is enforced case-insensitively",
     "run-helper failure proof strings are rejected case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "production verifier rejects non-canonical source path overrides",
@@ -145,6 +150,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
     "local proof floor commit f16f13b pinned for M106 run-helper failure guard",
     "local proof floor commit 999231f pinned for M106 source-input refresh guard",
+    "local proof floor commit 25836f6 pinned for M106 source refresh proof floor",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -164,12 +170,16 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "compile manifest freshness drift",
     "support-packet source_sha256 drift",
     "every measured rollout action",
+    "weekly pulse duplicate or ambiguous launch governance actions",
     "status-plane final claim drift",
     "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
     "forbidden worker proof strings",
     "task-local telemetry field names",
+    "successor-wave telemetry summary strings",
+    "frontier-detail prompt strings",
     "handoff polling phrase guard",
     "worker-run OODA helper guard",
+    "worker-run supervisor launcher guard",
     "run-helper failure proof strings",
     "proof paths outside package allowed path roots",
     "non-canonical source path overrides",
@@ -184,6 +194,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "local proof floor commit 543dfd5",
     "local proof floor commit f16f13b",
     "local proof floor commit 999231f",
+    "local proof floor commit 25836f6",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
@@ -197,6 +208,8 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "/var/lib/codex-fleet",
     "ACTIVE_RUN_HANDOFF.generated.md",
     "run_ooda_design_supervisor_until_quiet",
+    "run_chummer_design_supervisor.sh",
+    "run_ooda_design_supervisor.sh",
     "ooda_design_supervisor.py",
     "TASK_LOCAL_TELEMETRY.generated.json",
     "first_commands",
@@ -207,6 +220,13 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "polling_disabled",
     "runtime_handoff_path",
     "status_query_supported",
+    "remaining milestones",
+    "remaining queue items",
+    "critical path",
+    "eta:",
+    "eta ",
+    "successor frontier detail:",
+    "successor frontier ids to prioritize first",
     "operator telemetry",
     "supervisor status polling",
     "supervisor eta polling",
@@ -833,6 +853,21 @@ def _launch_decision(weekly_pulse: Dict[str, Any]) -> Dict[str, Any]:
 def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str, Any]) -> Dict[str, Any]:
     issues: List[str] = []
     generated_at = _parse_iso_utc(weekly_pulse.get("generated_at"))
+    decision_actions = [
+        str(row.get("action") or "").strip()
+        for row in weekly_pulse.get("governor_decisions") or []
+        if isinstance(row, dict) and str(row.get("action") or "").strip()
+    ]
+    duplicate_actions = sorted(
+        {
+            action
+            for action in decision_actions
+            if decision_actions.count(action) > 1
+        }
+    )
+    launch_action_rows = [
+        action for action in decision_actions if action in {"freeze_launch", "launch_expand"}
+    ]
     if str(weekly_pulse.get("contract_name") or "").strip() != "chummer.weekly_product_pulse":
         issues.append("weekly pulse contract_name is missing or unexpected")
     if _coerce_int(weekly_pulse.get("contract_version"), 0) < 3:
@@ -850,6 +885,16 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
         missing = [key for key in REQUIRED_LAUNCH_SIGNALS if not signals.get(key)]
         if missing:
             issues.append("weekly pulse launch governance decision is missing cited signal(s): " + ", ".join(missing))
+    if duplicate_actions:
+        issues.append(
+            "weekly pulse governor_decisions has duplicate action row(s): "
+            + ", ".join(duplicate_actions)
+        )
+    if len(launch_action_rows) != 1:
+        issues.append(
+            "weekly pulse must contain exactly one launch governance action "
+            f"(freeze_launch or launch_expand); found {len(launch_action_rows)}"
+        )
     return {
         "status": "pass" if not issues else "fail",
         "generated_at": str(weekly_pulse.get("generated_at") or "").strip(),
