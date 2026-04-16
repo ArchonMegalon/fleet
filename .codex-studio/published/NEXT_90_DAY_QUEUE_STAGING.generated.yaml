@@ -199,6 +199,7 @@ items:
     status: complete
     proof:
       - /docker/EA/docs/chummer5a_parity_lab/CHUMMER5A_PARITY_LAB_PACK.yaml
+      - /docker/EA/docs/chummer5a_parity_lab/README.md
       - /docker/EA/docs/chummer5a_parity_lab/oracle_baselines.yaml
       - /docker/EA/docs/chummer5a_parity_lab/veteran_workflow_pack.yaml
       - /docker/EA/docs/chummer5a_parity_lab/compare_packs.yaml
