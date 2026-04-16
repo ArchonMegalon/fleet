@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-16T19:16:41Z
+Generated: 2026-04-16T19:25:50Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -127,6 +127,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 ## Source Paths
 
+- closed_flagship_registry: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 - design_queue_staging: /docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml
 - flagship_readiness: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
 - journey_gates: /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json

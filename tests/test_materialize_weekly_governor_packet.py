@@ -53,6 +53,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     root = tmp_path / "repo"
     published = root / ".codex-studio" / "published"
     registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    closed_flagship_registry = tmp_path / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
     design_queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     queue = published / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     weekly = published / "WEEKLY_PRODUCT_PULSE.generated.json"
@@ -142,6 +143,29 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                             "title": "Keep the successor wave registry current and prune closed work without reopening architecture-cleanup debt.",
                         },
                     ],
+                }
+            ],
+        },
+    )
+    _write_yaml(
+        closed_flagship_registry,
+        {
+            "product": "chummer",
+            "program_wave": "next_12_biggest_wins",
+            "status": "complete",
+            "waves": [
+                {
+                    "id": "W1",
+                    "name": "Ship the flagship desktop",
+                    "status": "complete",
+                    "milestone_ids": [1],
+                }
+            ],
+            "milestones": [
+                {
+                    "id": 1,
+                    "title": "Gold install, update, and recovery lane across macOS, Windows, and Linux",
+                    "status": "complete",
                 }
             ],
         },
@@ -298,6 +322,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
         "root": root,
         "published": published,
         "registry": registry,
+        "closed_flagship_registry": closed_flagship_registry,
         "design_queue": design_queue,
         "queue": queue,
         "weekly": weekly,
@@ -320,6 +345,8 @@ def _verifier_args(paths: dict[str, Path], packet: Path) -> list[str]:
         str(paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"),
         "--successor-registry",
         str(paths["registry"]),
+        "--closed-flagship-registry",
+        str(paths["closed_flagship_registry"]),
         "--design-queue-staging",
         str(paths["design_queue"]),
         "--queue-staging",
@@ -348,6 +375,8 @@ def _run_materializer(paths: dict[str, Path], out: Path) -> subprocess.Completed
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -384,6 +413,8 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -662,6 +693,8 @@ def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -779,6 +812,8 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -871,6 +906,8 @@ def test_verify_next90_m106_governor_packet_rejects_active_run_source_path(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -926,6 +963,8 @@ def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -982,6 +1021,8 @@ def test_verify_next90_m106_governor_packet_rejects_support_source_hash_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1038,6 +1079,8 @@ def test_verify_next90_m106_governor_packet_rejects_packet_identity_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1115,6 +1158,8 @@ def test_weekly_governor_packet_fails_package_verification_on_package_meaning_dr
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1161,6 +1206,8 @@ def test_verify_next90_m106_governor_packet_rejects_stale_decision_ledger(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1218,6 +1265,8 @@ def test_verify_next90_m106_governor_packet_rejects_packet_older_than_support_so
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1278,6 +1327,8 @@ def test_verify_next90_m106_governor_packet_rejects_packet_older_than_status_pla
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1338,6 +1389,8 @@ def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1422,6 +1475,8 @@ def test_verify_next90_m106_governor_packet_rejects_out_of_scope_fleet_proof_pat
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1483,6 +1538,8 @@ def test_weekly_governor_packet_rejects_embedded_out_of_scope_fleet_proof_paths(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1548,6 +1605,8 @@ def test_weekly_governor_packet_rejects_sibling_repo_proof_paths(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1602,6 +1661,8 @@ def test_verify_next90_m106_governor_packet_rejects_flagship_reopen_guard_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1651,6 +1712,59 @@ def test_verify_next90_m106_governor_packet_rejects_flagship_reopen_guard_drift(
     )
 
 
+def test_verify_next90_m106_governor_packet_rejects_reopened_closed_flagship_registry(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    closed_registry = yaml.safe_load(
+        paths["closed_flagship_registry"].read_text(encoding="utf-8")
+    )
+    closed_registry["status"] = "in_progress"
+    closed_registry["waves"][0]["status"] = "in_progress"
+    closed_registry["milestones"][0]["status"] = "in_progress"
+    _write_yaml(paths["closed_flagship_registry"], closed_registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["source_input_health"]["status"] == "fail"
+    assert payload["status"] == "blocked"
+    assert (
+        payload["source_input_health"]["required_inputs"]["closed_flagship_registry"][
+            "status"
+        ]
+        == "in_progress"
+    )
+    assert (
+        "closed_flagship_registry status is not complete"
+        in payload["source_input_health"]["issues"]
+    )
+    assert any(
+        issue.startswith("closed_flagship_registry has reopened wave(s): W1")
+        for issue in payload["source_input_health"]["issues"]
+    )
+    assert any(
+        issue.startswith("closed_flagship_registry has reopened milestone(s): 1")
+        for issue in payload["source_input_health"]["issues"]
+    )
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "source input health no longer proves the closed flagship registry status is complete"
+        in verifier.stderr
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_resolving_proof_path_drift(
     tmp_path: Path,
 ) -> None:
@@ -1666,6 +1780,8 @@ def test_verify_next90_m106_governor_packet_rejects_resolving_proof_path_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1721,6 +1837,8 @@ def test_verify_next90_m106_governor_packet_rejects_local_proof_floor_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1776,6 +1894,8 @@ def test_verify_next90_m106_governor_packet_rejects_compile_manifest_artifact_dr
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1838,6 +1958,8 @@ def test_verify_next90_m106_governor_packet_rejects_stale_compile_manifest(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1897,6 +2019,8 @@ def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -1984,6 +2108,8 @@ def test_verify_next90_m106_governor_packet_rejects_missing_decision_action_ledg
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2053,6 +2179,8 @@ def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2142,6 +2270,8 @@ def test_weekly_governor_packet_allows_launch_expand_when_dependencies_and_gates
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2209,6 +2339,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2270,6 +2402,8 @@ def test_weekly_governor_packet_fails_package_verification_on_design_queue_drift
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2327,6 +2461,8 @@ def test_weekly_governor_packet_fails_package_verification_on_missing_structured
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2428,6 +2564,8 @@ def test_weekly_governor_packet_fails_package_verification_on_fleet_queue_mirror
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2489,6 +2627,8 @@ def test_weekly_governor_packet_fails_package_verification_on_successor_wave_dri
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2536,6 +2676,8 @@ def test_weekly_governor_packet_fails_package_verification_when_m106_leaves_w8(t
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2583,6 +2725,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_wave_drift(t
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2632,6 +2776,8 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_source_drift
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2688,6 +2834,8 @@ def test_weekly_governor_packet_fails_package_verification_when_registry_task_is
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2764,6 +2912,8 @@ def test_weekly_governor_packet_fails_package_verification_when_registry_evidenc
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2813,6 +2963,8 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_not_comple
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2862,6 +3014,8 @@ def test_weekly_governor_packet_fails_package_verification_when_queue_proof_is_m
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2922,6 +3076,8 @@ def test_weekly_governor_packet_fails_package_verification_when_frontier_pin_is_
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -2978,6 +3134,8 @@ def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3041,6 +3199,8 @@ def test_weekly_governor_packet_fails_when_bootstrap_guard_anchor_is_missing(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3103,6 +3263,8 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3172,6 +3334,8 @@ def test_weekly_governor_packet_rejects_active_run_state_artifact_proof(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3241,6 +3405,8 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3318,6 +3484,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3367,6 +3535,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_required_source_is_missin
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3424,6 +3594,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_source_path_cites_active_
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3481,6 +3653,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_support_package_proof_reg
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3539,6 +3713,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_support_packets_are_stale
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",
@@ -3605,6 +3781,8 @@ def test_weekly_governor_packet_blocks_loop_ready_when_parity_truth_drops_below_
             str(out),
             "--successor-registry",
             str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
             "--design-queue-staging",
             str(paths["design_queue"]),
             "--queue-staging",

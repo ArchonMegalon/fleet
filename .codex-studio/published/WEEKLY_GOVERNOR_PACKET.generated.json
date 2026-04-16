@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T19:16:41Z",
+  "generated_at": "2026-04-16T19:25:50Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -550,6 +550,10 @@
     "closed_work_task_id": "106.1",
     "do_not_reopen_owned_surfaces": true,
     "flagship_wave_guard": {
+      "closed_registry_milestone_count": 18,
+      "closed_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
+      "closed_registry_status": "complete",
+      "closed_registry_wave_count": 5,
       "closed_wave": "next_12_biggest_wins",
       "readiness_inputs": "read-only readiness, parity, journey, and support snapshots",
       "rule": "Successor M106 packet work may summarize flagship readiness inputs, but must not reopen or re-scope the closed flagship wave.",
@@ -724,6 +728,17 @@
       "support_packets successor_package_verification.status is not pass; weekly governor support truth must be backed by the M102 receipt-gated package proof"
     ],
     "required_inputs": {
+      "closed_flagship_registry": {
+        "milestone_count": 18,
+        "open_milestone_ids": [],
+        "open_wave_ids": [],
+        "program_wave": "next_12_biggest_wins",
+        "required_key": "program_wave",
+        "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
+        "state": "present",
+        "status": "complete",
+        "wave_count": 5
+      },
       "design_queue_staging": {
         "required_key": "items",
         "state": "present"
@@ -798,6 +813,7 @@
     "status": "fail"
   },
   "source_paths": {
+    "closed_flagship_registry": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml",
     "design_queue_staging": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
     "flagship_readiness": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
     "journey_gates": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
@@ -813,6 +829,7 @@
     "2376135131"
   ],
   "truth_inputs": {
+    "closed_flagship_registry_status": "complete",
     "closure_health_state": "clear",
     "flagship_parity_release_truth": {
       "families_below_gold_ready": [],

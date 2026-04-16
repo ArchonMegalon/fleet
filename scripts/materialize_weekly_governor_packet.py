@@ -33,6 +33,10 @@ SUCCESSOR_REGISTRY = (
     Path("/docker/chummercomplete/chummer-design/products/chummer")
     / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
 )
+CLOSED_FLAGSHIP_REGISTRY_PATH = (
+    Path("/docker/chummercomplete/chummer-design/products/chummer")
+    / "NEXT_12_BIGGEST_WINS_REGISTRY.yaml"
+)
 DESIGN_QUEUE_STAGING = (
     Path("/docker/chummercomplete/chummer-design/products/chummer")
     / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
@@ -195,6 +199,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         help="operator-readable Markdown companion for the weekly governor packet",
     )
     parser.add_argument("--successor-registry", default=str(SUCCESSOR_REGISTRY))
+    parser.add_argument("--closed-flagship-registry", default=str(CLOSED_FLAGSHIP_REGISTRY_PATH))
     parser.add_argument("--design-queue-staging", default=str(DESIGN_QUEUE_STAGING))
     parser.add_argument("--queue-staging", default=str(QUEUE_STAGING))
     parser.add_argument("--weekly-pulse", default=str(WEEKLY_PULSE))
@@ -772,6 +777,7 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
 def verify_source_inputs(
     *,
     registry: Dict[str, Any],
+    closed_flagship_registry: Dict[str, Any],
     design_queue: Dict[str, Any],
     queue: Dict[str, Any],
     weekly_pulse: Dict[str, Any],
@@ -783,6 +789,7 @@ def verify_source_inputs(
 ) -> Dict[str, Any]:
     required: Dict[str, tuple[Dict[str, Any], str]] = {
         "successor_registry": (registry, "program_wave"),
+        "closed_flagship_registry": (closed_flagship_registry, "program_wave"),
         "design_queue_staging": (design_queue, "items"),
         "queue_staging": (queue, "items"),
         "weekly_pulse": (weekly_pulse, "contract_name"),
@@ -836,6 +843,55 @@ def verify_source_inputs(
             support_age_seconds = int((dt.datetime.now(UTC) - support_generated_at).total_seconds())
             if support_age_seconds > SUPPORT_PACKETS_MAX_AGE_SECONDS:
                 issues.append(f"support_packets are stale ({support_age_seconds}s old)")
+    closed_flagship_status = str(closed_flagship_registry.get("status") or "").strip()
+    closed_flagship_wave = str(closed_flagship_registry.get("program_wave") or "").strip()
+    closed_waves = [
+        row
+        for row in closed_flagship_registry.get("waves") or []
+        if isinstance(row, dict)
+    ]
+    closed_milestones = [
+        row
+        for row in closed_flagship_registry.get("milestones") or []
+        if isinstance(row, dict)
+    ]
+    open_closed_waves = [
+        str(row.get("id") or "").strip()
+        for row in closed_waves
+        if str(row.get("status") or "").strip().lower() not in COMPLETE_STATUSES
+    ]
+    open_closed_milestones = [
+        _coerce_int(row.get("id"), -1)
+        for row in closed_milestones
+        if str(row.get("status") or "").strip().lower() not in COMPLETE_STATUSES
+        and _coerce_int(row.get("id"), -1) >= 0
+    ]
+    rows["closed_flagship_registry"].update(
+        {
+            "program_wave": closed_flagship_wave,
+            "status": closed_flagship_status or "missing",
+            "source_path": str(dict(source_paths or {}).get("closed_flagship_registry") or "").strip(),
+            "wave_count": len(closed_waves),
+            "milestone_count": len(closed_milestones),
+            "open_wave_ids": open_closed_waves,
+            "open_milestone_ids": open_closed_milestones,
+        }
+    )
+    if rows["closed_flagship_registry"]["state"] == "present":
+        if closed_flagship_wave != CLOSED_FLAGSHIP_WAVE:
+            issues.append("closed_flagship_registry program_wave is not next_12_biggest_wins")
+        if closed_flagship_status.lower() not in COMPLETE_STATUSES:
+            issues.append("closed_flagship_registry status is not complete")
+        if open_closed_waves:
+            issues.append(
+                "closed_flagship_registry has reopened wave(s): "
+                + ", ".join(open_closed_waves)
+            )
+        if open_closed_milestones:
+            issues.append(
+                "closed_flagship_registry has reopened milestone(s): "
+                + ", ".join(str(item) for item in open_closed_milestones)
+            )
     disallowed_source_paths = _disallowed_worker_proof_entries(
         [f"{name}: {path}" for name, path in sorted(dict(source_paths or {}).items())]
     )
@@ -1009,6 +1065,7 @@ def build_payload(
     *,
     repo_root: Path,
     registry: Dict[str, Any],
+    closed_flagship_registry: Dict[str, Any],
     design_queue: Dict[str, Any],
     queue: Dict[str, Any],
     weekly_pulse: Dict[str, Any],
@@ -1028,6 +1085,7 @@ def build_payload(
     weekly_input_health = verify_weekly_inputs(weekly_pulse, launch_decision)
     source_input_health = verify_source_inputs(
         registry=registry,
+        closed_flagship_registry=closed_flagship_registry,
         design_queue=design_queue,
         queue=queue,
         weekly_pulse=weekly_pulse,
@@ -1244,6 +1302,22 @@ def build_payload(
         "flagship_wave_guard": {
             "status": "closed_wave_not_reopened",
             "closed_wave": CLOSED_FLAGSHIP_WAVE,
+            "closed_registry_status": str(closed_flagship_registry.get("status") or "").strip(),
+            "closed_registry_path": str(dict(source_paths or {}).get("closed_flagship_registry") or "").strip(),
+            "closed_registry_wave_count": len(
+                [
+                    row
+                    for row in closed_flagship_registry.get("waves") or []
+                    if isinstance(row, dict)
+                ]
+            ),
+            "closed_registry_milestone_count": len(
+                [
+                    row
+                    for row in closed_flagship_registry.get("milestones") or []
+                    if isinstance(row, dict)
+                ]
+            ),
             "readiness_inputs": "read-only readiness, parity, journey, and support snapshots",
             "rule": (
                 "Successor M106 packet work may summarize flagship readiness inputs, "
@@ -1337,6 +1411,7 @@ def build_payload(
             "successor_dependency_posture": dependency_posture,
             "support_summary": support,
             "status_plane_final_claim": status_plane_final_claim,
+            "closed_flagship_registry_status": str(closed_flagship_registry.get("status") or "").strip(),
         },
         "decision_board": decision_board,
         "decision_gate_ledger": decision_gate_ledger,
@@ -1581,6 +1656,7 @@ def materialize(args: argparse.Namespace) -> Path:
     )
     source_paths = {
         "successor_registry": str(Path(args.successor_registry).resolve()),
+        "closed_flagship_registry": str(Path(args.closed_flagship_registry).resolve()),
         "design_queue_staging": str(Path(args.design_queue_staging).resolve()),
         "queue_staging": str(Path(args.queue_staging).resolve()),
         "weekly_pulse": str(Path(args.weekly_pulse).resolve()),
@@ -1592,6 +1668,7 @@ def materialize(args: argparse.Namespace) -> Path:
     payload = build_payload(
         repo_root=Path(args.repo_root).resolve(),
         registry=_read_yaml(Path(args.successor_registry).resolve()),
+        closed_flagship_registry=_read_yaml(Path(args.closed_flagship_registry).resolve()),
         design_queue=_read_yaml(Path(args.design_queue_staging).resolve()),
         queue=_read_yaml(Path(args.queue_staging).resolve()),
         weekly_pulse=_read_json(Path(args.weekly_pulse).resolve()),

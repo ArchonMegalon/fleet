@@ -35,6 +35,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         default=str(PUBLISHED / "WEEKLY_GOVERNOR_PACKET.generated.md"),
     )
     parser.add_argument("--successor-registry", default=str(weekly.SUCCESSOR_REGISTRY))
+    parser.add_argument("--closed-flagship-registry", default=str(weekly.CLOSED_FLAGSHIP_REGISTRY_PATH))
     parser.add_argument("--design-queue-staging", default=str(weekly.DESIGN_QUEUE_STAGING))
     parser.add_argument("--queue-staging", default=str(weekly.QUEUE_STAGING))
     parser.add_argument("--weekly-pulse", default=str(weekly.WEEKLY_PULSE))
@@ -178,6 +179,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     packet_path = Path(args.packet).resolve()
     markdown_path = Path(args.markdown).resolve()
     registry_path = Path(args.successor_registry).resolve()
+    closed_flagship_registry_path = Path(args.closed_flagship_registry).resolve()
     design_queue_path = Path(args.design_queue_staging).resolve()
     queue_path = Path(args.queue_staging).resolve()
     weekly_pulse_path = Path(args.weekly_pulse).resolve()
@@ -190,6 +192,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     packet = _read_json(packet_path)
     markdown = markdown_path.read_text(encoding="utf-8") if markdown_path.is_file() else ""
     registry = weekly._read_yaml(registry_path)
+    closed_flagship_registry = weekly._read_yaml(closed_flagship_registry_path)
     design_queue = weekly._read_yaml(design_queue_path)
     queue = weekly._read_yaml(queue_path)
     weekly_pulse = weekly._read_json(weekly_pulse_path)
@@ -205,6 +208,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     )
     source_paths = {
         "successor_registry": str(registry_path),
+        "closed_flagship_registry": str(closed_flagship_registry_path),
         "design_queue_staging": str(design_queue_path),
         "queue_staging": str(queue_path),
         "weekly_pulse": str(weekly_pulse_path),
@@ -219,6 +223,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     live_payload = weekly.build_payload(
         repo_root=repo_root,
         registry=registry,
+        closed_flagship_registry=closed_flagship_registry,
         design_queue=design_queue,
         queue=queue,
         weekly_pulse=weekly_pulse,
@@ -233,6 +238,7 @@ def verify(args: argparse.Namespace) -> List[str]:
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
     required_inputs = dict(dict(packet.get("source_input_health") or {}).get("required_inputs") or {})
+    closed_flagship_input = dict(required_inputs.get("closed_flagship_registry") or {})
     support_input_health = dict(required_inputs.get("support_packets") or {})
     local_commit_resolution = dict(packet_verification.get("local_commit_resolution") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
@@ -538,6 +544,36 @@ def verify(args: argparse.Namespace) -> List[str]:
         flagship_wave_guard.get("closed_wave") == weekly.CLOSED_FLAGSHIP_WAVE,
         issues,
         "repeat prevention flagship wave guard closed wave drifted",
+    )
+    _require(
+        flagship_wave_guard.get("closed_registry_status") == "complete",
+        issues,
+        "repeat prevention flagship wave guard no longer proves the closed registry is complete",
+    )
+    _require(
+        flagship_wave_guard.get("closed_registry_path") == str(closed_flagship_registry_path),
+        issues,
+        "repeat prevention flagship wave guard closed registry path drifted",
+    )
+    _require(
+        closed_flagship_input.get("status") == "complete",
+        issues,
+        "source input health no longer proves the closed flagship registry status is complete",
+    )
+    _require(
+        closed_flagship_input.get("program_wave") == weekly.CLOSED_FLAGSHIP_WAVE,
+        issues,
+        "source input health no longer pins the closed flagship registry wave",
+    )
+    _require(
+        closed_flagship_input.get("open_wave_ids") == [],
+        issues,
+        "closed flagship registry input reports reopened wave ids",
+    )
+    _require(
+        closed_flagship_input.get("open_milestone_ids") == [],
+        issues,
+        "closed flagship registry input reports reopened milestone ids",
     )
     _require(
         "must not reopen" in str(flagship_wave_guard.get("rule") or ""),
