@@ -82,6 +82,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 6f468ee9 tightens M102 worker-state proof guard so run-state helper output cannot close desktop-native trust evidence.
       - /docker/chummercomplete/chummer.run-services commit 4ed1f541 pins the M102 supervisor proof guard floor so future shards verify the current completed-package guard.
       - /docker/chummercomplete/chummer.run-services commit f3300fd9 pins the M102 supervisor proof guard into the verifier and unit guard.
+      - /docker/chummercomplete/chummer.run-services commit 06fa0634 pins the M102 local proof floor guard.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
