@@ -453,6 +453,7 @@ items:
       - local proof floor commit 999231f pinned for M106 source-input refresh guard
       - local proof floor commit 25836f6 pinned for M106 source refresh proof floor
       - local proof floor commit 3e7ee9b pinned for M106 governor packet proof floor
+      - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
