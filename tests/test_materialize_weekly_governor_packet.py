@@ -740,6 +740,39 @@ def test_verify_next90_m106_governor_packet_accepts_checked_in_closeout(tmp_path
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
 
 
+def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    support = json.loads(paths["support"].read_text(encoding="utf-8"))
+    support["successor_package_verification"] = {
+        "status": "fail",
+        "issues": ["queue proof missing receipt-gated M102 marker"],
+    }
+    _write_json(paths["support"], support)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "fail"
+    assert payload["status"] == "blocked"
+    assert payload["decision_board"]["current_launch_action"] == "freeze_launch"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 0, verifier.stderr
+    assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
+
+
 def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
     tmp_path: Path,
 ) -> None:

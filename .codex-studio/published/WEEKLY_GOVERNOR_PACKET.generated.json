@@ -72,9 +72,9 @@
       },
       {
         "name": "source_input_health",
-        "observed": "pass",
+        "observed": "fail",
         "required": "pass",
-        "state": "pass"
+        "state": "fail"
       },
       {
         "name": "decision_alignment",
@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T16:38:06Z",
+  "generated_at": "2026-04-16T16:45:38Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -200,7 +200,7 @@
       "queue closeout status remains complete and carries the required weekly governor proof receipts",
       "public status copy is derived from the same measured decision ledger as the governor packet"
     ],
-    "loop_status": "ready",
+    "loop_status": "blocked",
     "required_decision_actions": [
       "launch_expand",
       "freeze_launch",
@@ -643,20 +643,22 @@
   ],
   "schema_version": 1,
   "source_input_health": {
-    "issues": [],
+    "issues": [
+      "support_packets successor_package_verification.status is not pass; weekly governor support truth must be backed by the M102 receipt-gated package proof"
+    ],
     "required_inputs": {
       "design_queue_staging": {
         "required_key": "items",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-16T16:29:59Z",
+        "generated_at": "2026-04-16T16:44:50Z",
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-16T16:29:59Z",
+        "generated_at": "2026-04-16T16:44:50Z",
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
         "state": "present"
@@ -698,13 +700,13 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-16T16:29:58Z",
+        "generated_at": "2026-04-16T16:44:50Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "53230fa2a5c0c4bf8fb8c58a67c2871e452adbbb6a0d1a478f88d0dab5026f89",
+        "source_sha256": "b5171db0114258434f13659a1f8f9d8f7595ccff23c301f0cdd958f31d6d1489",
         "state": "present",
-        "successor_package_verification_status": "pass"
+        "successor_package_verification_status": "fail"
       },
       "weekly_pulse": {
         "generated_at": "2026-04-15T08:25:28Z",
@@ -713,7 +715,7 @@
         "state": "present"
       }
     },
-    "status": "pass"
+    "status": "fail"
   },
   "source_paths": {
     "design_queue_staging": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
@@ -725,8 +727,8 @@
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
   },
-  "status": "ready",
-  "status_reason": "Fleet package is closed and the weekly measured rollout loop is ready.",
+  "status": "blocked",
+  "status_reason": "Fleet package closeout or measured rollout loop verification is blocked.",
   "successor_frontier_ids": [
     "2376135131"
   ],

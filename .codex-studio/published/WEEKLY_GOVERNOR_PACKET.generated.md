@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-16T16:38:06Z
+Generated: 2026-04-16T16:45:38Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -19,13 +19,13 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 - Package verification: pass
 - Weekly input health: pass
-- Source input health: pass
+- Source input health: fail
 - Decision alignment: pass
 - Expected launch action: freeze_launch
 - Actual launch action: freeze_launch
 - Package closeout: fleet_package_complete
 - Do not reopen package: True
-- Measured rollout loop: ready
+- Measured rollout loop: blocked
 - Registry work task 106.1 status: complete
 - Required registry evidence markers: 22
 - Queue closeout status: complete
@@ -84,7 +84,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 | --- | --- | --- | --- |
 | package_authority | pass | pass | pass |
 | weekly_input_health | pass | pass | pass |
-| source_input_health | pass | pass | pass |
+| source_input_health | fail | pass | fail |
 | decision_alignment | pass | freeze_launch | freeze_launch |
 | successor_dependencies | blocked | satisfied | open |
 | flagship_readiness | pass | pass | pass |

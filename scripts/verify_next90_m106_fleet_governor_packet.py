@@ -233,6 +233,9 @@ def verify(args: argparse.Namespace) -> List[str]:
     support_input_health = dict(required_inputs.get("support_packets") or {})
     local_commit_resolution = dict(packet_verification.get("local_commit_resolution") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
+    weekly_health = dict(packet.get("weekly_input_health") or {})
+    source_health = dict(packet.get("source_input_health") or {})
+    decision_alignment = dict(packet.get("decision_alignment") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
     decision_board = dict(packet.get("decision_board") or {})
     decision_gate_ledger = dict(packet.get("decision_gate_ledger") or {})
@@ -301,7 +304,30 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues=issues,
     )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
-    _require(packet.get("status") == "ready", issues, "packet status is not ready")
+    _require(weekly_health.get("status") == "pass", issues, "packet weekly_input_health.status is not pass")
+    _require(decision_alignment.get("status") == "pass", issues, "packet decision_alignment.status is not pass")
+    source_input_status = source_health.get("status")
+    source_input_blocked = source_input_status != "pass"
+    if source_input_blocked:
+        _require(source_health.get("issues") != [], issues, "blocked source_input_health does not name its blocking issue")
+        _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite source input failure")
+        _require(
+            decision_board.get("current_launch_action") == "freeze_launch",
+            issues,
+            "source-blocked packet does not freeze launch",
+        )
+        _require(
+            dict(decision_board.get("launch_expand") or {}).get("state") == "blocked",
+            issues,
+            "source-blocked packet does not block launch expansion",
+        )
+        _require(
+            dict(decision_board.get("freeze_launch") or {}).get("state") == "active",
+            issues,
+            "source-blocked packet does not keep freeze_launch active",
+        )
+    else:
+        _require(packet.get("status") == "ready", issues, "packet status is not ready")
     support_source_sha256 = str(support_input_health.get("source_sha256") or "").strip().lower()
     actual_support_source_sha256 = _sha256_file(support_packets_path)
     _require(
@@ -381,7 +407,14 @@ def verify(args: argparse.Namespace) -> List[str]:
         "compile manifest does not list weekly governor packet artifact(s): "
         + ", ".join(missing_compile_artifacts),
     )
-    _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
+    if source_input_blocked:
+        _require(
+            loop.get("loop_status") == "blocked",
+            issues,
+            "source-blocked packet measured rollout loop is not blocked",
+        )
+    else:
+        _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
     _require(
         required_decision_actions
         == ["launch_expand", "freeze_launch", "canary", "rollback", "focus_shift"],
