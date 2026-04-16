@@ -86,6 +86,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit f23b6dc4 records the M102 proof floor in the verifier.
       - /docker/chummercomplete/chummer.run-services commit 7cf5461b pins the M102 desktop trust proof floor.
       - /docker/chummercomplete/chummer.run-services commit cae283e9 requires the current M102 desktop trust proof floor.
+      - /docker/chummercomplete/chummer.run-services commit e908400b pins the M102 current desktop trust proof floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
