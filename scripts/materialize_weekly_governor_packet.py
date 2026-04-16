@@ -91,6 +91,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "ade57ae",
     "55d8282",
     "144eae5",
+    "543dfd5",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -123,10 +124,12 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
     "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
     "status-plane final claim drift blocks launch expansion and measured rollout readiness",
+    "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
     "forbidden worker proof strings are rejected case-insensitively",
     "task-local telemetry field names are rejected as worker proof strings",
     "handoff polling phrase guard is enforced case-insensitively",
     "worker-run OODA helper guard is enforced case-insensitively",
+    "run-helper failure proof strings are rejected case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "production verifier rejects non-canonical source path overrides",
     "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
@@ -137,6 +140,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard",
     "local proof floor commit 55d8282 pinned for M106 source-authority guard",
     "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
+    "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -157,10 +161,12 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "support-packet source_sha256 drift",
     "every measured rollout action",
     "status-plane final claim drift",
+    "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
     "forbidden worker proof strings",
     "task-local telemetry field names",
     "handoff polling phrase guard",
     "worker-run OODA helper guard",
+    "run-helper failure proof strings",
     "proof paths outside package allowed path roots",
     "non-canonical source path overrides",
     "reused closed successor frontier rows",
@@ -171,6 +177,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "local proof floor commit ade57ae",
     "local proof floor commit 55d8282",
     "local proof floor commit 144eae5",
+    "local proof floor commit 543dfd5",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
@@ -205,7 +212,13 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "worker runs",
     "operator/OODA loop",
     "operator ooda loop",
+    "operator/OODA loop owns telemetry",
+    "operator ooda loop owns telemetry",
     "run failure",
+    "hard-blocked",
+    "hard blocked",
+    "non-zero during active runs",
+    "nonzero during active runs",
     "--telemetry-answer",
     "codexea --telemetry",
     "chummer_design_supervisor status",
@@ -1420,6 +1433,18 @@ def build_payload(
         },
     }
     packet_status = "ready" if package_complete and measured_loop_ready else "blocked"
+    if package_complete and measured_loop_ready:
+        status_reason = "Fleet package is closed and the weekly measured rollout loop is ready."
+    elif package_complete:
+        status_reason = (
+            "Fleet package is closed; measured rollout remains blocked by current "
+            "source, dependency, or sibling gates."
+        )
+    else:
+        status_reason = (
+            "Fleet package closeout is blocked; inspect package_verification issues "
+            "before treating this slice as closed."
+        )
     decision_board = {
         "current_launch_action": launch_action,
         "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
@@ -1477,11 +1502,7 @@ def build_payload(
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
         "status": packet_status,
-        "status_reason": (
-            "Fleet package is closed and the weekly measured rollout loop is ready."
-            if packet_status == "ready"
-            else "Fleet package closeout or measured rollout loop verification is blocked."
-        ),
+        "status_reason": status_reason,
         "generated_at": iso_now(),
         "as_of": str(weekly_pulse.get("as_of") or "").strip(),
         "program_wave": "next_90_day_product_advance",

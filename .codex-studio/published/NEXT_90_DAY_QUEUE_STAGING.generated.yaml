@@ -417,6 +417,7 @@ items:
       - task-local telemetry field names are rejected as worker proof strings
       - handoff polling phrase guard is enforced case-insensitively
       - worker-run OODA helper guard is enforced case-insensitively
+      - run-helper failure proof strings are rejected case-insensitively
       - verifier rejects Fleet proof paths outside package allowed path roots
       - production verifier rejects non-canonical source path overrides
       - verifier rejects reused closed successor frontier rows outside the Fleet M106 package

@@ -37,7 +37,13 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "worker runs",
     "operator/OODA loop",
     "operator ooda loop",
+    "operator/OODA loop owns telemetry",
+    "operator ooda loop owns telemetry",
     "run failure",
+    "hard-blocked",
+    "hard blocked",
+    "non-zero during active runs",
+    "nonzero during active runs",
     "--telemetry-answer",
     "codexea --telemetry",
     "chummer_design_supervisor status",
@@ -130,10 +136,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json.",
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
                                 "status-plane final claim drift blocks launch expansion and measured rollout readiness.",
+                                "status_reason distinguishes closed Fleet package proof from blocked rollout gates.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "task-local telemetry field names are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
+                                "run-helper failure proof strings are rejected case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "Production verifier rejects non-canonical source path overrides.",
                                 "Verifier rejects reused closed successor frontier rows outside the Fleet M106 package.",
@@ -144,6 +152,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard.",
                                 "local proof floor commit 55d8282 pinned for M106 source-authority guard.",
                                 "local proof floor commit 144eae5 pinned for M106 worker-run helper guard.",
+                                "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard.",
                                 "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages.",
                             ],
                         },
@@ -226,10 +235,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json",
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
                         "status-plane final claim drift blocks launch expansion and measured rollout readiness",
+                        "status_reason distinguishes closed Fleet package proof from blocked rollout gates",
                         "forbidden worker proof strings are rejected case-insensitively",
                         "task-local telemetry field names are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
+                        "run-helper failure proof strings are rejected case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "production verifier rejects non-canonical source path overrides",
                         "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
@@ -240,6 +251,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "local proof floor commit ade57ae pinned for M106 task-local telemetry field guard",
                         "local proof floor commit 55d8282 pinned for M106 source-authority guard",
                         "local proof floor commit 144eae5 pinned for M106 worker-run helper guard",
+                        "local proof floor commit 543dfd5 pinned for M106 markdown proof-floor guard",
                         "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -514,6 +526,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "ade57ae",
         "55d8282",
         "144eae5",
+        "543dfd5",
     ]
     assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -557,6 +570,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "ade57ae",
         "55d8282",
         "144eae5",
+        "543dfd5",
     ]
     assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
@@ -670,7 +684,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
     assert "- Closed successor frontier ids: 2376135131" in markdown
-    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5" in markdown
+    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
@@ -929,6 +943,10 @@ def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet
     assert payload["package_verification"]["status"] == "pass"
     assert payload["source_input_health"]["status"] == "fail"
     assert payload["status"] == "blocked"
+    assert (
+        payload["status_reason"]
+        == "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates."
+    )
     assert payload["decision_board"]["current_launch_action"] == "freeze_launch"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
     assert payload["measured_rollout_loop"]["blocked_dependency_package_ids"] == [
@@ -1994,7 +2012,7 @@ def test_verify_next90_m106_governor_packet_rejects_markdown_proof_floor_prefix(
     markdown_path = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"
     markdown = markdown_path.read_text(encoding="utf-8")
     markdown_path.write_text(
-        markdown.replace(", 144eae5\n", "\n"),
+        markdown.replace(", 543dfd5\n", "\n"),
         encoding="utf-8",
     )
 
@@ -2502,7 +2520,7 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert payload["status"] == "blocked"
     assert (
         payload["status_reason"]
-        == "Fleet package closeout or measured rollout loop verification is blocked."
+        == "Fleet package closeout is blocked; inspect package_verification issues before treating this slice as closed."
     )
     assert payload["package_verification"]["status"] == "fail"
     assert payload["package_closeout"]["status"] == "blocked"
@@ -3714,10 +3732,16 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
     queue["items"][0]["proof"].append(
         "Operator/OODA loop says active-run helper commands inside worker runs are okay"
     )
+    queue["items"][0]["proof"].append(
+        "Hard-blocked helpers return non-zero during active runs but still prove the package"
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "Active-run helper commands caused a run failure but still prove closure"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Operator/OODA loop owns telemetry, so worker proof can cite it"
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -3770,6 +3794,18 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
         in issue
         and "Active-run helper commands" in issue
         and "run failure" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Hard-blocked helpers" in issue
+        and "non-zero during active runs" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Operator/OODA loop owns telemetry" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
