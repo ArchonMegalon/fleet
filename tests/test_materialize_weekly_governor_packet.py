@@ -123,6 +123,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                                 "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention.",
+                                "local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard.",
                                 "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages.",
                             ],
                         },
@@ -211,6 +212,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                         "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
+                        "local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard",
                         "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -481,6 +483,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "3580ba8",
         "eeafd9e",
         "1ba508e",
+        "6d1663c",
     ]
     assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -520,6 +523,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "3580ba8",
         "eeafd9e",
         "1ba508e",
+        "6d1663c",
     ]
     assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True
@@ -632,7 +636,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert "- Closed package: next90-m106-fleet-governor-packet" in markdown
     assert "- Closed work task: 106.1" in markdown
     assert "- Closed successor frontier ids: 2376135131" in markdown
-    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e" in markdown
+    assert "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c" in markdown
     assert "- Do not reopen owned surfaces: True" in markdown
     assert "- Worker command guard: active_run_helpers_forbidden" in markdown
     assert f"- Blocked helper markers: {', '.join(BLOCKED_WORKER_PROOF_MARKERS)}" in markdown
