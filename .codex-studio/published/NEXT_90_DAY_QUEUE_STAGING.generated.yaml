@@ -376,6 +376,7 @@ items:
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
       - local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention
       - local proof floor commit 6d1663c pinned for M106 governor packet dependency-routing guard
+      - local proof floor commit ade57ae pinned for M106 task-local telemetry field guard
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
