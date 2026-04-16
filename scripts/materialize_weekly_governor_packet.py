@@ -282,6 +282,7 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "operator ooda loop",
     "operator/OODA loop owns telemetry",
     "operator ooda loop owns telemetry",
+    "ooda loop owns telemetry",
     "operator-owned telemetry",
     "operator-owned run-helper",
     "operator-owned helper",
