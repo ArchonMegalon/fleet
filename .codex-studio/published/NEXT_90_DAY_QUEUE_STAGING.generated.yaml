@@ -159,6 +159,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 52086c9d tightens the M101 active-run field proof guard so copied task-local status fields cannot close the completed package.
       - /docker/chummercomplete/chummer6-ui-finish commit 82df294e pins the M101 active-run field proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit bb90dca8 tightens M101 verify entrypoint hygiene.
+      - /docker/chummercomplete/chummer6-ui-finish commit 20487c22 pins M101 verify entrypoint proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit bc01c725 pins the M101 release train proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
