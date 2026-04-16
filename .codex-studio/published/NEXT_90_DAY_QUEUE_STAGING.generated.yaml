@@ -479,6 +479,7 @@ items:
       - local proof floor commit 26679c7 pinned for M106 refreshed packet artifact floor
       - local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard
       - local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard
+      - local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
