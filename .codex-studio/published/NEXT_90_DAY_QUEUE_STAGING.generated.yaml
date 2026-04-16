@@ -184,6 +184,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 75b38965 tightens M101 blocked-helper proof source traceability.
       - /docker/chummercomplete/chummer6-ui-finish commit db4fc1e1 tightens M101 worker-context proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 4a4079f5 pins the latest M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 9b97ab1a tightens M101 primary route-truth proof so Avalonia primary evidence cannot smuggle fallback tokens into proof-bearing fields.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
