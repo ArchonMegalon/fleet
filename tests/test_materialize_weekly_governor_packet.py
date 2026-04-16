@@ -1384,6 +1384,71 @@ def test_weekly_governor_packet_rejects_embedded_out_of_scope_fleet_proof_paths(
     )
 
 
+def test_weekly_governor_packet_rejects_sibling_repo_proof_paths(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "/docker/EA/docs/chummer_governor_packets/README.md belongs to a sibling package"
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "registry note cites /docker/chummercomplete/chummer.run-services/README.md as Fleet closeout proof"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert any(
+        "queue item proof includes Fleet proof path(s) outside allowed package roots"
+        in issue
+        and "/docker/EA/docs/chummer_governor_packets/README.md" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes Fleet proof path(s) outside allowed package roots"
+        in issue
+        and "/docker/chummercomplete/chummer.run-services/README.md" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+
+
 def test_verify_next90_m106_governor_packet_rejects_flagship_reopen_guard_drift(
     tmp_path: Path,
 ) -> None:

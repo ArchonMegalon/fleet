@@ -286,6 +286,7 @@ def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
         if first_token:
             candidates.append(first_token)
         candidates.extend(re.findall(r"/docker/fleet/[^\s,;:]+", text))
+        candidates.extend(re.findall(r"/docker/(?!fleet/)[^\s,;:]+", text))
         seen: set[str] = set()
         for candidate in candidates:
             if candidate in seen:
@@ -294,6 +295,9 @@ def _fleet_proof_path_scope_issues(entries: List[str]) -> List[str]:
             relative = ""
             if candidate.startswith("/docker/fleet/"):
                 relative = candidate.removeprefix("/docker/fleet/")
+            elif candidate.startswith("/docker/"):
+                issues.append(candidate)
+                continue
             elif candidate.startswith(tuple(f"{root}/" for root in ALLOWED_PATHS)):
                 relative = candidate
             if relative and not relative.startswith(allowed_prefixes):
