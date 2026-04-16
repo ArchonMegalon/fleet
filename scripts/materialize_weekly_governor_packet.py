@@ -127,6 +127,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "handoff polling phrase guard is enforced case-insensitively",
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "production verifier rejects non-canonical source path overrides",
+    "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
     "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -158,6 +159,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "handoff polling phrase guard",
     "proof paths outside package allowed path roots",
     "non-canonical source path overrides",
+    "reused closed successor frontier rows",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
     "local proof floor commit 1ba508e",
@@ -584,6 +586,21 @@ def _queue_mirror_drift(design_item: Dict[str, Any], item: Dict[str, Any]) -> Li
     return drift
 
 
+def _frontier_reuse_issues(items: List[Dict[str, Any]], prefix: str) -> List[str]:
+    reused = [
+        str(row.get("package_id") or "").strip() or "<missing>"
+        for row in items
+        if str(row.get("package_id") or "").strip() != PACKAGE_ID
+        and str(row.get("frontier_id") or "").strip() in SUCCESSOR_FRONTIER_IDS
+    ]
+    if not reused:
+        return []
+    return [
+        f"{prefix} reuses closed successor frontier 2376135131 outside {PACKAGE_ID}: "
+        + ", ".join(reused)
+    ]
+
+
 def verify_package(
     registry: Dict[str, Any],
     design_queue: Dict[str, Any],
@@ -630,6 +647,8 @@ def verify_package(
         issues.append(f"design queue item {PACKAGE_ID} is missing from canonical staging queue")
     elif len(design_items) > 1:
         issues.append(f"design queue staging has duplicate package rows for {PACKAGE_ID}")
+    issues.extend(_frontier_reuse_issues(design_queue.get("items") or [], "design queue"))
+    issues.extend(_frontier_reuse_issues(queue.get("items") or [], "queue"))
     if str(design_queue.get("program_wave") or "").strip() != PROGRAM_WAVE:
         issues.append("design queue staging program_wave is not next_90_day_product_advance")
     if str(design_queue.get("status") or "").strip() != QUEUE_STATUS:

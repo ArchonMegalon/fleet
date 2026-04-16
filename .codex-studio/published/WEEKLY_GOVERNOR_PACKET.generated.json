@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T20:20:55Z",
+  "generated_at": "2026-04-16T20:28:41Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -521,6 +521,7 @@
       "handoff polling phrase guard is enforced case-insensitively",
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "production verifier rejects non-canonical source path overrides",
+      "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
       "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -552,6 +553,7 @@
       "handoff polling phrase guard",
       "proof paths outside package allowed path roots",
       "non-canonical source path overrides",
+      "reused closed successor frontier rows",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131",
       "local proof floor commit 1ba508e",

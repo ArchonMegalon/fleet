@@ -130,6 +130,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "Production verifier rejects non-canonical source path overrides.",
+                                "Verifier rejects reused closed successor frontier rows outside the Fleet M106 package.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                                 "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention.",
@@ -223,6 +224,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "handoff polling phrase guard is enforced case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "production verifier rejects non-canonical source path overrides",
+                        "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                         "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -2436,6 +2438,45 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is False
     assert "queue item allowed_paths no longer match package authority" in payload["package_verification"]["issues"]
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_rejects_reused_closed_frontier_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    duplicate = dict(queue["items"][0])
+    duplicate["package_id"] = "next90-m106-fleet-governor-packet-repeat"
+    duplicate["title"] = "Repeat closed weekly governor packet"
+    queue["items"].append(duplicate)
+    _write_yaml(paths["queue"], queue)
+
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    design_duplicate = dict(design_queue["items"][0])
+    design_duplicate["package_id"] = "next90-m106-fleet-governor-packet-repeat"
+    design_duplicate["title"] = "Repeat closed weekly governor packet"
+    design_queue["items"].append(design_duplicate)
+    _write_yaml(paths["design_queue"], design_queue)
+
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked"
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["do_not_reopen_package"] is False
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert (
+        "design queue reuses closed successor frontier 2376135131 outside "
+        "next90-m106-fleet-governor-packet: next90-m106-fleet-governor-packet-repeat"
+        in payload["package_verification"]["issues"]
+    )
+    assert (
+        "queue reuses closed successor frontier 2376135131 outside "
+        "next90-m106-fleet-governor-packet: next90-m106-fleet-governor-packet-repeat"
+        in payload["package_verification"]["issues"]
+    )
 
 
 def test_weekly_governor_packet_fails_package_verification_on_design_queue_drift(
