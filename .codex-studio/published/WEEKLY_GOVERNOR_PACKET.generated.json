@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T17:26:07Z",
+  "generated_at": "2026-04-16T19:16:41Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -399,6 +399,10 @@
         {
           "commit": "eeafd9e",
           "status": "present"
+        },
+        {
+          "commit": "1ba508e",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -415,7 +419,8 @@
         "6fd5bfe",
         "3418b3c",
         "3580ba8",
-        "eeafd9e"
+        "eeafd9e",
+        "1ba508e"
       ],
       "status": "pass"
     },
@@ -432,7 +437,8 @@
       "6fd5bfe",
       "3418b3c",
       "3580ba8",
-      "eeafd9e"
+      "eeafd9e",
+      "1ba508e"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -483,7 +489,7 @@
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-      "local proof floor commit eeafd9e pinned for M106 governor packet repeat prevention",
+      "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -509,7 +515,7 @@
       "proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131",
-      "local proof floor commit eeafd9e",
+      "local proof floor commit 1ba508e",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -603,6 +609,10 @@
         {
           "commit": "eeafd9e",
           "status": "present"
+        },
+        {
+          "commit": "1ba508e",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -619,7 +629,8 @@
         "6fd5bfe",
         "3418b3c",
         "3580ba8",
-        "eeafd9e"
+        "eeafd9e",
+        "1ba508e"
       ],
       "status": "pass"
     },
@@ -636,7 +647,8 @@
       "6fd5bfe",
       "3418b3c",
       "3580ba8",
-      "eeafd9e"
+      "eeafd9e",
+      "1ba508e"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -717,13 +729,13 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-16T16:44:50Z",
+        "generated_at": "2026-04-16T19:11:37Z",
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-16T16:44:50Z",
+        "generated_at": "2026-04-16T19:11:37Z",
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
         "state": "present"
@@ -758,7 +770,7 @@
         "state": "pass"
       },
       "status_plane": {
-        "generated_at": "2026-04-16T16:11:57Z",
+        "generated_at": "2026-04-16T18:32:54Z",
         "required_key": "whole_product_final_claim_status",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
         "state": "present"
@@ -768,11 +780,11 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-16T16:44:50Z",
+        "generated_at": "2026-04-16T19:11:36Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "b5171db0114258434f13659a1f8f9d8f7595ccff23c301f0cdd958f31d6d1489",
+        "source_sha256": "0dc107612e352e446594a98faecfdf8f89311683efefae55a1656a8779841e5f",
         "state": "present",
         "successor_package_verification_status": "fail"
       },
