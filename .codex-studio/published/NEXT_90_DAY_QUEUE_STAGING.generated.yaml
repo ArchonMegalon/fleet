@@ -173,6 +173,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 1c7b5819 tightens M101 queue proof commit guard so completed queue proof commit citations must resolve locally inside package scope.
       - /docker/chummercomplete/chummer6-ui-finish commit aa394d32 pins the M101 queue proof commit guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 8db934d3 tightens M101 Avalonia startup-smoke receipt independence proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit cb1fe210 pins M101 receipt independence proof.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
