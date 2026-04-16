@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-16T21:53:50Z
+Generated: 2026-04-16T21:58:57Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
