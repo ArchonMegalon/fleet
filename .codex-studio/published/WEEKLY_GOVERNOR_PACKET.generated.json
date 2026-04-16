@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T23:43:00Z",
+  "generated_at": "2026-04-16T23:50:10Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -518,6 +518,14 @@
         {
           "commit": "83d2d21",
           "status": "present"
+        },
+        {
+          "commit": "e74a7ec",
+          "status": "present"
+        },
+        {
+          "commit": "8fb8d40",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -551,7 +559,9 @@
         "26679c7",
         "ef50370",
         "a1be389",
-        "83d2d21"
+        "83d2d21",
+        "e74a7ec",
+        "8fb8d40"
       ],
       "status": "pass"
     },
@@ -585,7 +595,9 @@
       "26679c7",
       "ef50370",
       "a1be389",
-      "83d2d21"
+      "83d2d21",
+      "e74a7ec",
+      "8fb8d40"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -667,6 +679,8 @@
       "local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard",
       "local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard",
       "local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard",
+      "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
+      "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -723,6 +737,8 @@
       "local proof floor commit ef50370",
       "local proof floor commit a1be389",
       "local proof floor commit 83d2d21",
+      "local proof floor commit e74a7ec",
+      "local proof floor commit 8fb8d40",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -891,6 +907,14 @@
         {
           "commit": "83d2d21",
           "status": "present"
+        },
+        {
+          "commit": "e74a7ec",
+          "status": "present"
+        },
+        {
+          "commit": "8fb8d40",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -924,7 +948,9 @@
         "26679c7",
         "ef50370",
         "a1be389",
-        "83d2d21"
+        "83d2d21",
+        "e74a7ec",
+        "8fb8d40"
       ],
       "status": "pass"
     },
@@ -958,7 +984,9 @@
       "26679c7",
       "ef50370",
       "a1be389",
-      "83d2d21"
+      "83d2d21",
+      "e74a7ec",
+      "8fb8d40"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
