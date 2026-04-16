@@ -1952,6 +1952,68 @@ def test_verify_next90_m106_governor_packet_rejects_local_proof_floor_drift(
     assert "repeat prevention local proof floor commit list drifted" in verifier.stderr
 
 
+def test_verify_next90_m106_governor_packet_rejects_markdown_proof_floor_prefix(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    markdown_path = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"
+    markdown = markdown_path.read_text(encoding="utf-8")
+    markdown_path.write_text(
+        markdown.replace(", 144eae5\n", "\n"),
+        encoding="utf-8",
+    )
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "checked-in markdown packet no longer matches the live source-input projection"
+        in verifier.stderr
+    )
+    assert "markdown local proof floor commit pin is missing" in verifier.stderr
+
+
 def test_verify_next90_m106_governor_packet_rejects_compile_manifest_artifact_drift(
     tmp_path: Path,
 ) -> None:

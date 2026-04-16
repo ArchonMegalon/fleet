@@ -114,6 +114,10 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _markdown_local_proof_floor_line() -> str:
+    return "- Local proof floor commits: " + ", ".join(weekly.LOCAL_PROOF_FLOOR_COMMITS)
+
+
 def _require_generated_after_source(
     *,
     packet_generated_at: str,
@@ -652,7 +656,7 @@ def verify(args: argparse.Namespace) -> List[str]:
         "markdown successor frontier closeout pin is missing",
     )
     _require(
-        "- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282" in markdown,
+        _markdown_local_proof_floor_line() in markdown,
         issues,
         "markdown local proof floor commit pin is missing",
     )
