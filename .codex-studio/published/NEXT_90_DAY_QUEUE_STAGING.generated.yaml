@@ -111,6 +111,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit d72386ee pins the M102 loopback callback proof floor.
       - /docker/chummercomplete/chummer.run-services commit fee0655a tightens M102 app-local callback state proof so the desktop listener's state query survives grant callback continuation.
       - /docker/chummercomplete/chummer.run-services commit 568b8358 tightens M102 app-local callback query-context proof.
+      - /docker/chummercomplete/chummer.run-services commit e0bcd91d pins the M102 callback query proof floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -400,6 +401,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit a08ba77b tightens M105 embedded proof path scope so prose proof bullets cannot cite paths outside Chummer.Run.Api, scripts, or tests.
       - /docker/chummercomplete/chummer.run-services commit 9f425d04 tightens M105 package-scoped receipt proof so untracked workspace continuity receipt rows cannot hide beside the canonical receipts.
       - /docker/chummercomplete/chummer.run-services commit 75dba18c pins the current M105 workspace receipt test proof floor so future shards verify the latest closed-package guard.
+      - /docker/chummercomplete/chummer.run-services commit f221ec3f tightens the M105 worker telemetry proof guard so completed-package evidence cannot cite control-plane helper output or worker-run telemetry summaries.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -476,6 +478,7 @@ items:
       - local proof floor commit bb49fc1 pinned for M106 run-prompt authority guard
       - local proof floor commit 26679c7 pinned for M106 refreshed packet artifact floor
       - local proof floor commit ef50370 pinned for M106 refreshed proof-floor guard
+      - local proof floor commit a1be389 pinned for M106 successor telemetry prompt-label guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
