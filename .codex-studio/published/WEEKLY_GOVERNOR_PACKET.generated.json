@@ -152,7 +152,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T16:30:45Z",
+  "generated_at": "2026-04-16T16:33:54Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -365,6 +365,10 @@
         {
           "commit": "aefd72c",
           "status": "present"
+        },
+        {
+          "commit": "21e00dd",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -375,7 +379,8 @@
         "f66dbaa",
         "f490e53",
         "e9ea391",
-        "aefd72c"
+        "aefd72c",
+        "21e00dd"
       ],
       "status": "pass"
     },
@@ -386,7 +391,8 @@
       "f66dbaa",
       "f490e53",
       "e9ea391",
-      "aefd72c"
+      "aefd72c",
+      "21e00dd"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -435,7 +441,7 @@
       "verifier rejects Fleet proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
-      "local proof floor commit aefd72c pinned for M106 governor packet repeat prevention",
+      "local proof floor commit 21e00dd pinned for M106 governor packet repeat prevention",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -459,7 +465,7 @@
       "proof paths outside package allowed path roots",
       "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
       "successor frontier 2376135131",
-      "local proof floor commit aefd72c",
+      "local proof floor commit 21e00dd",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -529,6 +535,10 @@
         {
           "commit": "aefd72c",
           "status": "present"
+        },
+        {
+          "commit": "21e00dd",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -539,7 +549,8 @@
         "f66dbaa",
         "f490e53",
         "e9ea391",
-        "aefd72c"
+        "aefd72c",
+        "21e00dd"
       ],
       "status": "pass"
     },
@@ -550,7 +561,8 @@
       "f66dbaa",
       "f490e53",
       "e9ea391",
-      "aefd72c"
+      "aefd72c",
+      "21e00dd"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
