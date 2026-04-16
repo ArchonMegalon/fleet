@@ -139,6 +139,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 60092e8d pins the M101 release train verifier, generated receipt, and compliance guard to the canonical 90c0a763 proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 5403219b stabilizes the M101 release train receipt timestamp so repeated proof checks do not reopen the completed package.
       - /docker/chummercomplete/chummer6-ui-finish commit 871c7f7b pins the M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 8b0e1801 pins the current M101 release train proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
