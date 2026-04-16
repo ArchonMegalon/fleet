@@ -528,6 +528,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "measured_rollout_loop",
     ]
     assert payload["repeat_prevention"]["remaining_dependency_ids"] == [101, 102, 103, 104, 105]
+    assert payload["repeat_prevention"]["blocked_dependency_package_ids"] == []
     assert payload["repeat_prevention"]["remaining_sibling_work_task_ids"] == ["106.3", "106.4"]
     assert (
         payload["repeat_prevention"]["worker_command_guard"]["status"]
@@ -867,6 +868,15 @@ def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet
     assert payload["status"] == "blocked"
     assert payload["decision_board"]["current_launch_action"] == "freeze_launch"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert payload["measured_rollout_loop"]["blocked_dependency_package_ids"] == [
+        "next90-m102-fleet-reporter-receipts"
+    ]
+    assert payload["package_closeout"]["blocked_dependency_package_ids"] == [
+        "next90-m102-fleet-reporter-receipts"
+    ]
+    assert payload["repeat_prevention"]["blocked_dependency_package_ids"] == [
+        "next90-m102-fleet-reporter-receipts"
+    ]
 
     verifier = subprocess.run(
         _verifier_args(paths, out),
@@ -3687,6 +3697,12 @@ def test_weekly_governor_packet_blocks_loop_ready_when_support_package_proof_reg
         ]
         == "fail"
     )
+    assert payload["package_closeout"]["blocked_dependency_package_ids"] == [
+        "next90-m102-fleet-reporter-receipts"
+    ]
+    assert payload["repeat_prevention"]["blocked_dependency_package_ids"] == [
+        "next90-m102-fleet-reporter-receipts"
+    ]
     assert (
         "support_packets successor_package_verification.status is not pass"
         in payload["source_input_health"]["issues"][0]

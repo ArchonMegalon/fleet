@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-16T19:25:50Z
+Generated: 2026-04-16T19:35:06Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -64,6 +64,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio
 - Remaining dependency packages: 101, 102, 103, 104, 105
+- Blocked dependency packages: next90-m102-fleet-reporter-receipts
 - Remaining sibling work tasks: 106.3, 106.4
 - Handoff rule: Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.
 - Worker command guard: active_run_helpers_forbidden

@@ -327,6 +327,30 @@ def verify(args: argparse.Namespace) -> List[str]:
     if source_input_blocked:
         _require(source_health.get("issues") != [], issues, "blocked source_input_health does not name its blocking issue")
         _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite source input failure")
+        source_issues = [str(issue) for issue in source_health.get("issues") or []]
+        support_dependency_blocked = any(
+            "support_packets successor_package_verification.status" in issue
+            for issue in source_issues
+        )
+        if support_dependency_blocked:
+            _require(
+                weekly.SUPPORT_DEPENDENCY_PACKAGE_ID
+                in (package_closeout.get("blocked_dependency_package_ids") or []),
+                issues,
+                "package closeout does not route blocked support-packet proof to the M102 dependency package",
+            )
+            _require(
+                weekly.SUPPORT_DEPENDENCY_PACKAGE_ID
+                in (repeat_prevention.get("blocked_dependency_package_ids") or []),
+                issues,
+                "repeat prevention does not route blocked support-packet proof to the M102 dependency package",
+            )
+            _require(
+                weekly.SUPPORT_DEPENDENCY_PACKAGE_ID
+                in (loop.get("blocked_dependency_package_ids") or []),
+                issues,
+                "measured rollout loop does not route blocked support-packet proof to the M102 dependency package",
+            )
         _require(
             decision_board.get("current_launch_action") == "freeze_launch",
             issues,

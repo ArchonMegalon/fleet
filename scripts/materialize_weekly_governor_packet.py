@@ -177,6 +177,7 @@ REQUIRED_LAUNCH_SIGNALS = (
     "closure_health_state",
 )
 COMPLETE_STATUSES = {"complete", "closed", "done"}
+SUPPORT_DEPENDENCY_PACKAGE_ID = "next90-m102-fleet-reporter-receipts"
 
 
 def iso_now() -> str:
@@ -1061,6 +1062,14 @@ def _governor_decision_rows(
     return rows
 
 
+def _blocked_dependency_package_ids(source_input_health: Dict[str, Any]) -> List[str]:
+    issues = _norm_list(source_input_health.get("issues"))
+    blocked: List[str] = []
+    if any("support_packets successor_package_verification.status" in issue for issue in issues):
+        blocked.append(SUPPORT_DEPENDENCY_PACKAGE_ID)
+    return blocked
+
+
 def build_payload(
     *,
     repo_root: Path,
@@ -1276,6 +1285,7 @@ def build_payload(
         if _coerce_int(dep, -1) >= 0
     ]
     open_sibling_work_task_ids = _norm_list(work_task_posture.get("open_sibling_work_task_ids"))
+    blocked_dependency_package_ids = _blocked_dependency_package_ids(source_input_health)
     repeat_prevention = {
         "status": "closed_for_fleet_package" if package_complete else "blocked",
         "closed_package_id": PACKAGE_ID,
@@ -1287,6 +1297,7 @@ def build_payload(
         "owned_surfaces": list(OWNED_SURFACES),
         "allowed_paths": list(ALLOWED_PATHS),
         "remaining_dependency_ids": remaining_dependency_ids,
+        "blocked_dependency_package_ids": blocked_dependency_package_ids,
         "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
         "handoff_rule": (
             "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; "
@@ -1433,6 +1444,7 @@ def build_payload(
                 else "Fleet package authority or proof is not complete; inspect package_verification issues before reusing this slice."
             ),
             "remaining_milestone_dependency_ids": remaining_dependency_ids,
+            "blocked_dependency_package_ids": blocked_dependency_package_ids,
             "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
             "milestone_106_still_open_because": (
                 "successor dependencies and sibling work tasks remain outside this Fleet package"
@@ -1448,6 +1460,7 @@ def build_payload(
         "measured_rollout_loop": {
             "loop_status": "ready" if measured_loop_ready else "blocked",
             "cadence": "weekly",
+            "blocked_dependency_package_ids": blocked_dependency_package_ids,
             "required_decision_actions": [
                 "launch_expand",
                 "freeze_launch",
@@ -1581,6 +1594,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Owned surfaces: {_markdown_list(repeat_prevention.get('owned_surfaces'))}",
             f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",
             f"- Remaining dependency packages: {_markdown_list(repeat_prevention.get('remaining_dependency_ids'))}",
+            f"- Blocked dependency packages: {_markdown_list(repeat_prevention.get('blocked_dependency_package_ids'))}",
             f"- Remaining sibling work tasks: {_markdown_list(repeat_prevention.get('remaining_sibling_work_task_ids'))}",
             f"- Handoff rule: {_markdown_status(repeat_prevention.get('handoff_rule'))}",
             f"- Worker command guard: {_markdown_status(worker_command_guard.get('status'))}",

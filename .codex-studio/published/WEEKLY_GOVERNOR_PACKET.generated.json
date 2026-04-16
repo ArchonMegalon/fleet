@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T19:25:50Z",
+  "generated_at": "2026-04-16T19:35:06Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -192,6 +192,9 @@
     }
   ],
   "measured_rollout_loop": {
+    "blocked_dependency_package_ids": [
+      "next90-m102-fleet-reporter-receipts"
+    ],
     "cadence": "weekly",
     "evidence_requirements": [
       "successor registry and queue item match package authority",
@@ -217,6 +220,9 @@
     ]
   },
   "package_closeout": {
+    "blocked_dependency_package_ids": [
+      "next90-m102-fleet-reporter-receipts"
+    ],
     "closeout_reason": "Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.",
     "do_not_reopen_package": true,
     "milestone_106_still_open_because": "successor dependencies and sibling work tasks remain outside this Fleet package",
@@ -542,6 +548,9 @@
       "scripts",
       "tests",
       ".codex-studio"
+    ],
+    "blocked_dependency_package_ids": [
+      "next90-m102-fleet-reporter-receipts"
     ],
     "closed_package_id": "next90-m106-fleet-governor-packet",
     "closed_successor_frontier_ids": [
