@@ -843,6 +843,72 @@ def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet
     assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
 
 
+def test_verify_next90_m106_governor_packet_rejects_active_run_source_path(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    active_run_named_support = (
+        tmp_path
+        / "chummer_design_supervisor"
+        / "shard-6"
+        / "runs"
+        / "20260416T172742Z-shard-6"
+        / "ACTIVE_RUN_HANDOFF.generated.md"
+    )
+    active_run_named_support.parent.mkdir(parents=True, exist_ok=True)
+    active_run_named_support.write_text(paths["support"].read_text(encoding="utf-8"), encoding="utf-8")
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(active_run_named_support),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+
+    verifier_args = _verifier_args(paths, out)
+    verifier_args[verifier_args.index("--support-packets") + 1] = str(active_run_named_support)
+    verifier = subprocess.run(
+        verifier_args,
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "verifier source paths include active-run or operator-helper evidence"
+        in verifier.stderr
+    )
+    assert "ACTIVE_RUN_HANDOFF.generated.md" in verifier.stderr
+
+
 def test_verify_next90_m106_governor_packet_rejects_stale_embedded_verification(
     tmp_path: Path,
 ) -> None:

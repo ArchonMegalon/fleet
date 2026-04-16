@@ -213,6 +213,9 @@ def verify(args: argparse.Namespace) -> List[str]:
         "support_packets": str(support_packets_path),
         "status_plane": str(status_plane_path),
     }
+    disallowed_source_paths = weekly._disallowed_worker_proof_entries(
+        [f"{name}: {path}" for name, path in sorted(source_paths.items())]
+    )
     live_payload = weekly.build_payload(
         repo_root=repo_root,
         registry=registry,
@@ -261,6 +264,13 @@ def verify(args: argparse.Namespace) -> List[str]:
         live_package_closeout.get("remaining_sibling_work_task_ids") or []
     )
 
+    _require(
+        not disallowed_source_paths,
+        issues,
+        "verifier source paths include active-run or operator-helper evidence that "
+        "worker package proof must not cite: "
+        + ", ".join(disallowed_source_paths),
+    )
     _require(verification["status"] == "pass", issues, f"live package verification is not pass: {verification['issues']}")
     _require(
         not projection_drift,
