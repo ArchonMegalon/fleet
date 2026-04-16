@@ -448,6 +448,7 @@ items:
       - forbidden worker proof strings are rejected case-insensitively
       - task-local telemetry field names are rejected as worker proof strings
       - successor-wave telemetry summary strings are rejected as worker proof strings
+      - literal successor-wave telemetry labels are rejected as worker proof strings
       - frontier-detail prompt strings are rejected as worker proof strings
       - run-prompt authority labels are rejected as worker proof strings
       - handoff polling phrase guard is enforced case-insensitively

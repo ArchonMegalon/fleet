@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T23:31:12Z",
+  "generated_at": "2026-04-16T23:34:34Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -348,6 +348,7 @@
       "remaining milestones",
       "remaining queue items",
       "critical path",
+      "successor-wave telemetry:",
       "eta:",
       "eta ",
       "successor frontier detail:",
@@ -623,6 +624,7 @@
       "forbidden worker proof strings are rejected case-insensitively",
       "task-local telemetry field names are rejected as worker proof strings",
       "successor-wave telemetry summary strings are rejected as worker proof strings",
+      "literal successor-wave telemetry labels are rejected as worker proof strings",
       "frontier-detail prompt strings are rejected as worker proof strings",
       "run-prompt authority labels are rejected as worker proof strings",
       "handoff polling phrase guard is enforced case-insensitively",
@@ -676,6 +678,7 @@
       "forbidden worker proof strings",
       "task-local telemetry field names",
       "successor-wave telemetry summary strings",
+      "literal successor-wave telemetry labels",
       "frontier-detail prompt strings",
       "run-prompt authority labels",
       "handoff polling phrase guard",
@@ -966,6 +969,7 @@
         "remaining milestones",
         "remaining queue items",
         "critical path",
+        "successor-wave telemetry:",
         "eta:",
         "eta ",
         "successor frontier detail:",
@@ -1113,6 +1117,7 @@
           "remaining milestones",
           "remaining queue items",
           "critical path",
+          "successor-wave telemetry:",
           "eta:",
           "eta ",
           "successor frontier detail:",

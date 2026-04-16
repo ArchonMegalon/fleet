@@ -33,6 +33,7 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "remaining milestones",
     "remaining queue items",
     "critical path",
+    "successor-wave telemetry:",
     "eta:",
     "eta ",
     "successor frontier detail:",
@@ -166,6 +167,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "forbidden worker proof strings are rejected case-insensitively.",
                                 "task-local telemetry field names are rejected as worker proof strings.",
                                 "successor-wave telemetry summary strings are rejected as worker proof strings.",
+                                "literal successor-wave telemetry labels are rejected as worker proof strings.",
                                 "frontier-detail prompt strings are rejected as worker proof strings.",
                                 "run-prompt authority labels are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
@@ -281,6 +283,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "forbidden worker proof strings are rejected case-insensitively",
                         "task-local telemetry field names are rejected as worker proof strings",
                         "successor-wave telemetry summary strings are rejected as worker proof strings",
+                        "literal successor-wave telemetry labels are rejected as worker proof strings",
                         "frontier-detail prompt strings are rejected as worker proof strings",
                         "run-prompt authority labels are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
@@ -3924,6 +3927,9 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
         "remaining queue items: 41"
     )
     queue["items"][0]["proof"].append(
+        "Successor-wave telemetry: active prompt context proves package closure"
+    )
+    queue["items"][0]["proof"].append(
         "Successor frontier ids to prioritize first: 2376135131"
     )
     _write_yaml(paths["queue"], queue)
@@ -3990,6 +3996,11 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
     assert any(
         "queue item proof includes active-run or operator-helper command evidence" in issue
         and "Successor frontier ids to prioritize first" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Successor-wave telemetry: active prompt context" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
