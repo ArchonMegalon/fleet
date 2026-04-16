@@ -141,6 +141,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 5403219b stabilizes the M101 release train receipt timestamp so repeated proof checks do not reopen the completed package.
       - /docker/chummercomplete/chummer6-ui-finish commit 871c7f7b pins the M101 release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 8b0e1801 pins the current M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit eae55383 pins the current M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 287c7538 pins the M101 proof floor to the latest completed-package guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -333,6 +335,7 @@ items:
       - verifier requires every measured rollout action to appear in both the decision board and decision gate ledger
       - status-plane final claim drift blocks launch expansion and measured rollout readiness
       - forbidden worker proof strings are rejected case-insensitively
+      - supervisor status polling and active worker run proof strings are rejected case-insensitively
       - verifier rejects Fleet proof paths outside package allowed path roots
       - no-PYTHONPATH bootstrap guard includes the standalone M106 verifier
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
