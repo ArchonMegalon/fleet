@@ -109,6 +109,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 2ded9038 tightens M102 app-local callback proof so localhost and 127.0.0.1 install-link callbacks stay desktop-native.
       - /docker/chummercomplete/chummer.run-services commit e7b5177b tightens M102 loopback callback proof so IPv6 app-local install-link callbacks stay desktop-native.
       - /docker/chummercomplete/chummer.run-services commit d72386ee pins the M102 loopback callback proof floor.
+      - /docker/chummercomplete/chummer.run-services commit fee0655a tightens M102 app-local callback state proof so the desktop listener's state query survives grant callback continuation.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification" --no-restore
@@ -299,6 +300,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 8ffec2b1 pins the latest be5755a6 queue proof floor in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 1bcb9b7e pins the current M104 proof pack guard.
       - /docker/chummercomplete/chummer-core-engine commit e04d7b88 binds the current M104 proof pack guard into the generator, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit 73638668 pins the current 58656418 worker proof hygiene guard in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
     allowed_paths:
       - src
       - tests
@@ -392,6 +394,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit db4fe453 tightens M105 served proof route mirroring so public proof shelves cannot drift from local route receipts.
       - /docker/chummercomplete/chummer.run-services commit 57a5b16d tightens M105 proof commit citation resolution so every registry and queue commit proof citation must resolve locally.
       - /docker/chummercomplete/chummer.run-services commit 02596ecc tightens M105 proof path scope so registry and queue proof paths must stay inside Chummer.Run.Api, scripts, or tests.
+      - /docker/chummercomplete/chummer.run-services commit a08ba77b tightens M105 embedded proof path scope so prose proof bullets cannot cite paths outside Chummer.Run.Api, scripts, or tests.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -461,6 +464,7 @@ items:
       - local proof floor commit 999231f pinned for M106 source-input refresh guard
       - local proof floor commit 25836f6 pinned for M106 source refresh proof floor
       - local proof floor commit 3e7ee9b pinned for M106 governor packet proof floor
+      - local proof floor commit 17189be pinned for M106 future-dated source timestamp guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
