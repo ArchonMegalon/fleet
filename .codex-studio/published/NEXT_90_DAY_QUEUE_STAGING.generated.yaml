@@ -189,6 +189,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit db4fc1e1 tightens M101 worker-context proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 4a4079f5 pins the latest M101 release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 9b97ab1a tightens M101 primary route-truth proof so Avalonia primary evidence cannot smuggle fallback tokens into proof-bearing fields.
+      - /docker/chummercomplete/chummer6-ui-finish commit f563293f pins M101 primary route proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit c9f49b5b tightens M101 closed-package proof so future shards verify the completed package instead of reopening the Avalonia primary-route slice.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -379,6 +381,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 9171e3f4 tightens M105 release proof receipt uniqueness so duplicate unscoped workspace or entitlement receipt ids cannot hide beside the closed package receipts.
       - /docker/chummercomplete/chummer.run-services commit a7e826d3 pins the M105 workspace receipt uniqueness proof floor.
       - /docker/chummercomplete/chummer.run-services commit d882db69 pins the M105 workspace proof floor guard.
+      - /docker/chummercomplete/chummer.run-services commit db4fe453 tightens M105 served proof route mirroring so public proof shelves cannot drift from local route receipts.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -420,12 +423,16 @@ items:
       - verifier rejects compile manifest freshness drift after weekly packet refresh
       - verifier rejects support-packet source_sha256 drift against SUPPORT_CASE_PACKETS.generated.json
       - verifier requires every measured rollout action to appear in both the decision board and decision gate ledger
+      - weekly pulse duplicate or ambiguous launch governance actions are rejected
       - status-plane final claim drift blocks launch expansion and measured rollout readiness
       - status_reason distinguishes closed Fleet package proof from blocked rollout gates
       - forbidden worker proof strings are rejected case-insensitively
       - task-local telemetry field names are rejected as worker proof strings
+      - successor-wave telemetry summary strings are rejected as worker proof strings
+      - frontier-detail prompt strings are rejected as worker proof strings
       - handoff polling phrase guard is enforced case-insensitively
       - worker-run OODA helper guard is enforced case-insensitively
+      - worker-run supervisor launcher guard is enforced case-insensitively
       - run-helper failure proof strings are rejected case-insensitively
       - verifier rejects Fleet proof paths outside package allowed path roots
       - production verifier rejects non-canonical source path overrides
