@@ -18,6 +18,14 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "run_ooda_design_supervisor_until_quiet",
     "ooda_design_supervisor.py",
     "TASK_LOCAL_TELEMETRY.generated.json",
+    "first_commands",
+    "focus_owners",
+    "focus_profiles",
+    "focus_texts",
+    "frontier_briefs",
+    "polling_disabled",
+    "runtime_handoff_path",
+    "status_query_supported",
     "operator telemetry",
     "supervisor status polling",
     "supervisor eta polling",
@@ -118,6 +126,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier requires every measured rollout action to appear in both the decision board and decision gate ledger.",
                                 "status-plane final claim drift blocks launch expansion and measured rollout readiness.",
                                 "forbidden worker proof strings are rejected case-insensitively.",
+                                "task-local telemetry field names are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
@@ -207,6 +216,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier requires every measured rollout action to appear in both the decision board and decision gate ledger",
                         "status-plane final claim drift blocks launch expansion and measured rollout readiness",
                         "forbidden worker proof strings are rejected case-insensitively",
+                        "task-local telemetry field names are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
@@ -3474,6 +3484,76 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
         and "chummer_design_supervisor eta --json reported done" in issue
         for issue in payload["package_verification"]["issues"]
     )
+
+
+def test_weekly_governor_packet_rejects_task_local_telemetry_field_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "polling_disabled=true and status_query_supported=false in the task-local packet"
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "runtime_handoff_path and frontier_briefs from the active worker run prove closure"
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(paths["support"]),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "polling_disabled=true" in issue
+        and "status_query_supported=false" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "runtime_handoff_path" in issue
+        and "frontier_briefs" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
 
 
 def test_weekly_governor_packet_blocks_loop_ready_when_launch_signal_is_missing(tmp_path: Path) -> None:

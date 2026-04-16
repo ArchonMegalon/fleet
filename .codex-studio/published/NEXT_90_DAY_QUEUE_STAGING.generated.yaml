@@ -369,6 +369,7 @@ items:
       - verifier requires every measured rollout action to appear in both the decision board and decision gate ledger
       - status-plane final claim drift blocks launch expansion and measured rollout readiness
       - forbidden worker proof strings are rejected case-insensitively
+      - task-local telemetry field names are rejected as worker proof strings
       - handoff polling phrase guard is enforced case-insensitively
       - verifier rejects Fleet proof paths outside package allowed path roots
       - no-PYTHONPATH bootstrap guard includes the standalone M106 verifier
