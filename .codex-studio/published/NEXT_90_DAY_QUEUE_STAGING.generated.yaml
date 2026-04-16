@@ -137,6 +137,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 90c0a763 pins the M101 verifier, generated receipt, and compliance guard to proof floor 49a5466c.
       - /docker/chummercomplete/chummer6-ui-finish commit 60092e8d pins the M101 release train verifier, generated receipt, and compliance guard to the canonical 90c0a763 proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 5403219b stabilizes the M101 release train receipt timestamp so repeated proof checks do not reopen the completed package.
+      - /docker/chummercomplete/chummer6-ui-finish commit 871c7f7b pins the M101 release train proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -283,6 +284,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 447f2a90 pins the M105 workspace uniqueness proof floor so future shards verify the current closed-package guard instead of repeating it.
       - /docker/chummercomplete/chummer.run-services commit a8f94a63 pins the M105 workspace uniqueness proof floor.
       - /docker/chummercomplete/chummer.run-services commit 06b0e574 pins the current M105 workspace proof floor guard.
+      - /docker/chummercomplete/chummer.run-services commit 79764447 pins the M105 workspace current proof floor.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -327,7 +329,7 @@ items:
       - verifier rejects Fleet proof paths outside package allowed path roots
       - no-PYTHONPATH bootstrap guard includes the standalone M106 verifier
       - successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention
-      - local proof floor commit 3418b3c pinned for M106 governor packet repeat prevention
+      - local proof floor commit 3580ba8 pinned for M106 governor packet repeat prevention
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
