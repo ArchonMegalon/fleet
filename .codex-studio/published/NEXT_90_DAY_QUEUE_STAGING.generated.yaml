@@ -259,6 +259,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 5dff1a2e tightens worker-safe closure evidence guards for task-local files and run-control helper transcripts.
       - /docker/chummercomplete/chummer-core-engine commit 2301a043 pins the current 5dff1a2e worker-safe proof floor in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 5c75316f pins the current 2301a043 worker-safe proof floor in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit 28be988f pins the current 5c75316f proof floor in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
     allowed_paths:
       - src
       - tests
