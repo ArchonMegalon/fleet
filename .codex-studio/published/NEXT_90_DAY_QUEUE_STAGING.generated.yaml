@@ -426,6 +426,8 @@ items:
     status: complete
     completion_action: verify_closed_package_only
     do_not_reopen_reason: M105 chummer6-hub workspace continuity is complete; future shards must verify the workspace restore receipt, registry row, queue row, and design-queue row instead of reopening the workspace restore and entitlement conflict receipt package.
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M105 chummer6-hub workspace continuity is complete; future shards must verify the workspace restore receipt, registry row, queue row, and design-queue row instead of reopening the workspace restore and entitlement conflict receipt package.
     landed_commit: 4d4b3856
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
