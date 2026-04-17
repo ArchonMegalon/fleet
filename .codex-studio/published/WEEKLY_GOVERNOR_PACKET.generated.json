@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T02:57:40Z",
+  "generated_at": "2026-04-17T03:07:39Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -730,6 +730,7 @@
       "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
       "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
       "verifier rebuilds the decision-critical packet projection from live source inputs",
+      "markdown Generated timestamp must match JSON generated_at",
       "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
       "future-dated weekly and source generated_at receipts are rejected",
       "verifier rejects compile manifest freshness drift after weekly packet refresh",
@@ -806,6 +807,7 @@
       "run_next90_m106_weekly_governor_packet_tests.py exits 0",
       "tmp_path fixture invocation",
       "decision-critical packet projection",
+      "markdown Generated timestamp must match JSON generated_at",
       "packet freshness drift against generated readiness",
       "future-dated weekly and source generated_at receipts",
       "compile manifest freshness drift",

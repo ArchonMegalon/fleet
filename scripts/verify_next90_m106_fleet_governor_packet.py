@@ -110,6 +110,13 @@ def _stable_markdown(markdown: str) -> str:
     )
 
 
+def _markdown_generated_at(markdown: str) -> str:
+    for line in markdown.splitlines():
+        if line.startswith("Generated: "):
+            return line.removeprefix("Generated: ").strip()
+    return ""
+
+
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -311,6 +318,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         _stable_markdown(markdown) == _stable_markdown(expected_markdown),
         issues,
         "checked-in markdown packet no longer matches the live source-input projection",
+    )
+    _require(
+        _markdown_generated_at(markdown) == str(packet.get("generated_at") or "").strip(),
+        issues,
+        "checked-in markdown packet Generated timestamp no longer matches JSON packet generated_at",
     )
     _require_generated_after_source(
         packet_generated_at=str(packet.get("generated_at") or ""),

@@ -184,6 +184,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
+                                "markdown Generated timestamp must match JSON generated_at.",
                                 "Verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs.",
                                 "future-dated weekly and source generated_at receipts are rejected.",
                                 "Verifier rejects compile manifest freshness drift after weekly packet refresh.",
@@ -322,6 +323,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
+                        "markdown Generated timestamp must match JSON generated_at",
                         "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
                         "future-dated weekly and source generated_at receipts are rejected",
                         "verifier rejects compile manifest freshness drift after weekly packet refresh",
@@ -2721,6 +2723,37 @@ def test_verify_next90_m106_governor_packet_rejects_stale_markdown_packet(
     assert verifier.returncode == 1
     assert (
         "checked-in markdown packet no longer matches the live source-input projection"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_markdown_generated_at_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    markdown = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"
+    markdown_lines = markdown.read_text(encoding="utf-8").splitlines()
+    markdown_lines = [
+        "Generated: 2026-04-14T10:00:00Z" if line.startswith("Generated: ") else line
+        for line in markdown_lines
+    ]
+    markdown.write_text("\n".join(markdown_lines) + "\n", encoding="utf-8")
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "checked-in markdown packet Generated timestamp no longer matches JSON packet generated_at"
         in verifier.stderr
     )
 
