@@ -288,6 +288,8 @@ items:
     wave: W7
     repo: executive-assistant
     status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M103 executive-assistant parity-lab extraction is complete; future shards must verify this receipt, registry row, design queue row, Fleet queue row, and direct proof command instead of recapturing Chummer5a oracle baselines or veteran workflow packs.
     proof:
       - /docker/EA/docs/chummer5a_parity_lab/CHUMMER5A_PARITY_LAB_PACK.yaml
       - /docker/EA/docs/chummer5a_parity_lab/README.md
