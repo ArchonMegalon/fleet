@@ -605,8 +605,10 @@ items:
       - local proof floor commit d597376 pinned for M106 telemetry handoff proof guard
       - local proof floor commit 233a52a pinned for M106 shard-runtime-handoff guard
       - local proof floor commit fba96cc pinned for M106 helper failure posture guard
+      - local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts
+      - commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
