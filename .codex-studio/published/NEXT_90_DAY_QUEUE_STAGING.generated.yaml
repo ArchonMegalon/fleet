@@ -378,6 +378,7 @@ items:
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignWorkspaceServerPlaneService.cs
+      - /docker/chummercomplete/chummer.run-services commit 4d4b3856 emits workspace_restore provenance receipts, entitlement_sync conflict receipts, stale claimed-install receipts, artifact drift receipts, authority planes, recovery hints, and block-continue posture.
       - /docker/chummercomplete/chummer.run-services commit b39147dc tightens the Hub local release proof guard for package next90-m105-hub-workspace-continuity and frontier 4623636482.
       - /docker/chummercomplete/chummer.run-services commit 5796e220 wires the M105 workspace restore verifier into scripts/ai/verify.sh so standard Hub verification runs the closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 80454b41 fail-closes workspace restore proof if landed verifier commits no longer resolve locally.
