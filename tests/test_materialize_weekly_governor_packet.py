@@ -53,6 +53,12 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "do not query supervisor status or eta",
     "polling the supervisor again",
     "active-run telemetry",
+    "active run",
+    "run id:",
+    "selected account",
+    "selected model",
+    "prompt path",
+    "recent stderr tail",
     "active-run helper",
     "active-run helper commands",
     "active run helper",
@@ -191,6 +197,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "frontier-detail prompt strings are rejected as worker proof strings.",
                                 "run-prompt authority labels are rejected as worker proof strings.",
                                 "execution-discipline prompt strings are rejected as worker proof strings.",
+                                "runtime handoff header and model metadata strings are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "control-plane polling prohibition guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
@@ -324,6 +331,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "frontier-detail prompt strings are rejected as worker proof strings",
                         "run-prompt authority labels are rejected as worker proof strings",
                         "execution-discipline prompt strings are rejected as worker proof strings",
+                        "runtime handoff header and model metadata strings are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "control-plane polling prohibition guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
@@ -3873,6 +3881,7 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
     queue["items"][0]["proof"].append("chummer_design_supervisor status --json reported green")
     queue["items"][0]["proof"].append("codexea status --json reported this queue slice is done")
     queue["items"][0]["proof"].append("active-run status helper reported ready")
+    queue["items"][0]["proof"].append("Active Run selected model gpt-5.4 proved this package")
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -3886,6 +3895,9 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "operator telemetry helper output proved launch readiness"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Run id: 20260417T015435Z-shard-6 and Prompt path proved closure"
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -3944,6 +3956,11 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Active Run selected model gpt-5.4 proved this package" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "codexea --telemetry-answer --json 1min credits" in issue
@@ -3953,6 +3970,12 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "chummer_design_supervisor eta --json reported done" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Run id: 20260417T015435Z-shard-6 and Prompt path proved closure" in issue
         for issue in payload["package_verification"]["issues"]
     )
 

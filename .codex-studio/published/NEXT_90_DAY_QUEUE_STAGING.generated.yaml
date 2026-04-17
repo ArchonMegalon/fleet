@@ -506,6 +506,7 @@ items:
       - frontier-detail prompt strings are rejected as worker proof strings
       - run-prompt authority labels are rejected as worker proof strings
       - execution-discipline prompt strings are rejected as worker proof strings
+      - runtime handoff header and model metadata strings are rejected as worker proof strings
       - handoff polling phrase guard is enforced case-insensitively
       - control-plane polling prohibition guard is enforced case-insensitively
       - worker-run OODA helper guard is enforced case-insensitively
