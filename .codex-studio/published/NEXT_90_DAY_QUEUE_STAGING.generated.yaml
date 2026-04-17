@@ -748,6 +748,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit f2b4ef6 tightens M101 queue scope guard so future shards verify exact allowed paths and owned surfaces instead of repeating or widening this completed package.
       - /docker/chummercomplete/chummer-hub-registry commit d1c9a12 pins the M101 queue-scope proof floor into the verifier, proof receipt, and closeout note.
       - /docker/chummercomplete/chummer-hub-registry commit cfb928b pins the M101 queue proof citation floor so canonical registry and queue staging cite the current completed-package proof floor.
+      - /docker/chummercomplete/chummer-hub-registry commit 2f7a422 tightens the M101 duplicate route-truth guard so future shards reject repeated desktopTupleCoverage.desktopRouteTruth tuple ids instead of repeating the completed package.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
