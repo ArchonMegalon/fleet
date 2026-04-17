@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-17T20:07:13Z
+Generated: 2026-04-17T20:10:15Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: 9330154116f4ce3155ecba966e74c4e4ceb182d07155982c72065a033848d5f9
+- Source input fingerprint: 1c7cba3ae9f249254994e3e0c4e96bda841f8bb0619c28a14d4b34c435af07c8
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: freeze_launch
@@ -29,7 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Governor packet cadence: weekly
-- Next packet due: 2026-04-24T20:07:13Z
+- Next packet due: 2026-04-24T20:10:15Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -88,7 +88,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Closed package: next90-m106-fleet-governor-packet
 - Closed work task: 106.1
 - Closed successor frontier ids: 2376135131
-- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 024c3c4
+- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a
 - Do not reopen owned surfaces: True
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio
