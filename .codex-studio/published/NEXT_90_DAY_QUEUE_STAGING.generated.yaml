@@ -542,6 +542,7 @@ items:
       - successor-wave telemetry summary strings are rejected as worker proof strings
       - literal successor-wave telemetry labels are rejected as worker proof strings
       - frontier-detail prompt strings are rejected as worker proof strings
+      - frontier-detail body strings are rejected as worker proof strings
       - run-prompt authority labels are rejected as worker proof strings
       - execution-discipline prompt strings are rejected as worker proof strings
       - runtime handoff header and model metadata strings are rejected as worker proof strings

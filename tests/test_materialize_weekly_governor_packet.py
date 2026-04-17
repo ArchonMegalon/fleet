@@ -25,6 +25,10 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "focus_profiles",
     "focus_texts",
     "frontier_briefs",
+    "status: complete; owners:",
+    "deps: 101, 102, 103, 104, 105",
+    "own and prove the surface slice(s): weekly_governor_packet, measured_rollout_loop",
+    "refresh flagship proof and close out the queue slice honestly",
     "frontier ids:",
     "open milestone ids:",
     "polling_disabled",
@@ -202,6 +206,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "successor-wave telemetry summary strings are rejected as worker proof strings.",
                                 "literal successor-wave telemetry labels are rejected as worker proof strings.",
                                 "frontier-detail prompt strings are rejected as worker proof strings.",
+                                "frontier-detail body strings are rejected as worker proof strings.",
                                 "run-prompt authority labels are rejected as worker proof strings.",
                                 "execution-discipline prompt strings are rejected as worker proof strings.",
                                 "runtime handoff header and model metadata strings are rejected as worker proof strings.",
@@ -345,6 +350,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "successor-wave telemetry summary strings are rejected as worker proof strings",
                         "literal successor-wave telemetry labels are rejected as worker proof strings",
                         "frontier-detail prompt strings are rejected as worker proof strings",
+                        "frontier-detail body strings are rejected as worker proof strings",
                         "run-prompt authority labels are rejected as worker proof strings",
                         "execution-discipline prompt strings are rejected as worker proof strings",
                         "runtime handoff header and model metadata strings are rejected as worker proof strings",
@@ -4197,6 +4203,9 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
     queue["items"][0]["proof"].append(
         "Frontier ids: 2376135131 from the active-run handoff prove this package is closed"
     )
+    queue["items"][0]["proof"].append(
+        "Refresh flagship proof and close out the queue slice honestly when this package lands"
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -4204,6 +4213,12 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "Successor frontier detail: 2376135131 [W8] Publish weekly governor packets"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "2376135131 [W8] Publish weekly governor packets with measured launch, freeze, "
+        "canary, and rollback decisions (status: complete; owners: fleet; deps: 101, "
+        "102, 103, 104, 105; Own and prove the surface slice(s): "
+        "weekly_governor_packet, measured_rollout_loop)"
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "Open milestone ids: 2376135131 from the runtime handoff prove closure"
@@ -4275,6 +4290,18 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Successor frontier detail" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "status: complete; owners: fleet" in issue
+        and "deps: 101, 102, 103, 104, 105" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Refresh flagship proof and close out the queue slice honestly" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
