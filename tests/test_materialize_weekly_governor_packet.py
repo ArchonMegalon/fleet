@@ -205,6 +205,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "control-plane polling prohibition guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
+                                "telemetry-ownership handoff prompt strings are rejected as worker proof strings.",
                                 "worker-run supervisor launcher guard is enforced case-insensitively.",
                                 "run-helper failure proof strings are rejected case-insensitively.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
@@ -345,6 +346,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "handoff polling phrase guard is enforced case-insensitively",
                         "control-plane polling prohibition guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
+                        "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
                         "worker-run supervisor launcher guard is enforced case-insensitively",
                         "run-helper failure proof strings are rejected case-insensitively",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
@@ -4360,6 +4362,9 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
     queue["items"][0]["proof"].append(
         "Execution discipline: do not invoke operator telemetry or active-run helper commands from inside worker runs."
     )
+    queue["items"][0]["proof"].append(
+        "Operator/OODA loop owns telemetry; keep working the assigned slice"
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -4440,6 +4445,11 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Operator/OODA loop owns telemetry" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Operator/OODA loop owns telemetry; keep working the assigned slice" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(

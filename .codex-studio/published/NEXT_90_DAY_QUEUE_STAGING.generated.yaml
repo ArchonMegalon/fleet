@@ -357,6 +357,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 44512fcf pins the current bb9af238 proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 5e808a1b pins the current adc72a7e proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit c323b4ad pins the current 5e808a1b queue proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit 7a432bc3 pins the current c323b4ad queue proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
     allowed_paths:
       - src
       - tests
@@ -537,6 +538,7 @@ items:
       - handoff polling phrase guard is enforced case-insensitively
       - control-plane polling prohibition guard is enforced case-insensitively
       - worker-run OODA helper guard is enforced case-insensitively
+      - telemetry-ownership handoff prompt strings are rejected as worker proof strings
       - worker-run supervisor launcher guard is enforced case-insensitively
       - run-helper failure proof strings are rejected case-insensitively
       - verifier rejects Fleet proof paths outside package allowed path roots

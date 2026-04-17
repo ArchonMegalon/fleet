@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T03:35:13Z",
+  "generated_at": "2026-04-17T03:43:29Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -757,6 +757,7 @@
       "handoff polling phrase guard is enforced case-insensitively",
       "control-plane polling prohibition guard is enforced case-insensitively",
       "worker-run OODA helper guard is enforced case-insensitively",
+      "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
       "worker-run supervisor launcher guard is enforced case-insensitively",
       "run-helper failure proof strings are rejected case-insensitively",
       "verifier rejects Fleet proof paths outside package allowed path roots",
@@ -835,6 +836,7 @@
       "handoff polling phrase guard",
       "control-plane polling prohibition guard",
       "worker-run OODA helper guard",
+      "telemetry-ownership handoff prompt strings",
       "worker-run supervisor launcher guard",
       "run-helper failure proof strings",
       "proof paths outside package allowed path roots",
