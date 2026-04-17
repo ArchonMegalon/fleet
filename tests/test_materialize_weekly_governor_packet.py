@@ -5974,6 +5974,55 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
 
 
+def test_weekly_governor_packet_rejects_design_queue_operator_ooda_prompt_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    item = next(
+        row
+        for row in design_queue["items"]
+        if row["package_id"] == "next90-m106-fleet-governor-packet"
+    )
+    item["proof"].append(
+        "Operator/OODA loop owns telemetry; keep working the assigned slice."
+    )
+    item["proof"].append(
+        "Execution discipline: do not invoke operator telemetry or active-run helper commands from inside worker runs."
+    )
+    item["proof"].append(
+        "Use the shard runtime handoff as the worker-safe resume context."
+    )
+    _write_yaml(paths["design_queue"], design_queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "design queue item proof includes active-run or operator-helper command evidence"
+        in issue
+        and "Operator/OODA loop owns telemetry" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "design queue item proof includes active-run or operator-helper command evidence"
+        in issue
+        and "do not invoke operator telemetry" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "design queue item proof includes active-run or operator-helper command evidence"
+        in issue
+        and "worker-safe resume context" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+
+
 def test_weekly_governor_packet_rejects_unprefixed_ooda_telemetry_ownership_proof(
     tmp_path: Path,
 ) -> None:
