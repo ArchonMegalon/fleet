@@ -548,6 +548,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit fdac7b2f tightens the M105 closed queue action guard so Fleet and design queue rows must carry verify_closed_package_only plus the package-specific do-not-reopen reason.
       - /docker/chummercomplete/chummer.run-services commit 11a9662f pins the current M105 workspace proof floor into the closed-package verifier.
       - /docker/chummercomplete/chummer.run-services commit ec1bb219 tightens the M105 queue identity guard so copied title or frontier rows cannot make future shards repeat the closed workspace continuity package.
+      - /docker/chummercomplete/chummer.run-services commit ea99e70a wires the M105 queue identity guard into standard Hub verification so future shards verify the closed queue row instead of repeating the workspace continuity package.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_queue_identity.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
@@ -668,6 +669,7 @@ items:
       - local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor
       - local proof floor commit b909cc5 pinned for M106 codexea helper proof guard
       - local proof floor commit 787d27a pinned for M106 packet refresh floor
+      - local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts
       - commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift
@@ -675,6 +677,7 @@ items:
       - commit d15a7ae tightens the M106 queue closeout action guard.
       - commit b909cc5 tightens the M106 codexea helper proof guard.
       - commit 787d27a pins the M106 packet refresh floor.
+      - commit b467c27 tightens the M106 design queue OODA prompt proof guard.
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
@@ -786,6 +789,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit 75a248f tightens the M101 queue identity guard so Fleet and design queue staging must keep the assigned title, task, and wave on the completed package row.
       - /docker/chummercomplete/chummer-hub-registry commit d767fba pins M101 route proof command floor so future shards verify the current completed-package proof floor instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 63a5583 tightens M101 desktop rollback route truth so primary rollback posture must match sibling fallback route truth before future shards trust the completed package row.
+      - /docker/chummercomplete/chummer-hub-registry commit 0b52f5f tightens M101 sibling fallback rollback rationale so primary rollback reasons name the exact fallback route id before future shards trust the completed package row.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
