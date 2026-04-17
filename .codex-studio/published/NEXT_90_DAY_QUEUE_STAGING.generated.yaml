@@ -434,6 +434,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit c6f0439e pins the M105 successor handoff proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit db056eb5 pins the M105 successor prompt proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 19536ab1 pins the M105 workspace proof floor so future shards verify the latest closed-package guard.
+      - /docker/chummercomplete/chummer.run-services commit 3eb87a75 pins the M105 workspace proof floor guard so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
