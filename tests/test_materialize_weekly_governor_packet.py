@@ -71,9 +71,18 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "non-zero during active runs",
     "nonzero during active runs",
     "--telemetry-answer",
+    "codexea telemetry",
+    "codexea status",
+    "codexea eta",
+    "codexea watch",
+    "codexea-watchdog",
     "codexea --telemetry",
     "chummer_design_supervisor status",
     "chummer_design_supervisor eta",
+    "supervisor status",
+    "supervisor eta",
+    "operator telemetry helper",
+    "active-run status helper",
     "chummer_design_supervisor.py",
     "chummer_design_supervisor.py status",
     "chummer_design_supervisor.py eta",
@@ -3779,13 +3788,21 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
     queue["items"][0]["proof"].append("Operator telemetry says this worker package is complete")
     queue["items"][0]["proof"].append("Supervisor status polling was observed from inside the active worker run")
     queue["items"][0]["proof"].append("chummer_design_supervisor status --json reported green")
+    queue["items"][0]["proof"].append("codexea status --json reported this queue slice is done")
+    queue["items"][0]["proof"].append("active-run status helper reported ready")
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "codexea --telemetry-answer --json 1min credits"
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "codexea telemetry showed the package was safe to close"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "chummer_design_supervisor eta --json reported done"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "operator telemetry helper output proved launch readiness"
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
