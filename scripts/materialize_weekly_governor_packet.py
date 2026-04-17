@@ -66,6 +66,12 @@ EXPECTED_PACKAGE_TASK = (
     "Turn readiness, parity, support, and rollout truth into a weekly governor packet "
     "that drives measured product decisions."
 )
+EXPECTED_COMPLETION_ACTION = "verify_closed_package_only"
+EXPECTED_DO_NOT_REOPEN_REASON = (
+    "M106 Fleet weekly governor packet is complete; future shards must verify the "
+    "weekly packet receipt, registry row, queue row, and design-queue row instead "
+    "of reopening the measured rollout packet package."
+)
 EXPECTED_MILESTONE_TITLE = "Product-governor weekly adoption and measured rollout loop"
 MILESTONE_ID = 106
 PROGRAM_WAVE = "next_90_day_product_advance"
@@ -725,6 +731,10 @@ def _queue_authority_issues(item: Dict[str, Any], prefix: str) -> List[str]:
             issues.append("queue item is not marked complete in staging queue")
         else:
             issues.append(f"{prefix} item is not marked complete")
+    if str(item.get("completion_action") or "").strip() != EXPECTED_COMPLETION_ACTION:
+        issues.append(f"{prefix} item completion_action is not {EXPECTED_COMPLETION_ACTION}")
+    if str(item.get("do_not_reopen_reason") or "").strip() != EXPECTED_DO_NOT_REOPEN_REASON:
+        issues.append(f"{prefix} item do_not_reopen_reason no longer matches package closeout authority")
     return issues
 
 
@@ -780,6 +790,8 @@ def _queue_mirror_drift(design_item: Dict[str, Any], item: Dict[str, Any]) -> Li
         "wave",
         "repo",
         "status",
+        "completion_action",
+        "do_not_reopen_reason",
         "proof",
         "allowed_paths",
         "owned_surfaces",
@@ -967,6 +979,12 @@ def verify_package(
         "dependency_posture": dependency_posture,
         "queue_status": str(item.get("status") or "").strip(),
         "design_queue_status": str(design_item.get("status") or "").strip(),
+        "queue_completion_action": str(item.get("completion_action") or "").strip(),
+        "design_queue_completion_action": str(design_item.get("completion_action") or "").strip(),
+        "queue_do_not_reopen_reason": str(item.get("do_not_reopen_reason") or "").strip(),
+        "design_queue_do_not_reopen_reason": str(design_item.get("do_not_reopen_reason") or "").strip(),
+        "expected_completion_action": EXPECTED_COMPLETION_ACTION,
+        "expected_do_not_reopen_reason": EXPECTED_DO_NOT_REOPEN_REASON,
         "queue_frontier_id": str(item.get("frontier_id") or "").strip(),
         "design_queue_frontier_id": str(design_item.get("frontier_id") or "").strip(),
         "design_queue_source_registry_path": str(design_queue.get("source_registry_path") or "").strip(),

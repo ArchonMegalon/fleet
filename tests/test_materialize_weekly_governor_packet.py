@@ -325,6 +325,12 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "wave": "W8",
                     "repo": "fleet",
                     "status": "complete",
+                    "completion_action": "verify_closed_package_only",
+                    "do_not_reopen_reason": (
+                        "M106 Fleet weekly governor packet is complete; future shards must verify the "
+                        "weekly packet receipt, registry row, queue row, and design-queue row instead "
+                        "of reopening the measured rollout packet package."
+                    ),
                     "proof": [
                         "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
                         "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
@@ -674,6 +680,16 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["package_verification"]["status"] == "pass"
     assert payload["package_verification"]["registry_work_task_status"] == "complete"
     assert payload["package_verification"]["queue_status"] == "complete"
+    assert payload["package_verification"]["queue_completion_action"] == "verify_closed_package_only"
+    assert payload["package_verification"]["design_queue_completion_action"] == "verify_closed_package_only"
+    assert (
+        payload["package_verification"]["queue_do_not_reopen_reason"]
+        == payload["package_verification"]["expected_do_not_reopen_reason"]
+    )
+    assert (
+        payload["package_verification"]["design_queue_do_not_reopen_reason"]
+        == payload["package_verification"]["expected_do_not_reopen_reason"]
+    )
     assert (
         payload["package_verification"]["queue_source_registry_path"]
         == "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"

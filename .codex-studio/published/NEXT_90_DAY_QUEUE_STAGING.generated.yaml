@@ -542,6 +542,8 @@ items:
     wave: W8
     repo: fleet
     status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.
     proof:
       - /docker/fleet/scripts/materialize_weekly_governor_packet.py
       - /docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py

@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T06:33:09Z",
+  "generated_at": "2026-04-17T06:41:44Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -324,6 +324,8 @@
       ],
       "status": "open"
     },
+    "design_queue_completion_action": "verify_closed_package_only",
+    "design_queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "design_queue_frontier_id": "2376135131",
     "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "design_queue_status": "complete",
@@ -425,6 +427,8 @@
       "chummer_design_supervisor.py status",
       "chummer_design_supervisor.py eta"
     ],
+    "expected_completion_action": "verify_closed_package_only",
+    "expected_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "expected_queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
     "expected_queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
     "expected_registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
@@ -739,6 +743,8 @@
       "measured_rollout_loop"
     ],
     "package_id": "next90-m106-fleet-governor-packet",
+    "queue_completion_action": "verify_closed_package_only",
+    "queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "queue_frontier_id": "2376135131",
     "queue_mirror_drift": [],
     "queue_mirror_status": "in_sync",
