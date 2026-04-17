@@ -130,6 +130,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 894dbedd pins M102 current proof floor.
       - /docker/chummercomplete/chummer.run-services commit 997337a6 pins M102 desktop trust proof floor.
       - /docker/chummercomplete/chummer.run-services commit e24162d9 requires M102 desktop trust proof citation.
+      - /docker/chummercomplete/chummer.run-services commit bb8db39c tightens M102 support install matching.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
@@ -234,6 +235,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit ccc77950 pins M101 artifact mutation proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 4f103b72 pins M101 current release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit deff0535 pins the current M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 342bff22 pins M101 active-run proof guard floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
