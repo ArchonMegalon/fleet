@@ -254,7 +254,7 @@ items:
       - /docker/EA/docs/chummer5a_parity_lab/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
       - /docker/EA/.codex-studio/published/CHUMMER5A_PARITY_ORACLE_PACK.generated.json
       - python tests/test_chummer5a_parity_lab_pack.py
-      - python tests/test_chummer5a_parity_lab_pack.py exits with ran=17 failed=0 and blocks operator-owned run-helper proof for the closed EA package.
+      - python tests/test_chummer5a_parity_lab_pack.py exits with ran=18 failed=0 and blocks operator-owned run-helper proof for the closed EA package.
       - /docker/EA commit f252c02 pins the latest M103 parity-lab proof floor into the published receipt, handoff closeout, and direct guard.
     allowed_paths:
       - skills
