@@ -318,6 +318,7 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "open milestone ids:",
     "polling_disabled",
     "runtime_handoff_path",
+    "shard runtime handoff",
     "status_query_supported",
     "task-local telemetry file",
     "local machine-readable context",

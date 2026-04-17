@@ -29,6 +29,7 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "open milestone ids:",
     "polling_disabled",
     "runtime_handoff_path",
+    "shard runtime handoff",
     "status_query_supported",
     "task-local telemetry file",
     "local machine-readable context",
@@ -3908,6 +3909,9 @@ def test_weekly_governor_packet_rejects_active_run_state_artifact_proof(
     queue["items"][0]["proof"].append(
         "/var/lib/codex-fleet/chummer_design_supervisor/shard-6/ACTIVE_RUN_HANDOFF.generated.md"
     )
+    queue["items"][0]["proof"].append(
+        "The shard runtime handoff says this package is already complete"
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -3958,6 +3962,11 @@ def test_weekly_governor_packet_rejects_active_run_state_artifact_proof(
     assert any(
         "queue item proof includes active-run or operator-helper command evidence" in issue
         and "ACTIVE_RUN_HANDOFF.generated.md" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "shard runtime handoff" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
