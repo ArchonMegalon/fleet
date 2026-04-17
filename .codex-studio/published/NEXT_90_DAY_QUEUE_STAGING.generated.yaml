@@ -302,9 +302,10 @@ items:
       - /docker/chummercomplete/chummer-core-engine/docs/ENGINE_PROOF_PACK.md
       - /docker/chummercomplete/chummer-core-engine/docs/NEXT90_M104_CORE_PROOF_PACK_CLOSEOUT.md
       - /docker/chummercomplete/chummer-core-engine commit fd15fe87 tightens row-scoped allowed-path authority for src, tests, docs, and scripts.
-      - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors; ENGINE_PROOF_PACK.generated.json reports missing_queue_proof_anchors=[].
+      - /docker/chummercomplete/chummer-core-engine commit 44fdda0f fail-closes non-resolving successor queue proof anchors so stale closeout evidence cannot keep the proof pack passed.
       - /docker/chummercomplete/chummer-core-engine commit cfc465a5 adds checked-in receipt reproducibility proof for ENGINE_PROOF_PACK.generated.json.
       - /docker/chummercomplete/chummer-core-engine commit 86040e30 fail-closes unassigned queue allowed paths or owned surfaces for this completed package.
+      - /docker/chummercomplete/chummer-core-engine commit 35cd27b4 pins successor frontier 3227666051 into the completed queue proof so future shards verify this closed package instead of repeating it.
       - /docker/chummercomplete/chummer-core-engine commit 8dd516ef makes failed engine proof pack generation exit nonzero while still writing diagnostic receipts.
       - /docker/chummercomplete/chummer-core-engine commit c88178fa tightens design-owned queue scope proof so canonical allowed-path or owned-surface drift cannot keep M104 passed.
       - /docker/chummercomplete/chummer-core-engine commit 769e7259 pins local commit proof through guard 56048971 so future shards verify the closed package instead of repeating it.
@@ -492,6 +493,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 28cfb2be pins the M105 steering proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 417946f4 pins the M105 workspace proof floor so future shards verify the current closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit e0960698 tightens the M105 workspace telemetry proof guard for copied run-control execution-discipline text.
+      - /docker/chummercomplete/chummer.run-services commit dc46a811 tightens the M105 telemetry proof floor so registry and queue proof must retain the current telemetry guard.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
