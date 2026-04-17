@@ -359,6 +359,7 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "writable scope roots",
     "operator telemetry",
     "do not invoke operator telemetry",
+    "do not invoke operator telemetry or active-run helper commands from inside worker runs",
     "supervisor status polling",
     "supervisor eta polling",
     "do not query supervisor status",
