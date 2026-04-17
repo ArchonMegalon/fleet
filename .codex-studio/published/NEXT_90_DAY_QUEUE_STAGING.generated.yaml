@@ -802,6 +802,8 @@ items:
     repo: chummer6-ui
     status: complete
     landed_commit: a8e4f92c
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M103 chummer6-ui veteran certification is complete; future shards must verify this receipt, registry row, design queue row, Fleet queue row, and direct proof command instead of recapturing promoted-head Chummer5a screenshot parity.
     proof:
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M103_UI_VETERAN_CERTIFICATION.generated.json
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
@@ -841,6 +843,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 585ccc78 pins M103 active-run proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 9a6ebd38 pins M103 veteran certification proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit b0f424aa tightens M103 scoped proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit b8c0b19d tightens the M103 completed queue action guard so Fleet and design queue rows must carry verify_closed_package_only plus a package-specific do-not-reopen reason.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
