@@ -511,6 +511,7 @@ items:
       - local proof floor commit 6c429cb pinned for M106 verified closeout proof floor
       - local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor
       - local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard
+      - local proof floor commit 5882234 pinned for M106 blocked dependency route guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
