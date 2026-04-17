@@ -239,7 +239,7 @@ items:
       - /docker/EA/docs/chummer5a_parity_lab/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
       - /docker/EA/.codex-studio/published/CHUMMER5A_PARITY_ORACLE_PACK.generated.json
       - python tests/test_chummer5a_parity_lab_pack.py
-      - python tests/test_chummer5a_parity_lab_pack.py exits with ran=16 failed=0 and blocks operator-owned run-helper proof for the closed EA package.
+      - python tests/test_chummer5a_parity_lab_pack.py exits with ran=17 failed=0 and blocks operator-owned run-helper proof for the closed EA package.
       - /docker/EA commit f252c02 pins the latest M103 parity-lab proof floor into the published receipt, handoff closeout, and direct guard.
     allowed_paths:
       - skills
@@ -318,6 +318,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit c58d18e1 pins the current 5f50cb7b engine proof floor in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 39c875fd pins the current d584120b local engine proof floor in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit f1b6c5ca pins the queued 39c875fd proof floor into the generator, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit faf14925 pins the current f1b6c5ca proof floor guard in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
     allowed_paths:
       - src
       - tests
@@ -419,6 +420,8 @@ items:
       - /docker/chummercomplete/chummer.run-services commit d00cf74c tightens the M105 campaign OS proof guard so generated campaign proof cannot cite blocked run-control evidence.
       - /docker/chummercomplete/chummer.run-services commit 049e2938 pins the M105 campaign proof guard.
       - /docker/chummercomplete/chummer.run-services commit 58edeea6 tightens the M105 worker-context field guard so queue proof cannot cite task-local run context fields.
+      - /docker/chummercomplete/chummer.run-services commit 586ad535 tightens the M105 successor handoff proof guard so completed-package proof cannot cite copied handoff-context run fields.
+      - /docker/chummercomplete/chummer.run-services commit 54d3756f tightens the M105 successor prompt proof guard so copied successor frontier id, assigned package, and execution-rule fields cannot close the completed workspace package.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
