@@ -138,6 +138,8 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 438861f0 pins the M102 receipt matching proof floor.
       - /docker/chummercomplete/chummer.run-services commit 4238a88a pins the current M102 desktop trust proof floor.
       - /docker/chummercomplete/chummer.run-services commit b8a03984 tightens M102 encoded active-run proof marker guard.
+      - /docker/chummercomplete/chummer.run-services commit 6961320a tightens M102 installed-build receipt truth.
+      - /docker/chummercomplete/chummer.run-services commit aceef790 pins the M102 installed-build receipt proof.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
