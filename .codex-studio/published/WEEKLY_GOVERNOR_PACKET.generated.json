@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T20:04:30Z",
+  "generated_at": "2026-04-17T20:07:13Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -218,8 +218,8 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-17T20:04:30Z",
-    "next_packet_due_at": "2026-04-24T20:04:30Z",
+    "generated_at": "2026-04-17T20:07:13Z",
+    "next_packet_due_at": "2026-04-24T20:07:13Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -1343,6 +1343,10 @@
         {
           "commit": "b909cc5",
           "status": "present"
+        },
+        {
+          "commit": "024c3c4",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -1398,7 +1402,8 @@
         "f3bfb8d",
         "d15a7ae",
         "ac1c4ac",
-        "b909cc5"
+        "b909cc5",
+        "024c3c4"
       ],
       "status": "pass"
     },
@@ -1454,7 +1459,8 @@
       "f3bfb8d",
       "d15a7ae",
       "ac1c4ac",
-      "b909cc5"
+      "b909cc5",
+      "024c3c4"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -1573,6 +1579,8 @@
       "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
       "local proof floor commit b909cc5 pinned for M106 codexea helper proof guard",
       "commit b909cc5 tightens the M106 codexea helper proof guard",
+      "local proof floor commit 024c3c4 pinned for M106 refreshed packet artifact floor",
+      "commit 024c3c4 refreshes the M106 weekly governor packet proof",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -1664,6 +1672,8 @@
       "local proof floor commit ac1c4ac",
       "local proof floor commit b909cc5",
       "commit b909cc5 tightens the M106 codexea helper proof guard",
+      "local proof floor commit 024c3c4",
+      "commit 024c3c4 refreshes the M106 weekly governor packet proof",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -2009,6 +2019,10 @@
         {
           "commit": "b909cc5",
           "status": "present"
+        },
+        {
+          "commit": "024c3c4",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -2064,7 +2078,8 @@
         "f3bfb8d",
         "d15a7ae",
         "ac1c4ac",
-        "b909cc5"
+        "b909cc5",
+        "024c3c4"
       ],
       "status": "pass"
     },
@@ -2120,7 +2135,8 @@
       "f3bfb8d",
       "d15a7ae",
       "ac1c4ac",
-      "b909cc5"
+      "b909cc5",
+      "024c3c4"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -2293,13 +2309,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "fd2c25ad8a3677d82c21d87400e88f2fc46093834ce4073c41e0572e8c551977",
+    "combined_source_sha256": "9330154116f4ce3155ecba966e74c4e4ceb182d07155982c72065a033848d5f9",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "1d3f0b128ba0e8ecb20d62820a929acd24634d51a6d71e52e2a76ce99e617a6f"
+        "source_sha256": "1b0c2d214d0e6f0f3ef065bdb67f429868c1ea4025e1abbdf856b12da90edf21"
       },
       {
         "name": "closed_flagship_registry",
@@ -2309,12 +2325,12 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "9b5ffb04eb7cfaa17feb53e6e966c993df3560d672d9c8cab2ff6b1aef98f358"
+        "source_sha256": "69b475015e5cb3675adf9a0c54c00806076869be505fdf9038a4b89b155b157c"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "5570f9f62cc852a4a58ed13012d75045c2f7ad666a34763f49f67cca00f04b4c"
+        "source_sha256": "f5a363b4319e2185aa9f7194a1438e5bd42fd7eec066973b18da9ba086510d3f"
       },
       {
         "name": "weekly_pulse",
@@ -2363,7 +2379,7 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "9b5ffb04eb7cfaa17feb53e6e966c993df3560d672d9c8cab2ff6b1aef98f358",
+        "source_sha256": "69b475015e5cb3675adf9a0c54c00806076869be505fdf9038a4b89b155b157c",
         "state": "present"
       },
       "flagship_readiness": {
@@ -2403,7 +2419,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "5570f9f62cc852a4a58ed13012d75045c2f7ad666a34763f49f67cca00f04b4c",
+        "source_sha256": "f5a363b4319e2185aa9f7194a1438e5bd42fd7eec066973b18da9ba086510d3f",
         "state": "present"
       },
       "source_path_authority": {
@@ -2558,7 +2574,7 @@
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "1d3f0b128ba0e8ecb20d62820a929acd24634d51a6d71e52e2a76ce99e617a6f",
+        "source_sha256": "1b0c2d214d0e6f0f3ef065bdb67f429868c1ea4025e1abbdf856b12da90edf21",
         "state": "present"
       },
       "support_packets": {

@@ -130,14 +130,54 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "f3bfb8d",
     "d15a7ae",
     "ac1c4ac",
+    "b909cc5",
+    "024c3c4",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
 CLOSED_FLAGSHIP_WAVE = "next_12_biggest_wins"
+REQUIRED_DECISION_ACTIONS = (
+    "launch_expand",
+    "freeze_launch",
+    "canary",
+    "rollback",
+    "focus_shift",
+)
+REQUIRED_DECISION_SOURCE_GATES = {
+    "launch_expand": (
+        "package_authority",
+        "weekly_input_health",
+        "source_input_health",
+        "decision_alignment",
+        "successor_dependencies",
+        "flagship_readiness",
+        "flagship_parity",
+        "flagship_quality",
+        "status_plane_final_claim",
+        "journey_gates",
+        "local_release_proof",
+        "weekly_adoption_truth",
+        "provider_canary",
+        "closure_health",
+        "support_packets",
+        "support_followthrough_receipts",
+    ),
+    "freeze_launch": ("fail_closed_default",),
+    "canary": ("provider_canary",),
+    "rollback": (
+        "closure_waiting_on_release_truth",
+        "update_required_misrouted_cases",
+        "support_followthrough_receipt_blockers",
+        "release_health",
+    ),
+    "focus_shift": ("successor_wave_scope",),
+}
 UTC = dt.timezone.utc
 WEEKLY_PULSE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 SUPPORT_PACKETS_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
+GENERATED_SOURCE_MAX_AGE_SECONDS = 8 * 24 * 60 * 60
 GENERATED_AT_MAX_FUTURE_SKEW_SECONDS = 5 * 60
+WEEKLY_PACKET_CADENCE_SECONDS = 7 * 24 * 60 * 60
 REQUIRED_GENERATED_SOURCE_INPUTS = (
     "weekly_pulse",
     "flagship_readiness",
@@ -184,6 +224,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "control-plane polling prohibition guard is enforced case-insensitively",
     "worker-run OODA helper guard is enforced case-insensitively",
     "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
+    "worker-safe resume context prompt strings are rejected as worker proof strings",
     "worker-run supervisor launcher guard is enforced case-insensitively",
     "run-helper failure proof strings are rejected case-insensitively",
     "repeat-prevention worker command guard records helper failure posture",
@@ -231,6 +272,10 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
     "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
     "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
+    "local proof floor commit b909cc5 pinned for M106 codexea helper proof guard",
+    "commit b909cc5 tightens the M106 codexea helper proof guard",
+    "local proof floor commit 024c3c4 pinned for M106 refreshed packet artifact floor",
+    "commit 024c3c4 refreshes the M106 weekly governor packet proof",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -272,6 +317,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "control-plane polling prohibition guard",
     "worker-run OODA helper guard",
     "telemetry-ownership handoff prompt strings",
+    "worker-safe resume context prompt strings",
     "worker-run supervisor launcher guard",
     "run-helper failure proof strings",
     "repeat-prevention worker command guard records helper failure posture",
@@ -318,6 +364,11 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "local proof floor commit 15efd7c",
     "local proof floor commit f3bfb8d",
     "local proof floor commit d15a7ae",
+    "local proof floor commit ac1c4ac",
+    "local proof floor commit b909cc5",
+    "commit b909cc5 tightens the M106 codexea helper proof guard",
+    "local proof floor commit 024c3c4",
+    "commit 024c3c4 refreshes the M106 weekly governor packet proof",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
@@ -347,12 +398,28 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "refresh flagship proof and close out the queue slice honestly",
     "frontier ids:",
     "open milestone ids:",
+    "mode: successor_wave",
     "polling_disabled",
     "runtime_handoff_path",
     "shard runtime handoff",
+    "use the shard runtime handoff as the worker-safe resume context",
     "status_query_supported",
     "task-local telemetry file",
     "local machine-readable context",
+    "implementation-only",
+    "implementation only",
+    "implementation-only retry",
+    "this retry is implementation-only",
+    "previous attempt burned time on supervisor helper loops",
+    "retry is implementation-only",
+    "successor-wave pass",
+    "product advance successor-wave pass",
+    "next-90-day product advance successor-wave pass",
+    "run these exact commands first",
+    "do not invent another orientation step",
+    "read these files directly first",
+    "historical operator status snippets",
+    "stale notes rather than commands",
     "remaining milestones",
     "remaining queue items",
     "critical path",
@@ -371,10 +438,15 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "operator telemetry",
     "do not invoke operator telemetry",
     "do not invoke operator telemetry or active-run helper commands from inside worker runs",
+    "supervisor helper loop",
+    "supervisor helper loops",
     "supervisor status polling",
     "supervisor eta polling",
+    "supervisor status or eta helpers",
+    "supervisor status or eta helpers inside this worker run",
     "do not query supervisor status",
     "do not query supervisor status or eta",
+    "do not run supervisor status or eta helpers",
     "polling the supervisor again",
     "current flagship closeout",
     "do not reopen the closed flagship wave",
@@ -431,10 +503,12 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
 )
 REQUIRED_LAUNCH_SIGNALS = (
     "journey_gate_state",
+    "journey_gate_blocked_count",
     "local_release_proof_status",
     "provider_canary_status",
     "closure_health_state",
 )
+REQUIRED_RISK_CLUSTER_FIELDS = ("cluster_id", "summary")
 COMPLETE_STATUSES = {"complete", "closed", "done"}
 SUPPORT_DEPENDENCY_PACKAGE_ID = "next90-m102-fleet-reporter-receipts"
 EXPECTED_SUPPORT_BLOCKED_DEPENDENCY_PACKAGE_IDS = (SUPPORT_DEPENDENCY_PACKAGE_ID,)
@@ -605,6 +679,31 @@ def _parse_iso_utc(value: Any) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _format_iso_utc(value: dt.datetime) -> str:
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _packet_schedule(generated_at: str) -> Dict[str, Any]:
+    generated = _parse_iso_utc(generated_at)
+    if generated is None:
+        return {
+            "cadence": "weekly",
+            "generated_at": generated_at,
+            "next_packet_due_at": "",
+            "cadence_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "status": "invalid_generated_at",
+        }
+    return {
+        "cadence": "weekly",
+        "generated_at": _format_iso_utc(generated),
+        "next_packet_due_at": _format_iso_utc(
+            generated + dt.timedelta(seconds=WEEKLY_PACKET_CADENCE_SECONDS)
+        ),
+        "cadence_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+        "status": "scheduled",
+    }
+
+
 def _find_milestone(registry: Dict[str, Any]) -> Dict[str, Any]:
     for row in registry.get("milestones") or []:
         if isinstance(row, dict) and _coerce_int(row.get("id"), -1) == MILESTONE_ID:
@@ -659,6 +758,125 @@ def _dependency_posture(registry: Dict[str, Any], milestone: Dict[str, Any]) -> 
         "dependencies": rows,
         "open_dependency_ids": open_dependencies,
         "missing_dependency_ids": missing_dependencies,
+    }
+
+
+def _dependency_package_routes(
+    *,
+    dependency_posture: Dict[str, Any],
+    design_queue: Dict[str, Any],
+    queue: Dict[str, Any],
+) -> Dict[str, Any]:
+    design_items_by_milestone: Dict[int, List[Dict[str, Any]]] = {}
+    queue_items_by_milestone: Dict[int, List[Dict[str, Any]]] = {}
+    for source, target in (
+        (design_queue.get("items") or [], design_items_by_milestone),
+        (queue.get("items") or [], queue_items_by_milestone),
+    ):
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            milestone_id = _coerce_int(item.get("milestone_id"), -1)
+            if milestone_id >= 0:
+                target.setdefault(milestone_id, []).append(item)
+
+    rows: List[Dict[str, Any]] = []
+    missing_package_milestone_ids: List[int] = []
+    incomplete_package_milestone_ids: List[int] = []
+    mirror_drift_milestone_ids: List[int] = []
+    for dep in dependency_posture.get("dependencies") or []:
+        if not isinstance(dep, dict):
+            continue
+        milestone_id = _coerce_int(dep.get("id"), -1)
+        if milestone_id < 0:
+            continue
+        design_matches = design_items_by_milestone.get(milestone_id) or []
+        queue_matches = queue_items_by_milestone.get(milestone_id) or []
+        design_item = design_matches[0] if len(design_matches) == 1 else {}
+        queue_item = queue_matches[0] if len(queue_matches) == 1 else {}
+        package_id = str(
+            queue_item.get("package_id")
+            or design_item.get("package_id")
+            or f"milestone-{milestone_id}"
+        ).strip()
+        queue_status = str(queue_item.get("status") or "").strip()
+        design_status = str(design_item.get("status") or "").strip()
+        completion_action = str(
+            queue_item.get("completion_action")
+            or design_item.get("completion_action")
+            or ""
+        ).strip()
+        queue_closed = queue_status.lower() in COMPLETE_STATUSES
+        design_closed = design_status.lower() in COMPLETE_STATUSES
+        mirror_in_sync = bool(design_item and queue_item) and _queue_mirror_drift(
+            design_item, queue_item
+        ) == []
+        registry_status = str(dep.get("status") or "").strip()
+        registry_open = registry_status.lower() not in COMPLETE_STATUSES
+        if not design_item or not queue_item:
+            route_state = "package_row_missing"
+            missing_package_milestone_ids.append(milestone_id)
+        elif not mirror_in_sync:
+            route_state = "queue_mirror_drift"
+            mirror_drift_milestone_ids.append(milestone_id)
+        elif queue_closed and design_closed and completion_action == EXPECTED_COMPLETION_ACTION:
+            route_state = (
+                "closed_package_verified_milestone_open"
+                if registry_open
+                else "closed_package_verified"
+            )
+        else:
+            route_state = "package_incomplete"
+            incomplete_package_milestone_ids.append(milestone_id)
+        rows.append(
+            {
+                "milestone_id": milestone_id,
+                "registry_status": registry_status or "missing",
+                "package_id": package_id,
+                "repo": str(queue_item.get("repo") or design_item.get("repo") or "").strip(),
+                "queue_status": queue_status or "missing",
+                "design_queue_status": design_status or "missing",
+                "completion_action": completion_action or "missing",
+                "queue_mirror_status": "in_sync" if mirror_in_sync else "drift_or_missing",
+                "route_state": route_state,
+                "operator_route": (
+                    "verify_closed_package_only"
+                    if route_state.startswith("closed_package_verified")
+                    else "route_to_dependency_package"
+                ),
+                "launch_gate_contribution": (
+                    "blocked_until_registry_milestone_complete"
+                    if registry_open
+                    else "clear"
+                ),
+            }
+        )
+    route_blockers = (
+        missing_package_milestone_ids
+        + incomplete_package_milestone_ids
+        + mirror_drift_milestone_ids
+    )
+    return {
+        "status": "pass" if not route_blockers else "blocked",
+        "rows": rows,
+        "missing_package_milestone_ids": missing_package_milestone_ids,
+        "incomplete_package_milestone_ids": incomplete_package_milestone_ids,
+        "mirror_drift_milestone_ids": mirror_drift_milestone_ids,
+        "closed_package_count": sum(
+            1
+            for row in rows
+            if str(row.get("route_state") or "").startswith("closed_package_verified")
+        ),
+        "open_registry_milestone_count": sum(
+            1
+            for row in rows
+            if row.get("launch_gate_contribution")
+            == "blocked_until_registry_milestone_complete"
+        ),
+        "rule": (
+            "Closed dependency package rows are verified instead of reopened; "
+            "launch expansion still waits for successor registry milestone status to close."
+        ),
     }
 
 
@@ -749,10 +967,11 @@ def _queue_authority_issues(item: Dict[str, Any], prefix: str) -> List[str]:
 def _queue_proof_issues(item: Dict[str, Any], prefix: str, repo_root: Path) -> List[str]:
     issues: List[str] = []
     proof_entries = _norm_list(item.get("proof"))
+    normalized_proof_entries = {entry.rstrip(".") for entry in proof_entries}
     missing_proof = [
         marker
         for marker in REQUIRED_QUEUE_PROOF_MARKERS
-        if marker not in proof_entries
+        if marker not in proof_entries and marker.rstrip(".") not in normalized_proof_entries
     ]
     if missing_proof:
         issues.append(
@@ -1035,10 +1254,44 @@ def _launch_decision(weekly_pulse: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _risk_cluster_health(weekly_pulse: Dict[str, Any]) -> Dict[str, Any]:
+    clusters = weekly_pulse.get("top_support_or_feedback_clusters")
+    issues: List[str] = []
+    if not isinstance(clusters, list):
+        issues.append("weekly pulse top_support_or_feedback_clusters must be a list")
+        clusters = []
+    if not clusters:
+        issues.append("weekly pulse top_support_or_feedback_clusters is empty")
+    malformed_rows: List[str] = []
+    for index, row in enumerate(clusters):
+        if not isinstance(row, dict):
+            malformed_rows.append(f"{index}:not_object")
+            continue
+        missing = [
+            field
+            for field in REQUIRED_RISK_CLUSTER_FIELDS
+            if not str(row.get(field) or "").strip()
+        ]
+        if missing:
+            malformed_rows.append(f"{index}:missing_" + "_".join(missing))
+    if malformed_rows:
+        issues.append(
+            "weekly pulse top_support_or_feedback_clusters has malformed row(s): "
+            + ", ".join(malformed_rows)
+        )
+    return {
+        "status": "pass" if not issues else "fail",
+        "cluster_count": len(clusters),
+        "required_fields": list(REQUIRED_RISK_CLUSTER_FIELDS),
+        "issues": issues,
+    }
+
+
 def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str, Any]) -> Dict[str, Any]:
     issues: List[str] = []
     generated_at = _parse_iso_utc(weekly_pulse.get("generated_at"))
     now = dt.datetime.now(UTC)
+    risk_cluster_health = _risk_cluster_health(weekly_pulse)
     decision_actions = [
         str(row.get("action") or "").strip()
         for row in weekly_pulse.get("governor_decisions") or []
@@ -1084,11 +1337,13 @@ def verify_weekly_inputs(weekly_pulse: Dict[str, Any], launch_decision: Dict[str
             "weekly pulse must contain exactly one launch governance action "
             f"(freeze_launch or launch_expand); found {len(launch_action_rows)}"
         )
+    issues.extend(risk_cluster_health["issues"])
     return {
         "status": "pass" if not issues else "fail",
         "generated_at": str(weekly_pulse.get("generated_at") or "").strip(),
         "max_age_seconds": WEEKLY_PULSE_MAX_AGE_SECONDS,
         "required_launch_signals": list(REQUIRED_LAUNCH_SIGNALS),
+        "risk_cluster_health": risk_cluster_health,
         "issues": issues,
     }
 
@@ -1125,16 +1380,25 @@ def verify_source_inputs(
         present = bool(payload)
         has_required_key = bool(payload.get(required_key)) if present else False
         state = "present" if present and has_required_key else "missing_or_unparseable"
+        source_path = str(dict(source_paths or {}).get(name) or "").strip()
         rows[name] = {
             "state": state,
             "required_key": required_key,
         }
+        if source_path:
+            rows[name]["source_path"] = source_path
+            try:
+                rows[name]["source_sha256"] = hashlib.sha256(
+                    Path(source_path).read_bytes()
+                ).hexdigest()
+            except OSError:
+                rows[name]["source_sha256"] = ""
+                issues.append(f"{name} source_path cannot be read for source_sha256")
         if state != "present":
             issues.append(f"{name} is missing, empty, unparseable, or lacks {required_key}")
         if name in REQUIRED_GENERATED_SOURCE_INPUTS:
             generated_at = str(payload.get("generated_at") or "").strip() if present else ""
             rows[name]["generated_at"] = generated_at
-            rows[name]["source_path"] = str(dict(source_paths or {}).get(name) or "").strip()
             parsed_generated_at = _parse_iso_utc(generated_at)
             if state == "present" and not parsed_generated_at:
                 issues.append(f"{name} generated_at is missing or invalid")
@@ -1142,6 +1406,11 @@ def verify_source_inputs(
                 future_skew_seconds = int((parsed_generated_at - now).total_seconds())
                 if future_skew_seconds > GENERATED_AT_MAX_FUTURE_SKEW_SECONDS:
                     issues.append(f"{name} generated_at is future-dated ({future_skew_seconds}s ahead)")
+                elif name not in {"weekly_pulse", "support_packets"}:
+                    rows[name]["max_age_seconds"] = GENERATED_SOURCE_MAX_AGE_SECONDS
+                    age_seconds = int((now - parsed_generated_at).total_seconds())
+                    if age_seconds > GENERATED_SOURCE_MAX_AGE_SECONDS:
+                        issues.append(f"{name} is stale ({age_seconds}s old)")
     support_successor_proof = dict(support_packets.get("successor_package_verification") or {})
     support_successor_status = str(support_successor_proof.get("status") or "").strip()
     support_generated_at = _parse_iso_utc(support_packets.get("generated_at"))
@@ -1150,13 +1419,6 @@ def verify_source_inputs(
         support_successor_status or "missing"
     )
     rows["support_packets"]["max_age_seconds"] = SUPPORT_PACKETS_MAX_AGE_SECONDS
-    if support_source_path:
-        try:
-            rows["support_packets"]["source_sha256"] = hashlib.sha256(
-                Path(support_source_path).read_bytes()
-            ).hexdigest()
-        except OSError:
-            rows["support_packets"]["source_sha256"] = ""
     if rows["support_packets"]["state"] == "present" and support_successor_status != "pass":
         issues.append(
             "support_packets successor_package_verification.status is not pass; "
@@ -1169,6 +1431,54 @@ def verify_source_inputs(
             support_age_seconds = int((now - support_generated_at).total_seconds())
             if support_age_seconds > SUPPORT_PACKETS_MAX_AGE_SECONDS:
                 issues.append(f"support_packets are stale ({support_age_seconds}s old)")
+    launch_decision = _launch_decision(weekly_pulse)
+    launch_signals = _decision_signal_map(launch_decision)
+    supporting = dict(weekly_pulse.get("supporting_signals") or {})
+    provider = dict(supporting.get("provider_route_stewardship") or {})
+    closure = dict(supporting.get("closure_health") or {})
+    adoption = dict(supporting.get("adoption_health") or {})
+    journey_summary = dict(journey_gates.get("summary") or {})
+    expected_launch_signals = {
+        "journey_gate_state": str(
+            journey_summary.get("overall_state")
+            or dict(weekly_pulse.get("journey_gate_health") or {}).get("state")
+            or ""
+        ).strip(),
+        "journey_gate_blocked_count": str(
+            journey_summary.get("blocked_count")
+            if "blocked_count" in journey_summary
+            else ""
+        ).strip(),
+        "local_release_proof_status": str(
+            adoption.get("local_release_proof_status") or ""
+        ).strip(),
+        "provider_canary_status": str(provider.get("canary_status") or "").strip(),
+        "closure_health_state": str(closure.get("state") or "").strip(),
+    }
+    signal_mismatches = {
+        key: {
+            "cited": str(launch_signals.get(key) or "").strip(),
+            "source": expected,
+        }
+        for key, expected in expected_launch_signals.items()
+        if str(launch_signals.get(key) or "").strip()
+        and expected
+        and str(launch_signals.get(key) or "").strip() != expected
+    }
+    rows["launch_signal_truth_alignment"] = {
+        "state": "pass" if not signal_mismatches else "fail",
+        "expected_from_sources": expected_launch_signals,
+        "cited_signals": {
+            key: str(launch_signals.get(key) or "").strip()
+            for key in REQUIRED_LAUNCH_SIGNALS
+        },
+        "mismatches": signal_mismatches,
+    }
+    if signal_mismatches:
+        issues.append(
+            "weekly pulse launch cited signal(s) do not match generated source truth: "
+            + ", ".join(sorted(signal_mismatches))
+        )
     closed_flagship_status = str(closed_flagship_registry.get("status") or "").strip()
     closed_flagship_wave = str(closed_flagship_registry.get("program_wave") or "").strip()
     closed_waves = [
@@ -1259,46 +1569,100 @@ def verify_source_inputs(
     }
 
 
+def _source_input_fingerprint(source_input_health: Dict[str, Any]) -> Dict[str, Any]:
+    required_inputs = dict(source_input_health.get("required_inputs") or {})
+    rows: List[Dict[str, str]] = []
+    missing_inputs: List[str] = []
+    for name in EXPECTED_PRODUCTION_SOURCE_PATHS:
+        row = dict(required_inputs.get(name) or {})
+        source_path = str(row.get("source_path") or "").strip()
+        source_sha256 = str(row.get("source_sha256") or "").strip().lower()
+        if not source_path or not source_sha256:
+            missing_inputs.append(name)
+        rows.append(
+            {
+                "name": name,
+                "source_path": source_path,
+                "source_sha256": source_sha256,
+            }
+        )
+    fingerprint_material = "\n".join(
+        f"{row['name']} {row['source_sha256']} {row['source_path']}" for row in rows
+    )
+    return {
+        "status": "pass" if not missing_inputs else "fail",
+        "source_count": len(rows),
+        "missing_inputs": missing_inputs,
+        "combined_source_sha256": hashlib.sha256(
+            fingerprint_material.encode("utf-8")
+        ).hexdigest(),
+        "rows": rows,
+    }
+
+
 def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     summary = dict(support_packets.get("summary") or {})
     followthrough = dict(support_packets.get("reporter_followthrough_plan") or {})
+    action_groups = dict(followthrough.get("action_groups") or {})
     receipt_gates = dict(support_packets.get("followthrough_receipt_gates") or {})
     gate_counts = dict(receipt_gates.get("gate_counts") or {})
+    plan_ready_count = _coerce_int(followthrough.get("ready_count"), 0)
+    summary_blocked_missing_count = _coerce_int(
+        summary.get("reporter_followthrough_blocked_missing_install_receipts_count"),
+        0,
+    )
+    summary_blocked_mismatch_count = _coerce_int(
+        summary.get("reporter_followthrough_blocked_receipt_mismatch_count"),
+        0,
+    )
+    plan_blocked_missing_count = _coerce_int(
+        followthrough.get("blocked_missing_install_receipts_count"),
+        0,
+    )
+    plan_blocked_mismatch_count = _coerce_int(
+        followthrough.get("blocked_receipt_mismatch_count"),
+        0,
+    )
+    feedback_ready_count = len(action_groups.get("feedback") or [])
+    fix_available_ready_count = len(action_groups.get("fix_available") or [])
+    please_test_ready_count = len(action_groups.get("please_test") or [])
+    recovery_ready_count = len(action_groups.get("recovery") or [])
+    gate_blocked_missing_count = _coerce_int(
+        receipt_gates.get("blocked_missing_install_receipts_count"),
+        0,
+    )
+    gate_blocked_mismatch_count = _coerce_int(
+        receipt_gates.get("blocked_receipt_mismatch_count"),
+        0,
+    )
+    blocked_missing_count = max(
+        summary_blocked_missing_count,
+        plan_blocked_missing_count,
+        gate_blocked_missing_count,
+    )
+    blocked_mismatch_count = max(
+        summary_blocked_mismatch_count,
+        plan_blocked_mismatch_count,
+        gate_blocked_mismatch_count,
+    )
     return {
         "open_packet_count": _coerce_int(summary.get("open_packet_count"), 0),
         "open_non_external_packet_count": _coerce_int(summary.get("open_non_external_packet_count"), 0),
         "closure_waiting_on_release_truth": _coerce_int(summary.get("closure_waiting_on_release_truth"), 0),
         "update_required_misrouted_case_count": _coerce_int(summary.get("update_required_misrouted_case_count"), 0),
-        "reporter_followthrough_ready_count": _coerce_int(summary.get("reporter_followthrough_ready_count"), 0),
-        "fix_available_ready_count": _coerce_int(summary.get("fix_available_ready_count"), 0),
-        "please_test_ready_count": _coerce_int(summary.get("please_test_ready_count"), 0),
-        "recovery_loop_ready_count": _coerce_int(summary.get("recovery_loop_ready_count"), 0),
-        "reporter_followthrough_blocked_missing_install_receipts_count": _coerce_int(
-            summary.get("reporter_followthrough_blocked_missing_install_receipts_count"),
-            0,
-        ),
-        "reporter_followthrough_blocked_receipt_mismatch_count": _coerce_int(
-            summary.get("reporter_followthrough_blocked_receipt_mismatch_count"),
-            0,
-        ),
-        "reporter_followthrough_plan_ready_count": _coerce_int(followthrough.get("ready_count"), 0),
-        "reporter_followthrough_plan_blocked_missing_install_receipts_count": _coerce_int(
-            followthrough.get("blocked_missing_install_receipts_count"),
-            0,
-        ),
-        "reporter_followthrough_plan_blocked_receipt_mismatch_count": _coerce_int(
-            followthrough.get("blocked_receipt_mismatch_count"),
-            0,
-        ),
+        "reporter_followthrough_ready_count": plan_ready_count,
+        "feedback_followthrough_ready_count": feedback_ready_count,
+        "fix_available_ready_count": fix_available_ready_count,
+        "please_test_ready_count": please_test_ready_count,
+        "recovery_loop_ready_count": recovery_ready_count,
+        "reporter_followthrough_blocked_missing_install_receipts_count": blocked_missing_count,
+        "reporter_followthrough_blocked_receipt_mismatch_count": blocked_mismatch_count,
+        "reporter_followthrough_plan_ready_count": plan_ready_count,
+        "reporter_followthrough_plan_blocked_missing_install_receipts_count": plan_blocked_missing_count,
+        "reporter_followthrough_plan_blocked_receipt_mismatch_count": plan_blocked_mismatch_count,
         "followthrough_receipt_gates_ready_count": _coerce_int(receipt_gates.get("ready_count"), 0),
-        "followthrough_receipt_gates_blocked_missing_install_receipts_count": _coerce_int(
-            receipt_gates.get("blocked_missing_install_receipts_count"),
-            0,
-        ),
-        "followthrough_receipt_gates_blocked_receipt_mismatch_count": _coerce_int(
-            receipt_gates.get("blocked_receipt_mismatch_count"),
-            0,
-        ),
+        "followthrough_receipt_gates_blocked_missing_install_receipts_count": gate_blocked_missing_count,
+        "followthrough_receipt_gates_blocked_receipt_mismatch_count": gate_blocked_mismatch_count,
         "followthrough_receipt_gates_installed_build_receipted_count": _coerce_int(
             gate_counts.get("installed_build_receipted"),
             0,
@@ -1307,6 +1671,22 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
             gate_counts.get("installed_build_receipt_installation_bound"),
             0,
         ),
+    }
+
+
+def _adoption_summary(weekly_pulse: Dict[str, Any]) -> Dict[str, Any]:
+    supporting = dict(weekly_pulse.get("supporting_signals") or {})
+    adoption = dict(supporting.get("adoption_health") or {})
+    return {
+        "state": str(adoption.get("state") or "unknown").strip() or "unknown",
+        "local_release_proof_status": str(
+            adoption.get("local_release_proof_status") or "unknown"
+        ).strip()
+        or "unknown",
+        "proven_journey_count": _coerce_int(adoption.get("proven_journey_count"), 0),
+        "proven_route_count": _coerce_int(adoption.get("proven_route_count"), 0),
+        "history_snapshot_count": _coerce_int(adoption.get("history_snapshot_count"), 0),
+        "summary": str(adoption.get("summary") or "").strip(),
     }
 
 
@@ -1342,6 +1722,76 @@ def _flagship_parity_summary(flagship_readiness: Dict[str, Any]) -> Dict[str, An
     }
 
 
+def _flagship_quality_summary(flagship_readiness: Dict[str, Any]) -> Dict[str, Any]:
+    coverage = dict(flagship_readiness.get("coverage_details") or {})
+    desktop = dict(coverage.get("desktop_client") or {})
+    desktop_evidence = dict(desktop.get("evidence") or {})
+    polish = dict(coverage.get("ui_kit_and_flagship_polish") or {})
+    polish_evidence = dict(polish.get("evidence") or {})
+
+    localization_present = bool(
+        desktop_evidence.get("ui_localization_release_gate_present")
+    )
+    localization_status = str(
+        desktop_evidence.get("ui_localization_release_gate_status") or "unknown"
+    ).strip() or "unknown"
+    missing_locale_count = _coerce_int(
+        desktop_evidence.get(
+            "ui_localization_release_gate_missing_locale_summary_shipping_locale_count"
+        ),
+        0,
+    )
+    backlog_count = _coerce_int(
+        desktop_evidence.get("ui_localization_release_gate_translation_backlog_finding_count"),
+        0,
+    )
+    untranslated_locale_count = _coerce_int(
+        desktop_evidence.get("ui_localization_release_gate_untranslated_locale_count"),
+        0,
+    )
+    polish_status = str(polish.get("status") or "unknown").strip() or "unknown"
+    polish_summary = str(polish.get("summary") or "").strip()
+    accessibility_named = "accessibility" in polish_summary.lower() or any(
+        "accessibility" in str(value).lower()
+        for value in polish_evidence.values()
+    )
+    shipping_locales = _norm_list(
+        desktop_evidence.get("ui_localization_release_gate_shipping_locales")
+    )
+    issues: List[str] = []
+    if not localization_present:
+        issues.append("localization release gate is missing")
+    if localization_status != "pass":
+        issues.append(f"localization release gate status is {localization_status}")
+    if missing_locale_count:
+        issues.append(f"{missing_locale_count} shipping locale summary row(s) are missing")
+    if backlog_count:
+        issues.append(f"{backlog_count} translation backlog finding(s) remain")
+    if untranslated_locale_count:
+        issues.append(f"{untranslated_locale_count} shipping locale(s) still have untranslated keys")
+    if polish_status != "ready":
+        issues.append(f"ui kit and flagship polish status is {polish_status}")
+    if not accessibility_named:
+        issues.append("ui kit and flagship polish proof does not name accessibility")
+
+    return {
+        "release_truth_status": "pass" if not issues else "blocked",
+        "localization_release_gate_present": localization_present,
+        "localization_release_gate_status": localization_status,
+        "shipping_locale_count": _coerce_int(
+            desktop_evidence.get("ui_localization_release_gate_shipping_locale_count"),
+            len(shipping_locales),
+        ),
+        "shipping_locales": shipping_locales,
+        "missing_locale_summary_shipping_locale_count": missing_locale_count,
+        "translation_backlog_finding_count": backlog_count,
+        "untranslated_locale_count": untranslated_locale_count,
+        "ui_kit_and_flagship_polish_status": polish_status,
+        "accessibility_proof_named": accessibility_named,
+        "issues": issues,
+    }
+
+
 def _gate_row(name: str, state: str, required: str, observed: Any) -> Dict[str, str]:
     return {
         "name": name,
@@ -1351,21 +1801,28 @@ def _gate_row(name: str, state: str, required: str, observed: Any) -> Dict[str, 
     }
 
 
-def _status_copy(*, launch_allowed: bool, rollback_watch: bool, launch_reason: str) -> Dict[str, str]:
+def _status_copy(*, launch_allowed: bool, rollback_watch: bool, launch_reason: str) -> Dict[str, Any]:
+    provenance = {
+        "derived_from": "measured_rollout_loop.decision_action_matrix",
+        "decision_actions": list(REQUIRED_DECISION_ACTIONS),
+    }
     if launch_allowed:
         return {
+            **provenance,
             "state": "launch_expand_allowed",
             "headline": "Measured launch expansion is allowed.",
             "body": "Readiness, parity, support, canary, dependency, and release-proof gates are green for this weekly packet.",
         }
     if rollback_watch:
         return {
+            **provenance,
             "state": "freeze_with_rollback_watch",
             "headline": "Launch expansion is frozen with rollback watch active.",
             "body": launch_reason
             or "Release or support truth requires rollback watch before any broader launch move.",
         }
     return {
+        **provenance,
         "state": "freeze_launch",
         "headline": "Launch expansion remains frozen.",
         "body": launch_reason
@@ -1394,7 +1851,7 @@ def _governor_decision_rows(
     decision_gate_ledger: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
-    for action in ("launch_expand", "freeze_launch", "canary", "rollback", "focus_shift"):
+    for action in REQUIRED_DECISION_ACTIONS:
         board = dict(decision_board.get(action) or {})
         rows.append(
             {
@@ -1405,6 +1862,384 @@ def _governor_decision_rows(
             }
         )
     return rows
+
+
+def _decision_action_matrix(
+    *,
+    decision_board: Dict[str, Any],
+    decision_gate_ledger: Dict[str, Any],
+    governor_decisions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    governor_by_action = {
+        str(row.get("action") or "").strip(): row
+        for row in governor_decisions
+        if isinstance(row, dict)
+    }
+    rows: List[Dict[str, Any]] = []
+    for action in REQUIRED_DECISION_ACTIONS:
+        board = dict(decision_board.get(action) or {})
+        ledger = decision_gate_ledger.get(action) or []
+        governor = dict(governor_by_action.get(action) or {})
+        board_state = str(board.get("state") or "").strip()
+        governor_state = str(governor.get("state") or "").strip()
+        ledger_gate_count = len(ledger) if isinstance(ledger, list) else 0
+        governor_gate_count = _coerce_int(governor.get("gate_count"), -1)
+        state_consistent = bool(board_state and board_state == governor_state)
+        gate_count_consistent = bool(
+            ledger_gate_count > 0 and governor_gate_count == ledger_gate_count
+        )
+        rows.append(
+            {
+                "action": action,
+                "board_state": board_state or "missing",
+                "ledger_gate_count": ledger_gate_count,
+                "governor_state": governor_state or "missing",
+                "governor_gate_count": governor_gate_count,
+                "state_consistent": state_consistent,
+                "gate_count_consistent": gate_count_consistent,
+                "complete": bool(state_consistent and gate_count_consistent),
+            }
+        )
+    return rows
+
+
+def _decision_action_coverage(
+    *,
+    decision_board: Dict[str, Any],
+    decision_gate_ledger: Dict[str, Any],
+    governor_decisions: List[Dict[str, Any]],
+    decision_action_matrix: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    governor_actions = {
+        str(row.get("action") or "").strip()
+        for row in governor_decisions
+        if isinstance(row, dict)
+    }
+    matrix_by_action = {
+        str(row.get("action") or "").strip(): row
+        for row in decision_action_matrix
+        if isinstance(row, dict)
+    }
+    rows: List[Dict[str, Any]] = []
+    for action in REQUIRED_DECISION_ACTIONS:
+        ledger = decision_gate_ledger.get(action)
+        matrix_row = dict(matrix_by_action.get(action) or {})
+        board_present = action in decision_board
+        ledger_present = isinstance(ledger, list) and len(ledger) > 0
+        governor_present = action in governor_actions
+        matrix_complete = matrix_row.get("complete") is True
+        rows.append(
+            {
+                "action": action,
+                "board_present": board_present,
+                "ledger_present": ledger_present,
+                "governor_present": governor_present,
+                "matrix_complete": matrix_complete,
+                "covered": bool(
+                    board_present
+                    and ledger_present
+                    and governor_present
+                    and matrix_complete
+                ),
+            }
+        )
+    missing_actions = [
+        row["action"]
+        for row in rows
+        if not row["board_present"]
+        or not row["ledger_present"]
+        or not row["governor_present"]
+    ]
+    incomplete_actions = [
+        row["action"]
+        for row in rows
+        if row["board_present"]
+        and row["ledger_present"]
+        and row["governor_present"]
+        and not row["matrix_complete"]
+    ]
+    return {
+        "status": "pass" if not missing_actions and not incomplete_actions else "fail",
+        "required_actions": list(REQUIRED_DECISION_ACTIONS),
+        "covered_action_count": sum(1 for row in rows if row["covered"]),
+        "required_action_count": len(REQUIRED_DECISION_ACTIONS),
+        "missing_actions": missing_actions,
+        "incomplete_actions": incomplete_actions,
+        "rows": rows,
+    }
+
+
+def _decision_source_coverage(
+    *,
+    decision_board: Dict[str, Any],
+    decision_gate_ledger: Dict[str, Any],
+) -> Dict[str, Any]:
+    rows: List[Dict[str, Any]] = []
+    for action in REQUIRED_DECISION_ACTIONS:
+        board = dict(decision_board.get(action) or {})
+        ledger_rows = [
+            row for row in decision_gate_ledger.get(action) or [] if isinstance(row, dict)
+        ]
+        ledger_gate_names = {
+            str(row.get("name") or "").strip()
+            for row in ledger_rows
+            if str(row.get("name") or "").strip()
+        }
+        required_gates = list(REQUIRED_DECISION_SOURCE_GATES[action])
+        missing_gates = [
+            gate_name for gate_name in required_gates if gate_name not in ledger_gate_names
+        ]
+        board_state = str(board.get("state") or "").strip()
+        board_reason = str(board.get("reason") or board.get("next_decision") or "").strip()
+        rows.append(
+            {
+                "action": action,
+                "required_gates": required_gates,
+                "missing_gates": missing_gates,
+                "board_state_present": bool(board_state),
+                "board_reason_present": bool(board_reason),
+                "covered": bool(
+                    not missing_gates and board_state and board_reason
+                ),
+            }
+        )
+    missing_actions = [row["action"] for row in rows if not row["covered"]]
+    return {
+        "status": "pass" if not missing_actions else "fail",
+        "required_source_gates_by_action": {
+            action: list(gates)
+            for action, gates in REQUIRED_DECISION_SOURCE_GATES.items()
+        },
+        "covered_action_count": sum(1 for row in rows if row["covered"]),
+        "required_action_count": len(REQUIRED_DECISION_ACTIONS),
+        "missing_actions": missing_actions,
+        "rows": rows,
+    }
+
+
+def _decision_action_routes(
+    *,
+    decision_board: Dict[str, Any],
+    decision_gate_ledger: Dict[str, Any],
+) -> Dict[str, Any]:
+    route_contract = {
+        "launch_expand": {
+            "owner": "fleet",
+            "route": "weekly_governor_packet.launch_expand",
+            "cadence": "weekly",
+            "trigger_gate": "launch_gate_summary.all_green",
+            "unblock_condition": "all launch_expand gates pass",
+            "operator_action_when_blocked": "do_not_expand_launch",
+            "operator_action_when_clear": "promote_measured_launch_expansion",
+        },
+        "freeze_launch": {
+            "owner": "fleet",
+            "route": "weekly_governor_packet.freeze_launch",
+            "cadence": "weekly",
+            "trigger_gate": "launch_gate_summary.blocking_gate_names",
+            "unblock_condition": "launch_expand becomes allowed",
+            "operator_action_when_blocked": "keep_launch_frozen",
+            "operator_action_when_clear": "leave_freeze_available",
+        },
+        "canary": {
+            "owner": "fleet",
+            "route": "measured_rollout_loop.canary",
+            "cadence": "weekly",
+            "trigger_gate": "provider_canary",
+            "unblock_condition": "provider canary is green on all active lanes",
+            "operator_action_when_blocked": "collect_canary_evidence",
+            "operator_action_when_clear": "keep_canary_ready",
+        },
+        "rollback": {
+            "owner": "fleet",
+            "route": "measured_rollout_loop.rollback",
+            "cadence": "weekly",
+            "trigger_gate": "release_health",
+            "unblock_condition": "release and support followthrough gates are clear",
+            "operator_action_when_blocked": "prepare_rollback_or_revoke",
+            "operator_action_when_clear": "keep_rollback_armed",
+        },
+        "focus_shift": {
+            "owner": "fleet",
+            "route": "measured_rollout_loop.focus_shift",
+            "cadence": "weekly",
+            "trigger_gate": "successor_wave_scope",
+            "unblock_condition": "closed package stays verified and remaining work routes to dependency or sibling packages",
+            "operator_action_when_blocked": "route_remaining_work_to_dependency_or_sibling_packages",
+            "operator_action_when_clear": "route_remaining_work_to_dependency_or_sibling_packages",
+        },
+    }
+    rows: List[Dict[str, Any]] = []
+    for action in REQUIRED_DECISION_ACTIONS:
+        board = dict(decision_board.get(action) or {})
+        ledger_rows = [
+            row for row in decision_gate_ledger.get(action) or [] if isinstance(row, dict)
+        ]
+        blocking_gates = [
+            str(row.get("name") or "").strip() or "unknown"
+            for row in ledger_rows
+            if str(row.get("state") or "unknown").strip() not in {"pass", "clear"}
+        ]
+        gate_states = {
+            str(row.get("name") or "").strip() or "unknown": str(
+                row.get("state") or "unknown"
+            ).strip()
+            or "unknown"
+            for row in ledger_rows
+        }
+        contract = dict(route_contract[action])
+        state = str(board.get("state") or "unknown").strip() or "unknown"
+        route_blocked = bool(blocking_gates) or state in {
+            "active",
+            "blocked",
+            "accumulating",
+            "watch",
+        }
+        operator_action = (
+            str(contract.get("operator_action_when_blocked") or "").strip()
+            if route_blocked
+            else str(contract.get("operator_action_when_clear") or "").strip()
+        )
+        reason = str(board.get("reason") or board.get("next_decision") or "").strip()
+        rows.append(
+            {
+                "action": action,
+                "owner": contract["owner"],
+                "route": contract["route"],
+                "cadence": contract["cadence"],
+                "trigger_gate": contract["trigger_gate"],
+                "unblock_condition": contract["unblock_condition"],
+                "route_blocked": route_blocked,
+                "operator_action_when_blocked": contract["operator_action_when_blocked"],
+                "operator_action_when_clear": contract["operator_action_when_clear"],
+                "operator_action": operator_action,
+                "state": state,
+                "next_decision": reason,
+                "reason": reason,
+                "gate_states": gate_states,
+                "blocking_gates": blocking_gates,
+                "blocking_gate_count": len(blocking_gates),
+                "ready_for_operator_packet": bool(
+                    state
+                    and reason
+                    and contract.get("owner")
+                    and contract.get("route")
+                    and contract.get("cadence")
+                    and contract.get("trigger_gate")
+                    and contract.get("unblock_condition")
+                    and operator_action
+                    and gate_states
+                ),
+            }
+        )
+    missing_actions = [
+        action
+        for action in REQUIRED_DECISION_ACTIONS
+        if not any(row["action"] == action for row in rows)
+    ]
+    incomplete_actions = [
+        row["action"] for row in rows if row["ready_for_operator_packet"] is not True
+    ]
+    return {
+        "status": "pass" if not missing_actions and not incomplete_actions else "fail",
+        "required_actions": list(REQUIRED_DECISION_ACTIONS),
+        "missing_actions": missing_actions,
+        "incomplete_actions": incomplete_actions,
+        "rows": rows,
+    }
+
+
+def _decision_receipts(
+    *,
+    decision_action_matrix: List[Dict[str, Any]],
+    decision_action_routes: Dict[str, Any],
+) -> Dict[str, Any]:
+    matrix_by_action = {
+        str(row.get("action") or "").strip(): row
+        for row in decision_action_matrix
+        if isinstance(row, dict)
+    }
+    route_by_action = {
+        str(row.get("action") or "").strip(): row
+        for row in decision_action_routes.get("rows") or []
+        if isinstance(row, dict)
+    }
+    rows: List[Dict[str, Any]] = []
+    for action in REQUIRED_DECISION_ACTIONS:
+        matrix = dict(matrix_by_action.get(action) or {})
+        route = dict(route_by_action.get(action) or {})
+        receipt_source = {
+            "action": action,
+            "state": str(route.get("state") or matrix.get("board_state") or "").strip(),
+            "route": str(route.get("route") or "").strip(),
+            "operator_action": str(route.get("operator_action") or "").strip(),
+            "ledger_gate_count": _coerce_int(matrix.get("ledger_gate_count"), 0),
+            "governor_gate_count": _coerce_int(matrix.get("governor_gate_count"), 0),
+            "blocking_gate_count": _coerce_int(route.get("blocking_gate_count"), 0),
+            "blocking_gates": _norm_list(route.get("blocking_gates")),
+            "gate_states": dict(route.get("gate_states") or {}),
+            "matrix_complete": matrix.get("complete") is True,
+            "ready_for_operator_packet": route.get("ready_for_operator_packet") is True,
+        }
+        digest = hashlib.sha256(
+            json.dumps(receipt_source, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        rows.append(
+            {
+                "action": action,
+                "receipt_id": f"m106-{action}-{digest[:16]}",
+                "receipt_sha256": digest,
+                "state": receipt_source["state"] or "missing",
+                "route": receipt_source["route"] or "missing",
+                "operator_action": receipt_source["operator_action"] or "missing",
+                "ledger_gate_count": receipt_source["ledger_gate_count"],
+                "governor_gate_count": receipt_source["governor_gate_count"],
+                "blocking_gate_count": receipt_source["blocking_gate_count"],
+                "blocking_gates": receipt_source["blocking_gates"],
+                "matrix_complete": receipt_source["matrix_complete"],
+                "ready_for_operator_packet": receipt_source["ready_for_operator_packet"],
+            }
+        )
+    incomplete_actions = [
+        row["action"]
+        for row in rows
+        if row["matrix_complete"] is not True
+        or row["ready_for_operator_packet"] is not True
+        or not str(row.get("receipt_id") or "").startswith(f"m106-{row['action']}-")
+    ]
+    return {
+        "status": "pass" if not incomplete_actions else "fail",
+        "required_actions": list(REQUIRED_DECISION_ACTIONS),
+        "receipt_count": len(rows),
+        "incomplete_actions": incomplete_actions,
+        "rows": rows,
+    }
+
+
+def _launch_gate_summary(launch_gate_ledger: List[Dict[str, Any]]) -> Dict[str, Any]:
+    states: Dict[str, int] = {}
+    blocking_gate_names: List[str] = []
+    for row in launch_gate_ledger:
+        if not isinstance(row, dict):
+            continue
+        state = str(row.get("state") or "unknown").strip() or "unknown"
+        states[state] = states.get(state, 0) + 1
+        if state != "pass":
+            name = str(row.get("name") or "").strip()
+            blocking_gate_names.append(name or "unknown")
+    return {
+        "gate_count": len([row for row in launch_gate_ledger if isinstance(row, dict)]),
+        "pass_count": states.get("pass", 0),
+        "blocked_count": states.get("blocked", 0),
+        "fail_count": states.get("fail", 0),
+        "watch_count": states.get("watch", 0),
+        "accumulating_count": states.get("accumulating", 0),
+        "unknown_count": states.get("unknown", 0),
+        "blocking_gate_names": blocking_gate_names,
+        "all_green": not blocking_gate_names,
+    }
 
 
 def _blocked_dependency_package_ids(source_input_health: Dict[str, Any]) -> List[str]:
@@ -1457,30 +2292,38 @@ def build_payload(
     adoption = dict(supporting.get("adoption_health") or {})
     journey_summary = dict(journey_gates.get("summary") or {})
     support = _support_summary(support_packets)
+    adoption_summary = _adoption_summary(weekly_pulse)
     local_release_proof = str(
-        launch_signals.get("local_release_proof_status")
-        or adoption.get("local_release_proof_status")
+        adoption.get("local_release_proof_status")
+        or launch_signals.get("local_release_proof_status")
         or "unknown"
     ).strip()
     canary_status = str(
-        launch_signals.get("provider_canary_status") or provider.get("canary_status") or "unknown"
+        provider.get("canary_status") or launch_signals.get("provider_canary_status") or "unknown"
     ).strip()
     closure_state = str(
-        launch_signals.get("closure_health_state") or closure.get("state") or "unknown"
+        closure.get("state") or launch_signals.get("closure_health_state") or "unknown"
     ).strip()
     status_plane_final_claim = str(
         status_plane.get("whole_product_final_claim_status") or ""
     ).strip()
     journey_state = str(
-        launch_signals.get("journey_gate_state")
-        or journey_summary.get("overall_state")
+        journey_summary.get("overall_state")
         or (weekly_pulse.get("journey_gate_health") or {}).get("state")
+        or launch_signals.get("journey_gate_state")
         or "unknown"
     ).strip()
     readiness_status = str(flagship_readiness.get("status") or "unknown").strip()
     parity = _flagship_parity_summary(flagship_readiness)
+    quality = _flagship_quality_summary(flagship_readiness)
     parity_gold_ready = parity["release_truth_status"] == "gold_ready"
+    quality_ready = quality["release_truth_status"] == "pass"
     dependency_posture = dict(verification.get("dependency_posture") or {})
+    dependency_package_routes = _dependency_package_routes(
+        dependency_posture=dependency_posture,
+        design_queue=design_queue,
+        queue=queue,
+    )
     dependency_status = str(dependency_posture.get("status") or "open").strip()
     launch_allowed = (
         verification["status"] == "pass"
@@ -1489,12 +2332,19 @@ def build_payload(
         and dependency_status == "satisfied"
         and readiness_status == "pass"
         and parity_gold_ready
+        and quality_ready
         and status_plane_final_claim == "pass"
         and journey_state == "ready"
         and local_release_proof == "passed"
+        and adoption_summary["state"] != "unknown"
+        and adoption_summary["history_snapshot_count"] > 0
         and canary_status == "Canary green on all active lanes"
         and closure_state == "clear"
         and support["open_non_external_packet_count"] == 0
+        and support["reporter_followthrough_blocked_missing_install_receipts_count"] == 0
+        and support["reporter_followthrough_blocked_receipt_mismatch_count"] == 0
+        and support["followthrough_receipt_gates_blocked_missing_install_receipts_count"] == 0
+        and support["followthrough_receipt_gates_blocked_receipt_mismatch_count"] == 0
     )
     launch_action = str(launch_decision.get("action") or "freeze_launch").strip()
     decision_alignment = _decision_alignment(launch_action, launch_allowed)
@@ -1502,6 +2352,10 @@ def build_payload(
     rollback_watch = (
         support["closure_waiting_on_release_truth"] > 0
         or support["update_required_misrouted_case_count"] > 0
+        or support["reporter_followthrough_blocked_missing_install_receipts_count"] > 0
+        or support["reporter_followthrough_blocked_receipt_mismatch_count"] > 0
+        or support["followthrough_receipt_gates_blocked_missing_install_receipts_count"] > 0
+        or support["followthrough_receipt_gates_blocked_receipt_mismatch_count"] > 0
         or str((weekly_pulse.get("release_health") or {}).get("state") or "").strip() not in {
             "green",
             "green_or_explained",
@@ -1552,6 +2406,12 @@ def build_payload(
             parity["release_truth_status"],
         ),
         _gate_row(
+            "flagship_quality",
+            "pass" if quality_ready else "blocked",
+            "localization pass and accessibility/polish proof ready",
+            quality["release_truth_status"],
+        ),
+        _gate_row(
             "status_plane_final_claim",
             "pass" if status_plane_final_claim == "pass" else "blocked",
             "pass",
@@ -1570,6 +2430,18 @@ def build_payload(
             local_release_proof,
         ),
         _gate_row(
+            "weekly_adoption_truth",
+            "pass"
+            if adoption_summary["state"] != "unknown"
+            and adoption_summary["history_snapshot_count"] > 0
+            else "blocked",
+            "present with measured history",
+            (
+                f"{adoption_summary['state']} / "
+                f"{adoption_summary['history_snapshot_count']} history snapshots"
+            ),
+        ),
+        _gate_row(
             "provider_canary",
             "pass" if canary_status == "Canary green on all active lanes" else "blocked",
             "Canary green on all active lanes",
@@ -1581,6 +2453,26 @@ def build_payload(
             "pass" if support["open_non_external_packet_count"] == 0 else "blocked",
             "0 open non-external packets",
             support["open_non_external_packet_count"],
+        ),
+        _gate_row(
+            "support_followthrough_receipts",
+            "pass"
+            if support["reporter_followthrough_blocked_missing_install_receipts_count"] == 0
+            and support["reporter_followthrough_blocked_receipt_mismatch_count"] == 0
+            and support["followthrough_receipt_gates_blocked_missing_install_receipts_count"] == 0
+            and support["followthrough_receipt_gates_blocked_receipt_mismatch_count"] == 0
+            else "blocked",
+            "0 missing or mismatched install receipt blockers",
+            (
+                "reporter_missing="
+                f"{support['reporter_followthrough_blocked_missing_install_receipts_count']}; "
+                "reporter_mismatch="
+                f"{support['reporter_followthrough_blocked_receipt_mismatch_count']}; "
+                "receipt_gate_missing="
+                f"{support['followthrough_receipt_gates_blocked_missing_install_receipts_count']}; "
+                "receipt_gate_mismatch="
+                f"{support['followthrough_receipt_gates_blocked_receipt_mismatch_count']}"
+            ),
         ),
     ]
     rollback_gate_ledger = [
@@ -1595,6 +2487,26 @@ def build_payload(
             "watch" if support["update_required_misrouted_case_count"] > 0 else "clear",
             "0",
             support["update_required_misrouted_case_count"],
+        ),
+        _gate_row(
+            "support_followthrough_receipt_blockers",
+            "watch"
+            if support["reporter_followthrough_blocked_missing_install_receipts_count"] > 0
+            or support["reporter_followthrough_blocked_receipt_mismatch_count"] > 0
+            or support["followthrough_receipt_gates_blocked_missing_install_receipts_count"] > 0
+            or support["followthrough_receipt_gates_blocked_receipt_mismatch_count"] > 0
+            else "clear",
+            "0 missing or mismatched install receipt blockers",
+            (
+                "reporter_missing="
+                f"{support['reporter_followthrough_blocked_missing_install_receipts_count']}; "
+                "reporter_mismatch="
+                f"{support['reporter_followthrough_blocked_receipt_mismatch_count']}; "
+                "receipt_gate_missing="
+                f"{support['followthrough_receipt_gates_blocked_missing_install_receipts_count']}; "
+                "receipt_gate_mismatch="
+                f"{support['followthrough_receipt_gates_blocked_receipt_mismatch_count']}"
+            ),
         ),
         _gate_row(
             "release_health",
@@ -1614,8 +2526,13 @@ def build_payload(
         and decision_alignment["status"] == "pass"
         and readiness_status == "pass"
         and parity["release_truth_status"] in {"gold_ready", "veteran_ready"}
+        and quality_ready
         and status_plane_final_claim == "pass"
         and support["open_non_external_packet_count"] == 0
+        and support["reporter_followthrough_blocked_missing_install_receipts_count"] == 0
+        and support["reporter_followthrough_blocked_receipt_mismatch_count"] == 0
+        and support["followthrough_receipt_gates_blocked_missing_install_receipts_count"] == 0
+        and support["followthrough_receipt_gates_blocked_receipt_mismatch_count"] == 0
     )
     package_complete = (
         verification["status"] == "pass"
@@ -1644,6 +2561,7 @@ def build_payload(
         "allowed_paths": list(ALLOWED_PATHS),
         "remaining_dependency_ids": remaining_dependency_ids,
         "blocked_dependency_package_ids": blocked_dependency_package_ids,
+        "dependency_package_routes": dependency_package_routes,
         "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
         "handoff_rule": (
             "Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; "
@@ -1656,8 +2574,10 @@ def build_payload(
             "blocked_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
             "rule": (
                 "Worker proof must come from repo-local files, generated packets, and tests, "
-                "not operator telemetry or active-run helper commands; active-run helpers are "
-                "hard-blocked, count as run failure, and return non-zero during active runs."
+                "not operator telemetry, supervisor helper loops, supervisor status/ETA helpers, "
+                "or active-run helper commands; "
+                "active-run helpers are hard-blocked, count as run failure, and return non-zero "
+                "during active runs."
             ),
         },
         "flagship_wave_guard": {
@@ -1704,7 +2624,7 @@ def build_payload(
         "current_launch_reason": str(launch_decision.get("reason") or "").strip(),
         "launch_expand": {
             "state": "allowed" if launch_allowed else "blocked",
-            "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
+            "reason": "All measured launch gates are green." if launch_allowed else "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
         },
         "freeze_launch": {
             "state": "active" if freeze_active else "available",
@@ -1752,12 +2672,40 @@ def build_payload(
             ),
         ],
     }
+    governor_decisions = _governor_decision_rows(decision_board, decision_gate_ledger)
+    decision_action_matrix = _decision_action_matrix(
+        decision_board=decision_board,
+        decision_gate_ledger=decision_gate_ledger,
+        governor_decisions=governor_decisions,
+    )
+    decision_action_coverage = _decision_action_coverage(
+        decision_board=decision_board,
+        decision_gate_ledger=decision_gate_ledger,
+        governor_decisions=governor_decisions,
+        decision_action_matrix=decision_action_matrix,
+    )
+    decision_source_coverage = _decision_source_coverage(
+        decision_board=decision_board,
+        decision_gate_ledger=decision_gate_ledger,
+    )
+    decision_action_routes = _decision_action_routes(
+        decision_board=decision_board,
+        decision_gate_ledger=decision_gate_ledger,
+    )
+    decision_receipts = _decision_receipts(
+        decision_action_matrix=decision_action_matrix,
+        decision_action_routes=decision_action_routes,
+    )
+    launch_gate_summary = _launch_gate_summary(launch_gate_ledger)
+    source_input_fingerprint = _source_input_fingerprint(source_input_health)
+    generated_at = iso_now()
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
         "status": packet_status,
         "status_reason": status_reason,
-        "generated_at": iso_now(),
+        "generated_at": generated_at,
+        "governor_packet_schedule": _packet_schedule(generated_at),
         "as_of": str(weekly_pulse.get("as_of") or "").strip(),
         "program_wave": "next_90_day_product_advance",
         "wave_id": WAVE_ID,
@@ -1765,6 +2713,7 @@ def build_payload(
         "package_verification": verification,
         "weekly_input_health": weekly_input_health,
         "source_input_health": source_input_health,
+        "source_input_fingerprint": source_input_fingerprint,
         "decision_alignment": decision_alignment,
         "source_paths": source_paths,
         "truth_inputs": {
@@ -1772,19 +2721,22 @@ def build_payload(
             "weekly_pulse_version": _coerce_int(weekly_pulse.get("contract_version"), 0),
             "flagship_readiness_status": readiness_status,
             "flagship_parity_release_truth": parity,
+            "flagship_quality_release_truth": quality,
             "journey_gate_state": journey_state,
             "local_release_proof_status": local_release_proof,
             "provider_canary_status": canary_status,
             "closure_health_state": closure_state,
             "successor_dependency_status": dependency_status,
             "successor_dependency_posture": dependency_posture,
+            "successor_dependency_package_routes": dependency_package_routes,
             "support_summary": support,
+            "adoption_health": adoption_summary,
             "status_plane_final_claim": status_plane_final_claim,
             "closed_flagship_registry_status": str(closed_flagship_registry.get("status") or "").strip(),
         },
         "decision_board": decision_board,
         "decision_gate_ledger": decision_gate_ledger,
-        "governor_decisions": _governor_decision_rows(decision_board, decision_gate_ledger),
+        "governor_decisions": governor_decisions,
         "public_status_copy": _status_copy(
             launch_allowed=launch_allowed,
             rollback_watch=rollback_watch,
@@ -1803,6 +2755,7 @@ def build_payload(
             ),
             "remaining_milestone_dependency_ids": remaining_dependency_ids,
             "blocked_dependency_package_ids": blocked_dependency_package_ids,
+            "dependency_package_routes": dependency_package_routes,
             "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
             "milestone_106_still_open_because": (
                 "successor dependencies and sibling work tasks remain outside this Fleet package"
@@ -1818,25 +2771,37 @@ def build_payload(
         "measured_rollout_loop": {
             "loop_status": "ready" if measured_loop_ready else "blocked",
             "cadence": "weekly",
+            "launch_expansion_ready": launch_allowed,
+            "freeze_active": freeze_active,
+            "canary_ready": canary_status == "Canary green on all active lanes",
+            "rollback_watch": rollback_watch,
             "blocked_dependency_package_ids": blocked_dependency_package_ids,
-            "required_decision_actions": [
-                "launch_expand",
-                "freeze_launch",
-                "canary",
-                "rollback",
-                "focus_shift",
-            ],
+            "dependency_package_routes": dependency_package_routes,
+            "required_decision_actions": list(REQUIRED_DECISION_ACTIONS),
+            "launch_gate_summary": launch_gate_summary,
+            "decision_action_matrix": decision_action_matrix,
+            "decision_action_coverage": decision_action_coverage,
+            "decision_source_coverage": decision_source_coverage,
+            "decision_action_routes": decision_action_routes,
+            "decision_receipts": decision_receipts,
             "evidence_requirements": [
                 "successor registry and queue item match package authority",
                 "design-owned queue staging and Fleet queue mirror both carry the completed package proof",
                 "successor registry work task 106.1 remains complete with weekly governor evidence markers",
                 "successor dependency milestones are complete before launch expansion is allowed",
+                "closed dependency package rows route to verify_closed_package_only instead of reopening completed predecessor packages",
                 "weekly pulse cites journey, local release proof, canary, and closure signals",
+                "weekly adoption truth is present with measured history before launch expansion is allowed",
                 "flagship readiness remains green before any launch expansion",
                 "flagship parity remains at veteran_ready or gold_ready before the measured loop can steer launch decisions",
+                "localization and accessibility/polish proof remain green before measured rollout readiness",
                 "status-plane final claim remains pass before launch expansion or measured rollout readiness",
                 "support packet counts stay clear for non-external closure work",
+                "support followthrough stays free of missing or mismatched install receipt blockers",
                 "fix-available, please-test, and recovery followthrough counts come from install-aware receipt gates",
+                "each measured decision cites its required source gate rows before the packet can claim decision-source coverage",
+                "each measured decision names an owner, route, trigger gate, and unblock condition before the packet can drive operator action",
+                "each measured decision publishes gate-state, blocking-count, and operator-action fields before the weekly packet can drive launch, freeze, canary, rollback, or focus-shift action",
                 "queue closeout status remains complete and carries the required weekly governor proof receipts",
                 "public status copy is derived from the same measured decision ledger as the governor packet",
             ],
@@ -1862,18 +2827,27 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     truth = dict(payload.get("truth_inputs") or {})
     decision_board = dict(payload.get("decision_board") or {})
     loop = dict(payload.get("measured_rollout_loop") or {})
+    schedule = dict(payload.get("governor_packet_schedule") or {})
     closeout = dict(payload.get("package_closeout") or {})
     repeat_prevention = dict(payload.get("repeat_prevention") or {})
     worker_command_guard = dict(repeat_prevention.get("worker_command_guard") or {})
     flagship_wave_guard = dict(repeat_prevention.get("flagship_wave_guard") or {})
     weekly = dict(payload.get("weekly_input_health") or {})
     sources = dict(payload.get("source_input_health") or {})
+    source_inputs = dict(sources.get("required_inputs") or {})
+    launch_signal_alignment = dict(source_inputs.get("launch_signal_truth_alignment") or {})
     decision_alignment = dict(payload.get("decision_alignment") or {})
     support = dict(truth.get("support_summary") or {})
+    adoption = dict(truth.get("adoption_health") or {})
     dependency = dict(truth.get("successor_dependency_posture") or {})
+    dependency_routes = dict(truth.get("successor_dependency_package_routes") or {})
     parity = dict(truth.get("flagship_parity_release_truth") or {})
+    quality = dict(truth.get("flagship_quality_release_truth") or {})
     public_copy = dict(payload.get("public_status_copy") or {})
     gate_ledger = dict(payload.get("decision_gate_ledger") or {})
+    launch_gate_summary = dict(loop.get("launch_gate_summary") or {})
+    source_coverage = dict(loop.get("decision_source_coverage") or {})
+    action_routes = dict(loop.get("decision_action_routes") or {})
     risk_clusters = payload.get("risk_clusters") if isinstance(payload.get("risk_clusters"), list) else []
 
     lines = [
@@ -1908,12 +2882,30 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Package verification: {_markdown_status(verification.get('status'))}",
             f"- Weekly input health: {_markdown_status(weekly.get('status'))}",
             f"- Source input health: {_markdown_status(sources.get('status'))}",
+            f"- Source input fingerprint: {_markdown_status(dict(payload.get('source_input_fingerprint') or {}).get('combined_source_sha256'))}",
+            f"- Launch cited signal truth alignment: {_markdown_status(launch_signal_alignment.get('state'))}",
             f"- Decision alignment: {_markdown_status(decision_alignment.get('status'))}",
             f"- Expected launch action: {_markdown_status(decision_alignment.get('expected_action'))}",
             f"- Actual launch action: {_markdown_status(decision_alignment.get('actual_action'))}",
             f"- Package closeout: {_markdown_status(closeout.get('status'))}",
             f"- Do not reopen package: {bool(closeout.get('do_not_reopen_package'))}",
             f"- Measured rollout loop: {_markdown_status(loop.get('loop_status'))}",
+            f"- Governor packet cadence: {_markdown_status(schedule.get('cadence'))}",
+            f"- Next packet due: {_markdown_status(schedule.get('next_packet_due_at'))}",
+            f"- Decision action coverage: {_markdown_status(dict(loop.get('decision_action_coverage') or {}).get('status'))}",
+            f"- Decision actions covered: {dict(loop.get('decision_action_coverage') or {}).get('covered_action_count', 0)} / {dict(loop.get('decision_action_coverage') or {}).get('required_action_count', 0)}",
+            f"- Decision source coverage: {_markdown_status(source_coverage.get('status'))}",
+            f"- Decision sources covered: {source_coverage.get('covered_action_count', 0)} / {source_coverage.get('required_action_count', 0)}",
+            f"- Decision action routing: {_markdown_status(action_routes.get('status'))}",
+            f"- Launch expansion ready: {bool(loop.get('launch_expansion_ready'))}",
+            f"- Launch gates green: {bool(launch_gate_summary.get('all_green'))}",
+            f"- Launch gate pass count: {launch_gate_summary.get('pass_count', 0)}",
+            f"- Launch gate blocked count: {launch_gate_summary.get('blocked_count', 0)}",
+            f"- Launch gate fail count: {launch_gate_summary.get('fail_count', 0)}",
+            f"- Launch gate blocking names: {_markdown_list(launch_gate_summary.get('blocking_gate_names'))}",
+            f"- Freeze active: {bool(loop.get('freeze_active'))}",
+            f"- Canary ready: {bool(loop.get('canary_ready'))}",
+            f"- Rollback watch: {bool(loop.get('rollback_watch'))}",
             f"- Registry work task 106.1 status: {_markdown_status(verification.get('registry_work_task_status'))}",
             f"- Required registry evidence markers: {len(verification.get('required_registry_evidence_markers') or [])}",
             f"- Queue closeout status: {_markdown_status(verification.get('queue_status'))}",
@@ -1922,15 +2914,26 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Required resolving proof paths: {_markdown_list(verification.get('required_resolving_proof_paths'))}",
             f"- Successor dependency posture: {_markdown_status(dependency.get('status'))}",
             f"- Open successor dependencies: {_markdown_list(dependency.get('open_dependency_ids'))}",
+            f"- Dependency package routing: {_markdown_status(dependency_routes.get('status'))}",
+            f"- Closed dependency packages verified: {dependency_routes.get('closed_package_count', 0)}",
+            f"- Open registry dependency milestones: {dependency_routes.get('open_registry_milestone_count', 0)}",
             f"- Remaining sibling work tasks: {_markdown_list(closeout.get('remaining_sibling_work_task_ids'))}",
             f"- Flagship readiness: {_markdown_status(truth.get('flagship_readiness_status'))}",
             f"- Flagship parity release truth: {_markdown_status(parity.get('release_truth_status'))}",
+            f"- Flagship quality release truth: {_markdown_status(quality.get('release_truth_status'))}",
+            f"- Localization gate: {_markdown_status(quality.get('localization_release_gate_status'))}",
+            f"- Accessibility proof named: {_markdown_status(quality.get('accessibility_proof_named'))}",
             f"- Journey gate state: {_markdown_status(truth.get('journey_gate_state'))}",
             f"- Local release proof: {_markdown_status(truth.get('local_release_proof_status'))}",
+            f"- Weekly adoption state: {_markdown_status(adoption.get('state'))}",
+            f"- Weekly adoption history snapshots: {adoption.get('history_snapshot_count', 0)}",
+            f"- Weekly adoption proven journeys: {adoption.get('proven_journey_count', 0)}",
+            f"- Weekly adoption proven routes: {adoption.get('proven_route_count', 0)}",
             f"- Provider canary: {_markdown_status(truth.get('provider_canary_status'))}",
             f"- Closure health: {_markdown_status(truth.get('closure_health_state'))}",
             f"- Open non-external support packets: {support.get('open_non_external_packet_count', 0)}",
             f"- Reporter followthrough ready: {support.get('reporter_followthrough_ready_count', 0)}",
+            f"- Feedback followthrough ready: {support.get('feedback_followthrough_ready_count', 0)}",
             f"- Fix-available ready: {support.get('fix_available_ready_count', 0)}",
             f"- Please-test ready: {support.get('please_test_ready_count', 0)}",
             f"- Recovery-loop ready: {support.get('recovery_loop_ready_count', 0)}",
@@ -1953,6 +2956,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",
             f"- Remaining dependency packages: {_markdown_list(repeat_prevention.get('remaining_dependency_ids'))}",
             f"- Blocked dependency packages: {_markdown_list(repeat_prevention.get('blocked_dependency_package_ids'))}",
+            f"- Dependency package route rule: {_markdown_status(dict(repeat_prevention.get('dependency_package_routes') or {}).get('rule'))}",
             f"- Remaining sibling work tasks: {_markdown_list(repeat_prevention.get('remaining_sibling_work_task_ids'))}",
             f"- Handoff rule: {_markdown_status(repeat_prevention.get('handoff_rule'))}",
             f"- Worker command guard: {_markdown_status(worker_command_guard.get('status'))}",
@@ -1964,6 +2968,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             "## Public Status Copy",
             "",
             f"- State: {_markdown_status(public_copy.get('state'))}",
+            f"- Derived from: {_markdown_status(public_copy.get('derived_from'))}",
+            f"- Decision actions: {_markdown_list(public_copy.get('decision_actions'))}",
             f"- Headline: {_markdown_status(public_copy.get('headline'))}",
             f"- Body: {_markdown_status(public_copy.get('body'))}",
             "",
@@ -1995,6 +3001,78 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     if not loop.get("required_decision_actions"):
         lines.append("- none")
 
+    lines.extend(
+        [
+            "",
+            "## Decision Action Matrix",
+            "",
+            "| Action | Board state | Ledger gates | Governor state | Governor gates | Complete |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in loop.get("decision_action_matrix") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_markdown_status(row.get('action'))} | {_markdown_status(row.get('board_state'))} | "
+            f"{row.get('ledger_gate_count', 0)} | {_markdown_status(row.get('governor_state'))} | "
+            f"{row.get('governor_gate_count', 0)} | {bool(row.get('complete'))} |"
+        )
+    if not loop.get("decision_action_matrix"):
+        lines.append("| none | missing | 0 | missing | 0 | False |")
+
+    lines.extend(
+        [
+            "",
+            "## Decision Source Coverage",
+            "",
+            "| Action | Required gates | Missing gates | Covered |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    for row in source_coverage.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_markdown_status(row.get('action'))} | "
+            f"{_markdown_list(row.get('required_gates'))} | "
+            f"{_markdown_list(row.get('missing_gates'))} | "
+            f"{bool(row.get('covered'))} |"
+        )
+    if not source_coverage.get("rows"):
+        lines.append("| none | none | none | False |")
+
+    lines.extend(
+        [
+            "",
+            "## Decision Action Routes",
+            "",
+            "| Action | Owner | Route | Cadence | Trigger gate | Route blocked | Operator action | Blocked action | Clear action | Blocking gates | Next decision | Ready |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in action_routes.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_markdown_status(row.get('action'))} | "
+            f"{_markdown_status(row.get('owner'))} | "
+            f"{_markdown_status(row.get('route'))} | "
+            f"{_markdown_status(row.get('cadence'))} | "
+            f"{_markdown_status(row.get('trigger_gate'))} | "
+            f"{bool(row.get('route_blocked'))} | "
+            f"{_markdown_status(row.get('operator_action'))} | "
+            f"{_markdown_status(row.get('operator_action_when_blocked'))} | "
+            f"{_markdown_status(row.get('operator_action_when_clear'))} | "
+            f"{_markdown_list(row.get('blocking_gates'))} | "
+            f"{_markdown_status(row.get('next_decision'))} | "
+            f"{bool(row.get('ready_for_operator_packet'))} |"
+        )
+    if not action_routes.get("rows"):
+        lines.append(
+            "| none | unknown | unknown | unknown | unknown | False | unknown | unknown | unknown | none | none | False |"
+        )
+
     lines.extend(["", "## Evidence Requirements", ""])
     for requirement in loop.get("evidence_requirements") or []:
         lines.append(f"- {requirement}")
@@ -2011,6 +3089,30 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
         )
     if not risk_clusters:
         lines.append("- none")
+
+    lines.extend(
+        [
+            "",
+            "## Dependency Package Routes",
+            "",
+            "| Milestone | Package | Registry | Queue | Design queue | Route | Launch gate |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in dependency_routes.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {row.get('milestone_id', 'unknown')} | "
+            f"{_markdown_status(row.get('package_id'))} | "
+            f"{_markdown_status(row.get('registry_status'))} | "
+            f"{_markdown_status(row.get('queue_status'))} | "
+            f"{_markdown_status(row.get('design_queue_status'))} | "
+            f"{_markdown_status(row.get('operator_route'))} | "
+            f"{_markdown_status(row.get('launch_gate_contribution'))} |"
+        )
+    if not dependency_routes.get("rows"):
+        lines.append("| none | none | unknown | unknown | unknown | unknown | unknown |")
 
     lines.extend(["", "## Source Paths", ""])
     for key, path in sorted(dict(payload.get("source_paths") or {}).items()):
