@@ -493,6 +493,7 @@ items:
       - local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor
       - local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor
       - local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor
+      - local proof floor commit 52fe086 pinned for M106 governor packet proof floor
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:

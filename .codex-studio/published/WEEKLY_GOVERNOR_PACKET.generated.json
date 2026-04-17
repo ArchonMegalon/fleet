@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-16T23:58:39Z",
+  "generated_at": "2026-04-17T00:12:43Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -530,6 +530,10 @@
         {
           "commit": "dd5fdb5",
           "status": "present"
+        },
+        {
+          "commit": "52fe086",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -566,7 +570,8 @@
         "83d2d21",
         "e74a7ec",
         "8fb8d40",
-        "dd5fdb5"
+        "dd5fdb5",
+        "52fe086"
       ],
       "status": "pass"
     },
@@ -603,7 +608,8 @@
       "83d2d21",
       "e74a7ec",
       "8fb8d40",
-      "dd5fdb5"
+      "dd5fdb5",
+      "52fe086"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -688,6 +694,7 @@
       "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
       "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
       "local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor",
+      "local proof floor commit 52fe086 pinned for M106 governor packet proof floor",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -747,6 +754,7 @@
       "local proof floor commit e74a7ec",
       "local proof floor commit 8fb8d40",
       "local proof floor commit dd5fdb5",
+      "local proof floor commit 52fe086",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -927,6 +935,10 @@
         {
           "commit": "dd5fdb5",
           "status": "present"
+        },
+        {
+          "commit": "52fe086",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -963,7 +975,8 @@
         "83d2d21",
         "e74a7ec",
         "8fb8d40",
-        "dd5fdb5"
+        "dd5fdb5",
+        "52fe086"
       ],
       "status": "pass"
     },
@@ -1000,7 +1013,8 @@
       "83d2d21",
       "e74a7ec",
       "8fb8d40",
-      "dd5fdb5"
+      "dd5fdb5",
+      "52fe086"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
