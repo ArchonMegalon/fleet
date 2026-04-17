@@ -127,6 +127,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
     for proof_anchor in (
         root / "scripts" / "materialize_weekly_governor_packet.py",
         root / "scripts" / "verify_next90_m106_fleet_governor_packet.py",
+        root / "scripts" / "run_next90_m106_weekly_governor_packet_tests.py",
         root / "scripts" / "verify_script_bootstrap_no_pythonpath.py",
         root / "tests" / "test_materialize_weekly_governor_packet.py",
         root / "tests" / "test_fleet_script_bootstrap_without_pythonpath.py",
@@ -162,14 +163,17 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                             "evidence": [
                                 "/docker/fleet/scripts/materialize_weekly_governor_packet.py compiles readiness inputs.",
                                 "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py verifies the checked-in packet closeout without regenerating timestamps.",
+                                "/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py executes the pytest-style M106 fixture tests without requiring pytest.",
                                 "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M106 verifier in no-PYTHONPATH bootstrap proof.",
                                 "/docker/fleet/tests/test_materialize_weekly_governor_packet.py fail-closes drift.",
                                 "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py launches the standalone M106 verifier help without PYTHONPATH.",
                                 "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json reports current decisions.",
                                 "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md mirrors the operator packet.",
                                 "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py exits 0.",
+                                "python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0.",
                                 "python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py exits 0.",
                                 "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0.",
+                                "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0.",
                                 "Direct tmp_path fixture invocation exits 0.",
                                 "Verifier rebuilds the decision-critical packet projection from live source inputs.",
                                 "Verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs.",
@@ -291,14 +295,17 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "proof": [
                         "/docker/fleet/scripts/materialize_weekly_governor_packet.py",
                         "/docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py",
+                        "/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py",
                         "/docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py",
                         "/docker/fleet/tests/test_materialize_weekly_governor_packet.py",
                         "/docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py",
                         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json",
                         "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
                         "python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py",
+                        "python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py",
                         "python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py",
                         "python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0",
+                        "python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0",
                         "direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0",
                         "verifier rebuilds the decision-critical packet projection from live source inputs",
                         "verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs",
@@ -866,6 +873,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "- Required resolving proof paths: "
         "scripts/materialize_weekly_governor_packet.py, "
         "scripts/verify_next90_m106_fleet_governor_packet.py, "
+        "scripts/run_next90_m106_weekly_governor_packet_tests.py, "
         "scripts/verify_script_bootstrap_no_pythonpath.py, "
         "tests/test_materialize_weekly_governor_packet.py, "
         "tests/test_fleet_script_bootstrap_without_pythonpath.py"
@@ -3633,6 +3641,7 @@ def test_weekly_governor_packet_fails_package_verification_when_source_anchor_is
     assert payload["package_verification"]["required_resolving_proof_paths"] == [
         "scripts/materialize_weekly_governor_packet.py",
         "scripts/verify_next90_m106_fleet_governor_packet.py",
+        "scripts/run_next90_m106_weekly_governor_packet_tests.py",
         "scripts/verify_script_bootstrap_no_pythonpath.py",
         "tests/test_materialize_weekly_governor_packet.py",
         "tests/test_fleet_script_bootstrap_without_pythonpath.py",

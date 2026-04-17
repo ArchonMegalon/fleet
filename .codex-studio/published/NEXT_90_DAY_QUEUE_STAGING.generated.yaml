@@ -472,14 +472,17 @@ items:
     proof:
       - /docker/fleet/scripts/materialize_weekly_governor_packet.py
       - /docker/fleet/scripts/verify_next90_m106_fleet_governor_packet.py
+      - /docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py
       - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
       - /docker/fleet/tests/test_materialize_weekly_governor_packet.py
       - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
       - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
       - python3 -m py_compile scripts/materialize_weekly_governor_packet.py scripts/verify_next90_m106_fleet_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 -m py_compile scripts/run_next90_m106_weekly_governor_packet_tests.py
       - python3 -m py_compile scripts/verify_script_bootstrap_no_pythonpath.py tests/test_fleet_script_bootstrap_without_pythonpath.py
       - python3 scripts/verify_next90_m106_fleet_governor_packet.py exits 0
+      - python3 scripts/run_next90_m106_weekly_governor_packet_tests.py exits 0
       - direct tmp_path fixture invocation for tests/test_materialize_weekly_governor_packet.py exits 0
       - verifier rebuilds the decision-critical packet projection from live source inputs
       - verifier rejects checked-in packet freshness drift against generated readiness, journey, support, weekly pulse, and status-plane inputs
