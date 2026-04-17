@@ -603,6 +603,7 @@ items:
       - control-plane polling prohibition guard is enforced case-insensitively
       - worker-run OODA helper guard is enforced case-insensitively
       - telemetry-ownership handoff prompt strings are rejected as worker proof strings
+      - worker-safe resume context prompt strings are rejected as worker proof strings
       - worker-run supervisor launcher guard is enforced case-insensitively
       - run-helper failure proof strings are rejected case-insensitively
       - repeat-prevention worker command guard records helper failure posture
@@ -650,11 +651,13 @@ items:
       - local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor
       - local proof floor commit d15a7ae pinned for M106 queue closeout action guard
       - local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor
+      - local proof floor commit b909cc5 pinned for M106 codexea helper proof guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts
       - commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift
       - commit f3bfb8d refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, journey, and status-plane source input drift
       - commit d15a7ae tightens the M106 queue closeout action guard.
+      - commit b909cc5 tightens the M106 codexea helper proof guard.
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin
@@ -696,7 +699,10 @@ items:
       - generated support successor closure-field drift fails the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - future-dated support and weekly generated_at receipts fail the standalone verifier
       - weekly support-packet source-path drift fails the standalone verifier
+      - standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates
+      - standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready
       - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
@@ -705,7 +711,9 @@ items:
       - design-owned queue source row matches the Fleet completed queue proof assignment
       - design-owned queue source proof markers fail the standalone verifier
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check
       - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
+      - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
     allowed_paths:
       - scripts
       - tests
@@ -753,6 +761,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit d1c9a12 pins the M101 queue-scope proof floor into the verifier, proof receipt, and closeout note.
       - /docker/chummercomplete/chummer-hub-registry commit cfb928b pins the M101 queue proof citation floor so canonical registry and queue staging cite the current completed-package proof floor.
       - /docker/chummercomplete/chummer-hub-registry commit 2f7a422 tightens the M101 duplicate route-truth guard so future shards reject repeated desktopTupleCoverage.desktopRouteTruth tuple ids instead of repeating the completed package.
+      - /docker/chummercomplete/chummer-hub-registry commit b3a945b tightens the M101 tuple rationale and encoded helper proof floor so future shards verify the current completed-package proof instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
@@ -1035,6 +1044,12 @@ items:
       - /docker/chummercomplete/chummer.run-services commit a91ea733 tightens M107 artifact factory receipt refs.
       - /docker/chummercomplete/chummer.run-services commit c31258fa tightens M107 artifact factory proof floor.
       - /docker/chummercomplete/chummer.run-services commit 45d3d498 tightens M107 artifact factory proof floor.
+      - /docker/chummercomplete/chummer.run-services commit c3aaf05a pins M107 artifact factory proof floor.
+      - /docker/chummercomplete/chummer.run-services commit 285e97be tightens the current M107 artifact factory proof floor guard.
+      - /docker/chummercomplete/chummer.run-services commit ce1c6611 pins M107 artifact factory proof floor guard.
+      - /docker/chummercomplete/chummer.run-services commit 67ae7dab requires refreshed M107 proof floor.
+      - /docker/chummercomplete/chummer.run-services commit 65ac67a8 pins M107 refreshed artifact factory proof floor.
+      - /docker/chummercomplete/chummer.run-services commit e0121780 tightens M107 artifact factory external URI guard.
       - successor frontier 1421219975 pinned for next90-m107-hub-artifact-factory repeat prevention.
     allowed_paths:
       - Chummer.Run.Api
