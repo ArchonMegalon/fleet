@@ -332,6 +332,9 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit f1b6c5ca pins the queued 39c875fd proof floor into the generator, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit faf14925 pins the current f1b6c5ca proof floor guard in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 64b8f873 requires the current faf14925 proof floor guard in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit 06a2e06a pins the current 64b8f873 proof floor requirement in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit 6d25fb18 pins the current 06a2e06a proof floor receipt in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit cc6cf25b pins the M104 current proof floor guard.
     allowed_paths:
       - src
       - tests
@@ -439,6 +442,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit db056eb5 pins the M105 successor prompt proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 19536ab1 pins the M105 workspace proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 3eb87a75 pins the M105 workspace proof floor guard so future shards verify the latest closed-package guard.
+      - /docker/chummercomplete/chummer.run-services commit 3b854764 tightens the M105 workspace queue scope guard so completed-package proof cannot widen allowed paths or owned surfaces.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
