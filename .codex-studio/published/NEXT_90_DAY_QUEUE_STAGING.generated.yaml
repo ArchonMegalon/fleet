@@ -224,6 +224,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 757783c4 pins M101 b8 queue scope proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 0b8414d7 pins M101 current release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit b958e116 tightens M101 standard verify mutation coverage so Avalonia primary route-truth rows cannot cite Blazor fallback proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit 46a9f070 tightens M101 standard verify artifact-identity mutation coverage so Avalonia primary route-truth artifact IDs cannot cite Blazor fallback proof.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -336,6 +337,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit 06a2e06a pins the current 64b8f873 proof floor requirement in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 6d25fb18 pins the current 06a2e06a proof floor receipt in the generated proof pack, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit cc6cf25b pins the M104 current proof floor guard.
+      - /docker/chummercomplete/chummer-core-engine commit bb9af238 pins the current cc6cf25b proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
     allowed_paths:
       - src
       - tests
@@ -445,6 +447,8 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 3eb87a75 pins the M105 workspace proof floor guard so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 3b854764 tightens the M105 workspace queue scope guard so completed-package proof cannot widen allowed paths or owned surfaces.
       - /docker/chummercomplete/chummer.run-services commit 44bada17 pins the M105 workspace queue scope proof so future shards verify the latest closed-package guard.
+      - /docker/chummercomplete/chummer.run-services commit 31b76424 tightens the M105 workspace materializer proof so committed release receipts must be reproducible from scripts/materialize_hub_local_release_proof.py.
+      - /docker/chummercomplete/chummer.run-services commit 121f3571 pins the M105 workspace materializer proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
