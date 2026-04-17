@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T06:44:10Z",
+  "generated_at": "2026-04-17T07:15:58Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -634,6 +634,10 @@
         {
           "commit": "d15a7ae",
           "status": "present"
+        },
+        {
+          "commit": "ac1c4ac",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -687,7 +691,8 @@
         "fba96cc",
         "15efd7c",
         "f3bfb8d",
-        "d15a7ae"
+        "d15a7ae",
+        "ac1c4ac"
       ],
       "status": "pass"
     },
@@ -741,7 +746,8 @@
       "fba96cc",
       "15efd7c",
       "f3bfb8d",
-      "d15a7ae"
+      "d15a7ae",
+      "ac1c4ac"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -856,6 +862,7 @@
       "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
       "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
       "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
+      "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -1192,6 +1199,10 @@
         {
           "commit": "d15a7ae",
           "status": "present"
+        },
+        {
+          "commit": "ac1c4ac",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -1245,7 +1256,8 @@
         "fba96cc",
         "15efd7c",
         "f3bfb8d",
-        "d15a7ae"
+        "d15a7ae",
+        "ac1c4ac"
       ],
       "status": "pass"
     },
@@ -1299,7 +1311,8 @@
       "fba96cc",
       "15efd7c",
       "f3bfb8d",
-      "d15a7ae"
+      "d15a7ae",
+      "ac1c4ac"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -1468,13 +1481,13 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-17T06:20:27Z",
+        "generated_at": "2026-04-17T06:53:50Z",
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-17T06:20:27Z",
+        "generated_at": "2026-04-17T06:53:50Z",
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
         "state": "present"
@@ -1611,11 +1624,11 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-17T06:20:26Z",
+        "generated_at": "2026-04-17T06:53:49Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "6d0f78cc7e2bfc64dd502030967d280ecab825fac2d4ef8674e5c00a329d3ad9",
+        "source_sha256": "2ebccb952559f7a9023abcd313dee6757e441fb7c7ffe0620b3ad6cd51bac077",
         "state": "present",
         "successor_package_verification_status": "fail"
       },

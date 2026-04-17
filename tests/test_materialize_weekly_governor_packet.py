@@ -262,6 +262,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor.",
                                 "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor.",
                                 "local proof floor commit d15a7ae pinned for M106 queue closeout action guard.",
+                                "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor.",
                                 "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages.",
                             ],
                         },
@@ -417,6 +418,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
                         "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
                         "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
+                        "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
                         "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
                     ],
                     "allowed_paths": ["admin", "scripts", "tests", ".codex-studio"],
@@ -762,6 +764,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "15efd7c",
         "f3bfb8d",
         "d15a7ae",
+        "ac1c4ac",
     ]
     assert payload["package_verification"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["package_closeout"]["status"] == "fleet_package_complete"
@@ -837,6 +840,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "15efd7c",
         "f3bfb8d",
         "d15a7ae",
+        "ac1c4ac",
     ]
     assert payload["repeat_prevention"]["local_commit_resolution"]["status"] == "not_checked"
     assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is True

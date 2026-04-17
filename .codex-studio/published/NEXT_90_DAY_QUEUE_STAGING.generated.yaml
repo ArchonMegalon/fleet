@@ -269,6 +269,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit f7fcf1a9 tightens M101 queue title proof.
       - /docker/chummercomplete/chummer6-ui-finish commit f3779b5d pins M101 queue title proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 4779b4c9 tightens M101 encoded worker-context proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit a0decd1a tightens M101 hex-encoded helper proof guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -525,6 +526,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 14f55d5a pins the M105 current workspace proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit f519b944 pins the M105 current workspace proof floor into the package verifier and commit-resolution test.
       - /docker/chummercomplete/chummer.run-services commit 125aa82e recovers blank restore conflict summaries and pins the fallback in M105 workspace receipt proof.
+      - /docker/chummercomplete/chummer.run-services commit da9bb74c pins the blank restore conflict summary proof in the package verifier and commit-resolution test.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
@@ -636,6 +638,7 @@ items:
       - local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor
       - local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor
       - local proof floor commit d15a7ae pinned for M106 queue closeout action guard
+      - local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts
       - commit 15efd7c refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after current support, readiness, and journey source input drift
