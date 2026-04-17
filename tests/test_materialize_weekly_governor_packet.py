@@ -1839,6 +1839,39 @@ def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
         "repeat prevention worker command guard rule no longer requires repo-local proof"
         in verifier.stderr
     )
+    assert (
+        "repeat prevention worker command guard rule no longer forbids operator telemetry and active-run helper commands"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_worker_guard_rule_omitting_helper_ban(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    packet["repeat_prevention"]["worker_command_guard"]["rule"] = (
+        "Worker proof must come from repo-local files, generated packets, and tests."
+    )
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "repeat prevention worker command guard rule no longer forbids operator telemetry and active-run helper commands"
+        in verifier.stderr
+    )
 
 
 def test_verify_next90_m106_governor_packet_rejects_out_of_scope_fleet_proof_paths(

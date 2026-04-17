@@ -621,6 +621,12 @@ def verify(args: argparse.Namespace) -> List[str]:
         "repeat prevention worker command guard rule no longer requires repo-local proof",
     )
     _require(
+        "operator telemetry" in str(worker_command_guard.get("rule") or "")
+        and "active-run helper commands" in str(worker_command_guard.get("rule") or ""),
+        issues,
+        "repeat prevention worker command guard rule no longer forbids operator telemetry and active-run helper commands",
+    )
+    _require(
         flagship_wave_guard.get("status") == "closed_wave_not_reopened",
         issues,
         "repeat prevention flagship wave guard is not closed_wave_not_reopened",
