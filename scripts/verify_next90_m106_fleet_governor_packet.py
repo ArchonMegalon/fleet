@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import subprocess
@@ -67,6 +68,7 @@ def _stable_weekly_health(payload: Dict[str, Any]) -> Dict[str, Any]:
         "generated_at": payload.get("generated_at"),
         "max_age_seconds": payload.get("max_age_seconds"),
         "required_launch_signals": payload.get("required_launch_signals"),
+        "risk_cluster_health": payload.get("risk_cluster_health"),
     }
 
 
@@ -83,6 +85,7 @@ def _decision_projection(payload: Dict[str, Any]) -> Dict[str, Any]:
         "package_verification": payload.get("package_verification"),
         "weekly_input_health": _stable_weekly_health(dict(payload.get("weekly_input_health") or {})),
         "source_input_health": payload.get("source_input_health"),
+        "source_input_fingerprint": payload.get("source_input_fingerprint"),
         "decision_alignment": payload.get("decision_alignment"),
         "truth_inputs": payload.get("truth_inputs"),
         "decision_board": payload.get("decision_board"),
@@ -105,7 +108,9 @@ def _projection_drift(expected: Dict[str, Any], actual: Dict[str, Any]) -> List[
 def _stable_markdown(markdown: str) -> str:
     lines = markdown.splitlines()
     return "\n".join(
-        "Generated: <ignored>" if line.startswith("Generated: ") else line
+        "Generated: <ignored>" if line.startswith("Generated: ")
+        else "- Next packet due: <ignored>" if line.startswith("- Next packet due: ")
+        else line
         for line in lines
     )
 
@@ -119,6 +124,31 @@ def _markdown_generated_at(markdown: str) -> str:
 
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _source_sha256_issues(
+    *,
+    required_inputs: Dict[str, Any],
+    source_paths: Dict[str, str],
+) -> List[str]:
+    issues: List[str] = []
+    for name in sorted(weekly.EXPECTED_PRODUCTION_SOURCE_PATHS):
+        row = dict(required_inputs.get(name) or {})
+        expected_hash = str(row.get("source_sha256") or "").strip().lower()
+        source_path = Path(str(source_paths.get(name) or ""))
+        if not expected_hash:
+            issues.append(f"packet {name} source_sha256 is missing")
+            continue
+        try:
+            actual_hash = _sha256_file(source_path)
+        except OSError as exc:
+            issues.append(f"{name} source path cannot be read for source_sha256: {exc}")
+            continue
+        if expected_hash != actual_hash:
+            issues.append(
+                f"packet {name} source_sha256 no longer matches {source_path.name}"
+            )
+    return issues
 
 
 def _markdown_local_proof_floor_line() -> str:
@@ -145,6 +175,32 @@ def _require_generated_after_source(
             "checked-in packet generated_at predates "
             f"{source_name}; regenerate WEEKLY_GOVERNOR_PACKET.generated.json after refreshing source inputs"
         )
+
+
+def _packet_cadence_issues(
+    *, packet_generated_at: str, now: dt.datetime | None = None
+) -> List[str]:
+    issues: List[str] = []
+    packet_time = weekly._parse_iso_utc(packet_generated_at)
+    if not packet_time:
+        return ["checked-in weekly governor packet generated_at is missing or invalid"]
+    observed_now = (now or dt.datetime.now(weekly.UTC)).astimezone(weekly.UTC)
+    future_skew_seconds = int((packet_time - observed_now).total_seconds())
+    if future_skew_seconds > weekly.GENERATED_AT_MAX_FUTURE_SKEW_SECONDS:
+        issues.append(
+            "checked-in weekly governor packet generated_at is future-dated "
+            f"({future_skew_seconds}s ahead)"
+        )
+        return issues
+    age_seconds = int((observed_now - packet_time).total_seconds())
+    if age_seconds > weekly.WEEKLY_PACKET_CADENCE_SECONDS:
+        issues.append(
+            "checked-in weekly governor packet is overdue "
+            f"({age_seconds}s old); regenerate WEEKLY_GOVERNOR_PACKET.generated.json "
+            "and WEEKLY_GOVERNOR_PACKET.generated.md before using it for launch, freeze, "
+            "canary, or rollback decisions"
+        )
+    return issues
 
 
 def _compile_manifest_artifact_issues(
@@ -267,14 +323,27 @@ def verify(args: argparse.Namespace) -> List[str]:
     local_commit_resolution = dict(packet_verification.get("local_commit_resolution") or {})
     package_closeout = dict(packet.get("package_closeout") or {})
     weekly_health = dict(packet.get("weekly_input_health") or {})
+    schedule = dict(packet.get("governor_packet_schedule") or {})
+    risk_cluster_health = dict(weekly_health.get("risk_cluster_health") or {})
     source_health = dict(packet.get("source_input_health") or {})
     decision_alignment = dict(packet.get("decision_alignment") or {})
     loop = dict(packet.get("measured_rollout_loop") or {})
+    launch_gate_summary = dict(loop.get("launch_gate_summary") or {})
     decision_board = dict(packet.get("decision_board") or {})
     decision_gate_ledger = dict(packet.get("decision_gate_ledger") or {})
+    public_status_copy = dict(packet.get("public_status_copy") or {})
+    truth_inputs = dict(packet.get("truth_inputs") or {})
+    adoption_health = dict(truth_inputs.get("adoption_health") or {})
+    dependency_package_routes = dict(truth_inputs.get("successor_dependency_package_routes") or {})
     governor_decisions = packet.get("governor_decisions") or []
     required_resolving_paths = packet_verification.get("required_resolving_proof_paths") or []
     required_decision_actions = loop.get("required_decision_actions") or []
+    decision_action_matrix = loop.get("decision_action_matrix") or []
+    decision_action_coverage = dict(loop.get("decision_action_coverage") or {})
+    decision_source_coverage = dict(loop.get("decision_source_coverage") or {})
+    decision_action_routes = dict(loop.get("decision_action_routes") or {})
+    decision_receipts = dict(loop.get("decision_receipts") or {})
+    weekly_operator_handoff = dict(loop.get("weekly_operator_handoff") or {})
     packet_projection = _decision_projection(packet)
     live_projection = _decision_projection(live_payload)
     projection_drift = _projection_drift(live_projection, packet_projection)
@@ -324,6 +393,30 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "checked-in markdown packet Generated timestamp no longer matches JSON packet generated_at",
     )
+    expected_schedule = weekly._packet_schedule(str(packet.get("generated_at") or "").strip())
+    _require(
+        schedule == expected_schedule,
+        issues,
+        "packet governor_packet_schedule no longer matches generated_at plus weekly cadence",
+    )
+    _require(
+        schedule.get("status") == "scheduled",
+        issues,
+        "packet governor_packet_schedule.status is not scheduled",
+    )
+    _require(
+        schedule.get("cadence_seconds") == weekly.WEEKLY_PACKET_CADENCE_SECONDS,
+        issues,
+        "packet governor_packet_schedule cadence_seconds drifted",
+    )
+    packet_cadence_issues = _packet_cadence_issues(
+        packet_generated_at=str(packet.get("generated_at") or "")
+    )
+    _require(
+        not packet_cadence_issues,
+        issues,
+        "packet weekly cadence is not current: " + "; ".join(packet_cadence_issues),
+    )
     _require_generated_after_source(
         packet_generated_at=str(packet.get("generated_at") or ""),
         source_generated_at=str(weekly_pulse.get("generated_at") or ""),
@@ -356,6 +449,21 @@ def verify(args: argparse.Namespace) -> List[str]:
     )
     _require(packet.get("contract_name") == "fleet.weekly_governor_packet", issues, "packet contract_name is not fleet.weekly_governor_packet")
     _require(weekly_health.get("status") == "pass", issues, "packet weekly_input_health.status is not pass")
+    _require(
+        risk_cluster_health.get("status") == "pass",
+        issues,
+        "packet weekly_input_health.risk_cluster_health.status is not pass",
+    )
+    _require(
+        weekly._coerce_int(risk_cluster_health.get("cluster_count"), 0) > 0,
+        issues,
+        "packet weekly risk-cluster health has no measured support/feedback clusters",
+    )
+    _require(
+        risk_cluster_health.get("required_fields") == list(weekly.REQUIRED_RISK_CLUSTER_FIELDS),
+        issues,
+        "packet weekly risk-cluster required fields drifted",
+    )
     _require(decision_alignment.get("status") == "pass", issues, "packet decision_alignment.status is not pass")
     source_input_status = source_health.get("status")
     source_input_blocked = source_input_status != "pass"
@@ -453,6 +561,33 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "packet support_packets source_sha256 no longer matches SUPPORT_CASE_PACKETS.generated.json",
     )
+    source_sha256_issues = _source_sha256_issues(
+        required_inputs=required_inputs,
+        source_paths=source_paths,
+    )
+    _require(
+        not source_sha256_issues,
+        issues,
+        "packet source input hash proof drifted: " + "; ".join(source_sha256_issues),
+    )
+    expected_source_input_fingerprint = weekly._source_input_fingerprint(source_health)
+    _require(
+        dict(packet.get("source_input_fingerprint") or {})
+        == expected_source_input_fingerprint,
+        issues,
+        "packet source_input_fingerprint no longer matches source_input_health hashes",
+    )
+    _require(
+        expected_source_input_fingerprint.get("status") == "pass",
+        issues,
+        "packet source_input_fingerprint is not pass",
+    )
+    _require(
+        weekly._coerce_int(expected_source_input_fingerprint.get("source_count"), 0)
+        == len(weekly.EXPECTED_PRODUCTION_SOURCE_PATHS),
+        issues,
+        "packet source_input_fingerprint source count drifted",
+    )
     _require(
         packet_verification == verification,
         issues,
@@ -529,8 +664,143 @@ def verify(args: argparse.Namespace) -> List[str]:
     else:
         _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")
     _require(
+        loop.get("launch_expansion_ready")
+        == (dict(decision_board.get("launch_expand") or {}).get("state") == "allowed"),
+        issues,
+        "measured rollout loop launch_expansion_ready no longer matches launch_expand decision state",
+    )
+    launch_gate_rows = [
+        row
+        for row in decision_gate_ledger.get("launch_expand") or []
+        if isinstance(row, dict)
+    ]
+    expected_blocking_gate_names = [
+        str(row.get("name") or "").strip() or "unknown"
+        for row in launch_gate_rows
+        if str(row.get("state") or "unknown").strip() != "pass"
+    ]
+    expected_launch_gate_summary = {
+        "gate_count": len(launch_gate_rows),
+        "pass_count": sum(
+            1 for row in launch_gate_rows if str(row.get("state") or "").strip() == "pass"
+        ),
+        "blocked_count": sum(
+            1 for row in launch_gate_rows if str(row.get("state") or "").strip() == "blocked"
+        ),
+        "fail_count": sum(
+            1 for row in launch_gate_rows if str(row.get("state") or "").strip() == "fail"
+        ),
+        "watch_count": sum(
+            1 for row in launch_gate_rows if str(row.get("state") or "").strip() == "watch"
+        ),
+        "accumulating_count": sum(
+            1 for row in launch_gate_rows if str(row.get("state") or "").strip() == "accumulating"
+        ),
+        "unknown_count": sum(
+            1
+            for row in launch_gate_rows
+            if str(row.get("state") or "unknown").strip() == "unknown"
+        ),
+        "blocking_gate_names": expected_blocking_gate_names,
+        "all_green": not expected_blocking_gate_names,
+    }
+    _require(
+        launch_gate_summary == expected_launch_gate_summary,
+        issues,
+        "measured rollout launch_gate_summary no longer matches launch_expand gate ledger",
+    )
+    _require(
+        launch_gate_summary.get("all_green") == bool(loop.get("launch_expansion_ready")),
+        issues,
+        "measured rollout launch_gate_summary all_green no longer matches launch expansion readiness",
+    )
+    weekly_adoption_gate = {}
+    for row in decision_gate_ledger.get("launch_expand") or []:
+        if isinstance(row, dict) and row.get("name") == "weekly_adoption_truth":
+            weekly_adoption_gate = row
+            break
+    _require(
+        bool(adoption_health),
+        issues,
+        "truth inputs no longer include weekly adoption_health",
+    )
+    _require(
+        weekly_adoption_gate.get("required") == "present with measured history",
+        issues,
+        "launch gate ledger no longer requires weekly adoption truth with measured history",
+    )
+    _require(
+        str(adoption_health.get("state") or "").strip() != "",
+        issues,
+        "weekly adoption_health state is missing",
+    )
+    _require(
+        weekly._coerce_int(adoption_health.get("history_snapshot_count"), 0) > 0,
+        issues,
+        "weekly adoption_health history_snapshot_count is not measured",
+    )
+    _require(
+        loop.get("freeze_active")
+        == (dict(decision_board.get("freeze_launch") or {}).get("state") == "active"),
+        issues,
+        "measured rollout loop freeze_active no longer matches freeze_launch decision state",
+    )
+    _require(
+        loop.get("canary_ready")
+        == (dict(decision_board.get("canary") or {}).get("state") == "ready"),
+        issues,
+        "measured rollout loop canary_ready no longer matches canary decision state",
+    )
+    _require(
+        loop.get("rollback_watch")
+        == (dict(decision_board.get("rollback") or {}).get("state") == "watch"),
+        issues,
+        "measured rollout loop rollback_watch no longer matches rollback decision state",
+    )
+    if loop.get("launch_expansion_ready") is True:
+        expected_public_state = "launch_expand_allowed"
+        expected_public_headline = "Measured launch expansion is allowed."
+        expected_public_body = (
+            "Readiness, parity, support, canary, dependency, and release-proof gates "
+            "are green for this weekly packet."
+        )
+    elif loop.get("rollback_watch") is True:
+        expected_public_state = "freeze_with_rollback_watch"
+        expected_public_headline = "Launch expansion is frozen with rollback watch active."
+        expected_public_body = str(decision_board.get("current_launch_reason") or "").strip()
+    else:
+        expected_public_state = "freeze_launch"
+        expected_public_headline = "Launch expansion remains frozen."
+        expected_public_body = str(decision_board.get("current_launch_reason") or "").strip()
+    _require(
+        public_status_copy.get("state") == expected_public_state,
+        issues,
+        "public status copy state no longer matches measured rollout decision state",
+    )
+    _require(
+        public_status_copy.get("headline") == expected_public_headline,
+        issues,
+        "public status copy headline no longer matches measured rollout decision state",
+    )
+    _require(
+        public_status_copy.get("body") == expected_public_body,
+        issues,
+        "public status copy body no longer matches the current measured launch reason",
+    )
+    _require(
+        public_status_copy.get("derived_from")
+        == "measured_rollout_loop.decision_action_matrix",
+        issues,
+        "public status copy no longer names the measured rollout decision matrix as its source",
+    )
+    _require(
+        public_status_copy.get("decision_actions") == required_decision_actions,
+        issues,
+        "public status copy decision action list no longer matches measured rollout required actions",
+    )
+    _require(
         required_decision_actions
-        == ["launch_expand", "freeze_launch", "canary", "rollback", "focus_shift"],
+        == list(weekly.REQUIRED_DECISION_ACTIONS),
         issues,
         "measured rollout loop required decision actions drifted",
     )
@@ -568,6 +838,511 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "governor decision projection is missing required action(s): "
         + ", ".join(missing_governor_decision_actions),
+    )
+    if isinstance(decision_action_matrix, list):
+        action_matrix_by_action = {
+            str(row.get("action") or "").strip(): row
+            for row in decision_action_matrix
+            if isinstance(row, dict)
+        }
+    else:
+        action_matrix_by_action = {}
+    missing_action_matrix_rows = [
+        action for action in required_decision_actions if action not in action_matrix_by_action
+    ]
+    incomplete_action_matrix_rows = [
+        action
+        for action in required_decision_actions
+        if action in action_matrix_by_action
+        and dict(action_matrix_by_action.get(action) or {}).get("complete") is not True
+    ]
+    inconsistent_action_matrix_rows = [
+        action
+        for action in required_decision_actions
+        if action in action_matrix_by_action
+        and dict(action_matrix_by_action.get(action) or {}).get("state_consistent") is not True
+    ]
+    gate_count_drift_action_matrix_rows = [
+        action
+        for action in required_decision_actions
+        if action in action_matrix_by_action
+        and dict(action_matrix_by_action.get(action) or {}).get("gate_count_consistent") is not True
+    ]
+    action_matrix_state_drift: List[str] = []
+    governor_rows_by_action = {
+        str(row.get("action") or "").strip(): row
+        for row in governor_decisions
+        if isinstance(row, dict)
+    } if isinstance(governor_decisions, list) else {}
+    for action in required_decision_actions:
+        row = dict(action_matrix_by_action.get(action) or {})
+        board = dict(decision_board.get(action) or {})
+        ledger = decision_gate_ledger.get(action) or []
+        governor = dict(governor_rows_by_action.get(action) or {})
+        ledger_gate_count = len(ledger) if isinstance(ledger, list) else 0
+        if not row:
+            continue
+        if row.get("board_state") != board.get("state"):
+            action_matrix_state_drift.append(f"{action}.board_state")
+        if row.get("ledger_gate_count") != ledger_gate_count:
+            action_matrix_state_drift.append(f"{action}.ledger_gate_count")
+        if row.get("governor_state") != governor.get("state"):
+            action_matrix_state_drift.append(f"{action}.governor_state")
+        if row.get("governor_gate_count") != governor.get("gate_count"):
+            action_matrix_state_drift.append(f"{action}.governor_gate_count")
+        expected_state_consistent = bool(
+            str(board.get("state") or "").strip()
+            and str(board.get("state") or "").strip()
+            == str(governor.get("state") or "").strip()
+        )
+        expected_gate_count_consistent = bool(
+            ledger_gate_count > 0
+            and weekly._coerce_int(governor.get("gate_count"), -1) == ledger_gate_count
+        )
+        if row.get("state_consistent") is not expected_state_consistent:
+            action_matrix_state_drift.append(f"{action}.state_consistent")
+        if row.get("gate_count_consistent") is not expected_gate_count_consistent:
+            action_matrix_state_drift.append(f"{action}.gate_count_consistent")
+    _require(
+        not missing_action_matrix_rows,
+        issues,
+        "decision action matrix is missing required action(s): "
+        + ", ".join(missing_action_matrix_rows),
+    )
+    _require(
+        not incomplete_action_matrix_rows,
+        issues,
+        "decision action matrix has incomplete required action row(s): "
+        + ", ".join(incomplete_action_matrix_rows),
+    )
+    _require(
+        not inconsistent_action_matrix_rows,
+        issues,
+        "decision action matrix has board/governor state drift for action(s): "
+        + ", ".join(inconsistent_action_matrix_rows),
+    )
+    _require(
+        not gate_count_drift_action_matrix_rows,
+        issues,
+        "decision action matrix has ledger/governor gate-count drift for action(s): "
+        + ", ".join(gate_count_drift_action_matrix_rows),
+    )
+    _require(
+        not action_matrix_state_drift,
+        issues,
+        "decision action matrix no longer matches board, ledger, and governor projection for field(s): "
+        + ", ".join(action_matrix_state_drift),
+    )
+    expected_coverage_rows = []
+    for action in weekly.REQUIRED_DECISION_ACTIONS:
+        matrix_row = dict(action_matrix_by_action.get(action) or {})
+        board_present = action in decision_board
+        ledger_present = bool(decision_gate_ledger.get(action))
+        governor_present = action in governor_rows_by_action
+        matrix_complete = matrix_row.get("complete") is True
+        expected_coverage_rows.append(
+            {
+                "action": action,
+                "board_present": board_present,
+                "ledger_present": ledger_present,
+                "governor_present": governor_present,
+                "matrix_complete": matrix_complete,
+                "covered": bool(
+                    board_present
+                    and ledger_present
+                    and governor_present
+                    and matrix_complete
+                ),
+            }
+        )
+    expected_missing_coverage_actions = [
+        row["action"]
+        for row in expected_coverage_rows
+        if not row["board_present"]
+        or not row["ledger_present"]
+        or not row["governor_present"]
+    ]
+    expected_incomplete_coverage_actions = [
+        row["action"]
+        for row in expected_coverage_rows
+        if row["board_present"]
+        and row["ledger_present"]
+        and row["governor_present"]
+        and not row["matrix_complete"]
+    ]
+    expected_decision_action_coverage = {
+        "status": (
+            "pass"
+            if not expected_missing_coverage_actions
+            and not expected_incomplete_coverage_actions
+            else "fail"
+        ),
+        "required_actions": list(weekly.REQUIRED_DECISION_ACTIONS),
+        "covered_action_count": sum(
+            1 for row in expected_coverage_rows if row["covered"]
+        ),
+        "required_action_count": len(weekly.REQUIRED_DECISION_ACTIONS),
+        "missing_actions": expected_missing_coverage_actions,
+        "incomplete_actions": expected_incomplete_coverage_actions,
+        "rows": expected_coverage_rows,
+    }
+    _require(
+        decision_action_coverage == expected_decision_action_coverage,
+        issues,
+        "measured rollout decision_action_coverage no longer matches board, ledger, governor, and matrix coverage",
+    )
+    _require(
+        decision_action_coverage.get("status") == "pass",
+        issues,
+        "measured rollout decision_action_coverage is not pass",
+    )
+    _require(
+        decision_action_coverage.get("covered_action_count")
+        == len(weekly.REQUIRED_DECISION_ACTIONS),
+        issues,
+        "measured rollout decision_action_coverage does not cover every required action",
+    )
+    expected_decision_source_coverage = weekly._decision_source_coverage(
+        decision_board=decision_board,
+        decision_gate_ledger=decision_gate_ledger,
+    )
+    _require(
+        decision_source_coverage == expected_decision_source_coverage,
+        issues,
+        "measured rollout decision_source_coverage no longer matches required source gates",
+    )
+    _require(
+        decision_source_coverage.get("status") == "pass",
+        issues,
+        "measured rollout decision_source_coverage is not pass",
+    )
+    _require(
+        decision_source_coverage.get("covered_action_count")
+        == len(weekly.REQUIRED_DECISION_ACTIONS),
+        issues,
+        "measured rollout decision_source_coverage does not cover every required action",
+    )
+    _require(
+        decision_source_coverage.get("required_source_gates_by_action")
+        == {
+            action: list(gates)
+            for action, gates in weekly.REQUIRED_DECISION_SOURCE_GATES.items()
+        },
+        issues,
+        "measured rollout decision_source_coverage required gate map drifted",
+    )
+    expected_action_routes = weekly._decision_action_routes(
+        decision_board=decision_board,
+        decision_gate_ledger=decision_gate_ledger,
+    )
+    _require(
+        decision_action_routes == expected_action_routes,
+        issues,
+        "measured rollout decision_action_routes no longer matches board and gate ledger routing",
+    )
+    _require(
+        decision_action_routes.get("status") == "pass",
+        issues,
+        "measured rollout decision_action_routes is not pass",
+    )
+    _require(
+        decision_action_routes.get("required_actions") == list(weekly.REQUIRED_DECISION_ACTIONS),
+        issues,
+        "measured rollout decision_action_routes required action list drifted",
+    )
+    _require(
+        decision_action_routes.get("missing_actions") == [],
+        issues,
+        "measured rollout decision_action_routes is missing action route(s)",
+    )
+    _require(
+        decision_action_routes.get("incomplete_actions") == [],
+        issues,
+        "measured rollout decision_action_routes has incomplete operator route(s)",
+    )
+    route_rows = [
+        row for row in decision_action_routes.get("rows") or [] if isinstance(row, dict)
+    ]
+    missing_actionable_route_fields: List[str] = []
+    route_operator_projection_drift: List[str] = []
+    for row in route_rows:
+        action = str(row.get("action") or "unknown").strip() or "unknown"
+        for field in (
+            "owner",
+            "route",
+            "cadence",
+            "trigger_gate",
+            "unblock_condition",
+            "operator_action_when_blocked",
+            "operator_action_when_clear",
+            "operator_action",
+            "next_decision",
+        ):
+            if not str(row.get(field) or "").strip():
+                missing_actionable_route_fields.append(f"{action}.{field}")
+        ledger_rows = [
+            item
+            for item in decision_gate_ledger.get(action) or []
+            if isinstance(item, dict)
+        ]
+        expected_gate_states = {
+            str(item.get("name") or "").strip() or "unknown": str(
+                item.get("state") or "unknown"
+            ).strip()
+            or "unknown"
+            for item in ledger_rows
+        }
+        expected_blocking_gates = [
+            str(item.get("name") or "").strip() or "unknown"
+            for item in ledger_rows
+            if str(item.get("state") or "unknown").strip() not in {"pass", "clear"}
+        ]
+        expected_route_blocked = bool(expected_blocking_gates) or str(
+            dict(decision_board.get(action) or {}).get("state") or "unknown"
+        ).strip() in {
+            "active",
+            "blocked",
+            "accumulating",
+            "watch",
+        }
+        if row.get("gate_states") != expected_gate_states:
+            route_operator_projection_drift.append(f"{action}.gate_states")
+        if row.get("blocking_gate_count") != len(expected_blocking_gates):
+            route_operator_projection_drift.append(f"{action}.blocking_gate_count")
+        if row.get("blocking_gates") != expected_blocking_gates:
+            route_operator_projection_drift.append(f"{action}.blocking_gates")
+        if row.get("route_blocked") is not expected_route_blocked:
+            route_operator_projection_drift.append(f"{action}.route_blocked")
+    _require(
+        not missing_actionable_route_fields,
+        issues,
+        "measured rollout decision_action_routes missing operator-actionable field(s): "
+        + ", ".join(missing_actionable_route_fields),
+    )
+    _require(
+        not route_operator_projection_drift,
+        issues,
+        "measured rollout decision_action_routes no longer projects gate-state and blocking-count fields from the decision ledger: "
+        + ", ".join(route_operator_projection_drift),
+    )
+    _require(
+        all(str(row.get("cadence") or "").strip() == "weekly" for row in route_rows),
+        issues,
+        "measured rollout decision_action_routes cadence must remain weekly for every action",
+    )
+    expected_decision_receipts = weekly._decision_receipts(
+        decision_action_matrix=decision_action_matrix,
+        decision_action_routes=decision_action_routes,
+    )
+    _require(
+        decision_receipts == expected_decision_receipts,
+        issues,
+        "measured rollout decision_receipts no longer match decision matrix and route projection",
+    )
+    _require(
+        decision_receipts.get("status") == "pass",
+        issues,
+        "measured rollout decision_receipts is not pass",
+    )
+    _require(
+        decision_receipts.get("required_actions") == list(weekly.REQUIRED_DECISION_ACTIONS),
+        issues,
+        "measured rollout decision_receipts required action list drifted",
+    )
+    receipt_rows = [
+        row for row in decision_receipts.get("rows") or [] if isinstance(row, dict)
+    ]
+    receipt_rows_by_action = {
+        str(row.get("action") or "").strip(): row for row in receipt_rows
+    }
+    missing_receipt_actions = [
+        action
+        for action in weekly.REQUIRED_DECISION_ACTIONS
+        if action not in receipt_rows_by_action
+    ]
+    duplicate_receipt_count = len(receipt_rows) - len(receipt_rows_by_action)
+    invalid_receipt_fields: List[str] = []
+    receipt_ids = set()
+    for action in weekly.REQUIRED_DECISION_ACTIONS:
+        row = dict(receipt_rows_by_action.get(action) or {})
+        if not row:
+            continue
+        receipt_id = str(row.get("receipt_id") or "").strip()
+        receipt_sha = str(row.get("receipt_sha256") or "").strip()
+        if not receipt_id.startswith(f"m106-{action}-"):
+            invalid_receipt_fields.append(f"{action}.receipt_id")
+        if len(receipt_sha) != 64 or any(ch not in "0123456789abcdef" for ch in receipt_sha):
+            invalid_receipt_fields.append(f"{action}.receipt_sha256")
+        if row.get("matrix_complete") is not True:
+            invalid_receipt_fields.append(f"{action}.matrix_complete")
+        if row.get("ready_for_operator_packet") is not True:
+            invalid_receipt_fields.append(f"{action}.ready_for_operator_packet")
+        if receipt_id in receipt_ids:
+            invalid_receipt_fields.append(f"{action}.duplicate_receipt_id")
+        receipt_ids.add(receipt_id)
+    _require(
+        not missing_receipt_actions,
+        issues,
+        "measured rollout decision_receipts is missing action receipt(s): "
+        + ", ".join(missing_receipt_actions),
+    )
+    _require(
+        duplicate_receipt_count == 0,
+        issues,
+        "measured rollout decision_receipts contains duplicate action rows",
+    )
+    _require(
+        not invalid_receipt_fields,
+        issues,
+        "measured rollout decision_receipts has invalid receipt field(s): "
+        + ", ".join(invalid_receipt_fields),
+    )
+    expected_operator_handoff = weekly._weekly_operator_handoff(
+        schedule=schedule,
+        launch_gate_summary=launch_gate_summary,
+        decision_action_routes=decision_action_routes,
+        decision_receipts=decision_receipts,
+    )
+    _require(
+        weekly_operator_handoff == expected_operator_handoff,
+        issues,
+        "measured rollout weekly_operator_handoff no longer matches schedule, route, and receipt projection",
+    )
+    _require(
+        weekly_operator_handoff.get("status") == "pass",
+        issues,
+        "measured rollout weekly_operator_handoff is not pass",
+    )
+    _require(
+        weekly_operator_handoff.get("required_actions") == list(weekly.REQUIRED_DECISION_ACTIONS),
+        issues,
+        "measured rollout weekly_operator_handoff required action list drifted",
+    )
+    _require(
+        weekly_operator_handoff.get("missing_actions") == [],
+        issues,
+        "measured rollout weekly_operator_handoff is missing action handoff row(s)",
+    )
+    _require(
+        weekly_operator_handoff.get("incomplete_actions") == [],
+        issues,
+        "measured rollout weekly_operator_handoff has incomplete action handoff row(s)",
+    )
+    _require(
+        weekly_operator_handoff.get("schedule_ref")
+        == "governor_packet_schedule.next_packet_due_at",
+        issues,
+        "measured rollout weekly_operator_handoff schedule reference drifted",
+    )
+    _require(
+        weekly_operator_handoff.get("source")
+        == "measured_rollout_loop.decision_action_routes+decision_receipts",
+        issues,
+        "measured rollout weekly_operator_handoff source drifted",
+    )
+    handoff_rows = [
+        row for row in weekly_operator_handoff.get("rows") or [] if isinstance(row, dict)
+    ]
+    handoff_rows_by_action = {
+        str(row.get("action") or "").strip(): row for row in handoff_rows
+    }
+    invalid_handoff_fields: List[str] = []
+    for action in weekly.REQUIRED_DECISION_ACTIONS:
+        row = dict(handoff_rows_by_action.get(action) or {})
+        if not row:
+            invalid_handoff_fields.append(f"{action}.missing_row")
+            continue
+        route_row = dict(
+            next(
+                (
+                    route
+                    for route in route_rows
+                    if str(route.get("action") or "").strip() == action
+                ),
+                {},
+            )
+        )
+        receipt_row = dict(receipt_rows_by_action.get(action) or {})
+        for field in ("state", "route", "operator_action", "receipt_id", "next_decision"):
+            if not str(row.get(field) or "").strip():
+                invalid_handoff_fields.append(f"{action}.{field}")
+        if row.get("route") != route_row.get("route"):
+            invalid_handoff_fields.append(f"{action}.route")
+        if row.get("operator_action") != route_row.get("operator_action"):
+            invalid_handoff_fields.append(f"{action}.operator_action")
+        if row.get("blocking_gates") != route_row.get("blocking_gates"):
+            invalid_handoff_fields.append(f"{action}.blocking_gates")
+        if row.get("blocking_gate_count") != route_row.get("blocking_gate_count"):
+            invalid_handoff_fields.append(f"{action}.blocking_gate_count")
+        if row.get("receipt_id") != receipt_row.get("receipt_id"):
+            invalid_handoff_fields.append(f"{action}.receipt_id")
+    _require(
+        not invalid_handoff_fields,
+        issues,
+        "measured rollout weekly_operator_handoff has invalid action handoff field(s): "
+        + ", ".join(invalid_handoff_fields),
+    )
+    expected_dependency_routes = weekly._dependency_package_routes(
+        dependency_posture=dependency_posture,
+        design_queue=design_queue,
+        queue=queue,
+    )
+    _require(
+        dependency_package_routes == expected_dependency_routes,
+        issues,
+        "truth input successor_dependency_package_routes no longer matches registry and queue package routing",
+    )
+    _require(
+        dict(loop.get("dependency_package_routes") or {}) == expected_dependency_routes,
+        issues,
+        "measured rollout dependency_package_routes no longer matches registry and queue package routing",
+    )
+    _require(
+        dict(package_closeout.get("dependency_package_routes") or {}) == expected_dependency_routes,
+        issues,
+        "package closeout dependency_package_routes no longer matches registry and queue package routing",
+    )
+    _require(
+        dict(repeat_prevention.get("dependency_package_routes") or {}) == expected_dependency_routes,
+        issues,
+        "repeat prevention dependency_package_routes no longer matches registry and queue package routing",
+    )
+    _require(
+        dependency_package_routes.get("rule")
+        == (
+            "Closed dependency package rows are verified instead of reopened; "
+            "launch expansion still waits for successor registry milestone status to close."
+        ),
+        issues,
+        "dependency package route rule no longer prevents reopening closed predecessor packages",
+    )
+    dependency_route_rows = [
+        row for row in dependency_package_routes.get("rows") or [] if isinstance(row, dict)
+    ]
+    _require(
+        len(dependency_route_rows)
+        == len(dependency_posture.get("dependencies") or []),
+        issues,
+        "dependency package route row count no longer matches successor dependency count",
+    )
+    missing_dependency_route_fields: List[str] = []
+    for row in dependency_route_rows:
+        milestone_id = row.get("milestone_id", "unknown")
+        for field in (
+            "package_id",
+            "registry_status",
+            "queue_status",
+            "design_queue_status",
+            "operator_route",
+            "launch_gate_contribution",
+        ):
+            if not str(row.get(field) or "").strip():
+                missing_dependency_route_fields.append(f"{milestone_id}.{field}")
+    _require(
+        not missing_dependency_route_fields,
+        issues,
+        "dependency package routes missing decision-facing field(s): "
+        + ", ".join(missing_dependency_route_fields),
     )
     _require(
         package_closeout.get("status") == "fleet_package_complete",
@@ -634,9 +1409,11 @@ def verify(args: argparse.Namespace) -> List[str]:
     )
     _require(
         "operator telemetry" in str(worker_command_guard.get("rule") or "")
+        and "supervisor helper loops" in str(worker_command_guard.get("rule") or "")
+        and "supervisor status/ETA helpers" in str(worker_command_guard.get("rule") or "")
         and "active-run helper commands" in str(worker_command_guard.get("rule") or ""),
         issues,
-        "repeat prevention worker command guard rule no longer forbids operator telemetry and active-run helper commands",
+        "repeat prevention worker command guard rule no longer forbids operator telemetry, supervisor helper loops, supervisor status/ETA helpers, and active-run helper commands",
     )
     _require(
         "hard-blocked" in str(worker_command_guard.get("rule") or "")
@@ -713,6 +1490,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         "packet does not require the M106 verifier command receipt",
     )
     _require("- Status: closed_for_fleet_package" in markdown, issues, "markdown repeat-prevention status is missing")
+    _require(
+        f"- Next packet due: {schedule.get('next_packet_due_at')}" in markdown,
+        issues,
+        "markdown weekly packet schedule due date is missing",
+    )
     _require(
         "- Closed successor frontier ids: 2376135131" in markdown,
         issues,

@@ -44,6 +44,11 @@ RELEASE_CHANNEL_CANDIDATE_PATHS = (
     RELEASE_CHANNEL_MANIFEST_PATH,
 )
 KNOWN_EXTERNAL_PROOF_HOSTS = {"windows", "linux", "macos"}
+HOST_CLASS_PLATFORM_ALIASES = {
+    "windows": ("windows", "win32", "win"),
+    "macos": ("macos", "osx", "darwin"),
+    "linux": ("linux",),
+}
 
 
 def _normalize_release_channel_status(value: object) -> str:
@@ -75,6 +80,43 @@ def _release_channel_status_rank(status: str) -> int:
     return 0
 
 
+def _release_channel_coverage_rank(payload: object) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    coverage = payload.get("desktopTupleCoverage")
+    if not isinstance(coverage, dict):
+        return 0
+    missing_platforms = coverage.get("missingRequiredPlatforms")
+    missing_pairs = coverage.get("missingRequiredPlatformHeadPairs")
+    missing_tuples = coverage.get("missingRequiredPlatformHeadRidTuples")
+    external_requests = coverage.get("externalProofRequests")
+    if not all(
+        isinstance(value, list)
+        for value in (missing_platforms, missing_pairs, missing_tuples, external_requests)
+    ):
+        return 0
+    if missing_platforms or missing_pairs or missing_tuples or external_requests:
+        return 1
+    return 2
+
+
+def _release_channel_has_tuple_coverage(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    coverage = payload.get("desktopTupleCoverage")
+    return isinstance(coverage, dict)
+
+
+def _release_channel_authority_rank(candidate: Path, payload: object) -> int:
+    if not _release_channel_has_tuple_coverage(payload):
+        return 0
+    normalized_candidate = str(candidate.resolve())
+    if normalized_candidate == str(REGISTRY_RELEASE_CHANNEL_PATH.resolve()):
+        return 1
+    parent_name = candidate.parent.name.strip().lower()
+    return int(parent_name == "registry")
+
+
 def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) -> Path:
     override = str(os.environ.get("CHUMMER_EXTERNAL_PROOF_RELEASE_CHANNEL", "") or "").strip()
     if override:
@@ -82,7 +124,7 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
 
     candidate_paths = candidates or RELEASE_CHANNEL_CANDIDATE_PATHS
     best_path: Path | None = None
-    best_score: tuple[int, int, int, int, float, int] | None = None
+    best_score: tuple[int, int, int, int, int, float, int] | None = None
     fallback_path: Path | None = None
     for index, candidate in enumerate(candidate_paths):
         if not candidate.is_file():
@@ -98,6 +140,8 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
         artifactful = int(bool(artifacts))
         status = _normalize_release_channel_status(payload.get("status"))
         status_rank = _release_channel_status_rank(status)
+        coverage_rank = _release_channel_coverage_rank(payload)
+        authority_rank = _release_channel_authority_rank(candidate, payload)
         published_with_artifacts = int(status_rank >= 2 and artifactful)
         startup_smoke_available = int((candidate.parent / "startup-smoke").is_dir())
         generated_at = _parse_release_channel_generated_at(
@@ -105,6 +149,8 @@ def resolve_release_channel_path(*, candidates: tuple[Path, ...] | None = None) 
         )
         generated_at_ts = generated_at.timestamp() if generated_at is not None else float("-inf")
         score = (
+            authority_rank,
+            coverage_rank,
             published_with_artifacts,
             status_rank,
             artifactful,
@@ -183,3 +229,14 @@ def normalize_external_proof_tuple_id(
         )
     parts[2] = host
     return ":".join(parts)
+
+
+def host_class_matches_platform_hint(host_class: object, expected_host_contains: object) -> bool:
+    actual = str(host_class or "").strip().lower()
+    expected = str(expected_host_contains or "").strip().lower()
+    if not expected:
+        return True
+    if not actual:
+        return False
+    aliases = HOST_CLASS_PLATFORM_ALIASES.get(expected, (expected,))
+    return any(alias and alias in actual for alias in aliases)

@@ -99,13 +99,12 @@ services:
       CHUMMER_DESIGN_SUPERVISOR_STATE_ROOT: /var/lib/codex-fleet/chummer_design_supervisor
       CHUMMER_DESIGN_SUPERVISOR_CLEAR_LOCK_ON_BOOT: "1"
       CHUMMER_DESIGN_SUPERVISOR_HEALTH_MAX_AGE_SECONDS: "900"
-      CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB: "2"
-      CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB: "0.28"
       TZ: UTC
     volumes:
       - ./state:/var/lib/codex-fleet
       - ./config:/app/config:ro
       - ./secrets:/run/secrets:ro
+      - ${HOME:-/home/tibor}/.codex/auth.json:/run/secrets/chatgpt.auth.json:ro
       - ${HOME:-/home/tibor}/.config/gh:/run/gh:ro
       - ./:${FLEET_SELF_MOUNT_PATH:-/opt/codex-fleet}
       - /docker:/docker

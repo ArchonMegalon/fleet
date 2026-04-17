@@ -17,7 +17,7 @@ if [[ -n "${CHUMMER_DESIGN_SUPERVISOR_CORE_RESPONSES_PROFILE:-}" ]]; then
 fi
 
 if [[ -z "${CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS:-}" ]]; then
-  CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS=1
+  CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS=0
 fi
 export CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS
 
@@ -622,7 +622,11 @@ normalize_shard_worker_model() {
 	    core_rescue:ea-coder-hard-batch|core_rescue:ea-coder-hard|\
 	    review_shard:ea-coder-hard-batch|review_shard:ea-coder-hard|\
 	    audit_shard:ea-coder-hard-batch|audit_shard:ea-coder-hard)
-	      printf '%s' 'ea-coder-hard-batch'
+	      if [[ -n "$shard_worker_model" ]]; then
+	        printf '%s' "$shard_worker_model"
+	      else
+	        printf '%s' 'ea-coder-hard'
+	      fi
 	      ;;
     *)
       printf '%s' "$shard_worker_model"
@@ -658,7 +662,7 @@ resolve_shard_worker_profile() {
 	  case "$resolved_lane" in
 	    core|core_authority|core_booster|core_rescue)
 	      if [[ -z "$resolved_model" ]]; then
-	        resolved_model="ea-coder-hard-batch"
+	        resolved_model="ea-coder-hard"
 	      fi
       resolved_model="$(normalize_shard_worker_model "$resolved_lane" "$resolved_model")"
       printf '%s|%s\n' "$resolved_lane" "$resolved_model"
@@ -670,7 +674,7 @@ resolve_shard_worker_profile() {
 	    groundwork|repair|review_shard|audit_shard|survival|easy|jury|review_light)
 	      if prefer_full_ea_lanes && [[ "$resolved_lane" =~ ^(repair|survival)$ ]]; then
 	        resolved_lane="core"
-	        resolved_model="ea-coder-hard-batch"
+	        resolved_model="ea-coder-hard"
 	      fi
       if [[ "$resolved_lane" == "easy" ]]; then
         resolved_model=""
@@ -704,17 +708,17 @@ resolve_shard_worker_profile() {
       ;;
 	    *desktop-exit-gate*|*platform-gates*|*startup-smoke*|*release-gates*|*release-proof*|*flagship-readiness*|*grade-bar*|*materializer*|*proof*)
 	      resolved_lane="audit_shard"
-	      resolved_model="ea-coder-hard-batch"
+	      resolved_model="ea-coder-hard"
 	      ;;
 	    *visual-similarity*|*parity*)
 	      resolved_lane="review_shard"
-	      resolved_model="ea-coder-hard-batch"
+	      resolved_model="ea-coder-hard"
 	      ;;
   esac
 
 	  if prefer_full_ea_lanes && [[ "$resolved_lane" =~ ^(repair|survival)$ ]]; then
 	    resolved_lane="core"
-	    resolved_model="ea-coder-hard-batch"
+	    resolved_model="ea-coder-hard"
 	  fi
 
   resolved_model="$(normalize_shard_worker_model "$resolved_lane" "$resolved_model")"
@@ -801,6 +805,41 @@ reset_shard_runtime_state() {
     "$shard_state_root/loop.lock"
 }
 
+archive_retired_shard_state_roots() {
+  if [[ -z "$state_root_base" || ! -d "$state_root_base" ]]; then
+    return 0
+  fi
+  local retired_root="$state_root_base/retired-shards"
+  local archive_stamp
+  archive_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  shopt -s nullglob
+  local candidate=""
+  for candidate in "$state_root_base"/shard-*; do
+    [[ -d "$candidate" ]] || continue
+    local shard_name="${candidate##*/}"
+    local keep=0
+    local active_name=""
+    for active_name in "${active_shard_names[@]:-}"; do
+      if [[ "$shard_name" == "$active_name" ]]; then
+        keep=1
+        break
+      fi
+    done
+    if (( keep == 1 )); then
+      continue
+    fi
+    mkdir -p "$retired_root"
+    local target_path="$retired_root/${shard_name}-${archive_stamp}"
+    while [[ -e "$target_path" ]]; do
+      target_path="${retired_root}/${shard_name}-${archive_stamp}-${RANDOM}"
+    done
+    if mv "$candidate" "$target_path"; then
+      printf 'run_chummer_design_supervisor: archived retired shard state %s -> %s\n' "$candidate" "$target_path" >&2
+    fi
+  done
+  shopt -u nullglob
+}
+
 append_split_flags common_args --account-owner-id "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS:-}"
 if ! use_dynamic_account_routing "${CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE:-}" "${CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL:-}"; then
   append_split_flags common_args --account-alias "${CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES:-}"
@@ -813,6 +852,8 @@ filter_shard_passthrough_args passthrough_args "$@"
 
 if (( parallel_shards <= 1 )); then
   args=()
+  active_shard_names=("shard-1")
+  archive_retired_shard_state_roots
   write_active_shard_manifest "shard-1"$'\t'"1"$'\t'"${shard_frontier_id_groups[0]:-}"$'\t'"${shard_focus_profile_groups[0]:-}"$'\t'"${shard_owner_groups[0]:-}"$'\t'"${shard_account_groups[0]:-}"$'\t'"${shard_focus_text_groups[0]:-}"$'\t'"${shard_worker_bins[0]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"$'\t'"${shard_worker_lanes[0]:-}"$'\t'"${shard_worker_models[0]:-}"
   build_loop_args args 1 "${shard_focus_profile_groups[0]:-}" "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
   if [[ "$background_mode" == "1" || "$background_mode" == "true" || "$background_mode" == "yes" ]]; then
@@ -917,11 +958,14 @@ done
 
 if (( ${#active_shard_indexes[@]} == 0 )); then
   args=()
+  active_shard_names=("shard-1")
+  archive_retired_shard_state_roots
   write_active_shard_manifest "shard-1"$'\t'"1"$'\t'"${shard_frontier_id_groups[0]:-}"$'\t'"${shard_focus_profile_groups[0]:-}"$'\t'"${shard_owner_groups[0]:-}"$'\t'"${shard_account_groups[0]:-}"$'\t'"${shard_focus_text_groups[0]:-}"$'\t'"${shard_worker_bins[0]:-${CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN:-codex}}"$'\t'"${shard_worker_lanes[0]:-}"$'\t'"${shard_worker_models[0]:-}"
   build_loop_args args 1 "${shard_focus_profile_groups[0]:-}" "${shard_owner_groups[0]:-}" "${shard_account_groups[0]:-}" "${shard_focus_text_groups[0]:-}" "${shard_frontier_id_groups[0]:-}" "${shard_worker_bins[0]:-}" "${shard_worker_lanes[0]:-}" "${shard_worker_models[0]:-}"
   exec python3 scripts/chummer_design_supervisor.py loop "${passthrough_args[@]}" "${args[@]}"
 fi
 
+archive_retired_shard_state_roots
 write_active_shard_manifest "${active_manifest_rows[@]}"
 
 for shard_index in "${active_shard_indexes[@]}"; do

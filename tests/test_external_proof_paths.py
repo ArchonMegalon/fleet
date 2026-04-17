@@ -33,7 +33,9 @@ def _write_release_channel(path: Path, *, status: str, generated_at: str, artifa
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def test_resolve_release_channel_path_prefers_newer_published_portal_shelf(tmp_path: Path) -> None:
+def test_resolve_release_channel_path_prefers_newer_published_portal_shelf_when_coverage_quality_is_equal(
+    tmp_path: Path,
+) -> None:
     module = _load_module()
     registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
     portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
@@ -47,7 +49,9 @@ def test_resolve_release_channel_path_prefers_newer_published_portal_shelf(tmp_p
     assert resolved == portal
 
 
-def test_resolve_release_channel_path_falls_back_to_newest_artifactful_candidate_when_none_are_published(tmp_path: Path) -> None:
+def test_resolve_release_channel_path_falls_back_to_newest_artifactful_candidate_when_none_are_published(
+    tmp_path: Path,
+) -> None:
     module = _load_module()
     registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
     portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
@@ -59,3 +63,103 @@ def test_resolve_release_channel_path_falls_back_to_newest_artifactful_candidate
     resolved = module.resolve_release_channel_path(candidates=(registry, portal, docker))
 
     assert resolved == docker
+
+
+def test_resolve_release_channel_path_prefers_complete_registry_truth_over_fresher_incomplete_manifest(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    portal.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "generatedAt": "2026-04-14T20:59:34Z",
+                "artifacts": [{"artifactId": "avalonia-linux-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    portal.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "generatedAt": "2026-04-14T21:01:29Z",
+                "artifacts": [{"artifactId": "avalonia-linux-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": ["macos"],
+                    "missingRequiredPlatformHeadPairs": ["avalonia:macos"],
+                    "missingRequiredPlatformHeadRidTuples": ["avalonia:osx-arm64:macos"],
+                    "externalProofRequests": [{"tupleId": "avalonia:osx-arm64:macos"}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, portal))
+
+    assert resolved == registry
+
+
+def test_resolve_release_channel_path_prefers_registry_tuple_coverage_truth_over_fresher_portal_copy(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    portal = tmp_path / "portal" / "RELEASE_CHANNEL.generated.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    portal.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "generatedAt": "2026-04-14T21:16:21Z",
+                "artifacts": [{"artifactId": "avalonia-linux-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": ["macos"],
+                    "missingRequiredPlatformHeadPairs": ["avalonia:macos"],
+                    "missingRequiredPlatformHeadRidTuples": ["avalonia:osx-arm64:macos"],
+                    "externalProofRequests": [{"tupleId": "avalonia:osx-arm64:macos"}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    portal.write_text(
+        json.dumps(
+            {
+                "status": "published",
+                "generatedAt": "2026-04-14T21:18:48Z",
+                "artifacts": [{"artifactId": "avalonia-linux-x64-installer"}],
+                "desktopTupleCoverage": {
+                    "missingRequiredPlatforms": [],
+                    "missingRequiredPlatformHeadPairs": [],
+                    "missingRequiredPlatformHeadRidTuples": [],
+                    "externalProofRequests": [],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    resolved = module.resolve_release_channel_path(candidates=(registry, portal))
+
+    assert resolved == registry

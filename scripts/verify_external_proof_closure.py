@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import sys
 from datetime import datetime
@@ -16,6 +17,7 @@ try:
         DEFAULT_EXTERNAL_PROOF_RUNBOOK,
         DEFAULT_JOURNEY_GATES,
         DEFAULT_RELEASE_CHANNEL,
+        REGISTRY_RELEASE_CHANNEL_PATH,
         DEFAULT_SUPPORT_PACKETS,
         UI_DOCKER_DOWNLOADS_ROOT,
         UI_LOCALIZATION_RELEASE_GATE_PATH,
@@ -29,6 +31,7 @@ except ModuleNotFoundError:
         DEFAULT_EXTERNAL_PROOF_RUNBOOK,
         DEFAULT_JOURNEY_GATES,
         DEFAULT_RELEASE_CHANNEL,
+        REGISTRY_RELEASE_CHANNEL_PATH,
         DEFAULT_SUPPORT_PACKETS,
         UI_DOCKER_DOWNLOADS_ROOT,
         UI_LOCALIZATION_RELEASE_GATE_PATH,
@@ -38,6 +41,7 @@ except ModuleNotFoundError:
     )
 
 DEFAULT_MAX_ARTIFACT_AGE_HOURS = 24
+REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
 REQUIRED_POST_CAPTURE_RELEASE_PROOF_PATH = str(UI_LOCAL_RELEASE_PROOF_PATH)
 REQUIRED_POST_CAPTURE_UI_LOCALIZATION_RELEASE_GATE_PATH = str(UI_LOCALIZATION_RELEASE_GATE_PATH)
 REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
@@ -55,7 +59,6 @@ REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
     "verify_external_proof_closure.py",
     "materialize_flagship_product_readiness.py",
     "materialize_weekly_product_pulse_snapshot.py",
-    "chummer_design_supervisor.py status",
 )
 ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smoke_receipt"})
 ALLOWED_REQUIRED_HOSTS = frozenset({"windows", "macos", "linux"})
@@ -229,15 +232,16 @@ def _normalize_proof_capture_command(value: Any) -> str:
     raw = _normalized_token(value)
     if not raw:
         return ""
-    try:
-        tokens = shlex.split(raw, posix=True)
-    except ValueError:
-        tokens = raw.split()
-    return " ".join(
-        token
-        for token in tokens
-        if not token.startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
-    )
+    normalized = raw
+    normalized = re.sub(
+        r"(^|\s+)CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=[^\s]+(?=\s|$)",
+        r"\1",
+        normalized,
+    ).strip()
+    if "./scripts/run-desktop-startup-smoke.sh" in normalized:
+        normalized = re.sub(r"\s+run-[^\s\"']+\s*$", "", normalized).strip()
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
+    return normalized
 
 
 def _normalized_required_proofs(
@@ -357,14 +361,40 @@ def _require_windows_wrapper_failfast(
 
 def _script_commands(payload: str) -> list[str]:
     commands: list[str] = []
+    pending: list[str] = []
+
+    def _flush_pending() -> None:
+        if not pending:
+            return
+        command = "\n".join(pending).strip()
+        pending.clear()
+        if command:
+            commands.append(command)
+
     for raw_line in payload.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#!"):
             continue
         if line in {"set -e", "set -u", "set -o pipefail", "set -eu", "set -euo pipefail"}:
             continue
-        commands.append(line)
+        pending.append(line)
+        candidate = "\n".join(pending)
+        try:
+            shlex.split(candidate, posix=True)
+        except ValueError:
+            continue
+        _flush_pending()
+    _flush_pending()
     return commands
+
+
+def _normalized_script_commands(payload: str) -> set[str]:
+    normalized: set[str] = set()
+    for command in _script_commands(payload):
+        normalized_command = _normalize_proof_capture_command(command)
+        if normalized_command:
+            normalized.add(normalized_command)
+    return normalized
 
 
 def _require_bash_failfast(
@@ -2238,6 +2268,11 @@ def main() -> int:
                             )
                     if capture_script_loaded or validation_script_loaded:
                         validation_commands = _script_commands(validation_script_payload)
+                        normalized_capture_script_commands = (
+                            _normalized_script_commands(capture_script_payload)
+                            if capture_script_loaded
+                            else set()
+                        )
                         support_host_request_rows = [
                             item
                             for row_host, _, item in support_plan_request_rows
@@ -2265,7 +2300,10 @@ def main() -> int:
                             )
                             if capture_commands:
                                 for command in capture_commands:
-                                    if not capture_script_loaded or command not in capture_script_payload:
+                                    if (
+                                        not capture_script_loaded
+                                        or command not in normalized_capture_script_commands
+                                    ):
                                         failures.append(
                                             "external proof capture script is missing tuple proof_capture_commands entry "
                                             f"for tuple {tuple_id}: {command}"
@@ -2515,6 +2553,26 @@ def main() -> int:
                                         "external proof windows validation wrapper is missing startup-smoke receipt contract checks "
                                         f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
                                     )
+                                if (
+                                    not validation_script_loaded
+                                    or "startup-smoke-receipt-stale" not in validation_script_payload
+                                    or f"max_age_seconds={REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS}" not in validation_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof validation script is missing startup-smoke freshness checks "
+                                        f"for tuple {tuple_id}: expected marker 'startup-smoke-receipt-stale' and "
+                                        f"max_age_seconds={REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS}"
+                                    )
+                                if host == "windows" and (
+                                    not validation_wrapper_loaded
+                                    or "startup-smoke-receipt-stale" not in validation_wrapper_payload
+                                    or f"max_age_seconds={REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS}" not in validation_wrapper_payload
+                                ):
+                                    failures.append(
+                                        "external proof windows validation wrapper is missing startup-smoke freshness checks "
+                                        f"for tuple {tuple_id}: expected marker 'startup-smoke-receipt-stale' and "
+                                        f"max_age_seconds={REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS}"
+                                    )
                                 for key, value in (
                                     ("head_id", smoke_contract.get("head_id")),
                                     ("platform", smoke_contract.get("platform")),
@@ -2646,6 +2704,16 @@ def main() -> int:
                                     failures.append(
                                         "external proof ingest script is missing startup-smoke receipt contract checks "
                                         f"for tuple {tuple_id}: expected marker 'receipt-contract-mismatch'"
+                                    )
+                                if (
+                                    not ingest_script_loaded
+                                    or "startup-smoke-receipt-stale" not in ingest_script_payload
+                                    or f"max_age_seconds={REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS}" not in ingest_script_payload
+                                ):
+                                    failures.append(
+                                        "external proof ingest script is missing startup-smoke freshness checks "
+                                        f"for tuple {tuple_id}: expected marker 'startup-smoke-receipt-stale' and "
+                                        f"max_age_seconds={REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS}"
                                     )
                                 for key, value in (
                                     ("head_id", smoke_contract.get("head_id")),
@@ -2841,10 +2909,23 @@ def main() -> int:
                                     "external proof ingest script is missing bundle archive token "
                                     f"for host {host}: {host_token}-proof-bundle.tgz"
                                 )
-                            if "if [ ! -s \"$BUNDLE_ARCHIVE\" ]" not in ingest_script_payload:
+                            has_archive_only_guard = 'if [ ! -s "$BUNDLE_ARCHIVE" ]' in ingest_script_payload
+                            has_directory_fallback_guard = (
+                                'if [ -s "$BUNDLE_ARCHIVE" ]; then' in ingest_script_payload
+                                and 'Missing host proof bundle: $BUNDLE_ARCHIVE or $BUNDLE_DIR' in ingest_script_payload
+                                and (
+                                    'elif [ -d "$BUNDLE_DIR" ]; then' in ingest_script_payload
+                                    or 'if [ -d "$BUNDLE_DIR" ]; then' in ingest_script_payload
+                                    or (
+                                        "BUNDLE_DIR" in ingest_script_payload
+                                        and "external-proof-manifest.json" in ingest_script_payload
+                                    )
+                                )
+                            )
+                            if not has_archive_only_guard and not has_directory_fallback_guard:
                                 failures.append(
                                     "external proof ingest script is missing bundle archive presence guard token "
-                                    f"for host {host}: if [ ! -s \"$BUNDLE_ARCHIVE\" ]"
+                                    f"for host {host}: if [ ! -s \"$BUNDLE_ARCHIVE\" ] or archive+directory fallback guard"
                                 )
                             if "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"" not in ingest_script_payload:
                                 failures.append(

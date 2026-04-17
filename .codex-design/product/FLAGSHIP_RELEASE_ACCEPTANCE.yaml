@@ -1,6 +1,6 @@
 product: chummer
 version: 1
-last_reviewed: 2026-04-10
+last_reviewed: 2026-04-16
 purpose: Machine-readable flagship-grade acceptance matrix for whole-product public-release readiness.
 source_documents:
   - FLAGSHIP_PRODUCT_BAR.md
@@ -17,8 +17,15 @@ source_documents:
   - DESKTOP_EXECUTABLE_EXIT_GATES.md
   - LEGACY_CLIENT_AND_ADJACENT_PARITY.md
   - LEGACY_CLIENT_AND_ADJACENT_PARITY_REGISTRY.yaml
+  - COMPANION_PERSONA_AND_INTERACTION_MODEL.md
+  - COMPANION_PACKET.md
+  - COMPANION_TRIGGER_REGISTRY.yaml
+  - MEDIA_ARTIFACT_RECIPE_REGISTRY.yaml
+  - LOCALIZATION_AND_LANGUAGE_SYSTEM.md
+  - LOCALIZATION_PARITY_MATRIX.yaml
   - PUBLIC_RELEASE_EXPERIENCE.yaml
   - METRICS_AND_SLOS.yaml
+  - WHAT_IS_STILL_BELOW_GOLD.md
 acceptance_axes:
   - id: primary_path_clarity
     rule: Each major user job exposes one obvious primary path and one bounded fallback story.
@@ -61,6 +68,9 @@ surfaces:
       - A gold desktop claim is only true when every shipped desktop head independently satisfies startup, install, update, crash-recovery, feedback, workflow, and visual-familiarity proof.
       - The promoted desktop path starts with a guided product installer path instead of a framework chooser or browser ritual.
       - Install, claim, and restore land in the installer or app and open a workbench or restore continuation flow without a dashboard-first detour.
+      - First-run, restore, and fix-confirmation companion moments stay dismissible, evidence-backed when caution or blocking, and never replace the actual installer, restore, update, or support action path.
+      - Companion text, chips, and voice affordances remain localized across shipping locales and fall back to first-party text when EA compile, media, or microphone access is unavailable.
+      - Voice mode is strictly opt-in, requires explicit user gesture, and the flagship path remains complete in text-only mode.
       - The promoted desktop head clears the veteran first-minute gate and keeps key landmarks visible without hunting.
       - Startup, install, update, crash-recovery, and feedback/reporting flows are boring on the promoted path.
       - The desktop shell keeps a real `File` menu, first-class master index and character roster routes, roster-first orientation, and other veteran Chummer5a familiarity anchors on the flagship path.
@@ -149,6 +159,7 @@ surfaces:
       - Published artifacts keep manifests, provenance, compatibility, and recap-ready context attached.
       - Artifact surfaces look polished enough to justify public sharing rather than feeling like debug exports.
       - Artifact presentation preserves the shared design contract instead of falling back to utilitarian export chrome.
+      - Media-backed companion scenes remain optional, localized, and backed by first-party text fallback plus publication refs.
     evidence_sources:
       - CHARACTER_LIFECYCLE_AND_LIVING_DOSSIER.md
       - journeys/publish-a-grounded-artifact.md
@@ -165,6 +176,7 @@ surfaces:
       - Structural readiness and flagship readiness are published as distinct planes so green milestone coverage cannot masquerade as veteran-ready product truth.
       - The loop keeps decomposing remaining flagship gaps until the product is materially release-ready.
       - Completion, ETA, and closure proofs cite the same acceptance surfaces that the public release posture depends on.
+      - Release proof names the companion packet, trigger registry, media recipes, and localization fallback contracts whenever companion surfaces are on the promoted path.
     evidence_sources:
       - FLAGSHIP_PRODUCT_BAR.md
       - FLAGSHIP_PARITY_REGISTRY.yaml

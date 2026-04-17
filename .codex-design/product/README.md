@@ -256,7 +256,7 @@ The foundational closure wave is materially finished. The Account-Aware Front Do
 
 The current risk is no longer missing architecture. The current risk is that the campaign OS can be described better than it can be proven as a lived system across install, continuity, play, publication, closure, and no-step-back client parity. `CAMPAIGN_OS_GAP_AND_CHANGE_GUIDE.md` and `LEGACY_CLIENT_AND_ADJACENT_PARITY.md` are the active correction layers for that gap.
 
-The queued successor wave after the current flagship closeout is `NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md`, with machine-readable staging in `NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml`. It keeps the next quarter focused on repeatable desktop release truth, parity-lab proof, boring continuity, and product-governor cadence rather than reopening architecture cleanup.
+The queued successor wave after the current flagship closeout is `NEXT_90_DAY_PRODUCT_ADVANCE_GUIDE.md`, with machine-readable staging in `NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml`. It keeps the next quarter focused on repeatable desktop release truth, parity-lab proof, boring continuity, first-party artifact proof, premium campaign orientation bundles, install-aware release and support concierge flow, and product-governor cadence rather than reopening architecture cleanup.
 
 `PARTICIPATION_AND_BOOSTER_WORKFLOW.md` is the first-class canon for user language, ownership, state transitions, receipts, recognition, and package/bootstrap truth for the bounded participation lane.
 

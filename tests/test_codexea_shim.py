@@ -6,6 +6,7 @@ import stat
 import subprocess
 import tempfile
 import threading
+import textwrap
 import unittest
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -43,6 +44,7 @@ class CodexEaShimTests(unittest.TestCase):
                     "        'CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT': os.environ.get('CODEX_WRAPPER_SKIP_PROVIDER_DEFAULT'),",
                     "        'CODEXEA_LANE': os.environ.get('CODEXEA_LANE'),",
                     "        'CODEXEA_SUBMODE': os.environ.get('CODEXEA_SUBMODE'),",
+                    "        'CODEXEA_RESPONSES_AUTH_TOKEN': os.environ.get('CODEXEA_RESPONSES_AUTH_TOKEN'),",
                     "        'EA_MCP_MODEL': os.environ.get('EA_MCP_MODEL'),",
                     "    },",
                     "}",
@@ -148,6 +150,11 @@ class CodexEaShimTests(unittest.TestCase):
         )
         script.chmod(script.stat().st_mode | stat.S_IXUSR)
         return script
+
+    def write_executable(self, path: Path, content: str) -> Path:
+        path.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        return path
 
     def test_easy_prompt_is_locked_to_ea_easy_without_wrapper_trace_by_default(self) -> None:
         result = self.run_shim("continue the slice")
@@ -1096,6 +1103,70 @@ class CodexEaShimTests(unittest.TestCase):
         self.assertIn("uid123", payload["argv"])
         self.assertIn("continue fixing fleet", payload["argv"])
         self.assertFalse(any("AGENTS.md" in arg for arg in payload["argv"]))
+
+    def test_exec_keeps_responses_auth_token_out_of_argv(self) -> None:
+        result = self.run_shim(
+            "core",
+            "exec",
+            "say ok",
+            extra_env={
+                "CODEXEA_CLEAN_EXEC_OUTPUT": "0",
+                "CODEXEA_DISABLE_SCRIPT_WRAPPER": "1",
+                "EA_API_TOKEN": "super-secret-token",
+            },
+        )
+
+        completed = result["completed"]
+        payload = result["payload"]
+        self.assertEqual(completed.returncode, 0)
+        self.assertIsNotNone(payload)
+        argv = payload["argv"]
+        self.assertFalse(any("super-secret-token" in arg for arg in argv))
+        self.assertFalse(any("Authorization" in arg for arg in argv))
+        self.assertIn('model_providers.ea.bearer_token_env_var="CODEXEA_RESPONSES_AUTH_TOKEN"', argv)
+        self.assertIn(
+            'model_providers.ea.env_http_headers={"x-api-token"="CODEXEA_RESPONSES_AUTH_TOKEN","X-EA-Api-Token"="CODEXEA_RESPONSES_AUTH_TOKEN"}',
+            argv,
+        )
+        self.assertEqual(payload["env"]["CODEXEA_RESPONSES_AUTH_TOKEN"], "super-secret-token")
+
+    def test_status_uses_curl_config_for_auth_headers(self) -> None:
+        curl_path = self.write_executable(
+            self.root / "curl",
+            """#!/usr/bin/env bash
+            set -euo pipefail
+            config_path=""
+            args=("$@")
+            for ((i=0; i<${#args[@]}; i++)); do
+              if [ "${args[$i]}" = "-K" ] && [ $((i + 1)) -lt ${#args[@]} ]; then
+                config_path="${args[$((i + 1))]}"
+                break
+              fi
+            done
+            python3 -c 'import json, pathlib, sys; config_path = sys.argv[1]; config_text = pathlib.Path(config_path).read_text(encoding="utf-8") if config_path else ""; print(json.dumps({"argv": sys.argv[2:], "config_path": config_path, "config_text": config_text}))' "$config_path" "$@"
+            """,
+        )
+
+        result = self.run_shim(
+            "status",
+            "--json",
+            extra_env={
+                "EA_MCP_API_TOKEN": "status-secret-token",
+                "PATH": f"{self.root}:{os.environ.get('PATH', '')}",
+            },
+        )
+
+        completed = result["completed"]
+        self.assertEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        argv = payload["argv"]
+        self.assertTrue(curl_path.exists())
+        self.assertIn("-K", argv)
+        self.assertFalse(any("status-secret-token" in arg for arg in argv))
+        self.assertIn("Authorization: Bearer status-secret-token", payload["config_text"])
+        self.assertIn("X-EA-Api-Token: status-secret-token", payload["config_text"])
+        self.assertIn("X-API-Token: status-secret-token", payload["config_text"])
+        self.assertFalse(Path(payload["config_path"]).exists())
 
     def test_interactive_bootstrap_requires_trace_lines(self) -> None:
         text = BOOTSTRAP_PATH.read_text(encoding="utf-8")

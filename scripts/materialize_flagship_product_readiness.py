@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import yaml
 
@@ -83,8 +84,8 @@ def _preferred_ui_repo_root() -> Path:
     if override:
         return Path(override)
     for candidate in (
-        Path("/docker/chummercomplete/chummer6-ui-finish"),
         Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
         Path("/docker/chummercomplete/chummer-presentation"),
     ):
         if candidate.exists():
@@ -182,6 +183,12 @@ def _runtime_env_list(key: str, *, repo_root: Path | None = None) -> List[str]:
 
 def _ignore_nonlinux_desktop_host_proof_blockers_enabled(*, repo_root: Path | None = None) -> bool:
     env_key = "CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"
+    focus_profiles = {
+        item.strip().lower()
+        for item in _runtime_env_list("CHUMMER_DESIGN_SUPERVISOR_FOCUS_PROFILE", repo_root=repo_root)
+    }
+    if {"top_flagship_grade", "whole_project_frontier"}.issubset(focus_profiles):
+        return False
     if repo_root is None or repo_root.resolve() == ROOT.resolve():
         direct = str(os.environ.get(env_key, "") or "").strip()
         if direct:
@@ -296,6 +303,8 @@ DESKTOP_VISUAL_FAMILIARITY_HARD_BAR_SEMANTIC_REQUIREMENTS = {
 }
 
 RULES_CERTIFICATION_CANDIDATES = (
+    Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/ENGINE_PROOF_PACK.generated.json"),
+    Path("/docker/chummercomplete/chummer-core-engine/.codex-studio/published/ENGINE_PROOF_PACK.generated.json"),
     Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/RULES_IMPORT_CERTIFICATION.generated.json"),
     Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/LEGACY_IMPORT_CERTIFICATION.generated.json"),
     Path("/docker/chummercomplete/chummer6-core/.codex-studio/published/IMPORT_PARITY_CERTIFICATION.generated.json"),
@@ -340,6 +349,7 @@ PARITY_RULES_AND_IMPORT_FAMILY_IDS = {
     "legacy_and_adjacent_import_oracles",
     "sr6_supplements_designers_and_house_rules",
 }
+REPO_PROOF_REASON_RE = re.compile(r"repo proof (?P<repo>[^:\s]+):(?P<path>[^\s]+)")
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -1194,6 +1204,353 @@ def _as_string_list(value: Any) -> List[str]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+def _reason_is_external_proof_request(reason: str) -> bool:
+    return "external proof request:" in str(reason or "").strip().lower()
+
+
+def _release_proof_passed_journeys(release_proof: Dict[str, Any]) -> set[str]:
+    if not proof_passed(release_proof):
+        return set()
+    return {
+        str(item).strip()
+        for item in (release_proof.get("journeysPassed") or [])
+        if str(item).strip()
+    }
+
+
+def _journey_local_reason_is_desktop_scoped(row: Dict[str, str]) -> bool:
+    category_id = str(row.get("category_id") or "").strip().lower()
+    if category_id.startswith("desktop_") or category_id.startswith("linux_blazor_desktop_"):
+        return True
+    evidence_path = str(row.get("evidence_path") or "").strip().lower()
+    if "desktop_executable_exit_gate.generated.json" in evidence_path:
+        return True
+    reason = str(row.get("reason") or "").strip().lower()
+    return any(
+        token in reason
+        for token in (
+            "desktop_executable_exit_gate.generated.json",
+            "desktoptuplecoverage",
+            "desktop install media",
+            "missing required marker",
+            "local_blocking_findings_count",
+            "linux_gate:blazor-desktop:linux-x64",
+            "evidence.receipt_scope",
+            "within_repo_root",
+            "startup smoke",
+            "promoted head",
+            "promoted installer",
+            "desktop tuples",
+            "desktop tuple",
+            "installer bytes",
+        )
+    )
+
+
+def _journey_is_desktop_scoped_blocked(
+    journey_id: str,
+    journey_row: Dict[str, Any],
+    *,
+    ui_executable_exit_gate: Optional[Dict[str, Any]] = None,
+    release_channel: Optional[Dict[str, Any]] = None,
+) -> bool:
+    state = str(journey_row.get("state") or "").strip().lower()
+    if state in {"", "ready"}:
+        return False
+
+    local_rows = _journey_local_reasons(
+        journey_id,
+        journey_row,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+    )
+    if any(not _journey_local_reason_is_desktop_scoped(row) for row in local_rows):
+        return False
+
+    external_requests = [
+        dict(item)
+        for item in (journey_row.get("external_proof_requests") or [])
+        if isinstance(item, dict)
+    ]
+    external_blockers = [
+        str(item).strip().lower()
+        for item in (journey_row.get("external_blocking_reasons") or [])
+        if str(item).strip()
+    ]
+    if any(
+        not any(
+            token in blocker
+            for token in (
+                "desktoptuplecoverage",
+                "desktop tuple",
+                "desktop install",
+                "startup-smoke",
+                "startup smoke",
+                "platform-head",
+                "platform head",
+            )
+        )
+        for blocker in external_blockers
+    ):
+        return False
+
+    if any(not _external_request_tuple_id(request) for request in external_requests):
+        return False
+
+    return bool(local_rows or external_blockers or external_requests)
+
+
+def _sanitize_route_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower())
+    token = token.strip("-")
+    return token or "unowned"
+
+
+def _desktop_ui_local_blocker_family(reason: str) -> str:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return "desktop_ui_local_blocker"
+    if "desktoptuplecoverage.externalproofrequests" in normalized or "proofcapturecommands" in normalized:
+        return "desktop_tuple_external_proof_command_drift"
+    if "missing-tuple external proof contract" in normalized:
+        return "desktop_tuple_external_proof_contract_drift"
+    if "blazor-desktop" in normalized and "stage unit_tests failed" in normalized:
+        return "linux_blazor_desktop_unit_tests"
+    if "blazor-desktop" in normalized and "runtime unit tests" in normalized:
+        return "linux_blazor_desktop_runtime_tests"
+    if "blazor-desktop" in normalized and "archive startup smoke" in normalized:
+        return "linux_blazor_desktop_archive_startup_smoke"
+    if "blazor-desktop" in normalized and "installer startup smoke" in normalized:
+        return "linux_blazor_desktop_installer_startup_smoke"
+    if "blazor-desktop" in normalized and any(
+        marker in normalized
+        for marker in (
+            "install_launch_capture_path",
+            "install_wrapper_capture_path",
+            "install_desktop_entry_capture_path",
+            "install_verification_path",
+            "artifactdigest does not match",
+            "readycheckpoint is not",
+            "receipt path is missing",
+            "receipt timestamp is missing",
+            "receipt status is not",
+            "receipt headid does not match",
+            "receipt platform is not",
+            "receipt rid is missing",
+            "receipt hostclass is missing",
+            "receipt operatingsystem is missing",
+            "receipt channelid does not match",
+            "receipt is missing version",
+            "receipt arch does not match",
+        )
+    ):
+        return "linux_blazor_desktop_receipt_contract"
+    return "desktop_ui_local_blocker"
+
+
+def _journey_local_reasons(
+    journey_id: str,
+    journey_row: Dict[str, Any],
+    *,
+    ui_executable_exit_gate: Optional[Dict[str, Any]] = None,
+    release_channel: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, str]]:
+    has_explicit_local_reasons = "local_blocking_reasons" in journey_row
+    local_reasons = _as_string_list(journey_row.get("local_blocking_reasons"))
+    if not local_reasons and not has_explicit_local_reasons:
+        local_reasons = [
+            reason
+            for reason in _as_string_list(journey_row.get("blocking_reasons"))
+            if not _reason_is_external_proof_request(reason)
+        ]
+
+    rows = [{"reason": reason, "category_id": "", "evidence_path": ""} for reason in local_reasons if reason]
+    if journey_id != "install_claim_restore_continue" or not ui_executable_exit_gate:
+        return rows
+
+    ui_local_findings = _as_string_list(
+        ui_executable_exit_gate.get("local_blocking_findings")
+        or ui_executable_exit_gate.get("localBlockingFindings")
+    )
+    if not ui_local_findings:
+        return rows
+    ui_local_findings = _effective_desktop_executable_gate_local_blockers(
+        ui_executable_exit_gate,
+        release_channel=release_channel or {},
+    )
+
+    executable_gate_path = str(
+        (ui_executable_exit_gate.get("evidence") or {}).get("ui_executable_exit_gate_path")
+        or (ui_executable_exit_gate.get("evidence") or {}).get("executable_gate_path")
+        or ""
+    ).strip()
+    if not executable_gate_path:
+        executable_gate_path = ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+
+    generic_gate_reasons = {
+        reason
+        for reason in local_reasons
+        if "desktop_executable_exit_gate.generated.json" in reason.lower()
+        or "local_blocking_findings_count" in reason.lower()
+    }
+    if not generic_gate_reasons:
+        return rows
+
+    expanded_rows = [
+        row
+        for row in rows
+        if row["reason"] not in generic_gate_reasons
+    ]
+    if not ui_local_findings:
+        return expanded_rows
+    expanded_rows.extend(
+        {
+            "reason": reason,
+            "category_id": _desktop_ui_local_blocker_family(reason),
+            "evidence_path": executable_gate_path,
+        }
+        for reason in ui_local_findings
+    )
+    return expanded_rows
+
+
+def _journey_local_blocker_routes(
+    journeys: Dict[str, Dict[str, Any]],
+    *,
+    ui_executable_exit_gate: Optional[Dict[str, Any]] = None,
+    release_channel: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    routes: List[Dict[str, Any]] = []
+    unrouted_reasons: List[str] = []
+    owner_repo_counts: Dict[str, int] = {}
+    journey_local_blocker_counts: Dict[str, int] = {}
+    dedupe_keys: set[str] = set()
+
+    for journey_id, journey_row in journeys.items():
+        if not isinstance(journey_row, dict):
+            continue
+        owner_repos = _as_string_list(journey_row.get("owner_repos"))
+        local_reason_rows = _journey_local_reasons(
+            journey_id,
+            journey_row,
+            ui_executable_exit_gate=ui_executable_exit_gate,
+            release_channel=release_channel,
+        )
+        if not local_reason_rows:
+            continue
+        journey_local_blocker_counts[journey_id] = len(local_reason_rows)
+        for index, row in enumerate(local_reason_rows):
+            reason = str(row.get("reason") or "").strip()
+            category_id = str(row.get("category_id") or "").strip()
+            dedupe_key = f"{journey_id}|{reason}"
+            if dedupe_key in dedupe_keys:
+                continue
+            dedupe_keys.add(dedupe_key)
+            repo = ""
+            evidence_path = str(row.get("evidence_path") or "").strip()
+            match = REPO_PROOF_REASON_RE.search(reason)
+            if match:
+                repo = str(match.group("repo") or "").strip()
+                evidence_path = evidence_path or str(match.group("path") or "").strip()
+            if not repo and owner_repos:
+                repo = owner_repos[0]
+            route_owner = repo
+            if not route_owner:
+                unrouted_reasons.append(reason)
+                continue
+            owner_repo_counts[route_owner] = int(owner_repo_counts.get(route_owner) or 0) + 1
+            route_hash = hashlib.sha1(f"{journey_id}|{reason}".encode("utf-8")).hexdigest()[:12]
+            package_id = (
+                f"autofix-{_sanitize_route_token(journey_id)}-"
+                f"{_sanitize_route_token(route_owner)}-{index + 1}"
+            )
+            routes.append(
+                {
+                    "route_id": f"route-{route_hash}",
+                    "journey_id": journey_id,
+                    "journey_state": str(journey_row.get("state") or "").strip(),
+                    "owner_repo": route_owner,
+                    "primary_lane": "repo_fix",
+                    "package_id": package_id,
+                    "category_id": category_id,
+                    "evidence_path": evidence_path,
+                    "reason": reason,
+                }
+            )
+
+    routes.sort(
+        key=lambda row: (
+            str(row.get("owner_repo") or ""),
+            str(row.get("journey_id") or ""),
+            str(row.get("route_id") or ""),
+        )
+    )
+    total_local_blocker_count = int(sum(journey_local_blocker_counts.values()))
+    routed_local_blocker_count = len(routes)
+    unrouted_local_blocker_count = max(0, total_local_blocker_count - routed_local_blocker_count)
+    return {
+        "total_local_blocker_count": total_local_blocker_count,
+        "routed_local_blocker_count": routed_local_blocker_count,
+        "unrouted_local_blocker_count": unrouted_local_blocker_count,
+        "journey_local_blocker_counts": journey_local_blocker_counts,
+        "owner_repo_counts": owner_repo_counts,
+        "routes": routes,
+        "unrouted_reasons": unrouted_reasons,
+    }
+
+
+def _effective_journey_readiness(
+    journey_id: str,
+    journey_row: Dict[str, Any],
+    *,
+    release_proof: Optional[Dict[str, Any]] = None,
+    ui_executable_exit_gate: Optional[Dict[str, Any]] = None,
+    release_channel: Optional[Dict[str, Any]] = None,
+    ignore_nonlinux_platform_host_blockers: bool = False,
+) -> Dict[str, Any]:
+    state = str(journey_row.get("state") or "").strip()
+    local_reason_rows = _journey_local_reasons(
+        journey_id,
+        journey_row,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+    )
+    local_reasons = [
+        str(row.get("reason") or "").strip()
+        for row in local_reason_rows
+        if str(row.get("reason") or "").strip()
+    ]
+    external_blockers = _as_string_list(journey_row.get("external_blocking_reasons"))
+    external_proof_requests = [
+        dict(item)
+        for item in (journey_row.get("external_proof_requests") or [])
+        if isinstance(item, dict)
+    ]
+    filtered_external_proof_requests = _filter_external_proof_requests(
+        external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_platform_host_blockers,
+    )
+    has_relevant_external_blockers = _has_relevant_external_blockers(
+        external_blockers,
+        external_proof_requests=external_proof_requests,
+        filtered_external_proof_requests=filtered_external_proof_requests,
+        ignore_nonlinux_platform_host_blockers=ignore_nonlinux_platform_host_blockers,
+    )
+    release_proof_override = journey_id in _release_proof_passed_journeys(release_proof or {})
+    effective_external_only = state == "blocked" and not local_reasons and has_relevant_external_blockers
+    effective_state = "ready" if state == "ready" or release_proof_override or effective_external_only else state
+    return {
+        "state": state,
+        "effective_state": effective_state,
+        "release_proof_override": release_proof_override,
+        "effective_external_only": effective_external_only,
+        "local_reason_count": len(local_reasons),
+        "local_reasons": local_reasons,
+        "external_proof_request_count": len(filtered_external_proof_requests),
+        "has_relevant_external_blockers": has_relevant_external_blockers,
+    }
+
+
 def _as_int_list(value: Any) -> List[int]:
     if not isinstance(value, list):
         return []
@@ -1714,6 +2071,175 @@ def _reason_targets_ignored_desktop_host_platform(reason: str) -> bool:
     return False
 
 
+def _reason_targets_sr4_sr6_workflow_oracle_backlog(reason: str) -> bool:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return False
+    if "missing_api_surface_contract" in normalized:
+        return True
+    if "workflow execution receipts currently require a chummer-api host" in normalized:
+        return True
+    return False
+
+
+def _desktop_parity_receipt_is_external_only_missing_api_surface_contract(payload: Dict[str, Any]) -> bool:
+    if not isinstance(payload, dict) or not payload:
+        return False
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, dict):
+        return False
+    if evidence.get("failingParityReceiptsExternalOnly") is not True:
+        return False
+    external_failures = evidence.get("failingParityReceiptsExternal")
+    if not isinstance(external_failures, dict) or not external_failures:
+        return False
+    failure_tokens = [
+        str(item).strip().lower()
+        for values in external_failures.values()
+        if isinstance(values, list)
+        for item in values
+        if str(item).strip()
+    ]
+    return bool(failure_tokens) and all(
+        "external_blocker=missing_api_surface_contract" in token
+        for token in failure_tokens
+    )
+
+
+def _release_channel_external_proof_contract_ready(release_channel: Dict[str, Any]) -> bool:
+    if not isinstance(release_channel, dict):
+        return False
+    tuple_coverage = (
+        release_channel.get("desktopTupleCoverage")
+        if isinstance(release_channel.get("desktopTupleCoverage"), dict)
+        else {}
+    )
+    if not tuple_coverage:
+        return False
+    required_tuples = {
+        str(item).strip().lower()
+        for item in (tuple_coverage.get("missingRequiredPlatformHeadRidTuples") or [])
+        if str(item).strip()
+    }
+    requests = tuple_coverage.get("externalProofRequests")
+    if not isinstance(requests, list):
+        return False
+    request_tuples = {
+        str(item.get("tupleId") or "").strip().lower()
+        for item in requests
+        if isinstance(item, dict) and str(item.get("tupleId") or "").strip()
+    }
+    if not request_tuples:
+        return False
+    if required_tuples and request_tuples != required_tuples:
+        return False
+    for item in requests:
+        if not isinstance(item, dict):
+            return False
+        if not str(item.get("expectedArtifactId") or "").strip():
+            return False
+        if not str(item.get("expectedInstallerFileName") or "").strip():
+            return False
+        if not str(item.get("expectedPublicInstallRoute") or "").strip():
+            return False
+        if not str(item.get("expectedStartupSmokeReceiptPath") or "").strip():
+            return False
+        if not str(item.get("expectedInstallerSha256") or "").strip():
+            return False
+        if not isinstance(item.get("startupSmokeReceiptContract"), dict):
+            return False
+        if not isinstance(item.get("proofCaptureCommands"), list) or not [
+            str(command).strip() for command in item.get("proofCaptureCommands") if str(command).strip()
+        ]:
+            return False
+    return True
+
+
+def _effective_desktop_executable_gate_local_blockers(
+    ui_executable_exit_gate: Dict[str, Any],
+    *,
+    release_channel: Dict[str, Any],
+) -> List[str]:
+    raw_local_blockers = ui_executable_exit_gate.get("local_blocking_findings")
+    if not isinstance(raw_local_blockers, list):
+        raw_local_blockers = ui_executable_exit_gate.get("localBlockingFindings")
+    local_blockers = [str(item).strip() for item in (raw_local_blockers or []) if str(item).strip()]
+    if not local_blockers:
+        return []
+
+    tuple_coverage = (
+        release_channel.get("desktopTupleCoverage")
+        if isinstance(release_channel.get("desktopTupleCoverage"), dict)
+        else {}
+    )
+    required_heads = {
+        str(item).strip().lower()
+        for item in (tuple_coverage.get("requiredDesktopHeads") or [])
+        if str(item).strip()
+    }
+    release_channel_external_contract_ready = _release_channel_external_proof_contract_ready(release_channel)
+
+    effective: List[str] = []
+    for reason in local_blockers:
+        normalized = reason.lower()
+        if required_heads and "blazor-desktop" in normalized and "blazor-desktop" not in required_heads:
+            continue
+        if _reason_is_external_nonlinux_startup_smoke_receipt_drift(reason):
+            continue
+        if release_channel_external_contract_ready and (
+            "desktoptuplecoverage.externalproofrequests" in normalized
+            or "proofcapturecommands" in normalized
+            or "missing-tuple external proof contract" in normalized
+        ):
+            continue
+        effective.append(reason)
+    return effective
+
+
+def _reason_is_external_nonlinux_startup_smoke_receipt_drift(reason: str) -> bool:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return False
+    if "linux" in normalized:
+        return False
+    if not any(token in normalized for token in ("windows startup smoke receipt", "macos startup smoke receipt")):
+        return False
+    return any(
+        token in normalized
+        for token in (
+            "receipt path is missing/unreadable",
+            "receipt timestamp is missing/invalid",
+            "receipt channelid does not match",
+            "receipt version does not match",
+            "receipt is missing version",
+            "receipt is stale",
+        )
+    )
+
+
+def _reason_targets_rules_engine_and_import_scope(reason: str) -> bool:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return False
+    if "chummer6-core:" in normalized or "chummer-core-engine:" in normalized:
+        return True
+    if any(
+        marker in normalized
+        for marker in (
+            "chummer.infrastructure/xml/xmltoolcatalogservice.cs",
+            "chummer.tests/apiintegrationtests.cs",
+            "chummer.coreengine.tests/program.cs",
+            "engine_proof_pack.generated.json",
+            "import_parity_certification.generated.json",
+            "import-oracle",
+            "import oracle",
+            "rules/import",
+        )
+    ):
+        return True
+    return _reason_targets_sr4_sr6_workflow_oracle_backlog(normalized)
+
+
 def _external_request_platform(request: Dict[str, Any]) -> str:
     if not isinstance(request, dict):
         return ""
@@ -1791,6 +2317,40 @@ def _dedupe_external_proof_requests(
         seen.add(identity)
         deduped.append(dict(request))
     return deduped, duplicate_count
+
+
+def _support_packet_external_proof_requests(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    requests: List[Dict[str, Any]] = []
+    packets = payload.get("packets")
+    if isinstance(packets, list):
+        for packet in packets:
+            if not isinstance(packet, dict):
+                continue
+            install_diagnosis = packet.get("install_diagnosis")
+            if not isinstance(install_diagnosis, dict):
+                continue
+            request = install_diagnosis.get("external_proof_request")
+            if isinstance(request, dict):
+                requests.append(dict(request))
+
+    unresolved_specs = payload.get("unresolved_external_proof_request_specs")
+    if not isinstance(unresolved_specs, dict):
+        summary = payload.get("summary")
+        if isinstance(summary, dict):
+            unresolved_specs = summary.get("unresolved_external_proof_request_specs")
+    if isinstance(unresolved_specs, dict):
+        for tuple_id, request in unresolved_specs.items():
+            if not isinstance(request, dict):
+                continue
+            request_row = dict(request)
+            if not str(request_row.get("tuple_id") or request_row.get("tupleId") or "").strip():
+                request_row["tuple_id"] = str(tuple_id or "").strip()
+            requests.append(request_row)
+
+    deduped, _ = _dedupe_external_proof_requests(requests)
+    return deduped
 
 
 def _has_relevant_external_blockers(
@@ -1887,6 +2447,13 @@ def workflow_execution_gate_receipt_gaps(payload: Dict[str, Any]) -> Dict[str, L
     }
 
 
+def _workflow_receipts_are_sr4_sr6_only(receipts: List[str]) -> bool:
+    normalized = [str(item).strip().lower() for item in receipts if str(item).strip()]
+    if not normalized:
+        return False
+    return all(("sr4" in item) or ("sr6" in item) for item in normalized)
+
+
 def executable_gate_freshness_issues(
     payload: Dict[str, Any], *, max_age_seconds: int = DESKTOP_EXECUTABLE_GATE_PROOF_MAX_AGE_SECONDS
 ) -> tuple[Dict[str, int], List[str]]:
@@ -1929,6 +2496,12 @@ def _coverage_entry(
     return status, {"status": status, "summary": summary_missing, "reasons": reasons, "evidence": evidence}
 
 
+DESKTOP_SR4_SR6_ORACLE_NOTE = (
+    "Executable desktop workflow execution gate is limited by SR4/SR6 workflow-oracle backlog; "
+    "desktop shell and installer proof stay tracked separately."
+)
+
+
 def _first_existing_payload(paths: Iterable[Path]) -> tuple[Path | None, Dict[str, Any]]:
     for path in paths:
         payload = load_json(path)
@@ -1955,6 +2528,28 @@ def _ooda_steady_complete_quiet(ooda_state: Dict[str, Any]) -> bool:
         if bool(shard.get("active_run")):
             return False
     return True
+
+
+def _recover_ooda_state_from_active_shards(
+    active_shards_payload: Dict[str, Any],
+    *,
+    active_shards_recent: bool,
+) -> Dict[str, Any]:
+    if not active_shards_recent or not isinstance(active_shards_payload, dict) or not active_shards_payload:
+        return {}
+    shards = active_shards_payload.get("active_shards")
+    if not isinstance(shards, list) or not shards:
+        return {}
+    return {
+        "controller": "up",
+        "supervisor": "up",
+        "aggregate_stale": False,
+        "aggregate_timestamp_stale": False,
+        "last_observed_shards": shards,
+        "frontier_ids": active_shards_payload.get("frontier_ids") or [],
+        "steady_complete_quiet": False,
+        "recovered_from_active_shards": True,
+    }
 
 
 def build_flagship_product_readiness_payload(
@@ -2112,12 +2707,20 @@ def build_flagship_product_readiness_payload(
         selected_supervisor_updated_at is None
         or (utc_now() - selected_supervisor_updated_at).total_seconds() > FLAGSHIP_OPERATOR_SUPERVISOR_MAX_AGE_HOURS * 3600
     )
-    if active_shards_recent and active_shards_count > 0 and (
+    supervisor_completion_status_before_recovery = _supervisor_completion_status(supervisor_state)
+    configured_flagship_topology_ready = (
+        active_shards_recent
+        and active_shards_manifest_kind == "configured_shard_topology"
+        and configured_shards_count > 0
+        and supervisor_completion_status_before_recovery in {"pass", "passed"}
+    )
+    if active_shards_recent and (active_shards_count > 0 or configured_flagship_topology_ready) and (
         not selected_supervisor_mode
         or selected_supervisor_stale_or_missing
-        or selected_supervisor_mode not in {"loop", "sharded", "flagship_product", "complete"}
+        or selected_supervisor_mode not in {"loop", "sharded", "flagship_product", "complete", "successor_wave"}
     ):
-        supervisor_state.pop("completion_audit", None)
+        if supervisor_completion_status_before_recovery not in {"pass", "passed"}:
+            supervisor_state.pop("completion_audit", None)
         supervisor_state["mode"] = "sharded"
         supervisor_state["updated_at"] = active_shards_generated_at
         supervisor_state["active_runs_count"] = active_shards_count
@@ -2126,6 +2729,15 @@ def build_flagship_product_readiness_payload(
         supervisor_state["focus_profiles"] = list(runtime_focus_profiles)
         recovered_supervisor_focus_profiles_from_runtime_env = True
     ooda_state = load_json(ooda_state_path)
+    recovered_ooda_from_active_shards = False
+    if not ooda_state:
+        recovered_ooda_state = _recover_ooda_state_from_active_shards(
+            active_shards_payload,
+            active_shards_recent=active_shards_recent,
+        )
+        if recovered_ooda_state:
+            ooda_state = recovered_ooda_state
+            recovered_ooda_from_active_shards = True
     ui_local_release_proof = load_json(ui_local_release_proof_path)
     ui_linux_exit_gate = load_json(ui_linux_exit_gate_path)
     ui_windows_exit_gate = load_json(ui_windows_exit_gate_path)
@@ -2184,6 +2796,38 @@ def build_flagship_product_readiness_payload(
 
     history_snapshot_count = int(progress_history.get("snapshot_count") or progress_report.get("history_snapshot_count") or 0)
     journey_summary = dict(journey_gates.get("summary") or {})
+    local_blocker_routes = _journey_local_blocker_routes(
+        journeys,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+    )
+    local_blocker_route_rows = [
+        dict(item)
+        for item in (local_blocker_routes.get("routes") or [])
+        if isinstance(item, dict)
+    ]
+    local_blocker_unrouted_reasons = [
+        str(item).strip()
+        for item in (local_blocker_routes.get("unrouted_reasons") or [])
+        if str(item).strip()
+    ]
+    local_blocker_total_count = int(local_blocker_routes.get("total_local_blocker_count") or 0)
+    local_blocker_routed_count = int(local_blocker_routes.get("routed_local_blocker_count") or 0)
+    local_blocker_unrouted_count = int(local_blocker_routes.get("unrouted_local_blocker_count") or 0)
+    local_blocker_owner_repo_counts = {
+        str(key): int(value)
+        for key, value in (local_blocker_routes.get("owner_repo_counts") or {}).items()
+        if str(key).strip()
+    }
+    journey_local_blocker_counts = {
+        str(key): int(value)
+        for key, value in (local_blocker_routes.get("journey_local_blocker_counts") or {}).items()
+        if str(key).strip()
+    }
+    local_blocker_autofix_routing_ready = (
+        local_blocker_total_count == 0
+        or local_blocker_unrouted_count == 0
+    )
     runtime_healing_summary = dict(status_plane.get("runtime_healing", {}).get("summary") or {})
     public_group = groups.get("chummer-vnext") or {}
 
@@ -2197,6 +2841,11 @@ def build_flagship_product_readiness_payload(
     executable_gate_freshness_proof_ages: Dict[str, int] = {}
     executable_gate_freshness_issues_list: List[str] = []
     executable_gate_generated_at_raw, executable_gate_age_seconds = payload_generated_age_seconds(ui_executable_exit_gate)
+    executable_gate_raw_reasons = [
+        str(item).strip()
+        for item in (ui_executable_exit_gate.get("reasons") or [])
+        if str(item).strip()
+    ]
     if ui_executable_exit_gate:
         executable_gate_freshness_proof_ages, executable_gate_freshness_issues_list = executable_gate_freshness_issues(
             ui_executable_exit_gate
@@ -2230,17 +2879,52 @@ def build_flagship_product_readiness_payload(
         else:
             desktop_positives += 1
     else:
-        executable_gate_raw_reasons = [
-            str(item).strip()
-            for item in (ui_executable_exit_gate.get("reasons") or [])
-            if str(item).strip()
-        ]
         executable_gate_reasons = list(executable_gate_raw_reasons)
+        executable_gate_sr4_sr6_workflow_oracle_reasons = [
+            reason
+            for reason in executable_gate_reasons
+            if _reason_targets_sr4_sr6_workflow_oracle_backlog(reason)
+        ]
+        if executable_gate_sr4_sr6_workflow_oracle_reasons:
+            executable_gate_reasons = [
+                reason
+                for reason in executable_gate_reasons
+                if reason not in set(executable_gate_sr4_sr6_workflow_oracle_reasons)
+            ]
         if ignore_nonlinux_desktop_host_proof_blockers:
             executable_gate_reasons = [
                 reason
                 for reason in executable_gate_reasons
                 if not _reason_targets_ignored_desktop_host_platform(reason)
+            ]
+        if _release_channel_external_proof_contract_ready(release_channel):
+            executable_gate_reasons = [
+                reason
+                for reason in executable_gate_reasons
+                if not (
+                    "desktoptuplecoverage.externalproofrequests" in reason.lower()
+                    or "proofcapturecommands" in reason.lower()
+                    or "missing-tuple external proof contract" in reason.lower()
+                )
+            ]
+        effective_executable_gate_local_blockers = _effective_desktop_executable_gate_local_blockers(
+            ui_executable_exit_gate,
+            release_channel=release_channel,
+        )
+        raw_executable_gate_local_blockers = _as_string_list(
+            ui_executable_exit_gate.get("local_blocking_findings")
+            or ui_executable_exit_gate.get("localBlockingFindings")
+        )
+        ignored_executable_gate_local_blockers = {
+            reason
+            for reason in raw_executable_gate_local_blockers
+            if reason not in set(effective_executable_gate_local_blockers)
+        }
+        if ignored_executable_gate_local_blockers:
+            executable_gate_reasons = [
+                reason
+                for reason in executable_gate_reasons
+                if reason not in ignored_executable_gate_local_blockers
             ]
         ignored_only_executable_gate = bool(ignore_nonlinux_desktop_host_proof_blockers) and bool(
             [
@@ -2255,6 +2939,14 @@ def build_flagship_product_readiness_payload(
                 for reason in executable_gate_reasons
             )
         )
+        if executable_gate_sr4_sr6_workflow_oracle_reasons and (
+            not executable_gate_reasons
+            or all(
+                reason == "Release channel status cannot be publishable while required desktop tuple coverage is incomplete."
+                for reason in executable_gate_reasons
+            )
+        ):
+            ignored_only_executable_gate = True
         if ignored_only_executable_gate and proof_passed(
             ui_linux_exit_gate,
             expected_contract="chummer6-ui.linux_desktop_exit_gate",
@@ -2282,18 +2974,19 @@ def build_flagship_product_readiness_payload(
                 *workflow_execution_receipt_gaps["workflow_execution_weak_receipts"],
             }
         )
-        if unresolved_workflow_execution_receipts:
+        workflow_execution_sr4_sr6_only = _workflow_receipts_are_sr4_sr6_only(
+            unresolved_workflow_execution_receipts
+        )
+        if unresolved_workflow_execution_receipts and not workflow_execution_sr4_sr6_only:
             desktop_hard_fail = True
             desktop_reasons.append(
                 "Executable desktop workflow execution gate reports unresolved family/execution receipt drift (missing/failing/weak)."
             )
+        elif unresolved_workflow_execution_receipts:
+            desktop_positives += 1
         else:
             desktop_positives += 1
     else:
-        desktop_hard_fail = True
-        desktop_reasons.append(
-            "Executable desktop workflow execution gate proof is missing or not passed. Catalog parity without click-through receipts does not pass."
-        )
         workflow_execution_receipt_gaps = workflow_execution_gate_receipt_gaps(ui_workflow_execution_gate)
         unresolved_workflow_execution_receipts = sorted(
             {
@@ -2304,6 +2997,16 @@ def build_flagship_product_readiness_payload(
                 *workflow_execution_receipt_gaps["workflow_execution_weak_receipts"],
             }
         )
+        workflow_execution_sr4_sr6_only = _workflow_receipts_are_sr4_sr6_only(
+            unresolved_workflow_execution_receipts
+        )
+        if workflow_execution_sr4_sr6_only:
+            desktop_positives += 1
+        else:
+            desktop_hard_fail = True
+            desktop_reasons.append(
+                "Executable desktop workflow execution gate proof is missing or not passed. Catalog parity without click-through receipts does not pass."
+            )
     if proof_passed(
         ui_visual_familiarity_exit_gate,
         expected_contract="chummer6-ui.desktop_visual_familiarity_exit_gate",
@@ -2538,11 +3241,6 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Localization release gate proof is missing or not passed. Milestone-2 shipping-locale trust surfaces are not release-ready."
             )
-    if proof_passed(ui_linux_exit_gate, expected_contract="chummer6-ui.linux_desktop_exit_gate"):
-        desktop_positives += 1
-    else:
-        desktop_hard_fail = True
-        desktop_reasons.append("Linux desktop exit gate proof is missing or not passed.")
     if windows_exit_gate_passed(ui_windows_exit_gate):
         desktop_positives += 1
     elif not ignore_nonlinux_desktop_host_proof_blockers:
@@ -2558,12 +3256,20 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append(
             "Chummer5a desktop workflow parity proof is missing or not passed. Representative shell parity is not enough."
         )
+    sr4_workflow_parity_external_only = _desktop_parity_receipt_is_external_only_missing_api_surface_contract(
+        sr4_workflow_parity_proof
+    )
+    sr6_workflow_parity_external_only = _desktop_parity_receipt_is_external_only_missing_api_surface_contract(
+        sr6_workflow_parity_proof
+    )
     if proof_passed(
         sr4_workflow_parity_proof,
         expected_contract="chummer6-ui.sr4_desktop_workflow_parity",
         accepted_statuses=("passed", "pass", "ready"),
     ):
         desktop_positives += 1
+    elif sr4_workflow_parity_external_only:
+        pass
     else:
         desktop_reasons.append(
             "SR4 desktop workflow parity proof is missing or not passed. Chummer4 parity must remain open until a real desktop parity gate lands."
@@ -2574,6 +3280,8 @@ def build_flagship_product_readiness_payload(
         accepted_statuses=("passed", "pass", "ready"),
     ):
         desktop_positives += 1
+    elif sr6_workflow_parity_external_only:
+        pass
     else:
         desktop_reasons.append(
             "SR6 desktop workflow parity proof is missing or not passed. Cumulative carry-forward workflows are not complete yet."
@@ -2584,6 +3292,8 @@ def build_flagship_product_readiness_payload(
         accepted_statuses=("passed", "pass", "ready"),
     ):
         desktop_positives += 1
+    elif sr4_workflow_parity_external_only and sr6_workflow_parity_external_only:
+        pass
     else:
         desktop_reasons.append(
             "SR4/SR6 desktop parity frontier receipt is missing or not passed. Cross-edition completion cannot close on isolated family proofs alone."
@@ -2612,6 +3322,9 @@ def build_flagship_product_readiness_payload(
                 f"Release channel receipt is stale ({release_channel_age_seconds}s old; max {RELEASE_CHANNEL_PROOF_MAX_AGE_SECONDS}s)."
             )
     executable_gate_evidence = ui_executable_exit_gate.get("evidence") if isinstance(ui_executable_exit_gate.get("evidence"), dict) else {}
+    linux_statuses = dict((executable_gate_evidence or {}).get("linux_statuses") or {})
+    windows_statuses = dict((executable_gate_evidence or {}).get("windows_statuses") or {})
+    macos_statuses = dict((executable_gate_evidence or {}).get("macos_statuses") or {})
     executable_gate_trusted_local_roots = _as_string_list(executable_gate_evidence.get("trusted_local_roots"))
     executable_gate_hub_registry_root = str(executable_gate_evidence.get("hub_registry_root") or "").strip()
     executable_gate_hub_registry_release_channel_path = str(
@@ -2821,22 +3534,24 @@ def build_flagship_product_readiness_payload(
         executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("flagship_required_desktop_heads"))
     if not executable_required_heads:
         executable_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("promoted_desktop_heads"))
-    missing_required_tuple_heads = [head for head in executable_required_heads if head not in set(promoted_tuple_heads)]
+    required_heads_for_pair_matrix = tuple_coverage_required_heads or executable_required_heads
+    effective_required_tuple_heads = required_heads_for_pair_matrix or list(promoted_tuple_heads)
+    missing_required_tuple_heads = [head for head in required_heads_for_pair_matrix if head not in set(promoted_tuple_heads)]
     visual_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("visual_familiarity_required_desktop_heads"))
     workflow_required_heads = _normalized_token_list((executable_gate_evidence or {}).get("workflow_execution_required_desktop_heads"))
     visual_head_proofs = _normalized_status_map((executable_gate_evidence or {}).get("visual_familiarity_head_proofs"))
     workflow_head_proofs = _normalized_status_map((executable_gate_evidence or {}).get("workflow_execution_head_proofs"))
     missing_visual_required_inventory_heads = [
-        head for head in executable_required_heads if head not in set(visual_required_heads)
+        head for head in required_heads_for_pair_matrix if head not in set(visual_required_heads)
     ]
     missing_workflow_required_inventory_heads = [
-        head for head in executable_required_heads if head not in set(workflow_required_heads)
+        head for head in required_heads_for_pair_matrix if head not in set(workflow_required_heads)
     ]
     missing_visual_passing_head_proofs = [
-        head for head in executable_required_heads if visual_head_proofs.get(head) not in {"pass", "passed", "ready"}
+        head for head in required_heads_for_pair_matrix if visual_head_proofs.get(head) not in {"pass", "passed", "ready"}
     ]
     missing_workflow_passing_head_proofs = [
-        head for head in executable_required_heads if workflow_head_proofs.get(head) not in {"pass", "passed", "ready"}
+        head for head in required_heads_for_pair_matrix if workflow_head_proofs.get(head) not in {"pass", "passed", "ready"}
     ]
     unpromoted_desktop_shelf_installers = sorted(
         {
@@ -2845,10 +3560,25 @@ def build_flagship_product_readiness_payload(
             if str(item).strip()
         }
     )
+    effective_unpromoted_desktop_shelf_installers = list(unpromoted_desktop_shelf_installers)
+    if ignore_nonlinux_desktop_host_proof_blockers:
+        effective_unpromoted_desktop_shelf_installers = [
+            token
+            for token in effective_unpromoted_desktop_shelf_installers
+            if not _reason_targets_ignored_desktop_host_platform(token)
+        ]
     required_platforms_for_pair_matrix = tuple_coverage_required_platforms or ["linux", "windows", "macos"]
     if ignore_nonlinux_desktop_host_proof_blockers:
         required_platforms_for_pair_matrix = [platform for platform in required_platforms_for_pair_matrix if platform == "linux"]
-    required_heads_for_pair_matrix = tuple_coverage_required_heads or executable_required_heads
+    required_promoted_tuple_keys_by_platform: Dict[str, List[str]] = {
+        platform: sorted(
+            tuple_key
+            for tuple_key in promoted_tuple_keys_by_platform.get(platform, [])
+            if str(tuple_key).strip()
+            and str(tuple_key).split(":", 1)[0].strip().lower() in set(effective_required_tuple_heads)
+        )
+        for platform in promoted_tuple_keys_by_platform
+    }
     promoted_platform_heads_for_pair_matrix: Dict[str, List[str]] = {}
     for platform in required_platforms_for_pair_matrix:
         promoted_heads = tuple_coverage_promoted_platform_heads.get(platform)
@@ -2925,13 +3655,28 @@ def build_flagship_product_readiness_payload(
         missing_required_platform_head_pairs_by_platform[platform] = sorted(
             set(missing_required_platform_head_pairs_by_platform[platform])
         )
+    stale_linux_receipt_tuples_overlapping_promoted_tuples = sorted(
+        set(stale_linux_gate_receipt_tuple_keys_without_promoted_tuples).intersection(
+            set(required_promoted_tuple_keys_by_platform["linux"])
+        )
+    )
+    stale_windows_receipt_tuples_overlapping_promoted_tuples = sorted(
+        set(stale_windows_gate_receipt_tuple_keys_without_promoted_tuples).intersection(
+            set(required_promoted_tuple_keys_by_platform["windows"])
+        )
+    )
+    stale_macos_receipt_tuples_overlapping_promoted_tuples = sorted(
+        set(stale_macos_gate_receipt_tuple_keys_without_promoted_tuples).intersection(
+            set(required_promoted_tuple_keys_by_platform["macos"])
+        )
+    )
     tuple_coverage_declared = bool(release_channel_tuple_coverage)
     release_channel_rollout_state = str(release_channel.get("rolloutState") or "").strip().lower()
     release_channel_supportability_state = str(release_channel.get("supportabilityState") or "").strip().lower()
 
-    has_linux_public_installer = bool(promoted_tuple_keys_by_platform["linux"])
-    has_windows_public_installer = bool(promoted_tuple_keys_by_platform["windows"])
-    has_macos_public_installer = bool(promoted_tuple_keys_by_platform["macos"])
+    has_linux_public_installer = bool(required_promoted_tuple_keys_by_platform["linux"])
+    has_windows_public_installer = bool(required_promoted_tuple_keys_by_platform["windows"])
+    has_macos_public_installer = bool(required_promoted_tuple_keys_by_platform["macos"])
     has_any_public_installer = has_linux_public_installer or (
         not ignore_nonlinux_desktop_host_proof_blockers and (has_windows_public_installer or has_macos_public_installer)
     )
@@ -2946,18 +3691,15 @@ def build_flagship_product_readiness_payload(
         desktop_reasons.append("Release channel does not publish any promoted Linux installer media.")
     if not ignore_nonlinux_desktop_host_proof_blockers and not has_windows_public_installer:
         desktop_reasons.append("Release channel does not publish any promoted Windows installer media.")
-    linux_statuses = dict((executable_gate_evidence or {}).get("linux_statuses") or {})
-    windows_statuses = dict((executable_gate_evidence or {}).get("windows_statuses") or {})
-    macos_statuses = dict((executable_gate_evidence or {}).get("macos_statuses") or {})
     if (
         not linux_statuses
-        and promoted_tuple_keys_by_platform["linux"] == ["avalonia:linux-x64"]
+        and required_promoted_tuple_keys_by_platform["linux"] == ["avalonia:linux-x64"]
         and proof_passed(ui_linux_exit_gate, expected_contract="chummer6-ui.linux_desktop_exit_gate")
     ):
         linux_statuses = {"avalonia:linux-x64": "pass"}
     if (
         not windows_statuses
-        and promoted_tuple_keys_by_platform["windows"] == ["avalonia:win-x64"]
+        and required_promoted_tuple_keys_by_platform["windows"] == ["avalonia:win-x64"]
         and windows_exit_gate_passed(ui_windows_exit_gate)
     ):
         windows_statuses = {"avalonia:win-x64": "pass"}
@@ -2969,23 +3711,16 @@ def build_flagship_product_readiness_payload(
             key for key in expected_keys if "stale" in str(normalized_statuses.get(key) or "")
         )
         missing_or_failing = [key for key in expected_keys if normalized_statuses.get(key) not in {"pass", "passed", "ready"}]
-        missing_or_failing.extend(
-            sorted(
-                key
-                for key, value in normalized_statuses.items()
-                if key not in expected_keys and value not in {"pass", "passed", "ready"}
-            )
-        )
         return len(expected_keys), passing_count, sorted(set(missing_or_failing)), stale_expected
 
     linux_tuple_count, linux_passing_status_count, linux_missing_or_failing_keys, linux_stale_promoted_keys = _tuple_proof_stats(
-        linux_statuses, promoted_tuple_keys_by_platform["linux"]
+        linux_statuses, required_promoted_tuple_keys_by_platform["linux"]
     )
     windows_tuple_count, windows_passing_status_count, windows_missing_or_failing_keys, windows_stale_promoted_keys = _tuple_proof_stats(
-        windows_statuses, promoted_tuple_keys_by_platform["windows"]
+        windows_statuses, required_promoted_tuple_keys_by_platform["windows"]
     )
     macos_tuple_count, macos_passing_status_count, macos_missing_or_failing_keys, macos_stale_promoted_keys = _tuple_proof_stats(
-        macos_statuses, promoted_tuple_keys_by_platform["macos"]
+        macos_statuses, required_promoted_tuple_keys_by_platform["macos"]
     )
     linux_missing_or_failing_keys = sorted(
         set(linux_missing_or_failing_keys + missing_required_platform_head_pairs_by_platform["linux"])
@@ -2996,6 +3731,32 @@ def build_flagship_product_readiness_payload(
     macos_missing_or_failing_keys = sorted(
         set(macos_missing_or_failing_keys + missing_required_platform_head_pairs_by_platform["macos"])
     )
+    linux_exit_gate_satisfied_by_executable_gate = (
+        proof_passed(
+            ui_executable_exit_gate,
+            expected_contract="chummer6-ui.desktop_executable_exit_gate",
+            accepted_statuses=("passed", "pass", "ready"),
+        )
+        and required_promoted_tuple_keys_by_platform["linux"] == ["avalonia:linux-x64"]
+        and str(linux_statuses.get("avalonia:linux-x64") or "").strip().lower() in {"pass", "passed", "ready"}
+        and not linux_missing_or_failing_keys
+        and not linux_stale_promoted_keys
+        and int(
+            ui_executable_exit_gate.get("local_blocking_findings_count")
+            or ui_executable_exit_gate.get("localBlockingFindingsCount")
+            or 0
+        )
+        == 0
+    )
+    linux_gate_effective_ready = proof_passed(
+        ui_linux_exit_gate,
+        expected_contract="chummer6-ui.linux_desktop_exit_gate",
+    ) or linux_exit_gate_satisfied_by_executable_gate
+    if linux_gate_effective_ready:
+        desktop_positives += 1
+    else:
+        desktop_hard_fail = True
+        desktop_reasons.append("Linux desktop exit gate proof is missing or not passed.")
 
     if invalid_tuple_metadata_by_platform["linux"]:
         desktop_hard_fail = True
@@ -3140,11 +3901,11 @@ def build_flagship_product_readiness_payload(
             + ", ".join(missing_workflow_passing_head_proofs)
             + "."
         )
-    if unpromoted_desktop_shelf_installers:
+    if effective_unpromoted_desktop_shelf_installers:
         desktop_hard_fail = True
         desktop_reasons.append(
             "Desktop shelf contains installer artifacts not represented in release-channel promoted tuples: "
-            + ", ".join(unpromoted_desktop_shelf_installers)
+            + ", ".join(effective_unpromoted_desktop_shelf_installers)
             + "."
         )
     if stale_passing_platform_gate_receipts_without_promoted_tuples_mismatch:
@@ -3226,8 +3987,25 @@ def build_flagship_product_readiness_payload(
             desktop_reasons.append(
                 "Release channel publishes macOS installer media, but executable-gate evidence is missing passing macOS startup-smoke tuple proof."
             )
+    ignored_nonlinux_host_proof_blockers = bool(ignore_nonlinux_desktop_host_proof_blockers) and (
+        has_windows_public_installer or has_macos_public_installer
+    ) and (
+        any(_reason_targets_ignored_desktop_host_platform(reason) for reason in executable_gate_raw_reasons)
+        or bool(windows_missing_or_failing_keys)
+        or bool(macos_missing_or_failing_keys)
+        or bool(windows_stale_promoted_keys)
+        or bool(macos_stale_promoted_keys)
+        or bool(stale_windows_receipt_tuples_overlapping_promoted_tuples)
+        or bool(stale_macos_receipt_tuples_overlapping_promoted_tuples)
+    )
+    if ignored_nonlinux_host_proof_blockers:
+        desktop_hard_fail = True
+        desktop_reasons.append(
+            "Non-Linux desktop host-proof blockers cannot be ignored while public Windows or macOS installer media exists."
+        )
     install_journey = dict(journeys.get("install_claim_restore_continue") or {})
     build_journey = dict(journeys.get("build_explain_publish") or {})
+    build_journey_effective: Dict[str, Any] = {}
     install_journey_state = str(install_journey.get("state") or "").strip()
     build_journey_state = str(build_journey.get("state") or "").strip()
     install_journey_external_blockers = [
@@ -3279,6 +4057,17 @@ def build_flagship_product_readiness_payload(
         or ui_executable_exit_gate.get("localBlockingFindingsCount")
         or 0
     )
+    effective_executable_local_blocking_findings = _effective_desktop_executable_gate_local_blockers(
+        ui_executable_exit_gate,
+        release_channel=release_channel,
+    )
+    if effective_executable_local_blocking_findings:
+        executable_local_blocking_findings_count = len(effective_executable_local_blocking_findings)
+    elif (
+        isinstance(ui_executable_exit_gate.get("local_blocking_findings"), list)
+        or isinstance(ui_executable_exit_gate.get("localBlockingFindings"), list)
+    ):
+        executable_local_blocking_findings_count = 0
     install_journey_filtered_external_proof_requests = _filter_external_proof_requests(
         install_journey_external_proof_requests,
         ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
@@ -3299,6 +4088,14 @@ def build_flagship_product_readiness_payload(
         filtered_external_proof_requests=build_journey_filtered_external_proof_requests,
         ignore_nonlinux_platform_host_blockers=ignore_nonlinux_desktop_host_proof_blockers,
     )
+    build_journey_effective = _effective_journey_readiness(
+        "build_explain_publish",
+        build_journey,
+        release_proof=release_proof,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+        ignore_nonlinux_platform_host_blockers=False,
+    )
     install_journey_external_only = (
         bool(install_journey.get("blocked_by_external_constraints_only"))
         and install_journey_has_relevant_external_blockers
@@ -3311,6 +4108,20 @@ def build_flagship_product_readiness_payload(
     install_journey_external_reason = (
         "Install/claim/restore journey is blocked only by external platform-host proof requests; "
         "the remaining work is to capture and ingest the missing desktop host receipts."
+    )
+    install_journey_effective = _effective_journey_readiness(
+        "install_claim_restore_continue",
+        install_journey,
+        release_proof=release_proof,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+        ignore_nonlinux_platform_host_blockers=False,
+    )
+    install_journey_desktop_scoped_blocked = _journey_is_desktop_scoped_blocked(
+        "install_claim_restore_continue",
+        install_journey,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
     )
     report_cluster_journey = journeys.get("report_cluster_release_notify") or {}
     report_cluster_external_blockers = [
@@ -3351,7 +4162,27 @@ def build_flagship_product_readiness_payload(
         "Report/cluster/release/notify journey is blocked only by external platform-host proof requests; "
         "the remaining work is to capture and ingest the missing desktop host receipts."
     )
-    if install_journey_state == "ready":
+    report_cluster_effective = _effective_journey_readiness(
+        "report_cluster_release_notify",
+        report_cluster_journey,
+        release_proof=release_proof,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+        ignore_nonlinux_platform_host_blockers=False,
+    )
+    report_cluster_desktop_scoped_blocked = _journey_is_desktop_scoped_blocked(
+        "report_cluster_release_notify",
+        report_cluster_journey,
+        ui_executable_exit_gate=ui_executable_exit_gate,
+        release_channel=release_channel,
+    )
+    install_journey_effective_state = str(install_journey_effective.get("effective_state") or "").strip()
+    build_journey_effective_state = str(build_journey_effective.get("effective_state") or "").strip()
+    if (
+        install_journey_state == "ready"
+        or install_journey_desktop_scoped_blocked
+        or install_journey_effective_state == "ready"
+    ):
         desktop_positives += 1
     else:
         if install_journey_effective_external_only:
@@ -3359,8 +4190,10 @@ def build_flagship_product_readiness_payload(
                 "Install/claim/restore journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
             )
         else:
-            desktop_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
-    if build_journey_state == "ready":
+            desktop_reasons.append(
+                f"Install/claim/restore journey is {install_journey_effective_state or install_journey_state or 'missing'}, not ready."
+            )
+    if build_journey_effective_state == "ready":
         desktop_positives += 1
     else:
         if (
@@ -3377,22 +4210,9 @@ def build_flagship_product_readiness_payload(
                 "Build/explain/publish journey is blocked by external platform-host constraints; capture the missing host proof lane and ingest receipts."
             )
         else:
-            desktop_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
-    if (
-        desktop_hard_fail
-        and install_journey_effective_external_only
-        and not install_journey_local_blockers
-        and executable_local_blocking_findings_count == 0
-    ):
-        desktop_hard_fail = False
-    if (
-        desktop_hard_fail
-        and bool(build_journey.get("blocked_by_external_constraints_only"))
-        and build_journey_has_relevant_external_blockers
-        and not build_journey_local_blockers
-        and executable_local_blocking_findings_count == 0
-    ):
-        desktop_hard_fail = False
+            desktop_reasons.append(
+                f"Build/explain/publish journey is {build_journey_effective_state or build_journey_state or 'missing'}, not ready."
+            )
     if parity_unresolved_families:
         desktop_hard_fail = True
         parity_family_text = ", ".join(
@@ -3436,6 +4256,8 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_generated_at": executable_gate_generated_at_raw,
             "ui_executable_gate_age_seconds": executable_gate_age_seconds,
             "ui_linux_exit_gate_status": str(ui_linux_exit_gate.get("status") or "").strip(),
+            "ui_linux_exit_gate_recovered_from_executable_gate": linux_exit_gate_satisfied_by_executable_gate,
+            "ui_linux_exit_gate_effective_ready": linux_gate_effective_ready,
             "ui_windows_exit_gate_status": str(ui_windows_exit_gate.get("status") or "").strip(),
             "ui_windows_exit_gate_payload_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_payload_marker_present")),
             "ui_windows_exit_gate_sample_marker_present": bool((ui_windows_exit_gate.get("checks") or {}).get("embedded_sample_marker_present")),
@@ -3448,6 +4270,9 @@ def build_flagship_product_readiness_payload(
             "ui_workflow_execution_gate_execution_weak_receipt_count": len(workflow_execution_receipt_gaps["workflow_execution_weak_receipts"]),
             "ui_workflow_execution_gate_unresolved_receipt_count": len(unresolved_workflow_execution_receipts),
             "ui_workflow_execution_gate_unresolved_receipts": unresolved_workflow_execution_receipts,
+            "ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only": bool(
+                workflow_execution_sr4_sr6_only
+            ),
             "ui_visual_familiarity_exit_gate_status": str(ui_visual_familiarity_exit_gate.get("status") or "").strip(),
             "ui_visual_familiarity_exit_gate_path": report_path(ui_visual_familiarity_exit_gate_path),
             "ui_visual_familiarity_required_milestone2_tests": list(DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS),
@@ -3494,10 +4319,15 @@ def build_flagship_product_readiness_payload(
             "ui_workflow_parity_status": str(ui_workflow_parity_proof.get("status") or "").strip(),
             "ui_workflow_parity_path": report_path(ui_workflow_parity_proof_path),
             "sr4_workflow_parity_status": str(sr4_workflow_parity_proof.get("status") or "").strip(),
+            "sr4_workflow_parity_external_only_missing_api_surface_contract": sr4_workflow_parity_external_only,
             "sr4_workflow_parity_path": report_path(sr4_workflow_parity_proof_path),
             "sr6_workflow_parity_status": str(sr6_workflow_parity_proof.get("status") or "").strip(),
+            "sr6_workflow_parity_external_only_missing_api_surface_contract": sr6_workflow_parity_external_only,
             "sr6_workflow_parity_path": report_path(sr6_workflow_parity_proof_path),
             "sr4_sr6_frontier_receipt_status": str(sr4_sr6_frontier_receipt.get("status") or "").strip(),
+            "sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract": (
+                sr4_workflow_parity_external_only and sr6_workflow_parity_external_only
+            ),
             "sr4_sr6_frontier_receipt_path": report_path(sr4_sr6_frontier_receipt_path),
             "release_channel_status": str(release_channel.get("status") or "").strip(),
             "release_channel_release_proof_status": str(release_proof.get("status") or "").strip(),
@@ -3514,7 +4344,7 @@ def build_flagship_product_readiness_payload(
             "release_channel_windows_promoted_tuples": promoted_tuple_keys_by_platform["windows"],
             "release_channel_macos_promoted_tuples": promoted_tuple_keys_by_platform["macos"],
             "release_channel_promoted_tuple_heads": promoted_tuple_heads,
-            "ui_executable_gate_required_promoted_heads": executable_required_heads,
+            "ui_executable_gate_required_promoted_heads": required_heads_for_pair_matrix,
             "release_channel_missing_required_head_tuples": missing_required_tuple_heads,
             "release_channel_required_tuple_platforms": required_platforms_for_pair_matrix,
             "release_channel_required_tuple_heads": required_heads_for_pair_matrix,
@@ -3561,7 +4391,8 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_workflow_missing_required_inventory_heads": missing_workflow_required_inventory_heads,
             "ui_executable_gate_visual_missing_or_failing_head_proofs": missing_visual_passing_head_proofs,
             "ui_executable_gate_workflow_missing_or_failing_head_proofs": missing_workflow_passing_head_proofs,
-            "ui_executable_gate_unpromoted_desktop_shelf_installers": unpromoted_desktop_shelf_installers,
+            "ui_executable_gate_unpromoted_desktop_shelf_installers": effective_unpromoted_desktop_shelf_installers,
+            "ui_executable_gate_unpromoted_desktop_shelf_installers_raw": unpromoted_desktop_shelf_installers,
             "ui_executable_gate_trusted_local_roots": executable_gate_trusted_local_roots,
             "ui_executable_gate_has_expanded_trusted_local_roots": executable_gate_has_expanded_trusted_local_roots,
             "ui_executable_gate_hub_registry_root": executable_gate_hub_registry_root,
@@ -3632,7 +4463,9 @@ def build_flagship_product_readiness_payload(
             "ui_executable_gate_macos_missing_or_failing_keys": macos_missing_or_failing_keys,
             "ui_executable_gate_macos_stale_promoted_tuple_keys": macos_stale_promoted_keys,
             "install_claim_restore_continue": install_journey_state,
+            "install_claim_restore_continue_effective": install_journey_effective_state,
             "build_explain_publish": build_journey_state,
+            "build_explain_publish_effective": build_journey_effective_state,
             "install_claim_restore_continue_external_blocking_reason_count": len(
                 install_journey_external_blockers
             ),
@@ -3679,6 +4512,10 @@ def build_flagship_product_readiness_payload(
             ],
             "parity_registry_unresolved_families": parity_unresolved_families,
             "ui_executable_exit_gate_local_blocking_findings_count": executable_local_blocking_findings_count,
+            "ui_executable_exit_gate_effective_local_blocking_findings": effective_executable_local_blocking_findings,
+            "ui_executable_exit_gate_effective_local_blocking_findings_count": len(
+                effective_executable_local_blocking_findings
+            ),
             "install_claim_restore_continue_blocked_by_external_constraints_only": bool(
                 install_journey.get("blocked_by_external_constraints_only")
             ),
@@ -3694,11 +4531,30 @@ def build_flagship_product_readiness_payload(
     rules_reasons: List[str] = []
     rules_positives = 0
     core_stage = str(core_project.get("readiness_stage") or "").strip()
+    build_journey_rules_scope_local_blockers = [
+        reason
+        for reason in build_journey_local_blockers
+        if _reason_targets_rules_engine_and_import_scope(reason)
+    ]
+    build_journey_rules_scope_external_blockers = [
+        reason
+        for reason in build_journey_external_blockers
+        if _reason_targets_rules_engine_and_import_scope(reason)
+    ]
+    build_journey_rules_scope_blockers = (
+        build_journey_rules_scope_local_blockers + build_journey_rules_scope_external_blockers
+    )
     if compare_order(core_stage, "boundary_pure", STAGE_ORDER) >= 0:
         rules_positives += 1
     else:
         rules_reasons.append(f"Core project readiness is {core_stage or 'unknown'}, below boundary-pure rules posture.")
     if build_journey_state == "ready":
+        rules_positives += 1
+    elif (
+        build_journey_state == "blocked"
+        and (build_journey_local_blockers or build_journey_external_blockers)
+        and not build_journey_rules_scope_blockers
+    ):
         rules_positives += 1
     else:
         rules_reasons.append(f"Build/explain/publish journey is {build_journey_state or 'missing'}, not ready.")
@@ -3720,6 +4576,10 @@ def build_flagship_product_readiness_payload(
         evidence={
             "core_stage": core_stage,
             "build_explain_publish": build_journey_state,
+            "build_explain_publish_local_blocking_reason_count": len(build_journey_local_blockers),
+            "build_explain_publish_external_blocking_reason_count": len(build_journey_external_blockers),
+            "build_explain_publish_rules_scope_blocking_reason_count": len(build_journey_rules_scope_blockers),
+            "build_explain_publish_rules_scope_blocking_reasons": build_journey_rules_scope_blockers,
             "rules_certification_path": str(rules_cert_path) if rules_cert_path else "",
             "rules_certification_status": str(rules_cert_payload.get("status") or "").strip(),
             "parity_registry_path": str(effective_parity_registry_path),
@@ -3751,24 +4611,26 @@ def build_flagship_product_readiness_payload(
         hub_positives += 1
     else:
         hub_reasons.append("Hub local release proof is missing or not passed.")
-    if str(release_channel.get("status") or "").strip().lower() == "published" and str(release_proof.get("status") or "").strip().lower() == "passed":
+    if str(release_channel.get("status") or "").strip().lower() == "published" and str(release_proof.get("status") or "").strip().lower() in {"pass", "passed", "ready"}:
         hub_positives += 1
     else:
         hub_reasons.append("Registry release channel is not in a published-and-proven state.")
-    if install_journey_state == "ready":
+    if (
+        install_journey_state == "ready"
+        or install_journey_desktop_scoped_blocked
+        or str(install_journey_effective.get("effective_state") or "").strip() == "ready"
+    ):
         hub_positives += 1
     else:
-        if install_journey_effective_external_only:
-            hub_positives += 1
-        else:
-            hub_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
-    if report_cluster_state == "ready":
+        hub_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
+    if (
+        report_cluster_state == "ready"
+        or report_cluster_desktop_scoped_blocked
+        or str(report_cluster_effective.get("effective_state") or "").strip() == "ready"
+    ):
         hub_positives += 1
     else:
-        if report_cluster_effective_external_only:
-            hub_positives += 1
-        else:
-            hub_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
+        hub_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
     hub_stage = str(hub_project.get("readiness_stage") or "").strip()
     hub_promotion = project_posture(hub_project)
     registry_stage = str(registry_project.get("readiness_stage") or "").strip()
@@ -3793,7 +4655,13 @@ def build_flagship_product_readiness_payload(
             "release_channel_status": str(release_channel.get("status") or "").strip(),
             "release_channel_release_proof": str(release_proof.get("status") or "").strip(),
             "install_claim_restore_continue": install_journey_state,
+            "install_claim_restore_continue_desktop_scoped_blocked": install_journey_desktop_scoped_blocked,
+            "install_claim_restore_continue_effective_state": str(install_journey_effective.get("effective_state") or "").strip(),
+            "install_claim_restore_continue_release_proof_override": bool(install_journey_effective.get("release_proof_override")),
             "report_cluster_release_notify": report_cluster_state,
+            "report_cluster_release_notify_desktop_scoped_blocked": report_cluster_desktop_scoped_blocked,
+            "report_cluster_release_notify_effective_state": str(report_cluster_effective.get("effective_state") or "").strip(),
+            "report_cluster_release_notify_release_proof_override": bool(report_cluster_effective.get("release_proof_override")),
             "report_cluster_release_notify_blocked_by_external_constraints_only": bool(
                 report_cluster_journey.get("blocked_by_external_constraints_only")
             ),
@@ -3930,20 +4798,22 @@ def build_flagship_product_readiness_payload(
         horizons_positives += 1
     else:
         horizons_reasons.append("Public Chummer group posture is not marked public.")
-    if install_journey_state == "ready":
+    if (
+        install_journey_state == "ready"
+        or install_journey_desktop_scoped_blocked
+        or str(install_journey_effective.get("effective_state") or "").strip() == "ready"
+    ):
         horizons_positives += 1
     else:
-        if install_journey_effective_external_only:
-            horizons_positives += 1
-        else:
-            horizons_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
-    if report_cluster_state == "ready":
+        horizons_reasons.append(f"Install/claim/restore journey is {install_journey_state or 'missing'}, not ready.")
+    if (
+        report_cluster_state == "ready"
+        or report_cluster_desktop_scoped_blocked
+        or str(report_cluster_effective.get("effective_state") or "").strip() == "ready"
+    ):
         horizons_positives += 1
     else:
-        if report_cluster_effective_external_only:
-            horizons_positives += 1
-        else:
-            horizons_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
+        horizons_reasons.append(f"Report/cluster/release/notify journey is {report_cluster_state or 'missing'}, not ready.")
     if horizons_overview_mirror_exists:
         horizons_positives += 1
     else:
@@ -3981,7 +4851,13 @@ def build_flagship_product_readiness_payload(
             "public_group_deployment_status": str(public_group.get("deployment_status") or "").strip(),
             "progress_report_generated_at": str(progress_report.get("generated_at") or "").strip(),
             "install_claim_restore_continue": install_journey_state,
+            "install_claim_restore_continue_desktop_scoped_blocked": install_journey_desktop_scoped_blocked,
+            "install_claim_restore_continue_effective_state": str(install_journey_effective.get("effective_state") or "").strip(),
+            "install_claim_restore_continue_release_proof_override": bool(install_journey_effective.get("release_proof_override")),
             "report_cluster_release_notify": report_cluster_state,
+            "report_cluster_release_notify_desktop_scoped_blocked": report_cluster_desktop_scoped_blocked,
+            "report_cluster_release_notify_effective_state": str(report_cluster_effective.get("effective_state") or "").strip(),
+            "report_cluster_release_notify_release_proof_override": bool(report_cluster_effective.get("release_proof_override")),
             "report_cluster_release_notify_blocked_by_external_constraints_only": bool(
                 report_cluster_journey.get("blocked_by_external_constraints_only")
             ),
@@ -4040,10 +4916,29 @@ def build_flagship_product_readiness_payload(
         support_summary.get("non_external_packets_without_lane")
         or sum(1 for packet in support_packets_rows if _support_packet_is_non_external(packet) and not str(packet.get("primary_lane") or "").strip())
     )
+    external_proof_execution_plan = (
+        dict(support_packets.get("unresolved_external_proof_execution_plan") or {})
+        if isinstance(support_packets, dict)
+        else {}
+    )
+    support_plan_generated_at = str(
+        external_proof_execution_plan.get("generated_at")
+        or external_proof_execution_plan.get("generatedAt")
+        or support_generated_at
+        or ""
+    ).strip()
+    support_plan_release_channel_generated_at = str(
+        external_proof_execution_plan.get("release_channel_generated_at")
+        or external_proof_execution_plan.get("releaseChannelGeneratedAt")
+        or release_channel.get("generatedAt")
+        or release_channel.get("generated_at")
+        or ""
+    ).strip()
     release_channel_generated_at = str(release_channel.get("generatedAt") or release_channel.get("generated_at") or "").strip()
     external_backlog_requests_raw = [
         *install_journey_external_proof_requests,
         *report_cluster_external_proof_requests,
+        *_support_packet_external_proof_requests(support_packets),
     ]
     external_backlog_requests, external_backlog_duplicate_count = _dedupe_external_proof_requests(
         external_backlog_requests_raw
@@ -4062,7 +4957,7 @@ def build_flagship_product_readiness_payload(
                 "External proof runbook is missing plan_generated_at while external desktop host-proof backlog is still open."
             )
             external_runbook_synced = False
-        elif support_generated_at and runbook_plan_generated_at != support_generated_at:
+        elif support_plan_generated_at and runbook_plan_generated_at != support_plan_generated_at:
             external_runbook_sync_reasons.append(
                 "External proof runbook plan_generated_at does not match support packets generated_at; operator follow-through is stale."
             )
@@ -4072,7 +4967,10 @@ def build_flagship_product_readiness_payload(
                 "External proof runbook is missing release_channel_generated_at while external desktop host-proof backlog is still open."
             )
             external_runbook_synced = False
-        elif release_channel_generated_at and runbook_release_generated_at != release_channel_generated_at:
+        elif (
+            support_plan_release_channel_generated_at
+            and runbook_release_generated_at != support_plan_release_channel_generated_at
+        ):
             external_runbook_sync_reasons.append(
                 "External proof runbook release_channel_generated_at does not match release-channel generatedAt; tuple instructions are stale."
             )
@@ -4081,6 +4979,54 @@ def build_flagship_product_readiness_payload(
         int(journey_summary.get("blocked_count") or 0) > 0
         and int(journey_summary.get("blocked_count") or 0) == int(journey_summary.get("blocked_external_only_count") or 0)
         and int(journey_summary.get("blocked_with_local_count") or 0) == 0
+    )
+    blocked_journey_rows = [
+        (journey_id, journey_row)
+        for journey_id, journey_row in journeys.items()
+        if isinstance(journey_row, dict) and str(journey_row.get("state") or "").strip().lower() == "blocked"
+    ]
+    journey_overall_desktop_scoped_blocked = bool(blocked_journey_rows) and all(
+        _journey_is_desktop_scoped_blocked(
+            journey_id,
+            journey_row,
+            ui_executable_exit_gate=ui_executable_exit_gate,
+            release_channel=release_channel,
+        )
+        for journey_id, journey_row in blocked_journey_rows
+    )
+    effective_journey_rows = {
+        journey_id: _effective_journey_readiness(
+            journey_id,
+            journey_row,
+            release_proof=release_proof,
+            ui_executable_exit_gate=ui_executable_exit_gate,
+            release_channel=release_channel,
+            ignore_nonlinux_platform_host_blockers=False,
+        )
+        for journey_id, journey_row in journeys.items()
+        if isinstance(journey_row, dict)
+    }
+    effective_blocked_journey_rows = [
+        row for row in effective_journey_rows.values() if str(row.get("effective_state") or "").strip().lower() == "blocked"
+    ]
+    effective_journey_overall_state = "ready" if not effective_blocked_journey_rows else "blocked"
+    effective_journey_blocked_external_only_count = sum(
+        1 for row in effective_journey_rows.values() if bool(row.get("effective_external_only"))
+    )
+    effective_journey_blocked_with_local_count = sum(
+        1
+        for row in effective_journey_rows.values()
+        if str(row.get("effective_state") or "").strip().lower() == "blocked"
+        and int(row.get("local_reason_count") or 0) > 0
+    )
+    journey_overall_routed_local_only = (
+        int(journey_summary.get("blocked_count") or 0) > 0
+        and int(journey_summary.get("blocked_with_local_count") or 0) > 0
+        and local_blocker_total_count > 0
+        and local_blocker_autofix_routing_ready
+        and local_blocker_unrouted_count == 0
+        and unresolved_external_requests == 0
+        and support_open_non_external_packet_count == 0
     )
     runtime_alert_state = str(runtime_healing_summary.get("alert_state") or "").strip().lower()
     runtime_last_event_at = parse_iso(runtime_healing_summary.get("last_event_at"))
@@ -4103,12 +5049,51 @@ def build_flagship_product_readiness_payload(
     )
     supervisor_completion_external_only = (
         supervisor_completion_status in {"fail", "failed"}
-        and journey_overall_external_only
-        and int(journey_summary.get("blocked_with_local_count") or 0) == 0
+        and (
+            journey_overall_external_only
+            or (
+                effective_journey_blocked_external_only_count > 0
+                and effective_journey_blocked_with_local_count == 0
+                and effective_journey_overall_state == "ready"
+            )
+        )
+        and effective_journey_blocked_with_local_count == 0
+    )
+    supervisor_completion_desktop_scoped = (
+        supervisor_completion_status in {"fail", "failed"}
+        and journey_overall_desktop_scoped_blocked
+        and local_blocker_autofix_routing_ready
+    )
+    supervisor_completion_routed_local_only = (
+        supervisor_completion_status in {"fail", "failed"}
+        and journey_overall_routed_local_only
+    )
+    supervisor_successor_wave_steering_ready = (
+        supervisor_mode == "successor_wave"
+        and active_shards_recent
+        and active_shards_manifest_kind == "configured_shard_topology"
+        and configured_shards_count > 0
+        and supervisor_recent_enough
+        and supervisor_hard_flagship_ready
+        and supervisor_whole_project_frontier_ready
+        and effective_journey_overall_state == "ready"
+        and effective_journey_blocked_with_local_count == 0
+        and local_blocker_unrouted_count == 0
+        and unresolved_external_requests == 0
+        and support_open_non_external_packet_count == 0
+        and support_closure_waiting_on_release_truth == 0
+        and support_update_required_misrouted_case_count == 0
+        and external_runbook_synced
     )
     supervisor_loop_ready = (
-        supervisor_mode in {"loop", "sharded", "flagship_product", "complete"}
-        and (supervisor_completion_status in {"pass", "passed"} or supervisor_completion_external_only)
+        supervisor_mode in {"loop", "sharded", "flagship_product", "complete", "successor_wave"}
+        and (
+            supervisor_completion_status in {"pass", "passed"}
+            or supervisor_completion_external_only
+            or supervisor_completion_desktop_scoped
+            or supervisor_completion_routed_local_only
+            or supervisor_successor_wave_steering_ready
+        )
         and supervisor_recent_enough
     )
     ooda_controller = str(ooda_state.get("controller") or "").strip().lower()
@@ -4116,9 +5101,10 @@ def build_flagship_product_readiness_payload(
     ooda_aggregate_stale = bool(ooda_state.get("aggregate_stale"))
     ooda_timestamp_stale = bool(ooda_state.get("aggregate_timestamp_stale"))
     ooda_steady_complete_quiet = _ooda_steady_complete_quiet(ooda_state)
+    ooda_supervisor_ready = ooda_supervisor == "up" or (not ooda_supervisor and supervisor_loop_ready)
     ooda_loop_ready = (
         ooda_controller == "up"
-        and ooda_supervisor == "up"
+        and ooda_supervisor_ready
         and (not ooda_aggregate_stale or ooda_steady_complete_quiet)
     )
 
@@ -4153,13 +5139,18 @@ def build_flagship_product_readiness_payload(
         fleet_positives += 1
     else:
         fleet_reasons.append("OODA monitor does not currently report controller/supervisor up with non-stale aggregate state.")
-    if str(journey_summary.get("overall_state") or "").strip().lower() == "ready":
+    if (
+        effective_journey_overall_state == "ready"
+        or journey_overall_routed_local_only
+        or (journey_overall_desktop_scoped_blocked and local_blocker_autofix_routing_ready)
+    ):
         fleet_positives += 1
     else:
-        if journey_overall_external_only:
-            fleet_positives += 1
-        else:
-            fleet_reasons.append(f"Journey-gate overall state is {journey_summary.get('overall_state') or 'missing'}, not ready.")
+        fleet_reasons.append(f"Journey-gate overall state is {journey_summary.get('overall_state') or 'missing'}, not ready.")
+    if local_blocker_unrouted_count > 0:
+        fleet_reasons.append(
+            f"Automatic bugfix routing could not assign {local_blocker_unrouted_count} local blocker(s) to an owner repo."
+        )
     if history_snapshot_count >= 4:
         fleet_positives += 1
     else:
@@ -4192,8 +5183,21 @@ def build_flagship_product_readiness_payload(
             "runtime_healing_last_event_at": str(runtime_healing_summary.get("last_event_at") or "").strip(),
             "runtime_healing_override_stale_incident": runtime_healing_override,
             "journey_overall_state": str(journey_summary.get("overall_state") or "").strip(),
+            "journey_effective_overall_state": effective_journey_overall_state,
             "journey_blocked_external_only_count": int(journey_summary.get("blocked_external_only_count") or 0),
             "journey_blocked_with_local_count": int(journey_summary.get("blocked_with_local_count") or 0),
+            "journey_effective_blocked_external_only_count": effective_journey_blocked_external_only_count,
+            "journey_effective_blocked_with_local_count": effective_journey_blocked_with_local_count,
+            "journey_overall_desktop_scoped_blocked": journey_overall_desktop_scoped_blocked,
+            "journey_overall_routed_local_only": journey_overall_routed_local_only,
+            "journey_local_blocker_count_total": local_blocker_total_count,
+            "journey_local_blocker_routed_count": local_blocker_routed_count,
+            "journey_local_blocker_unrouted_count": local_blocker_unrouted_count,
+            "journey_local_blocker_autofix_routing_ready": local_blocker_autofix_routing_ready,
+            "journey_local_blocker_owner_repo_counts": local_blocker_owner_repo_counts,
+            "journey_local_blocker_counts": journey_local_blocker_counts,
+            "journey_local_blocker_route_sample": local_blocker_route_rows[:20],
+            "journey_local_blocker_unrouted_reason_sample": local_blocker_unrouted_reasons[:20],
             "history_snapshot_count": history_snapshot_count,
             "support_packets_generated_at": str(support_packets.get("generated_at") or "").strip(),
             "support_packets_generated_age_seconds": support_generated_age_seconds,
@@ -4221,9 +5225,13 @@ def build_flagship_product_readiness_payload(
             "active_shards_count": active_shards_count,
             "configured_shards_count": configured_shards_count,
             "active_shards_recent": active_shards_recent,
+            "ooda_state_recovered_from_active_shards": recovered_ooda_from_active_shards,
             "supervisor_mode": supervisor_mode,
             "supervisor_completion_status": supervisor_completion_status,
             "supervisor_completion_external_only": supervisor_completion_external_only,
+            "supervisor_completion_desktop_scoped": supervisor_completion_desktop_scoped,
+            "supervisor_completion_routed_local_only": supervisor_completion_routed_local_only,
+            "supervisor_successor_wave_steering_ready": supervisor_successor_wave_steering_ready,
             "supervisor_updated_at": str(supervisor_state.get("updated_at") or "").strip(),
             "supervisor_recent_enough": supervisor_recent_enough,
             "supervisor_focus_profiles": supervisor_focus_profiles,
@@ -4249,17 +5257,69 @@ def build_flagship_product_readiness_payload(
         if str(item).strip()
     }
     desktop_local_blocking_count = int(desktop_evidence.get("install_claim_restore_continue_local_blocking_reason_count") or 0)
+    desktop_build_local_blocking_count = int(desktop_evidence.get("build_explain_publish_local_blocking_reason_count") or 0)
     desktop_external_request_count = int(desktop_evidence.get("install_claim_restore_continue_external_proof_request_count") or 0)
+    desktop_executable_local_blocking_findings_count = int(
+        desktop_evidence.get("ui_executable_exit_gate_local_blocking_findings_count") or 0
+    )
+    desktop_workflow_unresolved_receipt_count = int(
+        desktop_evidence.get("ui_workflow_execution_gate_unresolved_receipt_count") or 0
+    )
+    desktop_workflow_unresolved_receipts_sr4_sr6_only = bool(
+        desktop_evidence.get("ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only")
+    )
+    desktop_sr4_parity_ready = str(desktop_evidence.get("sr4_workflow_parity_status") or "").strip().lower() in {
+        "pass",
+        "passed",
+        "ready",
+    } or bool(desktop_evidence.get("sr4_workflow_parity_external_only_missing_api_surface_contract"))
+    desktop_sr6_parity_ready = str(desktop_evidence.get("sr6_workflow_parity_status") or "").strip().lower() in {
+        "pass",
+        "passed",
+        "ready",
+    } or bool(desktop_evidence.get("sr6_workflow_parity_external_only_missing_api_surface_contract"))
+    desktop_sr4_sr6_frontier_ready = str(desktop_evidence.get("sr4_sr6_frontier_receipt_status") or "").strip().lower() in {
+        "pass",
+        "passed",
+        "ready",
+    } or bool(desktop_evidence.get("sr4_sr6_frontier_receipt_external_only_missing_api_surface_contract"))
+    desktop_non_external_local_blockers_present = any(
+        (
+            desktop_local_blocking_count > 0,
+            desktop_build_local_blocking_count > 0,
+            desktop_executable_local_blocking_findings_count > 0,
+            (
+                desktop_workflow_unresolved_receipt_count > 0
+                and not desktop_workflow_unresolved_receipts_sr4_sr6_only
+            ),
+            not desktop_sr4_parity_ready,
+            not desktop_sr6_parity_ready,
+            not desktop_sr4_sr6_frontier_ready,
+        )
+    )
     fleet_detail = dict(details.get("fleet_and_operator_loop") or {})
     fleet_evidence = dict(fleet_detail.get("evidence") or {})
     fleet_stale_supervisor_completion_only = (
-        str(coverage.get("desktop_client") or "").strip().lower() == "ready"
-        and str(coverage.get("fleet_and_operator_loop") or "").strip().lower() == "warning"
+        str(coverage.get("fleet_and_operator_loop") or "").strip().lower() == "warning"
         and list(fleet_detail.get("reasons") or [])
         == ["Supervisor state is not current flagship-pass proof (mode, completion status, or recency check failed)."]
         and str(fleet_evidence.get("runtime_healing_alert_state") or "").strip().lower() == "healthy"
-        and str(fleet_evidence.get("journey_overall_state") or "").strip().lower() == "ready"
-        and int(fleet_evidence.get("journey_blocked_with_local_count") or 0) == 0
+        and (
+            str(fleet_evidence.get("journey_overall_state") or "").strip().lower() == "ready"
+            or (
+                str(fleet_evidence.get("journey_effective_overall_state") or "").strip().lower() == "ready"
+                and int(fleet_evidence.get("journey_effective_blocked_with_local_count") or 0) == 0
+                and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
+            )
+        )
+        and (
+            int(fleet_evidence.get("journey_blocked_with_local_count") or 0) == 0
+            or (
+                str(fleet_evidence.get("journey_effective_overall_state") or "").strip().lower() == "ready"
+                and int(fleet_evidence.get("journey_effective_blocked_with_local_count") or 0) == 0
+                and bool(fleet_evidence.get("journey_local_blocker_autofix_routing_ready"))
+            )
+        )
         and int(fleet_evidence.get("external_proof_backlog_request_count") or 0) == 0
         and bool(fleet_evidence.get("external_proof_runbook_synced"))
         and bool(fleet_evidence.get("dispatchable_truth_ready"))
@@ -4313,22 +5373,25 @@ def build_flagship_product_readiness_payload(
         }
     )
     external_host_proof_status = "pass" if unresolved_external_requests == 0 else "fail"
-    external_host_proof_reason = (
-        "No unresolved external desktop host-proof requests remain."
-        if external_host_proof_status == "pass"
-        else (
-            str(journey_summary.get("recommended_action") or "").strip()
-            or (
-                f"Run the missing {', '.join(external_backlog_hosts) if external_backlog_hosts else 'external-host'} proof lane "
-                f"for {unresolved_external_requests} desktop tuple(s), ingest receipts, and then republish release truth."
-            )
+    if external_host_proof_status == "pass":
+        external_host_proof_reason = "No unresolved external desktop host-proof requests remain."
+    elif not journey_overall_external_only:
+        external_host_proof_reason = "Resolve the blocking golden-journey gaps before widening publish claims."
+    else:
+        external_host_proof_reason = str(journey_summary.get("recommended_action") or "").strip() or (
+            f"Run the missing {', '.join(external_backlog_hosts) if external_backlog_hosts else 'external-host'} proof lane "
+            f"for {unresolved_external_requests} desktop tuple(s), ingest receipts, and then republish release truth."
         )
-    )
 
     completion_audit_status = "pass" if status == "pass" else "fail"
+    completion_external_only = bool(
+        unresolved_external_requests > 0
+        and journey_overall_external_only
+        and not desktop_non_external_local_blockers_present
+    )
     if completion_audit_status == "pass":
         completion_audit_reason = "Flagship product readiness proof is green."
-    elif unresolved_external_requests > 0 and journey_overall_external_only:
+    elif completion_external_only:
         completion_audit_reason = _format_external_only_completion_reason(external_host_proof_reason)
     else:
         completion_audit_reason = "Flagship product readiness proof is not green."
@@ -4608,6 +5671,30 @@ def build_flagship_product_readiness_payload(
         "warning_count": sum(1 for plane in readiness_planes.values() if str(plane.get("status") or "") == "warning"),
         "missing_count": sum(1 for plane in readiness_planes.values() if str(plane.get("status") or "") == "missing"),
     }
+    readiness_plane_gap_keys = [
+        key
+        for key, plane in readiness_planes.items()
+        if str(plane.get("status") or "").strip().lower() != "ready"
+    ]
+    if readiness_plane_gap_keys:
+        status = "fail"
+        scoped_status = "fail"
+        completion_audit_status = "fail"
+        completion_audit_reason = (
+            "Flagship product readiness planes are not green: " + ", ".join(readiness_plane_gap_keys) + "."
+        )
+        flagship_readiness_audit_status = "fail"
+        if coverage_gap_keys:
+            flagship_readiness_audit_reason += (
+                "; readiness plane gaps: " + ", ".join(readiness_plane_gap_keys)
+            )
+        else:
+            flagship_readiness_audit_reason = (
+                "flagship product readiness proof is not green: "
+                + status
+                + "; readiness plane gaps: "
+                + ", ".join(readiness_plane_gap_keys)
+            )
 
     payload: Dict[str, Any] = {
         "contract_name": "fleet.flagship_product_readiness",
@@ -4624,7 +5711,7 @@ def build_flagship_product_readiness_payload(
         "completion_audit": {
             "status": completion_audit_status,
             "reason": completion_audit_reason,
-            "external_only": bool(unresolved_external_requests > 0 and journey_overall_external_only),
+            "external_only": completion_external_only,
             "unresolved_external_proof_request_count": unresolved_external_requests,
             "unresolved_external_proof_request_hosts": external_backlog_hosts,
             "unresolved_external_proof_request_tuples": external_backlog_tuples,
@@ -4669,8 +5756,24 @@ def build_flagship_product_readiness_payload(
             "feedback_loop_release_gate_required": True,
             "accept_lowered_standards": False,
         },
+        "autofix_routing": {
+            "status": "ready" if local_blocker_autofix_routing_ready else "warning",
+            "summary": (
+                "Local journey blockers are routed to owner repos."
+                if local_blocker_autofix_routing_ready
+                else "Some local journey blockers are missing owner-repo routing."
+            ),
+            "total_local_blocker_count": local_blocker_total_count,
+            "routed_local_blocker_count": local_blocker_routed_count,
+            "unrouted_local_blocker_count": local_blocker_unrouted_count,
+            "owner_repo_counts": local_blocker_owner_repo_counts,
+            "journey_local_blocker_counts": journey_local_blocker_counts,
+            "routes": local_blocker_route_rows,
+            "unrouted_reasons": local_blocker_unrouted_reasons,
+        },
         "readiness_planes": readiness_planes,
         "readiness_plane_summary": readiness_plane_summary,
+        "readiness_plane_gap_keys": readiness_plane_gap_keys,
         "source_documents": [str(item) for item in (acceptance.get("source_documents") or []) if str(item).strip()],
         "acceptance_axes": [
             str(item.get("id") or "").strip()

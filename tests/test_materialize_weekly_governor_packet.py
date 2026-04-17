@@ -1376,6 +1376,35 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     ]
     assert all(row["matrix_complete"] is True for row in decision_receipts["rows"])
     assert all(row["ready_for_operator_packet"] is True for row in decision_receipts["rows"])
+    operator_handoff = payload["measured_rollout_loop"]["weekly_operator_handoff"]
+    assert operator_handoff["status"] == "pass"
+    assert operator_handoff["cadence"] == "weekly"
+    assert operator_handoff["schedule_ref"] == "governor_packet_schedule.next_packet_due_at"
+    assert operator_handoff["source"] == (
+        "measured_rollout_loop.decision_action_routes+decision_receipts"
+    )
+    assert operator_handoff["required_actions"] == [
+        "launch_expand",
+        "freeze_launch",
+        "canary",
+        "rollback",
+        "focus_shift",
+    ]
+    assert operator_handoff["action_count"] == 5
+    assert operator_handoff["missing_actions"] == []
+    assert operator_handoff["incomplete_actions"] == []
+    assert operator_handoff["launch_gate_blocking_names"] == [
+        "successor_dependencies",
+        "local_release_proof",
+        "provider_canary",
+    ]
+    handoff_rows = {row["action"]: row for row in operator_handoff["rows"]}
+    assert handoff_rows["launch_expand"]["operator_action"] == "do_not_expand_launch"
+    assert handoff_rows["launch_expand"]["receipt_id"] == receipt_rows["launch_expand"][
+        "receipt_id"
+    ]
+    assert handoff_rows["rollback"]["route"] == "measured_rollout_loop.rollback"
+    assert handoff_rows["rollback"]["blocking_gates"] == []
 
 
 def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_path: Path) -> None:
@@ -1498,6 +1527,8 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     assert "- Decision source coverage: pass" in markdown
     assert "- Decision sources covered: 5 / 5" in markdown
     assert "- Decision action routing: pass" in markdown
+    assert "- Weekly operator handoff: pass" in markdown
+    assert "- Weekly operator handoff actions: 5 / 5" in markdown
     assert "- Launch gates green: False" in markdown
     assert "- Launch gate pass count: 12" in markdown
     assert "- Launch gate blocked count: 4" in markdown
@@ -1571,6 +1602,23 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
         "keep_rollback_armed | support_followthrough_receipt_blockers | "
         "Rollback stays armed from release/support truth; watch is active when support closure "
         "or release health is not clear. | True |"
+    ) in markdown
+    assert "## Weekly Operator Handoff" in markdown
+    assert (
+        "- Source: measured_rollout_loop.decision_action_routes+decision_receipts"
+    ) in markdown
+    assert "- Schedule ref: governor_packet_schedule.next_packet_due_at" in markdown
+    assert (
+        "- Launch gate blocking names: successor_dependencies, local_release_proof, "
+        "provider_canary, support_followthrough_receipts"
+    ) in markdown
+    assert (
+        "| launch_expand | blocked | weekly_governor_packet.launch_expand | "
+        "do_not_expand_launch | m106-launch_expand-"
+    ) in markdown
+    assert (
+        "| rollback | watch | measured_rollout_loop.rollback | prepare_rollback_or_revoke | "
+        "m106-rollback-"
     ) in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
@@ -3722,6 +3770,62 @@ def test_verify_next90_m106_governor_packet_rejects_decision_receipt_drift(
         in verifier.stderr
     )
     assert "measured rollout decision_receipts has invalid receipt field(s)" in verifier.stderr
+
+
+def test_verify_next90_m106_governor_packet_rejects_weekly_operator_handoff_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    handoff = packet["measured_rollout_loop"]["weekly_operator_handoff"]
+    handoff["status"] = "pass"
+    handoff["required_actions"] = ["launch_expand"]
+    handoff["schedule_ref"] = "stale.schedule"
+    handoff["source"] = "manual.operator.note"
+    for row in handoff["rows"]:
+        if row["action"] == "launch_expand":
+            row["route"] = "manual.launch.route"
+            row["operator_action"] = ""
+            row["receipt_id"] = "missing"
+            row["blocking_gates"] = []
+            row["blocking_gate_count"] = 0
+            row["next_decision"] = ""
+            break
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert (
+        "measured rollout weekly_operator_handoff no longer matches schedule, route, and receipt projection"
+        in verifier.stderr
+    )
+    assert (
+        "measured rollout weekly_operator_handoff required action list drifted"
+        in verifier.stderr
+    )
+    assert (
+        "measured rollout weekly_operator_handoff schedule reference drifted"
+        in verifier.stderr
+    )
+    assert (
+        "measured rollout weekly_operator_handoff source drifted"
+        in verifier.stderr
+    )
+    assert (
+        "measured rollout weekly_operator_handoff has invalid action handoff field(s)"
+        in verifier.stderr
+    )
 
 
 def test_verify_next90_m106_governor_packet_rejects_weekly_schedule_drift(

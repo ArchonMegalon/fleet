@@ -5,8 +5,10 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import sys
 import shlex
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +17,11 @@ try:
         CHUMMER_COMPLETE_ROOT,
         DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR,
         DEFAULT_EXTERNAL_PROOF_RUNBOOK,
+        DEFAULT_JOURNEY_GATES,
         DEFAULT_RELEASE_CHANNEL,
         DEFAULT_SUPPORT_PACKETS,
         FLEET_ROOT,
+        REGISTRY_RELEASE_CHANNEL_PATH,
         RELEASE_CHANNEL_REPO_ROOT,
         UI_DOCKER_DOWNLOADS_FILES_ROOT,
         UI_DOCKER_DOWNLOADS_ROOT,
@@ -34,9 +38,11 @@ except ModuleNotFoundError:
         CHUMMER_COMPLETE_ROOT,
         DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR,
         DEFAULT_EXTERNAL_PROOF_RUNBOOK,
+        DEFAULT_JOURNEY_GATES,
         DEFAULT_RELEASE_CHANNEL,
         DEFAULT_SUPPORT_PACKETS,
         FLEET_ROOT,
+        REGISTRY_RELEASE_CHANNEL_PATH,
         RELEASE_CHANNEL_REPO_ROOT,
         UI_DOCKER_DOWNLOADS_FILES_ROOT,
         UI_DOCKER_DOWNLOADS_ROOT,
@@ -54,6 +60,9 @@ UTC = dt.timezone.utc
 DEFAULT_OUT = DEFAULT_EXTERNAL_PROOF_RUNBOOK
 DEFAULT_RELEASE_CHANNEL_MANIFEST_PATH = UI_REPO_ROOT / "Docker" / "Downloads" / "RELEASE_CHANNEL.generated.json"
 FLEET_DESIGN_PRODUCT_ROOT = CHUMMER_COMPLETE_ROOT / "chummer-design"
+FLEET_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH = (
+    FLEET_ROOT / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+)
 DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR = "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}"
 DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR = "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
 DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR = "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}"
@@ -61,8 +70,16 @@ DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR = "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}
 DEFAULT_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD_EXPR = "${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}"
 ALLOWED_REQUIRED_HOSTS = frozenset({"windows", "macos", "linux"})
 ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smoke_receipt"})
+STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
+STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 300
 
-def _post_capture_republish_commands() -> list[str]:
+def _post_capture_republish_commands(
+    *,
+    journey_gates_path: Path | None = None,
+    release_channel_path: Path | None = None,
+) -> list[str]:
+    effective_journey_gates_path = journey_gates_path or (FLEET_ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json")
+    effective_release_channel_path = release_channel_path or REGISTRY_RELEASE_CHANNEL_PATH
     chummer6_ui_html_report = (
         FLEET_DESIGN_PRODUCT_ROOT / "products" / "chummer" / "PROGRESS_REPORT.generated.html"
     )
@@ -93,15 +110,23 @@ def _post_capture_republish_commands() -> list[str]:
         + shlex.quote(str(chummer6_ui_html_report))
         + " --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json --preview-out "
         + shlex.quote(str(chummer6_html_preview)),
-        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --release-channel {shlex.quote(str(DEFAULT_RELEASE_CHANNEL))}",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --release-channel {shlex.quote(str(effective_release_channel_path))}",
         f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel {shlex.quote(str(DEFAULT_RELEASE_CHANNEL))} --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
-        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+        "cd "
+        + shlex.quote(str(FLEET_ROOT))
+        + " && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates "
+        + shlex.quote(str(effective_journey_gates_path))
+        + " --release-channel "
+        + shlex.quote(str(effective_release_channel_path))
+        + " --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel {shlex.quote(str(effective_release_channel_path))} --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
+        "cd "
+        + shlex.quote(str(FLEET_ROOT))
+        + " && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out "
+        + shlex.quote(str(FLEET_FLAGSHIP_PRODUCT_READINESS_MIRROR_PATH)),
         "cd "
         + shlex.quote(str(FLEET_DESIGN_PRODUCT_ROOT))
         + " && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-        f"cd {shlex.quote(str(FLEET_ROOT))} && python3 scripts/chummer_design_supervisor.py status >/dev/null",
     ]
 
 
@@ -111,8 +136,8 @@ def _finalize_after_host_proof_commands(*, hosts: list[str], commands_dir: Path)
     ]
     for host in hosts:
         host_token = _normalize_host_token(host)
-        commands.append(f"./validate-{host_token}-proof.sh")
         commands.append(f"./ingest-{host_token}-proof-bundle.sh")
+        commands.append(f"./validate-{host_token}-proof.sh")
     commands.append("./republish-after-host-proof.sh")
     return commands
 
@@ -147,6 +172,285 @@ def _parse_iso(value: Any) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _startup_smoke_payload_is_fresh(
+    payload: Any,
+    *,
+    now: dt.datetime | None = None,
+    max_age_seconds: int = STARTUP_SMOKE_MAX_AGE_SECONDS,
+    max_future_skew_seconds: int = STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS,
+) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    raw = next(
+        (
+            str(payload.get(key) or "").strip()
+            for key in ("recordedAtUtc", "completedAtUtc", "generatedAt", "generated_at", "startedAtUtc")
+            if str(payload.get(key) or "").strip()
+        ),
+        "",
+    )
+    if not raw:
+        return False
+    parsed = _parse_iso(raw)
+    if parsed is None:
+        return False
+    current = now or dt.datetime.now(UTC)
+    age_seconds = int((current - parsed).total_seconds())
+    if age_seconds < -max_future_skew_seconds:
+        return False
+    if age_seconds < 0:
+        age_seconds = 0
+    return age_seconds <= max_age_seconds
+
+
+def _startup_smoke_payload_freshness_detail(
+    payload: Any,
+    *,
+    now: dt.datetime | None = None,
+    max_age_seconds: int = STARTUP_SMOKE_MAX_AGE_SECONDS,
+    max_future_skew_seconds: int = STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS,
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"fresh": False, "reason": "receipt_payload_not_object"}
+    raw = next(
+        (
+            str(payload.get(key) or "").strip()
+            for key in ("recordedAtUtc", "completedAtUtc", "generatedAt", "generated_at", "startedAtUtc")
+            if str(payload.get(key) or "").strip()
+        ),
+        "",
+    )
+    if not raw:
+        return {"fresh": False, "reason": "receipt_timestamp_missing"}
+    parsed = _parse_iso(raw)
+    if parsed is None:
+        return {"fresh": False, "reason": f"receipt_timestamp_invalid:{raw}"}
+    current = now or dt.datetime.now(UTC)
+    age_seconds = int((current - parsed).total_seconds())
+    if age_seconds < -max_future_skew_seconds:
+        return {
+            "fresh": False,
+            "reason": (
+                f"receipt_future_skew:recorded_at={raw}:age_seconds={age_seconds}:"
+                f"max_future_skew_seconds={max_future_skew_seconds}"
+            ),
+            "recorded_at": raw,
+            "age_seconds": age_seconds,
+        }
+    if age_seconds < 0:
+        age_seconds = 0
+    if age_seconds > max_age_seconds:
+        return {
+            "fresh": False,
+            "reason": (
+                f"receipt_stale:recorded_at={raw}:age_seconds={age_seconds}:"
+                f"max_age_seconds={max_age_seconds}"
+            ),
+            "recorded_at": raw,
+            "age_seconds": age_seconds,
+        }
+    return {
+        "fresh": True,
+        "reason": "receipt_fresh",
+        "recorded_at": raw,
+        "age_seconds": age_seconds,
+    }
+
+
+def _bundle_member_name(name: str) -> str:
+    normalized = name.strip().replace("\\", "/")
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized.strip("/")
+
+
+def _bundle_archive_is_reusable(bundle_archive: Path, *, expected_manifest: dict[str, Any]) -> bool:
+    if not bundle_archive.is_file():
+        return False
+    try:
+        with tarfile.open(bundle_archive, "r:gz") as archive:
+            members = {
+                _bundle_member_name(member.name): member
+                for member in archive.getmembers()
+                if member.isfile()
+            }
+            manifest_member = members.get("external-proof-manifest.json")
+            if manifest_member is None:
+                return False
+            manifest_file = archive.extractfile(manifest_member)
+            if manifest_file is None:
+                return False
+            manifest_payload = json.loads(manifest_file.read().decode("utf-8"))
+            if manifest_payload != expected_manifest:
+                return False
+            for request in expected_manifest.get("requests") or []:
+                if not isinstance(request, dict):
+                    return False
+                installer_relative = _normalize_text(request.get("expected_installer_bundle_relative_path"))
+                installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
+                if installer_relative:
+                    installer_member = members.get(installer_relative)
+                    if installer_member is None:
+                        return False
+                    installer_file = archive.extractfile(installer_member)
+                    if installer_file is None:
+                        return False
+                    if installer_sha256:
+                        import hashlib
+
+                        digest = hashlib.sha256(installer_file.read()).hexdigest().lower()
+                        if digest != installer_sha256:
+                            return False
+                receipt_relative = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
+                if receipt_relative:
+                    receipt_member = members.get(receipt_relative)
+                    if receipt_member is None:
+                        return False
+                    receipt_file = archive.extractfile(receipt_member)
+                    if receipt_file is None:
+                        return False
+                    receipt_payload = json.loads(receipt_file.read().decode("utf-8"))
+                    if not _startup_smoke_payload_is_fresh(receipt_payload):
+                        return False
+            return True
+    except Exception:
+        return False
+
+
+def _bundle_directory_is_reusable(bundle_dir: Path, *, expected_manifest: dict[str, Any]) -> bool:
+    if not bundle_dir.is_dir():
+        return False
+    try:
+        manifest_path = bundle_dir / "external-proof-manifest.json"
+        if not manifest_path.is_file():
+            return False
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest_payload != expected_manifest:
+            return False
+        for request in expected_manifest.get("requests") or []:
+            if not isinstance(request, dict):
+                return False
+            installer_relative = _normalize_text(request.get("expected_installer_bundle_relative_path"))
+            installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
+            if installer_relative:
+                installer_path = bundle_dir / installer_relative
+                if not installer_path.is_file():
+                    return False
+                if installer_sha256:
+                    import hashlib
+
+                    digest = hashlib.sha256(installer_path.read_bytes()).hexdigest().lower()
+                    if digest != installer_sha256:
+                        return False
+            receipt_relative = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
+            if receipt_relative:
+                receipt_path = bundle_dir / receipt_relative
+                if not receipt_path.is_file():
+                    return False
+                receipt_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+                if not _startup_smoke_payload_is_fresh(receipt_payload):
+                    return False
+        return True
+    except Exception:
+        return False
+
+
+def _inspect_bundle_directory_state(bundle_dir: Path, *, expected_manifest: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {"reusable": False, "detail": ""}
+    if not bundle_dir.is_dir():
+        result["detail"] = "bundle_directory_missing"
+        return result
+    manifest_path = bundle_dir / "external-proof-manifest.json"
+    if not manifest_path.is_file():
+        result["detail"] = f"manifest_missing:{manifest_path}"
+        return result
+    try:
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        result["detail"] = f"manifest_invalid_json:{manifest_path}:{exc}"
+        return result
+    if manifest_payload != expected_manifest:
+        result["detail"] = f"manifest_mismatch:{manifest_path}"
+        return result
+    for request in expected_manifest.get("requests") or []:
+        if not isinstance(request, dict):
+            result["detail"] = "manifest_request_invalid"
+            return result
+        installer_relative = _normalize_text(request.get("expected_installer_bundle_relative_path"))
+        installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
+        if installer_relative:
+            installer_path = bundle_dir / installer_relative
+            if not installer_path.is_file():
+                result["detail"] = f"installer_missing:{installer_path}"
+                return result
+            if installer_sha256:
+                import hashlib
+
+                digest = hashlib.sha256(installer_path.read_bytes()).hexdigest().lower()
+                if digest != installer_sha256:
+                    result["detail"] = (
+                        f"installer_sha256_mismatch:{installer_path}:digest={digest}:expected={installer_sha256}"
+                    )
+                    return result
+        receipt_relative = _normalize_text(request.get("expected_startup_smoke_receipt_path"))
+        if receipt_relative:
+            receipt_path = bundle_dir / receipt_relative
+            if not receipt_path.is_file():
+                result["detail"] = f"receipt_missing:{receipt_path}"
+                return result
+            try:
+                receipt_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                result["detail"] = f"receipt_invalid_json:{receipt_path}:{exc}"
+                return result
+            freshness = _startup_smoke_payload_freshness_detail(receipt_payload)
+            if not freshness.get("fresh"):
+                result["detail"] = f"{freshness.get('reason')}:{receipt_path}"
+                return result
+    result["reusable"] = True
+    result["detail"] = "bundle_directory_reusable"
+    return result
+
+
+def _existing_bundle_state(
+    *, commands_dir: Path, host_token: str, host: str, expected_manifest: dict[str, Any]
+) -> dict[str, str | bool]:
+    bundle_archive = commands_dir / f"{host_token}-proof-bundle.tgz"
+    bundle_dir = commands_dir / "host-proof-bundles" / host_token
+    archive_present = bundle_archive.is_file()
+    directory_present = bundle_dir.is_dir()
+    archive_reusable = _bundle_archive_is_reusable(bundle_archive, expected_manifest=expected_manifest)
+    directory_state = _inspect_bundle_directory_state(bundle_dir, expected_manifest=expected_manifest)
+    directory_reusable = bool(directory_state.get("reusable"))
+
+    status = "missing"
+    detail = ""
+    if archive_reusable:
+        status = "reusable_archive"
+        detail = "bundle_archive_reusable"
+    elif directory_reusable:
+        status = "reusable_directory"
+        detail = _normalize_text(directory_state.get("detail")) or "bundle_directory_reusable"
+    elif archive_present:
+        status = "stale_archive"
+        detail = "bundle_archive_stale_or_invalid"
+    elif directory_present:
+        status = "stale_directory"
+        detail = _normalize_text(directory_state.get("detail")) or "bundle_directory_stale_or_invalid"
+
+    return {
+        "status": status,
+        "detail": detail,
+        "archive_path": str(bundle_archive),
+        "directory_path": str(bundle_dir),
+        "archive_present": archive_present,
+        "directory_present": directory_present,
+        "archive_reusable": archive_reusable,
+        "directory_reusable": directory_reusable,
+        "host": host,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -155,6 +459,13 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--support-packets", type=Path, default=DEFAULT_SUPPORT_PACKETS)
+    parser.add_argument("--journey-gates", type=Path, default=DEFAULT_JOURNEY_GATES)
+    parser.add_argument(
+        "--release-channel",
+        type=Path,
+        default=DEFAULT_RELEASE_CHANNEL,
+        help="Optional release-channel artifact path used in post-capture republish commands.",
+    )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument(
         "--commands-dir",
@@ -172,19 +483,59 @@ def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _normalize_proof_capture_command(value: Any) -> str:
+def _startup_smoke_operating_system_hint(*, required_host: str = "", platform: str = "") -> str:
+    host_token = _normalize_text(required_host).lower()
+    platform_token = _normalize_text(platform).lower()
+    normalized = host_token or platform_token
+    if normalized == "windows":
+        return "Windows"
+    if normalized == "macos":
+        return "macOS"
+    if normalized == "linux":
+        return "Linux"
+    return ""
+
+
+def _sanitize_proof_capture_command(
+    value: Any, *, required_host: str = "", platform: str = ""
+) -> str:
     raw = _normalize_text(value)
     if not raw:
         return ""
-    try:
-        tokens = shlex.split(raw)
-    except ValueError:
-        tokens = raw.split()
-    return " ".join(
-        token
-        for token in tokens
-        if not token.startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
+    normalized = raw
+    operating_system_hint = _startup_smoke_operating_system_hint(
+        required_host=required_host,
+        platform=platform,
     )
+    if "./scripts/run-desktop-startup-smoke.sh" in normalized:
+        normalized = re.sub(
+            r"(^|\s+)CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=[^\s]+(?=\s|$)",
+            r"\1",
+            normalized,
+        ).strip()
+        if operating_system_hint:
+            normalized = normalized.replace(
+                "./scripts/run-desktop-startup-smoke.sh",
+                f"CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM={operating_system_hint} ./scripts/run-desktop-startup-smoke.sh",
+                1,
+            )
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
+    return normalized
+
+
+def _proof_capture_command_dedupe_key(value: Any) -> str:
+    raw = _normalize_text(value)
+    if not raw:
+        return ""
+    normalized = re.sub(
+        r"(^|\s+)CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=[^\s]+(?=\s|$)",
+        r"\1",
+        raw,
+    ).strip()
+    if "./scripts/run-desktop-startup-smoke.sh" in normalized:
+        normalized = re.sub(r"\s+run-[^\s\"']+\s*$", "", normalized).strip()
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
+    return normalized
 
 
 def _normalized_platform(value: Any) -> str:
@@ -326,7 +677,11 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                     if isinstance(commands_raw, list):
                         commands: list[str] = []
                         for token in commands_raw:
-                            normalized = _normalize_proof_capture_command(token)
+                            normalized = _sanitize_proof_capture_command(
+                                token,
+                                required_host=_normalize_text(raw_required_host),
+                                platform=_normalize_text(row.get("platform")).lower(),
+                            )
                             if normalized:
                                 commands.append(normalized)
                     else:
@@ -334,13 +689,24 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                     required_proofs_raw = row.get("required_proofs")
                     if required_proofs_raw is None:
                         required_proofs_raw = row.get("requiredProofs")
+                    tuple_parts = _normalize_text(raw_tuple_id).split(":")
+                    inferred_head = tuple_parts[0].strip().lower() if len(tuple_parts) >= 1 else ""
+                    inferred_rid = tuple_parts[1].strip().lower() if len(tuple_parts) >= 2 else ""
+                    inferred_host = tuple_parts[2].strip().lower() if len(tuple_parts) >= 3 else ""
+                    raw_platform = _normalize_text(row.get("platform")).lower()
+                    inferred_platform = (
+                        "windows" if inferred_host == "windows"
+                        else "macos" if inferred_host == "macos"
+                        else "linux" if inferred_host == "linux"
+                        else ""
+                    )
                     requests.append(
                         {
                             "tuple_id": _normalize_text(raw_tuple_id),
-                            "head_id": _normalize_text(row.get("head_id") or row.get("headId")).lower(),
-                            "platform": _normalize_text(row.get("platform")).lower(),
-                            "rid": _normalize_text(row.get("rid")).lower(),
-                            "required_host": _normalize_text(raw_required_host),
+                            "head_id": _normalize_text(row.get("head_id") or row.get("headId")).lower() or inferred_head,
+                            "platform": raw_platform or inferred_platform,
+                            "rid": _normalize_text(row.get("rid")).lower() or inferred_rid,
+                            "required_host": _normalize_text(raw_required_host).lower() or inferred_host,
                             "expected_artifact_id": _normalize_text(
                                 row.get("expected_artifact_id") or row.get("expectedArtifactId")
                             ),
@@ -371,6 +737,7 @@ def _normalize_plan(value: Any) -> dict[str, Any]:
                             ),
                             "required_proofs": _ordered_unique_strings(required_proofs_raw or []),
                             "proof_capture_commands": commands,
+                            "local_evidence": dict(row.get("local_evidence") or row.get("localEvidence") or {}),
                         }
                     )
             tuples_raw = raw_group.get("tuples")
@@ -417,6 +784,142 @@ def _load_support_packets(path: Path) -> dict[str, Any]:
         return {}
     loaded = json.loads(path.read_text(encoding="utf-8"))
     return loaded if isinstance(loaded, dict) else {}
+
+
+def _load_journey_gates(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _journey_requests_plan(journey_gates: dict[str, Any], *, fallback_plan: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(journey_gates, dict):
+        return {}
+    journeys = journey_gates.get("journeys")
+    if not isinstance(journeys, list):
+        return {}
+    requests_by_host: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in journeys:
+        if not isinstance(row, dict):
+            continue
+        request_rows = row.get("external_proof_requests")
+        if not isinstance(request_rows, list):
+            continue
+        for request in request_rows:
+            if not isinstance(request, dict):
+                continue
+            tuple_id = _normalize_text(request.get("tuple_id") or request.get("tupleId"))
+            required_host = _normalize_text(request.get("required_host") or request.get("requiredHost")).lower()
+            if not tuple_id or not required_host:
+                continue
+            normalized_request = {
+                "tuple_id": tuple_id,
+                "head_id": _normalize_text(request.get("head_id") or request.get("headId")).lower(),
+                "platform": _normalize_text(request.get("platform")).lower(),
+                "rid": _normalize_text(request.get("rid")).lower(),
+                "required_host": required_host,
+                "expected_artifact_id": _normalize_text(request.get("expected_artifact_id") or request.get("expectedArtifactId")),
+                "expected_installer_file_name": _normalize_text(
+                    request.get("expected_installer_file_name") or request.get("expectedInstallerFileName")
+                ),
+                "expected_installer_relative_path": _normalize_text(
+                    request.get("expected_installer_relative_path") or request.get("expectedInstallerRelativePath")
+                ),
+                "expected_installer_sha256": _normalize_text(
+                    request.get("expected_installer_sha256") or request.get("expectedInstallerSha256")
+                ).lower(),
+                "expected_public_install_route": _normalize_text(
+                    request.get("expected_public_install_route") or request.get("expectedPublicInstallRoute")
+                ),
+                "expected_startup_smoke_receipt_path": _normalize_text(
+                    request.get("expected_startup_smoke_receipt_path") or request.get("expectedStartupSmokeReceiptPath")
+                ),
+                "startup_smoke_receipt_contract": _normalized_smoke_contract_map(
+                    request.get("startup_smoke_receipt_contract") or request.get("startupSmokeReceiptContract")
+                ),
+                "capture_deadline_utc": _normalize_text(
+                    request.get("capture_deadline_utc") or request.get("captureDeadlineUtc") or fallback_plan.get("capture_deadline_utc")
+                ),
+                "required_proofs": _ordered_unique_strings(
+                    request.get("required_proofs") if request.get("required_proofs") is not None else request.get("requiredProofs")
+                ),
+                "proof_capture_commands": [
+                    normalized
+                    for token in (
+                        request.get("proof_capture_commands")
+                        if request.get("proof_capture_commands") is not None
+                        else request.get("proofCaptureCommands")
+                    ) or []
+                    if (
+                        normalized := _sanitize_proof_capture_command(
+                            token,
+                            required_host=required_host,
+                            platform=_normalize_text(request.get("platform")).lower(),
+                        )
+                    )
+                ],
+            }
+            requests_by_host.setdefault(required_host, {})[tuple_id] = normalized_request
+    if not requests_by_host:
+        return {}
+    host_groups: dict[str, Any] = {}
+    for host in requests_by_host.keys():
+        requests = [requests_by_host[host][tuple_id] for tuple_id in requests_by_host[host].keys()]
+        host_groups[host] = {
+            "request_count": len(requests),
+            "tuples": [request["tuple_id"] for request in requests],
+            "requests": requests,
+        }
+    plan_generated_at = (
+        _normalize_text(fallback_plan.get("generated_at"))
+        or _normalize_text(journey_gates.get("generated_at"))
+    )
+    return {
+        "request_count": sum(int(group.get("request_count") or 0) for group in host_groups.values()),
+        "hosts": list(host_groups.keys()),
+        "host_groups": host_groups,
+        "generated_at": plan_generated_at,
+        "release_channel_generated_at": _normalize_text(fallback_plan.get("release_channel_generated_at")),
+        "capture_deadline_hours": _safe_int(fallback_plan.get("capture_deadline_hours"), default=0),
+        "capture_deadline_utc": _normalize_text(fallback_plan.get("capture_deadline_utc")),
+    }
+
+
+def _merge_plan_with_journey_gates(plan: dict[str, Any], journey_gates: dict[str, Any]) -> dict[str, Any]:
+    merged = _normalize_plan(plan)
+    journey_plan = _journey_requests_plan(journey_gates, fallback_plan=merged)
+    if not journey_plan:
+        return merged
+    merged_host_groups = merged.get("host_groups")
+    if not isinstance(merged_host_groups, dict):
+        merged_host_groups = {}
+    journey_host_groups = journey_plan.get("host_groups")
+    if not isinstance(journey_host_groups, dict):
+        journey_host_groups = {}
+    for host, group in journey_host_groups.items():
+        if host not in merged_host_groups or int((merged_host_groups.get(host) or {}).get("request_count") or 0) <= 0:
+            merged_host_groups[host] = dict(group)
+    merged["host_groups"] = merged_host_groups
+    merged_hosts = [str(item) for item in (merged.get("hosts") or []) if str(item)]
+    for host in journey_host_groups.keys():
+        if host not in merged_hosts:
+            merged_hosts.append(host)
+    merged["hosts"] = merged_hosts
+    merged["request_count"] = sum(
+        int((group or {}).get("request_count") or 0)
+        for group in merged_host_groups.values()
+        if isinstance(group, dict)
+    )
+    if not _normalize_text(merged.get("generated_at")):
+        merged["generated_at"] = _normalize_text(journey_plan.get("generated_at"))
+    if not _normalize_text(merged.get("capture_deadline_utc")):
+        merged["capture_deadline_utc"] = _normalize_text(journey_plan.get("capture_deadline_utc"))
+    if not _safe_int(merged.get("capture_deadline_hours"), default=0):
+        merged["capture_deadline_hours"] = _safe_int(journey_plan.get("capture_deadline_hours"), default=0)
+    if not _normalize_text(merged.get("release_channel_generated_at")):
+        merged["release_channel_generated_at"] = _normalize_text(journey_plan.get("release_channel_generated_at"))
+    return merged
 
 
 def _normalize_relative_path(value: Any, *, field: str) -> str:
@@ -695,14 +1198,42 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     commands = [
         "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
         f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
+        f"BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
         "export BUNDLE_ARCHIVE",
+        "export BUNDLE_DIR",
         f"TARGET_ROOT={shlex.quote(str(target_root))}",
         "export TARGET_ROOT",
+        "mkdir -p \"$TARGET_ROOT\"",
         "if [ ! -s \"$BUNDLE_ARCHIVE\" ]; then",
-        "  echo \"Missing host proof bundle: $BUNDLE_ARCHIVE\"",
-        "  exit 1",
+        "  if [ ! -d \"$BUNDLE_DIR\" ]; then",
+        "    echo \"Missing host proof bundle: $BUNDLE_ARCHIVE or $BUNDLE_DIR\"",
+        "    exit 1",
+        "  fi",
         "fi",
-        "python3 -c "
+        "if [ ! -s \"$BUNDLE_ARCHIVE\" ]; then",
+        "  python3 -c "
+        + shlex.quote(
+            "import os, pathlib, shutil\n"
+            "bundle_dir=pathlib.Path(os.environ['BUNDLE_DIR'])\n"
+            "target_root=pathlib.Path(os.environ['TARGET_ROOT'])\n"
+            "bad=[]\n"
+            "copied=[]\n"
+            "for source in sorted(bundle_dir.rglob('*')):\n"
+            "    if source.is_dir():\n"
+            "        continue\n"
+            "    relative=source.relative_to(bundle_dir)\n"
+            "    if source.is_symlink() or any(part in ('..', '') for part in relative.parts):\n"
+            "        bad.append(str(relative))\n"
+            "        continue\n"
+            "    destination=target_root / relative\n"
+            "    destination.parent.mkdir(parents=True, exist_ok=True)\n"
+            "    shutil.copy2(source, destination)\n"
+            "    copied.append(str(relative))\n"
+            "assert not bad, 'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad)))\n"
+            "assert copied, 'external-proof-bundle-empty:' + str(bundle_dir)"
+        ),
+        "else",
+        "  python3 -c "
         + shlex.quote(
             "import os, pathlib, tarfile; "
             "bundle=pathlib.Path(os.environ['BUNDLE_ARCHIVE']); "
@@ -711,8 +1242,8 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
             "assert not any('..' in parts for parts in [pathlib.PurePosixPath(member.name).parts for member in members]), "
             "'external-proof-bundle-path-unsafe:' + ','.join(sorted(set(bad)))"
         ),
-        "mkdir -p \"$TARGET_ROOT\"",
-        "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"",
+        "  tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"",
+        "fi",
         "python3 -c "
         + shlex.quote(
             "import os, json, pathlib; "
@@ -764,6 +1295,35 @@ def _ingest_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
             or receipt_contract.get("host_class_contains")
         ):
             contract_payload = json.dumps(receipt_contract, sort_keys=True)
+            commands.append(
+                "python3 -c "
+                + shlex.quote(
+                    "import datetime as dt, json, os, pathlib; "
+                    "target_root=pathlib.Path(os.environ['TARGET_ROOT']); "
+                    f"relative={receipt_relative_path!r}; "
+                    f"max_age_seconds={STARTUP_SMOKE_MAX_AGE_SECONDS}; "
+                    f"max_future_skew_seconds={STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS}; "
+                    "path=target_root / relative; "
+                    "assert path.is_file(), 'external-proof-bundle-receipt-missing:' + str(path); "
+                    "payload=json.loads(path.read_text(encoding='utf-8')); "
+                    "payload=payload if isinstance(payload, dict) else {}; "
+                    "raw=next((str(payload.get(key) or '').strip() for key in "
+                    "('recordedAtUtc','completedAtUtc','generatedAt','generated_at','startedAtUtc') "
+                    "if str(payload.get(key) or '').strip()), ''); "
+                    "assert raw, 'startup-smoke-receipt-timestamp-missing:' + str(path); "
+                    "raw = raw[:-1] + '+00:00' if raw.endswith('Z') else raw; "
+                    "parsed=dt.datetime.fromisoformat(raw); "
+                    "parsed=parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=dt.timezone.utc); "
+                    "parsed=parsed.astimezone(dt.timezone.utc); "
+                    "now=dt.datetime.now(dt.timezone.utc); "
+                    "age_seconds=int((now-parsed).total_seconds()); "
+                    "assert age_seconds >= -max_future_skew_seconds, "
+                    "'startup-smoke-receipt-future-skew:' + str(path) + f':age_seconds={age_seconds}:max_future_skew_seconds={max_future_skew_seconds}'; "
+                    "age_seconds = 0 if age_seconds < 0 else age_seconds; "
+                    "assert age_seconds <= max_age_seconds, "
+                    "'startup-smoke-receipt-stale:' + str(path) + f':age_seconds={age_seconds}:max_age_seconds={max_age_seconds}'"
+                )
+            )
             commands.append(
                 "python3 -c "
                 + shlex.quote(
@@ -837,6 +1397,9 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
         receipt_path = build_download_path(receipt_relative_path)
         commands.append(
             f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(receipt_path))}"
+        )
+        commands.append(
+            f"cd {shlex.quote(str(UI_REPO_ROOT))} && {_startup_smoke_receipt_freshness_command(receipt_path)}"
         )
         receipt_contract = _normalized_smoke_contract_map(request.get("startup_smoke_receipt_contract"))
         contract_payload = json.dumps(receipt_contract, sort_keys=True)
@@ -913,6 +1476,36 @@ def _validation_commands_for_group(group: dict[str, Any]) -> list[str]:
             seen.add(normalized)
             commands.append(normalized)
     return commands
+
+
+def _startup_smoke_receipt_freshness_command(receipt_path: Path) -> str:
+    return (
+        "python3 -c "
+        + shlex.quote(
+            "import datetime as dt, json, pathlib, sys; "
+            f"p=pathlib.Path({str(receipt_path)!r}); "
+            f"max_age_seconds={STARTUP_SMOKE_MAX_AGE_SECONDS}; "
+            f"max_future_skew_seconds={STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS}; "
+            "payload=json.loads(p.read_text(encoding='utf-8')); "
+            "payload=payload if isinstance(payload, dict) else {}; "
+            "raw=next((str(payload.get(key) or '').strip() for key in "
+            "('recordedAtUtc','completedAtUtc','generatedAt','generated_at','startedAtUtc') "
+            "if str(payload.get(key) or '').strip()), ''); "
+            "sys.exit(f'startup-smoke-receipt-timestamp-missing:{p}') if not raw else None; "
+            "raw = raw[:-1] + '+00:00' if raw.endswith('Z') else raw; "
+            "parsed=dt.datetime.fromisoformat(raw); "
+            "parsed=parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=dt.timezone.utc); "
+            "parsed=parsed.astimezone(dt.timezone.utc); "
+            "now=dt.datetime.now(dt.timezone.utc); "
+            "age_seconds=int((now-parsed).total_seconds()); "
+            "sys.exit("
+            "f'startup-smoke-receipt-future-skew:{p}:age_seconds={age_seconds}:max_future_skew_seconds={max_future_skew_seconds}') "
+            "if age_seconds < -max_future_skew_seconds else None; "
+            "age_seconds = 0 if age_seconds < 0 else age_seconds; "
+            "sys.exit(0) if age_seconds <= max_age_seconds else sys.exit("
+            "f'startup-smoke-receipt-stale:{p}:age_seconds={age_seconds}:max_age_seconds={max_age_seconds}')"
+        )
+    )
 
 
 def _shell_hint_for_host(host: str) -> str:
@@ -1114,13 +1707,20 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
 
 def _commands_for_request(request: dict[str, Any]) -> list[str]:
     commands: list[str] = []
+    normalized_seen: set[str] = set()
     preflight = _installer_fetch_preflight_command(request)
     if preflight:
         commands.append(preflight)
+        normalized_preflight = _proof_capture_command_dedupe_key(preflight)
+        if normalized_preflight:
+            normalized_seen.add(normalized_preflight)
     for command in request.get("proof_capture_commands") or []:
-        normalized = _normalize_proof_capture_command(command)
-        if normalized and normalized not in commands:
-            commands.append(normalized)
+        raw = _normalize_text(command)
+        normalized = _proof_capture_command_dedupe_key(raw)
+        if not raw or not normalized or normalized in normalized_seen:
+            continue
+        commands.append(raw)
+        normalized_seen.add(normalized)
     return commands
 
 
@@ -1147,7 +1747,9 @@ def _write_file(path: Path, content: str, *, executable: bool) -> None:
     os.chmod(path, mode)
 
 
-def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> dict[str, Any]:
+def _materialize_command_files(
+    plan: dict[str, Any], *, commands_dir: Path, journey_gates_path: Path | None = None, release_channel_path: Path | None = None
+) -> dict[str, Any]:
     hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
     host_groups = plan.get("host_groups") or {}
     host_files: list[dict[str, str]] = []
@@ -1163,6 +1765,12 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
         validation_commands = _validation_commands_for_group(group)
         bundle_commands = _bundle_commands_for_group(group, host_token=host_token, host=host)
         ingest_commands = _ingest_commands_for_group(group, host_token=host_token, host=host)
+        bundle_archive = commands_dir / f"{host_token}-proof-bundle.tgz"
+        expected_manifest = _bundle_manifest_payload_for_group(group, host=host)
+        if bundle_archive.exists() and not _bundle_archive_is_reusable(
+            bundle_archive, expected_manifest=expected_manifest
+        ):
+            bundle_archive.unlink()
         preflight_script = commands_dir / f"preflight-{host_token}-proof.sh"
         capture_script = commands_dir / f"capture-{host_token}-proof.sh"
         validation_script = commands_dir / f"validate-{host_token}-proof.sh"
@@ -1297,7 +1905,10 @@ def _materialize_command_files(plan: dict[str, Any], *, commands_dir: Path) -> d
     _write_file(
         post_capture_script,
         _render_bash_script(
-            _post_capture_republish_commands(),
+            _post_capture_republish_commands(
+                journey_gates_path=journey_gates_path,
+                release_channel_path=release_channel_path,
+            ),
             no_op_message="No post-capture republish commands were generated.",
         ),
         executable=True,
@@ -1420,6 +2031,13 @@ def materialize_markdown(
         group = host_groups.get(host)
         if not isinstance(group, dict):
             continue
+        host_token = _normalize_host_token(host)
+        bundle_state = _existing_bundle_state(
+            commands_dir=rendered_commands_dir,
+            host_token=host_token,
+            host=host,
+            expected_manifest=_bundle_manifest_payload_for_group(group, host=host),
+        )
         lines.append(f"## Host: {host}")
         lines.append("")
         lines.append(f"- shell_hint: {_shell_hint_for_host(host)}")
@@ -1430,6 +2048,16 @@ def materialize_markdown(
         lines.append(f"- request_count: {int(group.get('request_count') or 0)}")
         tuples = [str(item) for item in (group.get("tuples") or []) if str(item)]
         lines.append(f"- tuples: {', '.join(tuples) if tuples else '(none)'}")
+        lines.append(f"- cached_bundle_status: `{_normalize_text(bundle_state.get('status')) or 'missing'}`")
+        bundle_detail = _normalize_text(bundle_state.get("detail"))
+        if bundle_detail:
+            lines.append(f"- cached_bundle_detail: `{bundle_detail}`")
+        lines.append(
+            f"- cached_bundle_archive_path: `{_normalize_text(bundle_state.get('archive_path')) or '(missing)'}`"
+        )
+        lines.append(
+            f"- cached_bundle_directory_path: `{_normalize_text(bundle_state.get('directory_path')) or '(missing)'}`"
+        )
         lines.append("")
         lines.append("### Requested Tuples")
         lines.append("")
@@ -1444,6 +2072,9 @@ def materialize_markdown(
             installer_sha256 = _normalize_text(request.get("expected_installer_sha256")) or "(missing)"
             route = _normalize_text(request.get("expected_public_install_route")) or "(missing)"
             receipt_path = _normalize_text(request.get("expected_startup_smoke_receipt_path")) or "(missing)"
+            local_evidence = dict(request.get("local_evidence") or {})
+            local_installer = dict(local_evidence.get("installer_artifact") or {})
+            local_receipt = dict(local_evidence.get("startup_smoke_receipt") or {})
             capture_deadline_utc = _normalize_text(request.get("capture_deadline_utc"))
             deadline_state = "unknown"
             deadline_dt = _parse_iso(capture_deadline_utc)
@@ -1457,6 +2088,28 @@ def materialize_markdown(
             lines.append(f"  installer_sha256: `{installer_sha256}`")
             lines.append(f"  public_route: `{route}`")
             lines.append(f"  startup_smoke_receipt: `{receipt_path}`")
+            if local_installer:
+                lines.append(
+                    "  local_installer_state: "
+                    f"`{_normalize_text(local_installer.get('state')) or 'unknown'}`"
+                )
+                installer_local_path = _normalize_text(local_installer.get("path"))
+                if installer_local_path:
+                    lines.append(f"  local_installer_path: `{installer_local_path}`")
+            if local_receipt:
+                lines.append(
+                    "  local_startup_smoke_receipt_state: "
+                    f"`{_normalize_text(local_receipt.get('state')) or 'unknown'}`"
+                )
+                receipt_local_path = _normalize_text(local_receipt.get("path"))
+                if receipt_local_path:
+                    lines.append(f"  local_startup_smoke_receipt_path: `{receipt_local_path}`")
+                receipt_recorded_at = _normalize_text(local_receipt.get("recorded_at_utc"))
+                if receipt_recorded_at:
+                    lines.append(f"  local_startup_smoke_receipt_recorded_at: `{receipt_recorded_at}`")
+                receipt_age_seconds = _normalize_text(local_receipt.get("age_seconds"))
+                if receipt_age_seconds:
+                    lines.append(f"  local_startup_smoke_receipt_age_seconds: `{receipt_age_seconds}`")
             lines.append(f"  capture_deadline_utc: `{capture_deadline_utc or '(missing)'}`")
             lines.append(f"  capture_deadline_state: `{deadline_state}`")
             tuple_commands = _commands_for_request(request)
@@ -1481,12 +2134,12 @@ def materialize_markdown(
         preflight_commands = _preflight_commands_for_group(group, host=host)
         bundle_commands = _bundle_commands_for_group(
             group,
-            host_token=_normalize_host_token(host),
+            host_token=host_token,
             host=host,
         )
         ingest_commands = _ingest_commands_for_group(
             group,
-            host_token=_normalize_host_token(host),
+            host_token=host_token,
             host=host,
         )
         lines.append("")
@@ -1637,7 +2290,17 @@ def materialize_markdown(
 def main() -> int:
     args = parse_args()
     support_packets = _load_support_packets(args.support_packets)
-    plan = _normalize_plan(support_packets.get("unresolved_external_proof_execution_plan"))
+    support_packets_path = args.support_packets.resolve()
+    journey_gates_path = args.journey_gates.resolve()
+    should_merge_journey_gates = (
+        support_packets_path == DEFAULT_SUPPORT_PACKETS.resolve()
+        or journey_gates_path != DEFAULT_JOURNEY_GATES.resolve()
+    )
+    journey_gates = _load_journey_gates(journey_gates_path) if should_merge_journey_gates else {}
+    plan = _merge_plan_with_journey_gates(
+        _normalize_plan(support_packets.get("unresolved_external_proof_execution_plan")),
+        journey_gates,
+    )
     failures = _validate_plan_relative_paths(plan)
     if failures:
         print("external-proof materialize failed: malformed relative paths", file=sys.stderr)
@@ -1649,7 +2312,12 @@ def main() -> int:
         if args.commands_dir is not None
         else (args.out.parent / "external-proof-commands").resolve()
     )
-    command_files = _materialize_command_files(plan, commands_dir=commands_dir)
+    command_files = _materialize_command_files(
+        plan,
+        commands_dir=commands_dir,
+        journey_gates_path=journey_gates_path if should_merge_journey_gates else None,
+        release_channel_path=args.release_channel.resolve(),
+    )
     markdown = materialize_markdown(plan, generated_at=utc_now_iso(), command_files=command_files)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(markdown, encoding="utf-8")

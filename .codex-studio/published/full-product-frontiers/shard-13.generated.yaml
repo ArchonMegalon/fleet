@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-14T16:41:51Z'
+generated_at: '2026-04-17T11:04:07Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-13
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -29,9 +29,9 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - fleet
-  - executive-assistant
+  - chummer6-ui
   - chummer6-hub
+  - fleet
   texts:
   - top flagship grade
   - whole project frontier
@@ -43,12 +43,11 @@ focus:
   - localization
   - restore confidence
   - fit and finish
-  - supervisor
-  - ooda
-  - currentness
-  - autofix
-  - queue
-  - blockers
+  - utility
+  - dice
+  - initiative
+  - dashboard
+  - operator
   - whole-project frontier
   - no lowered standards
   - feedback loop
@@ -57,7 +56,7 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - desktop client
+  - horizons and public surface
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -66,16 +65,15 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260414T164016Z-shard-13 is not trusted: worker
+  reason: 'latest worker receipt 20260417T110037Z-shard-13 is not trusted: worker
     exit 124'
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-14T16:38:57Z'
+  generated_at: '2026-04-17T11:02:48Z'
   proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
@@ -104,8 +102,8 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Emit provenance and conflict receipts for workspace restore
       and continuity'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: desktop_client.'
-    predicted_completion_at: '2026-04-15T07:51:45Z'
+      readiness coverage: horizons_and_public_surface.'
+    predicted_completion_at: '2026-04-18T02:14:01Z'
     range_low_hours: 8.55
     range_high_hours: 21.78
     remaining_open_milestones: 1
@@ -118,7 +116,7 @@ frontier:
     scope_kind: flagship_product_readiness
     scope_label: Full Chummer5A parity and flagship proof closeout
     scope_warning: ''
-source_queue_fingerprint: next90-staging-20260413
+source_queue_fingerprint: next90-staging-20260415-next-big-wins-widening
 queue_package:
   repo: chummer6-hub
   package_id: next90-m105-hub-workspace-continuity
@@ -142,8 +140,8 @@ eta:
   blocking_reason: ''
   summary: 'Milestone ''Emit provenance and conflict receipts for workspace restore
     and continuity'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: desktop_client.'
-  predicted_completion_at: '2026-04-15T07:51:45Z'
+    readiness coverage: horizons_and_public_surface.'
+  predicted_completion_at: '2026-04-18T02:14:01Z'
   range_low_hours: 8.55
   range_high_hours: 21.78
   remaining_open_milestones: 1

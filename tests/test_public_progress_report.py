@@ -486,6 +486,32 @@ class PublicProgressReportTests(unittest.TestCase):
         self.assertEqual(payload["repo_backlog"]["open_project_count"], 1)
         self.assertEqual(payload["repo_backlog"]["lead_task"], "Restore live queue truth")
 
+    def test_repo_local_backlog_snapshot_ignores_terminal_config_queue_items(self) -> None:
+        snapshot = self.progress._repo_local_backlog_snapshot(
+            {
+                "fleet": {
+                    "id": "fleet",
+                    "path": "/docker/fleet",
+                    "review": {"repo": "fleet"},
+                    "queue": [
+                        {
+                            "package_id": "fleet-postclient-operating-profiles",
+                            "title": "Add steady-state fleet operating profiles",
+                            "status": "done",
+                        },
+                        {
+                            "package_id": "fleet-postclient-proof-orchestration",
+                            "title": "Promote executable gates into orchestrated jobs",
+                            "status": "queued",
+                        },
+                    ],
+                }
+            }
+        )
+
+        self.assertEqual(snapshot["open_item_count"], 1)
+        self.assertEqual(snapshot["lead_task"], "Promote executable gates into orchestrated jobs")
+
     def test_build_progress_report_payload_surfaces_flagship_truth_from_upstream_proofs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -42,8 +42,8 @@ def _preferred_chummer_ui_root() -> pathlib.Path:
     if override:
         return pathlib.Path(override)
     for candidate in (
-        pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
         pathlib.Path("/docker/chummercomplete/chummer6-ui"),
+        pathlib.Path("/docker/chummercomplete/chummer6-ui-finish"),
         pathlib.Path("/docker/chummercomplete/chummer-presentation"),
     ):
         if candidate.exists():
@@ -589,11 +589,20 @@ def _queue_item_label(item: Any) -> str:
     return str(item or "").strip()
 
 
+def _queue_item_active(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return True
+    status = str(item.get("status") or item.get("state") or "").strip().lower().replace("_", " ")
+    if not status:
+        return True
+    return status not in {"complete", "completed", "done", "closed", "released"}
+
+
 def _project_active_queue(project_cfg: Dict[str, Any]) -> List[Any]:
-    queue = list(project_cfg.get("queue") or [])
+    queue = [item for item in (project_cfg.get("queue") or []) if _queue_item_active(item)]
     for source_cfg in project_cfg.get("queue_sources") or []:
         if isinstance(source_cfg, dict):
-            queue = list(_apply_queue_source(project_cfg, queue, source_cfg))
+            queue = [item for item in _apply_queue_source(project_cfg, queue, source_cfg) if _queue_item_active(item)]
     return queue
 
 

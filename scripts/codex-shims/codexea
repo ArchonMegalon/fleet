@@ -51,9 +51,11 @@ runtime_env_value() {
       esac
       case "${line}" in
         "${target}"=*)
-          value="${line#*=}"
-          strip_wrapping_quotes "${value}"
-          return 0
+          value="$(strip_wrapping_quotes "${line#*=}")"
+          if [ -n "${value}" ]; then
+            printf '%s' "${value}"
+            return 0
+          fi
           ;;
       esac
     done < "${path}"
@@ -1219,21 +1221,55 @@ emit_post_audit_request() {
   local review_file="$1"
   local token="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
   local -a curl_args=(curl -fsS -H "X-EA-Principal-ID: ${EA_PRINCIPAL_ID:-archon-codex-ea}" -H "Content-Type: application/json")
+  local auth_config=""
 
   env_truthy "${CODEXEA_POST_AUDIT}" || return 0
   [ -f "${review_file}" ] || return 0
   command -v curl >/dev/null 2>&1 || return 0
-  if [ -n "${token}" ]; then
-    curl_args+=(-H "Authorization: Bearer ${token}")
-    curl_args+=(-H "X-EA-Api-Token: ${token}")
-    curl_args+=(-H "X-API-Token: ${token}")
+  auth_config="$(build_ea_curl_auth_config "${token}" || true)"
+  if [ -n "${auth_config}" ]; then
+    curl_args+=(-K "${auth_config}")
   fi
   curl_args+=(-d @"${review_file}" "${EA_BASE_URL%/}/v1/codex/review-light")
   if env_truthy "${CODEXEA_POST_AUDIT_ASYNC}"; then
-    nohup "${curl_args[@]}" >/dev/null 2>&1 &
+    (
+      nohup "${curl_args[@]}" >/dev/null 2>&1
+      cleanup_ea_curl_auth_config "${auth_config}"
+    ) >/dev/null 2>&1 &
   else
     "${curl_args[@]}" >/dev/null 2>&1 || true
+    cleanup_ea_curl_auth_config "${auth_config}"
   fi
+}
+
+escape_curl_config_value() {
+  local value="${1:-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
+build_ea_curl_auth_config() {
+  local token="${1:-}"
+  local config_path=""
+  local escaped_token=""
+
+  [ -n "${token}" ] || return 1
+  config_path="$(mktemp "${TMPDIR:-/tmp}/codexea-curl-auth.XXXXXX")"
+  chmod 600 "${config_path}" || true
+  escaped_token="$(escape_curl_config_value "${token}")"
+  {
+    printf 'header = "Authorization: Bearer %s"\n' "${escaped_token}"
+    printf 'header = "X-EA-Api-Token: %s"\n' "${escaped_token}"
+    printf 'header = "X-API-Token: %s"\n' "${escaped_token}"
+  } > "${config_path}"
+  printf '%s' "${config_path}"
+}
+
+cleanup_ea_curl_auth_config() {
+  local config_path="${1:-}"
+  [ -n "${config_path}" ] || return 0
+  rm -f "${config_path}"
 }
 
 show_status() {
@@ -1276,6 +1312,7 @@ show_status() {
     -H "X-EA-Principal-ID: ${EA_MCP_PRINCIPAL_ID}"
   )
   local api_token="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
+  local auth_config=""
   local status_url="${EA_STATUS_URL}"
   status_url="$(append_query_param "${status_url}" "window" "${window}")"
   status_url="$(append_query_param "${status_url}" "refresh" "${refresh}")"
@@ -1283,10 +1320,9 @@ show_status() {
     status_url="$(append_query_param "${status_url}" "compact" "1")"
   fi
   local body=""
-  if [ -n "${api_token}" ]; then
-    curl_args+=(-H "Authorization: Bearer ${api_token}")
-    curl_args+=(-H "X-EA-Api-Token: ${api_token}")
-    curl_args+=(-H "X-API-Token: ${api_token}")
+  auth_config="$(build_ea_curl_auth_config "${api_token}" || true)"
+  if [ -n "${auth_config}" ]; then
+    curl_args+=(-K "${auth_config}")
   fi
   if [ -n "${watch_seconds}" ]; then
     local -a watch_args=()
@@ -1305,6 +1341,7 @@ show_status() {
   fi
   if ! body="$("${curl_args[@]}" "${status_url}" 2>/dev/null)"; then
     body="$("${curl_args[@]}" "${EA_PROFILES_URL}" 2>/dev/null)" || {
+      cleanup_ea_curl_auth_config "${auth_config}"
       if [ "${startup_compact}" -eq 1 ]; then
         return 1
       fi
@@ -1316,6 +1353,7 @@ show_status() {
       return 1
     }
   fi
+  cleanup_ea_curl_auth_config "${auth_config}"
   if [ "${want_json}" -eq 1 ] || ! [ -t 1 ] || ! command -v python3 >/dev/null 2>&1; then
     printf '%s\n' "${body}"
     return
@@ -1821,7 +1859,7 @@ case "${MODE}" in
   responses)
     : "${CODEXEA_STREAM_IDLE_TIMEOUT_MS:=300000}"
     : "${CODEXEA_STREAM_MAX_RETRIES:=5}"
-    EA_AUTH_TOKEN="${EA_API_TOKEN:-${EA_MCP_API_TOKEN:-}}"
+    EA_AUTH_TOKEN="${EA_MCP_API_TOKEN:-${EA_API_TOKEN:-}}"
     EA_CODEX_PROFILE="${EFFECTIVE_LANE}"
     if [ "${EA_CODEX_PROFILE}" = "core" ] && [ -n "${CODEXEA_CORE_RESPONSES_PROFILE:-}" ]; then
       EA_CODEX_PROFILE="${CODEXEA_CORE_RESPONSES_PROFILE}"
@@ -1830,14 +1868,14 @@ case "${MODE}" in
       EA_CODEX_PROFILE="audit"
     fi
     EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"X-EA-Codex-Profile\"=\"${EA_CODEX_PROFILE}\""
+    if [ -n "${EA_AUTH_TOKEN:-}" ]; then
+      EA_HEADERS="${EA_HEADERS},\"Authorization\"=\"Bearer ${EA_AUTH_TOKEN}\""
+    fi
     if [ -n "${EA_ONEMIN_ACCOUNT_ALIAS:-}" ]; then
       EA_HEADERS="${EA_HEADERS},\"X-EA-Onemin-Account-Alias\"=\"${EA_ONEMIN_ACCOUNT_ALIAS}\""
     fi
     if [ -n "${EA_ONEMIN_ACCOUNT_ENV_NAME:-}" ]; then
       EA_HEADERS="${EA_HEADERS},\"X-EA-Onemin-Account-Env\"=\"${EA_ONEMIN_ACCOUNT_ENV_NAME}\""
-    fi
-    if [ -n "${EA_AUTH_TOKEN:-}" ]; then
-      EA_HEADERS="${EA_HEADERS},\"Authorization\"=\"Bearer ${EA_AUTH_TOKEN}\",\"x-api-token\"=\"${EA_AUTH_TOKEN}\",\"X-EA-Api-Token\"=\"${EA_AUTH_TOKEN}\""
     fi
     EA_HEADERS="${EA_HEADERS}}"
     EA_DEFAULT_ARGS+=(
@@ -1850,6 +1888,13 @@ case "${MODE}" in
       -c "model_providers.ea.stream_idle_timeout_ms=${CODEXEA_STREAM_IDLE_TIMEOUT_MS}"
       -c "model_providers.ea.stream_max_retries=${CODEXEA_STREAM_MAX_RETRIES}"
     )
+    if [ -n "${EA_AUTH_TOKEN:-}" ]; then
+      export CODEXEA_RESPONSES_AUTH_TOKEN="${EA_AUTH_TOKEN}"
+      EA_DEFAULT_ARGS+=(
+        -c 'model_providers.ea.bearer_token_env_var="CODEXEA_RESPONSES_AUTH_TOKEN"'
+        -c 'model_providers.ea.env_http_headers={"x-api-token"="CODEXEA_RESPONSES_AUTH_TOKEN","X-EA-Api-Token"="CODEXEA_RESPONSES_AUTH_TOKEN"}'
+      )
+    fi
     ;;
   *)
     echo "Unsupported CODEXEA mode: ${MODE} (expected: mcp or responses)" >&2

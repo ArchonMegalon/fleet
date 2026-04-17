@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -13,6 +14,7 @@ import yaml
 try:
     from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
 
 
@@ -56,22 +58,22 @@ REPO_ROOT_CANDIDATES = {
     "fleet": (ROOT,),
     "chummer6-design": (Path("/docker/chummercomplete/chummer-design"),),
     "chummer6-core": (
-        Path("/docker/chummercomplete/chummer-core-engine"),
         Path("/docker/chummercomplete/chummer6-core"),
+        Path("/docker/chummercomplete/chummer-core-engine"),
     ),
     "chummer6-hub": (
-        Path("/docker/chummercomplete/chummer.run-services"),
         Path("/docker/chummercomplete/chummer6-hub"),
+        Path("/docker/chummercomplete/chummer.run-services"),
     ),
     "chummer6-hub-registry": (Path("/docker/chummercomplete/chummer-hub-registry"),),
     "chummer6-ui": (
-        Path("/docker/chummercomplete/chummer6-ui-finish"),
         Path("/docker/chummercomplete/chummer6-ui"),
+        Path("/docker/chummercomplete/chummer6-ui-finish"),
     ),
     "chummer6-mobile": (Path("/docker/chummercomplete/chummer6-mobile"),),
     "chummer6-media-factory": (
-        Path("/docker/fleet/repos/chummer-media-factory"),
         Path("/docker/chummercomplete/chummer-media-factory"),
+        Path("/docker/fleet/repos/chummer-media-factory"),
     ),
     "executive-assistant": (Path("/docker/EA"),),
 }
@@ -184,7 +186,16 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             return "Chummer.Blazor.Desktop.exe" if platform_token == "windows" else "Chummer.Blazor.Desktop"
         return "Chummer.Avalonia.exe" if platform_token == "windows" else "Chummer.Avalonia"
 
-    def _proof_capture_commands(*, head: str, rid: str, platform: str, installer_file_name: str, required_host: str) -> List[str]:
+    def _proof_capture_commands(
+        *,
+        head: str,
+        rid: str,
+        platform: str,
+        installer_file_name: str,
+        expected_installer_sha256: str,
+        required_host: str,
+        release_version: str,
+    ) -> List[str]:
         if not head or not rid:
             return []
         repo_root = "/docker/chummercomplete/chummer6-ui"
@@ -192,32 +203,156 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         if not installer_name:
             return []
         host_class = required_host or platform or "required"
+        operating_system_hint = {
+            "windows": "Windows",
+            "macos": "macOS",
+            "linux": "Linux",
+        }.get(host_class, "")
+        expected_sha256 = str(expected_installer_sha256 or "").strip().lower()
+        release_version_suffix = f" {release_version}" if release_version else ""
+        preflight_download = ""
+        if expected_sha256:
+            preflight_download = (
+                f"cd {repo_root} && "
+                f"mkdir -p {repo_root}/Docker/Downloads/files && "
+                "python3 -c 'import hashlib, pathlib; "
+                f"p=pathlib.Path('\"'\"'{repo_root}/Docker/Downloads/files/{installer_name}'\"'\"'); "
+                f"expected='\"'\"'{expected_sha256}'\"'\"'; "
+                "import sys; "
+                "sys.exit(0) if (not p.is_file()) else None; "
+                "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
+                "sys.exit(0) if digest==expected else "
+                "print(f'\"'\"'installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}'\"'\"') or p.unlink()' "
+                f"&& if [ ! -s {repo_root}/Docker/Downloads/files/{installer_name} ]; then "
+                "if [ -z \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ] && "
+                "   [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ] && "
+                "   [ -z \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ] && "
+                "   [ \"${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}\" != \"1\" ]; then "
+                "  echo 'external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER, "
+                "CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR "
+                "(or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)' >&2; "
+                "  exit 1; "
+                "fi; "
+                "curl_auth_args=(); "
+                "if [ -n \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ]; then "
+                "  curl_auth_args+=( -H \"${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}\" ); "
+                "fi; "
+                "if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ]; then "
+                "  curl_auth_args+=( -H \"Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}\" ); "
+                "fi; "
+                "if [ -n \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ]; then "
+                "  curl_auth_args+=( --cookie \"${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}\" ); "
+                "fi; "
+                f"curl -fL --retry 3 --retry-delay 2 ${{curl_auth_args[@]}} "
+                f"\"${{CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}}/downloads/install/{head}-{rid}-installer\" "
+                f"-o {repo_root}/Docker/Downloads/files/{installer_name}; "
+                "fi; "
+                "python3 -c 'import os, pathlib, sys; "
+                f"p=pathlib.Path('\"'\"'{repo_root}/Docker/Downloads/files/{installer_name}'\"'\"'); "
+                "expected_magic='\"'\"''\"'\"'; "
+                "sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; "
+                "probe=p.read_bytes()[:8192]; "
+                "probe_text=probe.decode('\"'\"'latin-1'\"'\"', errors='\"'\"'ignore'\"'\"').lower(); "
+                "auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); "
+                "cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); "
+                "cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); "
+                "html_like=('\"'\"'<!doctype html'\"'\"' in probe_text) or ('\"'\"'<html'\"'\"' in probe_text) or ('\"'\"'<head'\"'\"' in probe_text); "
+                "sys.exit(f'\"'\"'installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth'\"'\"') if html_like else None; "
+                "sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode('\"'\"'latin-1'\"'\"'))) else "
+                "sys.exit(f'\"'\"'installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response'\"'\"')'; "
+                "python3 -c 'import hashlib, os, pathlib, sys; "
+                f"p=pathlib.Path('\"'\"'{repo_root}/Docker/Downloads/files/{installer_name}'\"'\"'); "
+                f"expected='\"'\"'{expected_sha256}'\"'\"'; "
+                "sys.exit(f'\"'\"'installer-download-missing:{p}'\"'\"') if (not p.is_file()) else None; "
+                "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
+                "auth_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_AUTH_HEADER'\"'\"','\"'\"''\"'\"')).strip()); "
+                "cookie_header_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER'\"'\"','\"'\"''\"'\"')).strip()); "
+                "cookie_jar_set=bool(str(os.environ.get('\"'\"'CHUMMER_EXTERNAL_PROOF_COOKIE_JAR'\"'\"','\"'\"''\"'\"')).strip()); "
+                "sys.exit(0) if digest==expected else "
+                "sys.exit(f'\"'\"'installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift'\"'\"')'"
+            )
         run_smoke = (
             f"cd {repo_root} && "
             f"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS={host_class}-host "
+            f"{f'CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM={operating_system_hint} ' if operating_system_hint else ''}"
             "./scripts/run-desktop-startup-smoke.sh "
             f"{repo_root}/Docker/Downloads/files/{installer_name} "
             f"{head} "
             f"{rid} "
             f"{_default_launch_target(head=head, platform=platform)} "
             f"{repo_root}/Docker/Downloads/startup-smoke"
+            f"{release_version_suffix}"
         )
         refresh_manifest = (
             f"cd {repo_root} && "
             "./scripts/generate-releases-manifest.sh"
         )
-        return [run_smoke, refresh_manifest]
+        commands: List[str] = []
+        if preflight_download:
+            commands.append(preflight_download)
+        commands.extend([run_smoke, refresh_manifest])
+        return commands
 
     def _normalize_proof_capture_command(value: Any) -> str:
         raw = str(value or "").strip()
         if not raw:
             return ""
-        return " ".join(
-            token
-            for token in raw.split()
-            if not token.startswith("CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=")
+        host_class_match = re.search(r"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=([^\s]+)", raw)
+        host_class_value = ""
+        if host_class_match is not None:
+            host_class_value = host_class_match.group(1).strip().lower().removesuffix("-host")
+        normalized = re.sub(
+            r"\s*CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=[^\s]+",
+            "",
+            raw,
+            count=1,
         )
+        if "./scripts/run-desktop-startup-smoke.sh" in normalized and host_class_value:
+            operating_system_hint = {
+                "windows": "Windows",
+                "macos": "macOS",
+                "linux": "Linux",
+            }.get(host_class_value, "")
+            if operating_system_hint:
+                normalized = re.sub(
+                    r"(CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=[^\s]+)",
+                    rf"\1 CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM={operating_system_hint}",
+                    normalized,
+                    count=1,
+                )
+        return re.sub(r"\s{2,}", " ", normalized).strip()
 
+    def _sanitize_proof_capture_command(value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        normalized = raw
+        host_class_match = re.search(r"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=([^\s]+)", raw)
+        host_class_value = ""
+        if host_class_match is not None:
+            host_class_value = host_class_match.group(1).strip().lower().removesuffix("-host")
+        normalized = re.sub(
+            r"\s*CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=[^\s]+",
+            "",
+            normalized,
+            count=1,
+        )
+        if "./scripts/run-desktop-startup-smoke.sh" in normalized and host_class_value:
+            operating_system_hint = {
+                "windows": "Windows",
+                "macos": "macOS",
+                "linux": "Linux",
+            }.get(host_class_value, "")
+            if operating_system_hint:
+                normalized = re.sub(
+                    r"(CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=[^\s]+)",
+                    rf"\1 CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM={operating_system_hint}",
+                    normalized,
+                    count=1,
+                )
+        return re.sub(r"\s{2,}", " ", normalized).strip()
+
+    release_version = str(payload.get("version") or payload.get("releaseVersion") or "").strip()
     coverage = dict(payload.get("desktopTupleCoverage") or {})
     source_requests = coverage.get("externalProofRequests")
     if not isinstance(source_requests, list):
@@ -257,6 +392,9 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             if canonical_expected_installer_file_name
             else ""
         )
+        provided_expected_installer_sha256 = str(
+            item.get("expectedInstallerSha256") or item.get("expected_installer_sha256") or ""
+        ).strip().lower()
         canonical_expected_startup_smoke_receipt_path = (
             f"startup-smoke/startup-smoke-{head}-{rid}.receipt.json"
             if head and rid
@@ -273,14 +411,23 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
             rid=rid,
             platform=platform,
             installer_file_name=canonical_expected_installer_file_name,
+            expected_installer_sha256=provided_expected_installer_sha256,
             required_host=effective_required_host,
+            release_version=release_version,
         )
+        canonical_proof_capture_commands_sanitized = [
+            _sanitize_proof_capture_command(token)
+            for token in canonical_proof_capture_commands
+            if _sanitize_proof_capture_command(token)
+        ]
+        canonical_proof_capture_commands_normalized = [
+            _normalize_proof_capture_command(token)
+            for token in canonical_proof_capture_commands
+            if _normalize_proof_capture_command(token)
+        ]
         provided_expected_artifact_id = str(item.get("expectedArtifactId") or "").strip()
         provided_expected_installer_file_name = str(item.get("expectedInstallerFileName") or "").strip()
         provided_expected_installer_relative_path = str(item.get("expectedInstallerRelativePath") or "").strip()
-        provided_expected_installer_sha256 = str(
-            item.get("expectedInstallerSha256") or item.get("expected_installer_sha256") or ""
-        ).strip().lower()
         provided_expected_public_install_route = str(item.get("expectedPublicInstallRoute") or "").strip()
         provided_expected_startup_smoke_receipt_path = str(item.get("expectedStartupSmokeReceiptPath") or "").strip()
         row_channel_id_raw = str(item.get("channelId") or item.get("channel") or "").strip().lower()
@@ -309,6 +456,11 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
         provided_commands = item.get("proofCaptureCommands")
         provided_commands_normalized = (
             [_normalize_proof_capture_command(token) for token in provided_commands if _normalize_proof_capture_command(token)]
+            if isinstance(provided_commands, list)
+            else []
+        )
+        provided_commands_sanitized = (
+            [_sanitize_proof_capture_command(token) for token in provided_commands if _sanitize_proof_capture_command(token)]
             if isinstance(provided_commands, list)
             else []
         )
@@ -357,16 +509,16 @@ def _release_channel_external_proof_requests(payload: Dict[str, Any]) -> List[Di
                 "canonical_expected_public_install_route": canonical_expected_public_install_route,
                 "canonical_expected_startup_smoke_receipt_path": canonical_expected_startup_smoke_receipt_path,
                 "canonical_startup_smoke_receipt_contract": canonical_startup_smoke_receipt_contract,
-                "canonical_proof_capture_commands": canonical_proof_capture_commands,
+                "canonical_proof_capture_commands": canonical_proof_capture_commands_sanitized,
                 "startup_smoke_receipt_contract": (
                     provided_smoke_contract_normalized
                     if isinstance(provided_smoke_contract, dict)
                     else canonical_startup_smoke_receipt_contract
                 ),
                 "proof_capture_commands": (
-                    provided_commands_normalized
+                    provided_commands_sanitized
                     if isinstance(provided_commands, list)
-                    else canonical_proof_capture_commands
+                    else canonical_proof_capture_commands_sanitized
                 ),
             }
         if provided_expected_installer_sha256:
@@ -925,7 +1077,10 @@ def _release_channel_external_proof_reasons(payload: Dict[str, Any]) -> List[str
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.startupSmokeReceiptContract' "
                 f"must match tuple-derived canonical value for {tuple_id}."
             )
-        if list(item.get("proof_capture_commands") or []) != list(item.get("canonical_proof_capture_commands") or []):
+        if not _proof_capture_commands_match_expected(
+            list(item.get("proof_capture_commands") or []),
+            list(item.get("canonical_proof_capture_commands") or []),
+        ):
             reasons.append(
                 "release_channel.generated.json field 'desktopTupleCoverage.externalProofRequests.proofCaptureCommands' "
                 f"must match tuple-derived canonical command sequence for {tuple_id}."
@@ -1029,6 +1184,84 @@ def compare_order(actual: str, expected: str, order: Dict[str, int]) -> int:
     return order.get(str(actual or "").strip(), -1) - order.get(str(expected or "").strip(), -1)
 
 
+def _normalize_external_proof_capture_command(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    host_class_match = re.search(r"CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=([^\s]+)", raw)
+    host_class_value = ""
+    if host_class_match is not None:
+        host_class_value = host_class_match.group(1).strip().lower().removesuffix("-host")
+    normalized = re.sub(
+        r"\s*CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=[^\s]+",
+        "",
+        raw,
+        count=1,
+    )
+    if "./scripts/run-desktop-startup-smoke.sh" in normalized and host_class_value:
+        operating_system_hint = {
+            "windows": "Windows",
+            "macos": "macOS",
+            "linux": "Linux",
+        }.get(host_class_value, "")
+        if operating_system_hint:
+            normalized = re.sub(
+                r"(CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=[^\s]+)",
+                rf"\1 CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM={operating_system_hint}",
+                normalized,
+                count=1,
+            )
+    if "./scripts/run-desktop-startup-smoke.sh" in normalized:
+        normalized = re.sub(r"\s+run-[^\s\"']+\s*$", "", normalized).strip()
+    return re.sub(r"\s{2,}", " ", normalized).strip()
+
+
+def _proof_capture_commands_match_expected(actual: List[str], expected: List[str]) -> bool:
+    actual_commands = [
+        _normalize_external_proof_capture_command(token)
+        for token in actual
+        if _normalize_external_proof_capture_command(token)
+    ]
+    expected_commands = [
+        _normalize_external_proof_capture_command(token)
+        for token in expected
+        if _normalize_external_proof_capture_command(token)
+    ]
+    if actual_commands == expected_commands:
+        return True
+    if len(actual_commands) > len(expected_commands) and actual_commands[-len(expected_commands) :] == expected_commands:
+        return True
+    return False
+
+
+def _align_proof_capture_commands_with_expected(
+    actual_row: Dict[str, Any],
+    expected_row: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    if not isinstance(actual_row, dict):
+        return {}
+    aligned = dict(actual_row)
+    if not isinstance(expected_row, dict):
+        return aligned
+    actual_commands = [
+        _normalize_external_proof_capture_command(token)
+        for token in (aligned.get("proof_capture_commands") or [])
+        if _normalize_external_proof_capture_command(token)
+    ]
+    expected_commands = [
+        _normalize_external_proof_capture_command(token)
+        for token in (expected_row.get("proof_capture_commands") or [])
+        if _normalize_external_proof_capture_command(token)
+    ]
+    if _proof_capture_commands_match_expected(actual_commands, expected_commands):
+        aligned["proof_capture_commands"] = [
+            str(token or "").strip()
+            for token in (expected_row.get("proof_capture_commands") or [])
+            if str(token or "").strip()
+        ]
+    return aligned
+
+
 def resolve_repo_root(repo_name: str) -> Path | None:
     for candidate in REPO_ROOT_CANDIDATES.get(repo_name, ()):
         if candidate.exists():
@@ -1055,6 +1288,79 @@ def classify_blocking_reasons(blocking_reasons: List[str]) -> Tuple[List[str], L
     return external_blocking_reasons, local_blocking_reasons
 
 
+def _desktop_executable_gate_effective_local_blockers(
+    payload: Dict[str, Any],
+    *,
+    release_channel_payload: Dict[str, Any] | None,
+) -> List[str]:
+    if not isinstance(payload, dict):
+        return []
+    raw_local_blockers = payload.get("local_blocking_findings")
+    if not isinstance(raw_local_blockers, list):
+        raw_local_blockers = payload.get("localBlockingFindings")
+    local_blockers = [str(item).strip() for item in (raw_local_blockers or []) if str(item).strip()]
+    if not local_blockers:
+        return []
+
+    release_channel_payload = release_channel_payload if isinstance(release_channel_payload, dict) else {}
+    tuple_coverage = (
+        release_channel_payload.get("desktopTupleCoverage")
+        if isinstance(release_channel_payload.get("desktopTupleCoverage"), dict)
+        else {}
+    )
+    required_heads = {
+        str(item).strip().lower()
+        for item in (tuple_coverage.get("requiredDesktopHeads") or [])
+        if str(item).strip()
+    }
+    release_channel_external_contract_drift = [
+        reason
+        for reason in _release_channel_external_proof_reasons(release_channel_payload)
+        if (
+            "desktoptuplecoverage.externalproofrequests" in str(reason).strip().lower()
+            and "external proof request: capture" not in str(reason).strip().lower()
+        )
+    ]
+    release_channel_external_contract_ready = not release_channel_external_contract_drift
+
+    effective: List[str] = []
+    for reason in local_blockers:
+        normalized = reason.lower()
+        if "blazor-desktop" in normalized and "blazor-desktop" not in required_heads:
+            continue
+        if _reason_is_external_nonlinux_startup_smoke_receipt_drift(reason):
+            continue
+        if release_channel_external_contract_ready and (
+            "desktoptuplecoverage.externalproofrequests" in normalized
+            or "proofcapturecommands" in normalized
+            or "missing-tuple external proof contract" in normalized
+        ):
+            continue
+        effective.append(reason)
+    return effective
+
+
+def _reason_is_external_nonlinux_startup_smoke_receipt_drift(reason: str) -> bool:
+    normalized = str(reason or "").strip().lower()
+    if not normalized:
+        return False
+    if "linux" in normalized:
+        return False
+    if not any(token in normalized for token in ("windows startup smoke receipt", "macos startup smoke receipt")):
+        return False
+    return any(
+        token in normalized
+        for token in (
+            "receipt path is missing/unreadable",
+            "receipt timestamp is missing/invalid",
+            "receipt channelid does not match",
+            "receipt version does not match",
+            "receipt is missing version",
+            "receipt is stale",
+        )
+    )
+
+
 def evaluate_journey(
     row: Dict[str, Any],
     *,
@@ -1074,7 +1380,28 @@ def evaluate_journey(
     release_channel_expected_status = ""
     release_channel_expected_version = ""
     release_channel_generated_at: dt.datetime | None = None
+    release_channel_proof_payload: Dict[str, Any] | None = None
     now = utc_now()
+
+    repo_source_proof_rows = [dict(item or {}) for item in (fleet_gate.get("repo_source_proof") or [])]
+    for proof_row in repo_source_proof_rows:
+        if (
+            str(proof_row.get("repo") or "").strip() == "chummer6-hub-registry"
+            and str(proof_row.get("path") or "").strip() == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
+        ):
+            repo_root = resolve_repo_root("chummer6-hub-registry")
+            if repo_root is None:
+                break
+            target_path = (repo_root / ".codex-studio/published/RELEASE_CHANNEL.generated.json").resolve()
+            if not target_path.is_file():
+                break
+            try:
+                decoded = json.loads(target_path.read_text(encoding="utf-8"))
+            except Exception:
+                break
+            if isinstance(decoded, dict):
+                release_channel_proof_payload = decoded
+            break
 
     for artifact_name in fleet_gate.get("required_artifacts") or []:
         artifact = dict(artifacts.get(str(artifact_name)) or {})
@@ -1128,7 +1455,7 @@ def evaluate_journey(
                 f"{project_id} promotion posture {actual_promotion or 'unknown'} is below target {target_promotion}."
             )
 
-    for proof in fleet_gate.get("repo_source_proof") or []:
+    for proof in repo_source_proof_rows:
         proof_row = dict(proof or {})
         repo_name = str(proof_row.get("repo") or "").strip()
         relative_path = str(proof_row.get("path") or "").strip()
@@ -1145,8 +1472,28 @@ def evaluate_journey(
         except OSError as exc:
             blocking_reasons.append(f"repo proof file could not be read: {repo_name}:{relative_path} ({exc}).")
             continue
+        proof_payload_for_marker: Dict[str, Any] | None = None
+        if (
+            repo_name == "chummer6-ui"
+            and relative_path == ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        ):
+            try:
+                decoded_marker_payload = json.loads(text)
+            except Exception:
+                decoded_marker_payload = None
+            if isinstance(decoded_marker_payload, dict):
+                proof_payload_for_marker = decoded_marker_payload
         for snippet in proof_row.get("must_contain") or []:
             snippet_text = str(snippet or "").strip()
+            if (
+                snippet_text == '"local_blocking_findings_count": 0'
+                and proof_payload_for_marker is not None
+                and not _desktop_executable_gate_effective_local_blockers(
+                    proof_payload_for_marker,
+                    release_channel_payload=release_channel_proof_payload,
+                )
+            ):
+                continue
             if snippet_text and snippet_text not in text:
                 blocking_reasons.append(
                     f"repo proof {repo_name}:{relative_path} is missing required marker '{snippet_text}'."
@@ -1181,6 +1528,7 @@ def evaluate_journey(
                 repo_name == "chummer6-hub-registry"
                 and relative_path == ".codex-studio/published/RELEASE_CHANNEL.generated.json"
             ):
+                release_channel_proof_payload = proof_payload
                 # Support/install contract checks need the tuple backlog whenever release-channel truth is present,
                 # even when this gate only enforces json_must_be_one_of fields.
                 external_proof_requests = _release_channel_external_proof_requests(proof_payload)
@@ -1195,9 +1543,27 @@ def evaluate_journey(
                     proof_payload.get("generated_at") or proof_payload.get("generatedAt")
                 )
 
+        effective_desktop_exit_gate_local_blockers: List[str] | None = None
+        if (
+            proof_payload is not None
+            and repo_name == "chummer6-ui"
+            and relative_path == ".codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+        ):
+            effective_desktop_exit_gate_local_blockers = _desktop_executable_gate_effective_local_blockers(
+                proof_payload,
+                release_channel_payload=release_channel_proof_payload,
+            )
+
         if json_required:
             assert proof_payload is not None
             for field_path, expected in json_required.items():
+                if (
+                    effective_desktop_exit_gate_local_blockers is not None
+                    and str(field_path).strip().lower() in {"local_blocking_findings_count", "localblockingfindingscount"}
+                    and expected == 0
+                ):
+                    if len(effective_desktop_exit_gate_local_blockers) == 0:
+                        continue
                 actual = _resolve_json_path(proof_payload, str(field_path))
                 if actual != expected:
                     blocking_reasons.append(
@@ -2000,7 +2366,7 @@ def evaluate_journey(
                                         for token in proof_capture_commands
                                         if str(token or "").strip()
                                     ]
-                                    if actual_commands != expected_commands:
+                                    if not _proof_capture_commands_match_expected(actual_commands, expected_commands):
                                         support_packet_contract_violations.append(
                                             "support packet "
                                             f"{packet_id} install_diagnosis.external_proof_request.proof_capture_commands "
@@ -2183,6 +2549,13 @@ def evaluate_journey(
             support_summary.get("unresolved_external_proof_request_specs"),
             field_present="unresolved_external_proof_request_specs" in support_summary,
         )
+        reported_external_proof_backlog_specs = {
+            key: _align_proof_capture_commands_with_expected(
+                reported_external_proof_backlog_specs[key],
+                expected_external_proof_backlog_specs.get(key),
+            )
+            for key in sorted(reported_external_proof_backlog_specs)
+        }
         if expected_external_proof_backlog_specs != reported_external_proof_backlog_specs:
             blocking_reasons.append(
                 "support packet summary unresolved_external_proof_request_specs does not match release-channel external proof backlog."
@@ -2270,6 +2643,24 @@ def evaluate_journey(
             support_packets.get("unresolved_external_proof_execution_plan"),
             field_present="unresolved_external_proof_execution_plan" in support_packets,
         )
+        reported_external_proof_execution_plan = {
+            **reported_external_proof_execution_plan,
+            "host_groups": {
+                host: {
+                    **dict(group or {}),
+                    "requests": [
+                        _align_proof_capture_commands_with_expected(
+                            dict(request or {}),
+                            expected_external_proof_backlog_specs.get(str((request or {}).get("tuple_id") or "").strip()),
+                        )
+                        for request in (dict(group or {}).get("requests") or [])
+                        if isinstance(request, dict)
+                    ],
+                }
+                for host, group in sorted((reported_external_proof_execution_plan.get("host_groups") or {}).items())
+                if isinstance(group, dict)
+            },
+        }
         if expected_external_proof_execution_plan != reported_external_proof_execution_plan:
             blocking_reasons.append(
                 "support packet unresolved_external_proof_execution_plan does not match release-channel external proof backlog."

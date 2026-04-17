@@ -20,6 +20,43 @@ def _script_env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
+def test_flagship_claim_status_reports_readiness_plane_gaps_when_coverage_is_green(
+    monkeypatch, tmp_path: Path
+) -> None:
+    readiness_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "warning_keys": [],
+                "flagship_readiness_audit": {"warning_coverage_keys": []},
+                "coverage": {
+                    "desktop_client": "ready",
+                    "fleet_and_operator_loop": "ready",
+                },
+                "readiness_planes": {
+                    "structural_ready": {"status": "ready"},
+                    "flagship_ready": {"status": "warning"},
+                    "veteran_ready": {"status": "warning"},
+                },
+                "quality_policy": {
+                    "bar": "top_flagship_grade",
+                    "whole_project_frontier_required": True,
+                    "feedback_autofix_loop_required": True,
+                    "accept_lowered_standards": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "FLAGSHIP_READINESS_PATH", readiness_path)
+
+    claim = materialize_status_plane_module._flagship_claim_status()
+
+    assert claim["status"] == "fail"
+    assert claim["warning_keys"] == ["flagship_ready", "veteran_ready"]
+
+
 def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     status_json = tmp_path / "admin_status.json"
     out_path = tmp_path / "STATUS_PLANE.generated.yaml"
@@ -550,7 +587,7 @@ path: {tmp_path / "hub-registry"}
     assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
-def test_core_fallback_stage_uses_import_parity_certification(monkeypatch, tmp_path: Path) -> None:
+def test_core_fallback_stage_uses_import_parity_and_engine_proof(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "core" / ".codex-studio" / "published"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -569,6 +606,10 @@ path: {tmp_path / "core"}
         json.dumps({"status": "passed"}) + "\n",
         encoding="utf-8",
     )
+    (published_dir / "ENGINE_PROOF_PACK.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
 
     rows = materialize_status_plane_module._load_project_config_rows()
@@ -577,7 +618,7 @@ path: {tmp_path / "core"}
     assert rows[0]["readiness"]["stage"] == "boundary_pure"
 
 
-def test_core_fallback_stage_stays_repo_local_without_import_parity_pass(monkeypatch, tmp_path: Path) -> None:
+def test_core_fallback_stage_stays_repo_local_without_passing_core_proofs(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "core" / ".codex-studio" / "published"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -594,6 +635,37 @@ path: {tmp_path / "core"}
     )
     (published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json").write_text(
         json.dumps({"status": "failed"}) + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "ENGINE_PROOF_PACK.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)
+
+    rows = materialize_status_plane_module._load_project_config_rows()
+    assert len(rows) == 1
+    assert rows[0]["id"] == "core"
+    assert rows[0]["readiness"]["stage"] == "repo_local_complete"
+
+
+def test_core_fallback_stage_stays_repo_local_without_engine_proof(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "projects"
+    published_dir = tmp_path / "core" / ".codex-studio" / "published"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    published_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "core.yaml").write_text(
+        f"""
+id: core
+enabled: true
+lifecycle: live
+path: {tmp_path / "core"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json").write_text(
+        json.dumps({"status": "passed"}) + "\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(materialize_status_plane_module, "PROJECT_CONFIG_DIR", config_dir)

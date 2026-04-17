@@ -102,6 +102,8 @@ bash scripts/run_chummer_design_supervisor.sh
 ```
 
 Fleet compose now includes `fleet-design-supervisor`, so a normal `docker compose up -d` boot owns restart-on-reboot for the loop instead of relying on a tmux shell.
+Restart-safe supervisor policy is centralized in `config/projects/fleet.yaml` under `supervisor_contract.restart_safe_runtime`, `supervisor_contract.resource_policy`, and the package queue: shard count, state root, resource budgets, queue posture, account routing, and worker defaults all hydrate from that contract on cold start. Environment variables remain local overrides for deliberate operator steering.
+
 The helper also exposes steering and account rotation inputs from env:
 
 ```bash
@@ -110,6 +112,11 @@ CHUMMER_DESIGN_SUPERVISOR_FOCUS_TEXT=desktop,client bash scripts/run_chummer_des
 ```
 
 For EA / OneMinAI lanes, the supervisor now routes each shard dynamically across healthy configured accounts from `config/accounts.yaml` based on lane and model, then backs off credential sources that are usage-limited or auth-stale. `CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_ALIASES` and `CHUMMER_DESIGN_SUPERVISOR_SHARD_ACCOUNT_GROUPS` are explicit pinning overrides, not the normal routing path.
+To prove reboot recovery without launching workers, run:
+
+```bash
+CHUMMER_DESIGN_SUPERVISOR_PRINT_RUNTIME_POLICY=1 bash scripts/run_chummer_design_supervisor.sh
+```
 
 In Fleet `main`, `compile.manifest.json`, `STATUS_PLANE.generated.yaml`, and `SUPPORT_CASE_PACKETS.generated.json` are treated as committed public control artifacts. Downstream repos may still materialize equivalent publish/runtime artifacts locally until their own promotion flow catches up.
 

@@ -1,7 +1,7 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-10T13:23:46Z'
-mode: flagship_product
+generated_at: '2026-04-17T18:12:27Z'
+mode: complete
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -25,117 +25,152 @@ design_source_paths:
 - /docker/chummercomplete/chummer-design/products/chummer/projects/fleet.md
 primary_probe_shard: shard-1
 focus:
-  profiles: []
-  owners: []
-  texts: []
+  profiles:
+  - top_flagship_grade
+  - whole_project_frontier
+  owners:
+  - chummer6-core
+  - chummer6-design
+  - chummer6-hub
+  - chummer6-hub-registry
+  - chummer6-mobile
+  - chummer6-ui
+  - executive-assistant
+  - fleet
+  texts:
+  - Build golden oracle suites and release-bound engine proof packs
+  - Emit provenance and conflict receipts for workspace restore and continuity
+  - Extract Chummer5a oracle baselines and veteran workflow packs
+  - Gate fix followthrough against real install and receipt truth
+  - Keep native-host release proof independent for the primary desktop head
+  - Land restore continuation and conflict-safe UX on the primary desktop route
+  - Publish explicit promotion, fallback, and rollback rationale in registry truth
+  - Publish weekly governor packets with measured launch, freeze, canary, and rollback
+    decisions
+  - Run screenshot-backed parity review on the promoted desktop head
+  - Stand up artifact-factory orchestration for release, support, and publication
+    bundles
+  - Surface explain receipts and environment diffs where users need trust
+  - Synthesize parity, support, and release signals into operator-ready and reporter-ready
+    packets
+  - Unify claim, install, update, and support recovery into one desktop-native flow
+  - accessibility
+  - advancement
+  - aftermath
+  - automatic bugfixing
+  - build lab
+  - campaign
+  - chummer5a
+  - claim
+  - companion
+  - contacts
+  - continuity
+  - crash
+  - crew-fit
+  - custom-data
+  - dashboard
+  - desktop
+  - desktop-client
+  - diary
+  - dice
+  - dossier
+  - downtime
+  - event
+  - exchange
+  - explain
+  - export
+  - feedback
+  - flagship-readiness
+  - genesis
+  - gm
+  - governance
+  - grade-bar
+  - hero lab
+  - import
+  - initiative
+  - install
+  - launch
+  - localization
+  - master index
+  - materializer
+  - mobile
+  - next90-m101-registry-promotion-discipline
+  - next90-m101-ui-release-train
+  - next90-m102-fleet-reporter-receipts
+  - next90-m102-hub-desktop-native-trust
+  - next90-m103-ea-parity-lab
+  - next90-m103-ui-veteran-certification
+  - next90-m104-core-proof-pack
+  - next90-m104-ui-explain-receipts
+  - next90-m105-hub-workspace-continuity
+  - next90-m105-ui-restore-continuity
+  - next90-m106-ea-governor-packets
+  - next90-m106-fleet-governor-packet
+  - next90-m107-hub-artifact-factory
+  - offline
+  - operator
+  - opposition
+  - oracle
+  - prep
+  - pulse
+  - recap
+  - recovery
+  - release truth
+  - release-proof
+  - replay
+  - restore
+  - roster
+  - rule-environment
+  - settings
+  - sourcebook
+  - support
+  - translator
+  - travel
+  - trust
+  - update
+  - utility
+  - workbench
+  - xml
 quality_policy:
-  bar: flagship_product
+  bar: top_flagship_grade
   whole_project_frontier: true
   desktop_is_only_one_head: true
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: ''
-  reason: ''
+  status: pass
+  reason: 'current repo-local completion proof is green; using a supervisor evidence
+    receipt because the latest worker outcome is non-material to proof trust: worker
+    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-10T13:23:27Z'
-  proof_status: fail
-  missing_coverage_keys:
-  - desktop_client
+  generated_at: '2026-04-17T15:58:24Z'
+  proof_status: pass
+  missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 5
-frontier_ids:
-- 1
-- 3
-- 7
-- 8
-- 9
-frontier:
-- id: 1
-  title: Gold install, update, and recovery lane across macOS, Windows, and Linux
-  wave: W1
-  status: planned
-  owners:
-  - chummer6-ui
-  - chummer6-hub
-  - chummer6-hub-registry
-  - fleet
-  - chummer6-design
-  dependencies: []
-  exit_criteria:
-  - Guided install, linking, update, rollback, recovery, and startup smoke work as
-    one coherent release lane on every promoted desktop platform.
-  - Release truth, public shelf truth, and installer truth stay aligned by artifact,
-    head, architecture, and channel.
-- id: 3
-  title: Packaged-binary desktop exit tests and per-head proof that cannot lie
-  wave: W1
-  status: planned
-  owners:
-  - fleet
-  - chummer6-ui
-  - chummer6-hub-registry
-  dependencies:
-  - 1
-  - 2
-  exit_criteria:
-  - Avalonia and Blazor promoted heads prove executable menu liveness, workflow execution,
-    visual familiarity, and install behavior on shipped artifacts.
-  - Control-plane receipts fail honest when screenshots, startup smoke, or platform/head-specific
-    proof is missing or stale.
-- id: 7
-  title: Build Lab from creation to advancement to crew-fit
-  wave: W4
-  status: planned
-  owners:
-  - chummer6-core
-  - chummer6-ui
-  - chummer6-hub
-  dependencies:
-  - 2
-  - 4
-  exit_criteria:
-  - Character creation, compare, advancement planning, and crew-fit analysis behave
-    like one grounded build surface.
-  - Build decisions reuse campaign constraints, explain receipts, and living dossier
-    truth instead of branching into sidecar planners.
-- id: 8
-  title: Explain receipts and rule-environment diffs everywhere that drive real decisions
-  wave: W4
-  status: planned
-  owners:
-  - chummer6-core
-  - chummer6-ui
-  - chummer6-hub
-  - chummer6-design
-  dependencies:
-  - 7
-  exit_criteria:
-  - Numbers, workflow blockers, imports, support diagnoses, and campaign constraints
-    expose grounded receipts.
-  - Rule-environment before and after diffs are available wherever a user or operator
-    needs to understand why a result changed.
-- id: 9
-  title: Portable dossier and campaign exchange plus replay, recap, and module artifacts
-  wave: W4
-  status: planned
-  owners:
-  - chummer6-core
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-media-factory
-  - chummer6-ui
-  dependencies:
-  - 4
-  - 8
-  exit_criteria:
-  - Exchange, replay, recap, and module publication form a real second pillar of product
-    value with lineage, compatibility, and trust proof.
-  - Artifact truth survives publication, import, return, and audit without untracked
-    local drift.
-source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+frontier_count: 0
+frontier_ids: []
+frontier: []
+eta:
+  status: ready
+  eta_human: ready now
+  eta_confidence: high
+  basis: completion_audit_pass
+  scope_kind: repo_local_completion_ready
+  scope_label: Repo-local completion review
+  scope_warning: Repo-local completion evidence is green. External release, flagship,
+    or parity claims still depend on the broader readiness surfaces staying green.
+  blocking_reason: ''
+  summary: Whole-product completion audit is green on current repo-local evidence.
+  predicted_completion_at: '2026-04-17T18:12:27Z'
+  range_low_hours: 0.0
+  range_high_hours: 0.0
+  remaining_open_milestones: 0
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 0
+  remaining_effort_units: 0.0

@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-17T20:21:21Z
+Generated: 2026-04-17T20:55:18Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: 45eb64987b8030b310669eca744caf17e1c3a6b40faad4d2ce4d9f81521b40cb
+- Source input fingerprint: b8afcf35bca14ac7deaf0c14079dca20eb348deec1a10ec687f0bdff0f623406
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: freeze_launch
@@ -29,12 +29,14 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Governor packet cadence: weekly
-- Next packet due: 2026-04-24T20:21:21Z
+- Next packet due: 2026-04-24T20:55:18Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
 - Decision sources covered: 5 / 5
 - Decision action routing: pass
+- Weekly operator handoff: pass
+- Weekly operator handoff actions: 5 / 5
 - Launch expansion ready: False
 - Launch gates green: False
 - Launch gate pass count: 13
@@ -169,6 +171,21 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 | canary | fleet | measured_rollout_loop.canary | weekly | provider_canary | True | collect_canary_evidence | collect_canary_evidence | keep_canary_ready | provider_canary | Canary evidence is still accumulating | True |
 | rollback | fleet | measured_rollout_loop.rollback | weekly | release_health | False | keep_rollback_armed | prepare_rollback_or_revoke | keep_rollback_armed | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. | True |
 | focus_shift | fleet | measured_rollout_loop.focus_shift | weekly | successor_wave_scope | True | route_remaining_work_to_dependency_or_sibling_packages | route_remaining_work_to_dependency_or_sibling_packages | route_remaining_work_to_dependency_or_sibling_packages | successor_wave_scope | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. | True |
+
+## Weekly Operator Handoff
+
+- Source: measured_rollout_loop.decision_action_routes+decision_receipts
+- Cadence: weekly
+- Schedule ref: governor_packet_schedule.next_packet_due_at
+- Launch gate blocking names: successor_dependencies, local_release_proof, provider_canary
+
+| Action | State | Route | Operator action | Receipt | Blocking gates | Next decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| launch_expand | blocked | weekly_governor_packet.launch_expand | do_not_expand_launch | m106-launch_expand-5bdcf4bbdcc1cdd1 | successor_dependencies, local_release_proof, provider_canary | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. |
+| freeze_launch | active | weekly_governor_packet.freeze_launch | keep_launch_frozen | m106-freeze_launch-98c7727e35d8f9e9 | fail_closed_default | Freeze launch expansion until fresh local release proof passes on the public edge. |
+| canary | accumulating | measured_rollout_loop.canary | collect_canary_evidence | m106-canary-d26c9d22096a0e20 | provider_canary | Canary evidence is still accumulating |
+| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-5e74d9319f6f7334 | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |
+| focus_shift | queued_successor_wave | measured_rollout_loop.focus_shift | route_remaining_work_to_dependency_or_sibling_packages | m106-focus_shift-a17d06d411fbd624 | successor_wave_scope | Flagship closeout is complete; successor milestone 106 is the scoped Fleet packet slice. |
 
 ## Evidence Requirements
 

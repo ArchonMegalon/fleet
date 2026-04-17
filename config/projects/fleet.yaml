@@ -134,9 +134,11 @@ supervisor_contract:
     worker_model: ea-coder-hard-batch
     fallback_lanes:
     - core_rescue
+    - codexliz
     fallback_models:
     - ea-coder-hard-batch
     - ea-coder-hard
+    - gpt-5.3-codex-spark
     resource_policy:
       operating_profile: standard
       memory_dispatch_reserve_gib: 2

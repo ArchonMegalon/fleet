@@ -35,6 +35,35 @@ def _env_without_pythonpath() -> dict[str, str]:
     return env
 
 
+def test_normalize_proof_capture_command_strips_optional_startup_smoke_version_hint() -> None:
+    module = _load_verify_external_proof_closure_module()
+
+    normalized = module._normalize_proof_capture_command(
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke run-20260414-1836"
+    )
+
+    assert normalized == (
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host "
+        "./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/"
+        "chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia "
+        "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke"
+    )
+
+
+def test_normalized_script_commands_preserve_quoted_python_shell_commands() -> None:
+    module = _load_verify_external_proof_closure_module()
+
+    payload = (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n\n"
+        "cd /docker/chummercomplete/chummer6-ui && python3 -c 'print(\"quoted shell command\")'\n"
+    )
+
+    assert module._normalized_script_commands(payload) == {
+        'cd /docker/chummercomplete/chummer6-ui && python3 -c \'print("quoted shell command")\''
+    }
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -97,11 +126,10 @@ def _write_external_proof_bundle(
                 "cd /docker/fleet && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json",
                 "cd /docker/fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
                 "cd /docker/fleet && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json",
-                "cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
-                f"cd /docker/fleet && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel {module.DEFAULT_RELEASE_CHANNEL} --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
-                "cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+                "cd /docker/fleet && python3 scripts/materialize_external_proof_runbook.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+                f"cd /docker/fleet && python3 scripts/verify_external_proof_closure.py --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json --journey-gates .codex-studio/published/JOURNEY_GATES.generated.json --release-channel {module.REGISTRY_RELEASE_CHANNEL_PATH} --external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
+                "cd /docker/fleet && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out /docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json",
                 "cd /docker/chummercomplete/chummer-design && python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py --out products/chummer/WEEKLY_PRODUCT_PULSE.generated.json",
-                "cd /docker/fleet && python3 scripts/chummer_design_supervisor.py status >/dev/null",
                 "",
             ]
         ),
@@ -7227,6 +7255,46 @@ def test_verify_external_proof_closure_fails_when_ingest_script_omits_archive_pa
     assert result.returncode == 1
     assert "external proof ingest script is missing archive path-safety validation token" in result.stderr
     assert "member.name.startswith(" in result.stderr
+
+
+def test_verify_external_proof_closure_accepts_generated_directory_fallback_guard(
+    tmp_path: Path,
+) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    ingest_script = commands_dir / "ingest-windows-proof-bundle.sh"
+    ingest_payload = ingest_script.read_text(encoding="utf-8")
+    ingest_script.write_text(
+        ingest_payload.replace('if [ ! -s "$BUNDLE_ARCHIVE" ]; then', 'if [ -s "$BUNDLE_ARCHIVE" ]; then')
+        .replace('  echo "Missing host proof bundle: $BUNDLE_ARCHIVE"', 'elif [ -d "$BUNDLE_DIR" ]; then\n  cp -f "$BUNDLE_DIR"/external-proof-manifest.json "$TARGET_ROOT"/external-proof-manifest.json\nelse\n  echo "Missing host proof bundle: $BUNDLE_ARCHIVE or $BUNDLE_DIR"')
+        .replace('BUNDLE_ARCHIVE="$SCRIPT_DIR/windows-proof-bundle.zip"\nexport BUNDLE_ARCHIVE', 'BUNDLE_ARCHIVE="$SCRIPT_DIR/windows-proof-bundle.zip"\nBUNDLE_DIR="$SCRIPT_DIR/host-proof-bundles/windows"\nexport BUNDLE_ARCHIVE\nexport BUNDLE_DIR'),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "external proof ingest script is missing bundle archive presence guard token" not in result.stderr
+    assert "support packets unresolved_external_proof_request_count=1 (expected 0)" in result.stderr
 
 
 def test_verify_external_proof_closure_fails_when_ingest_script_omits_installer_digest_contract_checks(

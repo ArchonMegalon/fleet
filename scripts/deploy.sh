@@ -284,22 +284,73 @@ operator_password() {
   exit 1
 }
 
+escape_curl_config_value() {
+  local value="${1:-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
+build_operator_auth_config() {
+  local password="$1"
+  local config_path=""
+  local escaped_password=""
+
+  config_path="$(mktemp /tmp/fleet_operator_auth.XXXXXX)"
+  chmod 600 "$config_path" || true
+  escaped_password="$(escape_curl_config_value "$password")"
+  printf 'header = "X-Fleet-Operator-Password: %s"\n' "$escaped_password" > "$config_path"
+  printf '%s' "$config_path"
+}
+
+cleanup_curl_auth_config() {
+  local config_path="${1:-}"
+  [ -n "$config_path" ] || return 0
+  rm -f "$config_path"
+}
+
+docker_exec_curl_with_operator_auth() {
+  local container="$1"
+  local password="$2"
+  local shell_script=""
+  shift 2
+  shell_script="$(cat <<'SH'
+set -eu
+IFS= read -r password
+auth_cfg="$(mktemp /tmp/fleet_operator_auth.XXXXXX)"
+cleanup() {
+  rm -f "$auth_cfg"
+}
+trap cleanup EXIT
+escaped_password="$(printf '%s' "$password" | sed 's/[\\"]/\\&/g')"
+printf 'header = "X-Fleet-Operator-Password: %s"\n' "$escaped_password" > "$auth_cfg"
+chmod 600 "$auth_cfg" || true
+exec curl -K "$auth_cfg" "$@"
+SH
+)"
+  printf '%s\n' "$password" | docker exec -i "$container" sh -lc "$shell_script" sh "$@"
+}
+
 admin_status() {
   local password
   local temp_status
+  local auth_config=""
   password="$(operator_password)"
   temp_status="$(mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json)"
   trap 'rm -f "${temp_status}"' RETURN
-  if docker exec fleet-admin curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
+  if docker_exec_curl_with_operator_auth fleet-admin "${password}" -fsS \
     http://127.0.0.1:8092/api/admin/status >"${temp_status}" 2>/dev/null; then
     cat "${temp_status}"
     return 0
   fi
-  if curl -fsS -H "X-Fleet-Operator-Password: ${password}" \
+  auth_config="$(build_operator_auth_config "${password}")"
+  if curl -fsS -K "${auth_config}" \
     http://127.0.0.1:18090/api/admin/status >"${temp_status}" 2>/dev/null; then
+    cleanup_curl_auth_config "${auth_config}"
     cat "${temp_status}"
     return 0
   fi
+  cleanup_curl_auth_config "${auth_config}"
   echo "fleet admin status is unavailable via canonical internal admin or gateway fallback" >&2
   return 1
 }
@@ -308,17 +359,20 @@ admin_post() {
   local path="$1"
   local password
   local temp_output
+  local auth_config=""
   password="$(operator_password)"
   temp_output="$(mktemp /tmp/fleet_admin_post_wrapper.XXXXXX.out)"
   trap 'rm -f "${temp_output}"' RETURN
+  auth_config="$(build_operator_auth_config "${password}")"
   if curl -fsS -o "${temp_output}" -w "%{http_code}\n" \
-    -H "X-Fleet-Operator-Password: ${password}" \
+    -K "${auth_config}" \
     -X POST "http://127.0.0.1:8081${path}" 2>/dev/null; then
+    cleanup_curl_auth_config "${auth_config}"
     cat "${temp_output}"
     return 0
   fi
-  docker exec fleet-admin curl -sS -o /dev/null -w "%{http_code}\n" \
-    -H "X-Fleet-Operator-Password: ${password}" \
+  cleanup_curl_auth_config "${auth_config}"
+  docker_exec_curl_with_operator_auth fleet-admin "${password}" -sS -o /dev/null -w "%{http_code}\n" \
     -X POST "http://127.0.0.1:8092${path}"
 }
 
@@ -1799,7 +1853,7 @@ print(json.dumps({
     heal_group_now "$@"
     ;;
   gateway-cockpit)
-    docker exec fleet-dashboard wget --header="X-Fleet-Operator-Password: $(operator_password)" -qO- http://127.0.0.1:8090/api/cockpit/status | python3 -c '
+    docker_exec_curl_with_operator_auth fleet-dashboard "$(operator_password)" -fsS http://127.0.0.1:8090/api/cockpit/status | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
 cockpit = data.get("cockpit", {})

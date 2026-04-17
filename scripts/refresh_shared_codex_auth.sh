@@ -3,6 +3,7 @@ set -euo pipefail
 
 SRC_AUTH="${1:-${HOME}/.codex/auth.json}"
 DEST_AUTH="${2:-/docker/fleet/secrets/chatgpt.auth.json}"
+KEEP_BACKUPS="${KEEP_BACKUPS:-4}"
 
 if [[ ! -f "${SRC_AUTH}" ]]; then
   echo "Missing Codex auth source: ${SRC_AUTH}" >&2
@@ -27,5 +28,15 @@ if [[ -f "${DEST_AUTH}" ]]; then
   cp "${DEST_AUTH}" "${DEST_AUTH}.bak.$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 install -m 600 "${SRC_AUTH}" "${DEST_AUTH}"
+python3 - "${DEST_AUTH}" "${KEEP_BACKUPS}" <<'PY'
+from pathlib import Path
+import sys
+
+dest = Path(sys.argv[1])
+keep = max(0, int(sys.argv[2]))
+backups = sorted(dest.parent.glob(dest.name + ".bak.*"), key=lambda item: item.stat().st_mtime, reverse=True)
+for stale in backups[keep:]:
+    stale.unlink(missing_ok=True)
+PY
 echo "Shared Codex auth refreshed at ${DEST_AUTH}"
 echo "Fleet controller will ingest it on the next scheduler loop."

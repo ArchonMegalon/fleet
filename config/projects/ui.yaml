@@ -65,6 +65,12 @@ queue_sources:
 - kind: worklist
   path: /docker/chummercomplete/chummer-presentation/WORKLIST.md
   mode: append
+- kind: feedback_notes
+  path: feedback/2026-04-12-classic-dense-workbench-and-veteran-parity.md
+  mode: append
+- kind: feedback_notes
+  path: feedback/2026-04-13-post-flagship-release-train-and-veteran-certification.md
+  mode: append
 deployment:
   status: public
   promotion_stage: promoted_preview

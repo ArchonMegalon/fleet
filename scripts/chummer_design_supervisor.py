@@ -205,15 +205,15 @@ LANE_MODEL_COMPATIBILITY_FALLBACKS: Dict[str, Dict[str, tuple[str, ...]]] = {
         "survival": ("ea-coder-survival",),
     },
     "jury": {
-        "core": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "core": ("ea-coder-hard", "ea-coder-hard-batch"),
         "repair": ("ea-coder-fast",),
         "survival": ("ea-coder-survival",),
     },
     "audit_shard": {
         "jury": ("ea-coder-hard-batch",),
         "review_light": ("ea-coder-hard-batch",),
-        "core": ("ea-coder-hard-batch", "ea-coder-hard"),
-        "core_rescue": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "core": ("ea-coder-hard", "ea-coder-hard-batch"),
+        "core_rescue": ("ea-coder-hard", "ea-coder-hard-batch"),
         "repair": ("ea-coder-fast",),
         "survival": ("ea-coder-survival",),
         "easy": ("",),
@@ -221,8 +221,8 @@ LANE_MODEL_COMPATIBILITY_FALLBACKS: Dict[str, Dict[str, tuple[str, ...]]] = {
     "review_shard": {
         "jury": ("ea-coder-hard-batch",),
         "review_light": ("ea-coder-hard-batch",),
-        "core": ("ea-coder-hard-batch", "ea-coder-hard"),
-        "core_rescue": ("ea-coder-hard-batch", "ea-coder-hard"),
+        "core": ("ea-coder-hard", "ea-coder-hard-batch"),
+        "core_rescue": ("ea-coder-hard", "ea-coder-hard-batch"),
         "repair": ("ea-coder-fast",),
         "survival": ("ea-coder-survival",),
         "easy": ("",),
@@ -340,7 +340,7 @@ READY_ACCOUNT_STATES = {"", "ready", "unknown", "ok"}
 SPARK_MODEL = "gpt-5.3-codex-spark"
 GPT54_MODEL = "gpt-5.4"
 GPT53_CODEX_MODEL = "gpt-5.3-codex"
-EA_CORE_MODEL_PREFERENCE = ("ea-coder-hard-batch", "ea-coder-hard")
+EA_CORE_MODEL_PREFERENCE = ("ea-coder-hard", "ea-coder-hard-batch")
 OPENAI_ESCAPE_MODEL_PREFERENCE = (GPT54_MODEL, SPARK_MODEL, GPT53_CODEX_MODEL)
 FLAGSHIP_UI_APP_KEY = "avalonia"
 FLAGSHIP_UI_PROJECT_PATH = "Chummer.Avalonia/Chummer.Avalonia.csproj"
@@ -381,6 +381,8 @@ RETRYABLE_WORKER_ERROR_SIGNALS = (
     "worker_timeout",
     "worker_model_output_stalled",
     "worker_status_helper_loop",
+    "worker_status_helper_loop:repeated_blocked_status_polling",
+    "worker_self_polling:supervisor_status_loop",
     "high demand",
     "temporary errors",
     "switch to another model",
@@ -599,6 +601,18 @@ PARITY_FULL_PRODUCT_OWNER_OVERRIDES: Dict[str, Sequence[str]] = {
     "legacy_and_adjacent_import_oracles": ("chummer6-core", "chummer6-ui", "chummer6-design"),
     "sr6_supplements_designers_and_house_rules": ("chummer6-ui", "chummer6-core", "chummer6-design"),
 }
+FLAGSHIP_OWNER_PROJECT_ID_BY_OWNER: Dict[str, str] = {
+    "chummer6-core": "core",
+    "chummer6-ui": "ui",
+    "chummer6-ui-kit": "ui-kit",
+    "chummer6-hub": "hub",
+    "chummer6-hub-registry": "hub-registry",
+    "chummer6-mobile": "mobile",
+    "chummer6-media-factory": "media-factory",
+    "chummer6-design": "design",
+    "fleet": "fleet",
+    "executive-assistant": "ea",
+}
 FULL_PRODUCT_FRONTIER_SPECS: Sequence[Dict[str, Any]] = (
     {
         "key": "desktop_client_flagship",
@@ -715,6 +729,7 @@ class WorkerRun:
     attempted_accounts: List[str]
     attempted_models: List[str]
     selected_account_alias: str
+    selected_model: str
     worker_exit_code: int
     frontier_ids: List[int]
     open_milestone_ids: List[int]
@@ -927,7 +942,7 @@ def _worker_task_local_status_loop_grace_seconds(workspace_root: Path) -> float:
     raw = _runtime_env_default_with_workspace(
         "CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_STATUS_LOOP_GRACE_SECONDS",
         workspace_root,
-        "20",
+        str(int(DEFAULT_MODEL_OUTPUT_STALL_SECONDS)),
     )
     try:
         seconds = float(raw or "20")
@@ -1753,6 +1768,7 @@ def _memory_dispatch_snapshot(
     )
 
     status = "ok"
+    warning_resource_pressure = False
     reasons: List[str] = []
     if configured_shard_count > profile_dispatch_ceiling:
         reasons.append(
@@ -1770,6 +1786,7 @@ def _memory_dispatch_snapshot(
         )
     elif mem_available_percent is not None and mem_available_percent <= warning_available_percent and _severity_rank(status) < 1:
         status = "warning"
+        warning_resource_pressure = True
         reasons.append(f"MemAvailable is {mem_available_percent:.2f}% <= warning {warning_available_percent:.2f}%")
     if (
         swap_pressure_relevant
@@ -1791,12 +1808,13 @@ def _memory_dispatch_snapshot(
         )
     ):
         status = "warning"
+        warning_resource_pressure = True
         reasons.append(f"swap used is {swap_used_percent:.2f}% >= warning {warning_swap_used_percent:.2f}%")
 
     allowed_active_shards = profile_dispatch_ceiling
     if profile_dispatch_ceiling > 0:
         allowed_active_shards = min(profile_dispatch_ceiling, budget_cap)
-        if status == "warning":
+        if status == "warning" and warning_resource_pressure:
             allowed_active_shards = min(
                 allowed_active_shards,
                 max(1, (profile_dispatch_ceiling + 1) // 2),
@@ -3329,6 +3347,10 @@ def _active_shard_manifest_path(aggregate_root: Path) -> Path:
     return aggregate_root / "active_shards.json"
 
 
+def _status_live_refresh_path(aggregate_root: Path) -> Path:
+    return aggregate_root / "status-live-refresh.json"
+
+
 def _project_configured_shard_entries() -> List[Dict[str, Any]]:
     contract = _project_supervisor_contract(DEFAULT_PROJECTS_DIR)
     topology = contract.get("shard_topology") or {}
@@ -3366,6 +3388,32 @@ def _project_configured_shard_entries() -> List[Dict[str, Any]]:
                 entry[field] = text
         entries.append(entry)
     return entries
+
+
+def _runtime_configured_shard_entries(aggregate_root: Path) -> List[Dict[str, Any]]:
+    project_entries = _project_configured_shard_entries()
+    if project_entries:
+        return [dict(entry) for entry in project_entries]
+    return [dict(entry) for entry in _active_shard_manifest_entries(aggregate_root)]
+
+
+def _ensure_runtime_configured_shard_roots(aggregate_root: Path) -> List[Path]:
+    aggregate_root = _aggregate_state_root(aggregate_root)
+    entries = _runtime_configured_shard_entries(aggregate_root)
+    configured_roots: List[Path] = []
+    seen: set[Path] = set()
+    for entry in entries:
+        token = str(entry.get("name") or "").strip()
+        if not token.startswith("shard-"):
+            continue
+        candidate = aggregate_root / token
+        _ensure_dir(candidate)
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate in seen:
+            continue
+        configured_roots.append(candidate)
+        seen.add(resolved_candidate)
+    return configured_roots
 
 
 def _manifest_text_list(value: Any) -> List[str]:
@@ -4267,6 +4315,60 @@ def _flagship_design_source_paths(product_root: Path) -> List[Path]:
     return [path for path in candidates if path.exists()]
 
 
+def _flagship_focus_repo_paths(focus_owners: Sequence[str]) -> List[Path]:
+    wanted_project_ids = {
+        FLAGSHIP_OWNER_PROJECT_ID_BY_OWNER.get(str(owner or "").strip().lower())
+        for owner in focus_owners
+        if str(owner or "").strip()
+    }
+    wanted_project_ids = {item for item in wanted_project_ids if item}
+    if not wanted_project_ids:
+        return []
+    project_cfgs = {
+        str(cfg.get("id") or "").strip().lower(): cfg
+        for cfg in _load_project_cfgs(DEFAULT_PROJECTS_DIR)
+        if isinstance(cfg, dict)
+    }
+    seen: set[str] = set()
+    paths: List[Path] = []
+    for project_id in wanted_project_ids:
+        cfg = project_cfgs.get(project_id)
+        if not cfg:
+            continue
+        project_root_text = str(cfg.get("path") or "").strip()
+        project_root = Path(project_root_text).resolve() if project_root_text else None
+        candidates: List[Path] = []
+        if project_root is not None:
+            worklist_path = project_root / "WORKLIST.md"
+            if worklist_path.exists():
+                candidates.append(worklist_path)
+        for source_cfg in cfg.get("queue_sources") or []:
+            if not isinstance(source_cfg, dict):
+                continue
+            source_text = str(source_cfg.get("path") or "").strip()
+            if not source_text:
+                continue
+            source_path = Path(source_text)
+            if not source_path.is_absolute() and project_root is not None:
+                source_path = (project_root / source_path).resolve()
+            if source_path.exists():
+                candidates.append(source_path)
+        design_doc_text = str(cfg.get("design_doc") or "").strip()
+        if design_doc_text:
+            design_doc_path = Path(design_doc_text).resolve()
+            if design_doc_path.exists():
+                candidates.append(design_doc_path)
+        if project_root is not None and project_root.exists():
+            candidates.append(project_root)
+        for candidate in candidates:
+            key = str(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            paths.append(candidate)
+    return paths
+
+
 def _default_full_product_frontier(args: argparse.Namespace, audit: Dict[str, Any]) -> List[Milestone]:
     frontier: List[Milestone] = []
     frontier_status = _full_product_frontier_status(audit)
@@ -4794,6 +4896,12 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
     audit["unresolved_parity_families"] = [
         dict(item) for item in (parity_registry.get("unresolved_families") or []) if isinstance(item, dict)
     ]
+    desktop_plane = dict(coverage_details.get("desktop_client") or {})
+    desktop_evidence = (
+        dict(desktop_plane.get("evidence") or {})
+        if isinstance(desktop_plane.get("evidence"), dict)
+        else {}
+    )
     completion_external_only = completion_audit.get("external_only")
     if isinstance(completion_external_only, bool):
         audit["completion_external_only"] = completion_external_only
@@ -4843,6 +4951,17 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
     if audit["proof_status"] != "pass":
         audit["reason"] = f"flagship product readiness proof is not green: {audit['proof_status'] or 'missing'}"
         return audit
+    if _hard_flagship_requested(args):
+        nonlinux_public_installer_present = bool(
+            desktop_evidence.get("release_channel_has_windows_public_installer")
+            or desktop_evidence.get("release_channel_has_macos_public_installer")
+        )
+        if bool(desktop_evidence.get("desktop_ignore_nonlinux_desktop_host_proof_blockers")) and nonlinux_public_installer_present:
+            audit["reason"] = (
+                "flagship product readiness proof was generated with non-Linux desktop host-proof blockers ignored "
+                "while public Windows/macOS installer media still exist"
+            )
+            return audit
     if audit["unresolved_parity_families"]:
         audit["reason"] = "flagship product readiness proof still has unresolved non-plugin parity families"
         return audit
@@ -4969,6 +5088,11 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
                     supervisor_state_path = aggregate_candidate_path
                 else:
                     supervisor_state_path = candidate_state_path
+        ignore_nonlinux_desktop_host_proof_blockers = bool(
+            getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)
+        )
+        if _hard_flagship_requested(args):
+            ignore_nonlinux_desktop_host_proof_blockers = False
         return materialize_flagship_product_readiness(
             out_path=Path(args.flagship_product_readiness_path).resolve(),
             mirror_path=readiness_mirror_path,
@@ -4998,9 +5122,7 @@ def _refresh_flagship_product_readiness_artifact(args: argparse.Namespace) -> Op
             mobile_local_release_proof_path=Path("/docker/chummercomplete/chummer6-mobile/.codex-studio/published/MOBILE_LOCAL_RELEASE_PROOF.generated.json"),
             release_channel_path=resolved_release_channel_path,
             releases_json_path=resolved_releases_json_path,
-            ignore_nonlinux_desktop_host_proof_blockers=bool(
-                getattr(args, "ignore_nonlinux_desktop_host_proof_blockers", False)
-            ),
+            ignore_nonlinux_desktop_host_proof_blockers=ignore_nonlinux_desktop_host_proof_blockers,
         )
     except Exception as exc:
         print(f"[fleet-supervisor] flagship readiness materialization failed: {exc}", file=sys.stderr, flush=True)
@@ -5089,10 +5211,23 @@ def _full_product_frontier_payload(
         "frontier_ids": [item["id"] for item in frontier_rows],
         "frontier": frontier_rows,
     }
-    source_queue_fingerprint = str(queue_payload.get("source_queue_fingerprint") or "").strip()
-    if source_queue_fingerprint:
-        payload["source_queue_fingerprint"] = source_queue_fingerprint
+    queue_package_frontier_id = 0
     if queue_item:
+        queue_package_key = str(
+            queue_item.get("package_id")
+            or queue_item.get("title")
+            or "flagship_shard_slice"
+        ).strip()
+        queue_package_frontier_id = _synthetic_full_product_id(queue_package_key)
+    queue_package_is_active_frontier = bool(
+        queue_item
+        and frontier_rows
+        and any(_coerce_int(item.get("id"), 0) == queue_package_frontier_id for item in frontier_rows)
+    )
+    source_queue_fingerprint = str(queue_payload.get("source_queue_fingerprint") or "").strip()
+    if source_queue_fingerprint and queue_package_is_active_frontier:
+        payload["source_queue_fingerprint"] = source_queue_fingerprint
+    if queue_package_is_active_frontier:
         payload["queue_package"] = {
             "repo": str(queue_item.get("repo") or "").strip(),
             "package_id": str(queue_item.get("package_id") or "").strip(),
@@ -5281,6 +5416,7 @@ def build_successor_wave_prompt(
     focus_owners: Sequence[str],
     focus_texts: Sequence[str],
     eta_snapshot: Optional[Dict[str, Any]] = None,
+    recent_status_helper_loop: bool = False,
 ) -> str:
     frontier_text = "\n".join(f"- {_milestone_brief(item)}" for item in frontier) or "- none"
     frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
@@ -5294,6 +5430,12 @@ def build_successor_wave_prompt(
         focus_lines.append(f"- text focus: {', '.join(focus_texts)}")
     focus_text = "\n".join(focus_lines) if focus_lines else "- none"
     runtime_handoff_block = f"- {runtime_handoff_path}\n" if runtime_handoff_path is not None else ""
+    runtime_handoff_guidance = (
+        "Use the shard runtime handoff as the worker-safe resume context. "
+        "If any file shows historical operator status snippets, treat them as stale notes rather than commands to repeat.\n\n"
+        if runtime_handoff_path is not None
+        else ""
+    )
     successor_registry_block = f"- {successor_registry_path}\n" if successor_registry_path is not None else ""
     eta = _normalize_eta_scope_fields(dict(eta_snapshot or {}))
     eta_block = (
@@ -5313,11 +5455,49 @@ def build_successor_wave_prompt(
         "allowed_paths": [str(value).strip() for value in (queue_item.get("allowed_paths") or []) if str(value).strip()],
     }
     queue_json = json.dumps(queue_summary, indent=2, ensure_ascii=True, sort_keys=True)
+    allowed_paths_text = ", ".join(queue_summary["allowed_paths"]) or "repo-local allowed paths only"
+    owned_surfaces_text = ", ".join(queue_summary["owned_surfaces"]) or "none"
+    retry_second_path = successor_queue_path
+    retry_third_path = successor_registry_path or registry_path
+    retry_fourth_path = program_milestones_path
+    if recent_status_helper_loop:
+        return (
+            "Run a next-90-day product advance successor-wave pass for Chummer.\n\n"
+            "The previous attempt burned time on supervisor helper loops. This retry is implementation-only.\n\n"
+            "Assigned package:\n"
+            f"- repo: {queue_summary['repo'] or 'unknown'}\n"
+            f"- package: {queue_summary['package_id'] or 'unknown'}\n"
+            f"- title: {queue_summary['title'] or 'unknown'}\n"
+            f"- task: {queue_summary['task'] or 'unknown'}\n"
+            f"- owned surfaces: {owned_surfaces_text}\n"
+            f"- allowed paths: {allowed_paths_text}\n\n"
+            f"Current steering focus:\n{focus_text}\n\n"
+            "Run these exact commands first and do not invent another orientation step:\n"
+            f"1. `cat {TASK_LOCAL_TELEMETRY_FILENAME}`\n"
+            f"2. `sed -n '1,220p' {retry_second_path}`\n"
+            f"3. `sed -n '1,220p' {retry_third_path}`\n"
+            f"4. `sed -n '1,220p' {retry_fourth_path}`\n\n"
+            "Then inspect the target implementation files directly with `sed`, `cat`, and `rg`, staying inside the allowed paths, and start editing.\n"
+            "Do not run supervisor status or eta helpers inside this worker run.\n\n"
+            "Read these files directly first:\n"
+            f"- {registry_path}\n"
+            f"- {program_milestones_path}\n"
+            f"- {roadmap_path}\n"
+            f"{runtime_handoff_block}"
+            f"{successor_registry_block}"
+            f"- {successor_queue_path}\n\n"
+            f"{runtime_handoff_guidance}"
+            f"Writable scope roots:\n{scope_text}\n\n"
+            "If you stop, report only:\n"
+            "What shipped: ...\n"
+            "What remains: ...\n"
+            "Exact blocker: ...\n"
+        )
     return (
         "Run a next-90-day product advance successor-wave pass for Chummer.\n\n"
         "The current flagship closeout and readiness audits are green, so do not reopen the closed flagship wave. "
         "Advance the queued successor-wave slice below using repo-local evidence, small safe commits, and the same proof discipline as closeout work.\n\n"
-        "Execution discipline: do not invoke operator telemetry or active-run helper commands from inside worker runs. Those helpers are hard-blocked and return non-zero during active runs. The operator/OODA loop owns telemetry; keep working the assigned slice.\n\n"
+        "Execution discipline: do not invoke operator telemetry or active-run helper commands from inside worker runs. Those helpers are hard-blocked, count as run failure, and return non-zero during active runs. The operator/OODA loop owns telemetry; keep working the assigned slice.\n\n"
         "Start by reading these files directly:\n"
         f"- {registry_path}\n"
         f"- {program_milestones_path}\n"
@@ -5340,6 +5520,12 @@ def build_successor_wave_prompt(
         "2. Land the highest-impact implementation, proof, generated artifact, or guardrail slice for this package.\n"
         "3. Refresh relevant tests, generated outputs, readiness packets, and handoff notes only when evidence changes.\n"
         "4. If the package is already materially complete, close or tighten the registry/queue proof so future shards do not repeat it.\n\n"
+        "Execution rules inside this run:\n"
+        "- First action rule: open `TASK_LOCAL_TELEMETRY.generated.json`, then open one listed repo file, then inspect the target implementation files directly.\n"
+        "- Do not query supervisor status or eta from inside the worker run.\n"
+        "- If any file shows historical operator status snippets, treat them as stale notes rather than commands to repeat.\n"
+        "- Use the task-local telemetry file and shard runtime handoff as the local machine-readable context instead of polling the supervisor again.\n\n"
+        f"{runtime_handoff_guidance}"
         "If you stop, report only:\n"
         "What shipped: ...\n"
         "What remains: ...\n"
@@ -5532,17 +5718,144 @@ def build_completion_review_prompt(
     )
 
 
-def _flagship_task_local_telemetry_payload(eta_snapshot: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _flagship_task_local_telemetry_payload(
+    *,
+    eta_snapshot: Optional[Dict[str, Any]],
+    registry_path: Path,
+    program_milestones_path: Path,
+    roadmap_path: Path,
+    frontier_artifact_path: Path,
+    readiness_path: Path,
+    runtime_handoff_path: Optional[Path] = None,
+    focus_profiles: Sequence[str] = (),
+    focus_owners: Sequence[str] = (),
+    focus_texts: Sequence[str] = (),
+    source_paths: Sequence[Path] = (),
+    frontier: Sequence[Milestone] = (),
+    missing_coverage: str = "",
+) -> Dict[str, Any]:
     eta = _normalize_eta_scope_fields(dict(eta_snapshot or {}))
-    active_runs_count = eta_snapshot.get("active_runs_count") if isinstance(eta_snapshot, dict) else None
-    return {
-        "active_runs_count": active_runs_count,
-        "remaining_open_milestones": eta.get("remaining_open_milestones"),
-        "remaining_not_started_milestones": eta.get("remaining_not_started_milestones"),
-        "remaining_in_progress_milestones": eta.get("remaining_in_progress_milestones"),
-        "eta_human": eta.get("eta_human"),
-        "summary": eta.get("summary"),
+    first_commands = [f"cat {TASK_LOCAL_TELEMETRY_FILENAME}"]
+    for path in list(source_paths)[:2]:
+        first_commands.append(f"sed -n '1,220p' {path}")
+    first_commands.append(f"sed -n '1,220p' {frontier_artifact_path}")
+    first_commands.append(f"sed -n '1,220p' {registry_path}")
+    if runtime_handoff_path is not None:
+        first_commands.append(f"sed -n '1,220p' {runtime_handoff_path}")
+    payload = {
+        "mode": "implementation_only",
+        "polling_disabled": True,
+        "status_query_supported": False,
+        "scope_label": eta.get("scope_label"),
+        "slice_summary": eta.get("summary"),
+        "missing_flagship_coverage": missing_coverage,
+        "paths": {
+            "registry_path": str(registry_path),
+            "program_milestones_path": str(program_milestones_path),
+            "roadmap_path": str(roadmap_path),
+            "frontier_artifact_path": str(frontier_artifact_path),
+            "readiness_path": str(readiness_path),
+        },
+        "registry_path": str(registry_path),
+        "program_milestones_path": str(program_milestones_path),
+        "roadmap_path": str(roadmap_path),
+        "frontier_artifact_path": str(frontier_artifact_path),
+        "readiness_path": str(readiness_path),
+        "focus_profiles": [str(value).strip() for value in focus_profiles if str(value).strip()],
+        "focus_owners": [str(value).strip() for value in focus_owners if str(value).strip()],
+        "focus_texts": [str(value).strip() for value in focus_texts if str(value).strip()],
+        "source_paths": [str(path) for path in list(source_paths)[:12]],
+        "first_commands": first_commands[:6],
+        "guidance": (
+            "Do not run supervisor status helpers inside this worker run. "
+            "Open the listed files directly and start implementing the assigned slice."
+        ),
     }
+    if runtime_handoff_path is not None:
+        payload["runtime_handoff_path"] = str(runtime_handoff_path)
+    if frontier:
+        payload["frontier_briefs"] = [_milestone_brief(item) for item in list(frontier)[:3]]
+    return payload
+
+
+def _successor_wave_task_local_telemetry_payload(
+    *,
+    eta_snapshot: Optional[Dict[str, Any]],
+    registry_path: Path,
+    program_milestones_path: Path,
+    roadmap_path: Path,
+    successor_queue_path: Path,
+    successor_registry_path: Optional[Path] = None,
+    runtime_handoff_path: Optional[Path] = None,
+    focus_profiles: Sequence[str] = (),
+    focus_owners: Sequence[str] = (),
+    focus_texts: Sequence[str] = (),
+    queue_item: Optional[Dict[str, Any]] = None,
+    frontier: Sequence[Milestone] = (),
+) -> Dict[str, Any]:
+    eta = _normalize_eta_scope_fields(dict(eta_snapshot or {}))
+    first_commands = [f"cat {TASK_LOCAL_TELEMETRY_FILENAME}"]
+    first_commands.append(f"sed -n '1,220p' {successor_queue_path}")
+    if successor_registry_path is not None:
+        first_commands.append(f"sed -n '1,220p' {successor_registry_path}")
+    first_commands.append(f"sed -n '1,220p' {registry_path}")
+    first_commands.append(f"sed -n '1,220p' {program_milestones_path}")
+    if runtime_handoff_path is not None:
+        first_commands.append(f"sed -n '1,220p' {runtime_handoff_path}")
+    payload = {
+        "mode": "implementation_only",
+        "polling_disabled": True,
+        "status_query_supported": False,
+        "scope_label": eta.get("scope_label"),
+        "slice_summary": eta.get("summary"),
+        "paths": {
+            "registry_path": str(registry_path),
+            "program_milestones_path": str(program_milestones_path),
+            "roadmap_path": str(roadmap_path),
+            "successor_queue_path": str(successor_queue_path),
+        },
+        "registry_path": str(registry_path),
+        "program_milestones_path": str(program_milestones_path),
+        "roadmap_path": str(roadmap_path),
+        "successor_queue_path": str(successor_queue_path),
+        "focus_profiles": [str(value).strip() for value in focus_profiles if str(value).strip()],
+        "focus_owners": [str(value).strip() for value in focus_owners if str(value).strip()],
+        "focus_texts": [str(value).strip() for value in focus_texts if str(value).strip()],
+        "first_commands": first_commands[:6],
+        "guidance": (
+            "Do not run supervisor status helpers inside this worker run. "
+            "Open the listed files directly, use the task-local telemetry file as machine-readable context, "
+            "and keep implementing the assigned successor slice."
+        ),
+    }
+    if successor_registry_path is not None:
+        payload["successor_registry_path"] = str(successor_registry_path)
+    if runtime_handoff_path is not None:
+        payload["runtime_handoff_path"] = str(runtime_handoff_path)
+    if queue_item:
+        payload["queue_item"] = {
+            "repo": str(queue_item.get("repo") or "").strip(),
+            "package_id": str(queue_item.get("package_id") or "").strip(),
+            "milestone_id": _coerce_int(queue_item.get("milestone_id"), 0),
+            "title": str(queue_item.get("title") or "").strip(),
+            "task": str(queue_item.get("task") or "").strip(),
+            "owned_surfaces": [str(value).strip() for value in (queue_item.get("owned_surfaces") or []) if str(value).strip()],
+            "allowed_paths": [str(value).strip() for value in (queue_item.get("allowed_paths") or []) if str(value).strip()],
+        }
+    if frontier:
+        payload["frontier_briefs"] = [_milestone_brief(item) for item in list(frontier)[:3]]
+    return payload
+
+
+def _history_has_recent_status_helper_loop(history: Sequence[Dict[str, Any]], *, limit: int = 5) -> bool:
+    recent_rows = list(history or [])
+    if limit > 0:
+        recent_rows = recent_rows[-limit:]
+    return any(
+        "worker_status_helper_loop" in str(run.get("blocker") or "").strip().lower()
+        or "worker_status_helper_loop" in str(_run_receipt_status(run)[1] or "").strip().lower()
+        for run in recent_rows
+    )
 
 
 def build_flagship_product_prompt(
@@ -5567,10 +5880,16 @@ def build_flagship_product_prompt(
 ) -> str:
     product_root = program_milestones_path.resolve().parent
     design_source_paths = _flagship_design_source_paths(product_root)
+    focus_repo_paths = _flagship_focus_repo_paths(focus_owners)
+    combined_source_paths: List[Path] = []
+    for path in [*focus_repo_paths, *design_source_paths]:
+        if path not in combined_source_paths:
+            combined_source_paths.append(path)
     scope_text = "\n".join(f"- {path}" for path in scope_roots)
     frontier_text = "\n".join(f"- {_milestone_brief(item)}" for item in frontier) or "- none"
     frontier_ids = ", ".join(str(item.id) for item in frontier) or "none"
     suspicious_runs = _compact_prompt_section_lines(_completion_review_run_lines(history), max_lines=3, max_len=180)
+    recent_status_helper_loop = _history_has_recent_status_helper_loop(history)
     focus_lines = []
     if focus_profiles:
         focus_lines.append(f"- profile focus: {', '.join(focus_profiles)}")
@@ -5588,10 +5907,17 @@ def build_flagship_product_prompt(
         if runtime_handoff_path is not None
         else ""
     )
-    source_lines = "\n".join(f"- {path}" for path in design_source_paths[:12]) or f"- {product_root}"
+    source_lines = "\n".join(f"- {path}" for path in combined_source_paths[:12]) or f"- {product_root}"
     missing_coverage = ", ".join(
         str(item) for item in (full_product_audit.get("coverage_gap_keys") or full_product_audit.get("missing_coverage_keys") or [])
     ) or "none"
+    safe_first_command_rows = [f"- `cat {TASK_LOCAL_TELEMETRY_FILENAME}`"]
+    for path in combined_source_paths[:2]:
+        safe_first_command_rows.append(f"- `sed -n '1,220p' {path}`")
+    if len(safe_first_command_rows) < 3:
+        safe_first_command_rows.append(f"- `sed -n '1,220p' {frontier_artifact_path}`")
+    if len(safe_first_command_rows) < 4:
+        safe_first_command_rows.append(f"- `sed -n '1,220p' {registry_path}`")
     eta = _normalize_eta_scope_fields(dict(eta_snapshot or {}))
     eta_remaining_open = "unknown" if eta.get("remaining_open_milestones") is None else str(eta.get("remaining_open_milestones"))
     eta_remaining_in_progress = (
@@ -5601,25 +5927,41 @@ def build_flagship_product_prompt(
         "unknown" if eta.get("remaining_not_started_milestones") is None else str(eta.get("remaining_not_started_milestones"))
     )
     task_local_telemetry_json = json.dumps(
-        _flagship_task_local_telemetry_payload(eta_snapshot),
+        _flagship_task_local_telemetry_payload(
+            eta_snapshot=eta_snapshot,
+            registry_path=registry_path,
+            program_milestones_path=program_milestones_path,
+            roadmap_path=roadmap_path,
+            frontier_artifact_path=frontier_artifact_path,
+            readiness_path=readiness_path,
+            runtime_handoff_path=runtime_handoff_path,
+            focus_profiles=focus_profiles,
+            focus_owners=focus_owners,
+            focus_texts=focus_texts,
+            source_paths=combined_source_paths[:12],
+            frontier=frontier,
+            missing_coverage=missing_coverage,
+        ),
         separators=(",", ":"),
         ensure_ascii=True,
     )
     task_local_status_snapshot = (
-        "Task-local run context:\n"
+        "Run brief:\n"
         f"- scope: {eta.get('scope_label') or 'unknown'}\n"
-        f"- eta: {eta.get('eta_human') or 'unknown'}\n"
-        f"- remaining open milestones: {eta_remaining_open}\n"
-        f"- remaining in-progress milestones: {eta_remaining_in_progress}\n"
-        f"- remaining not-started milestones: {eta_remaining_not_started}\n"
-        "- the verbatim task-local telemetry snapshot is embedded below; use it as-is and do not regenerate it via shell, Python, or supervisor helper commands from inside the worker run.\n"
-        "```json\n"
-        f"{task_local_telemetry_json}\n"
-        "```\n\n"
+        f"- slice summary: {eta.get('summary') or 'unknown'}\n"
+        f"- missing flagship coverage: {missing_coverage}\n"
+        "- a local run brief file is listed below; open it directly if you need grounded context.\n\n"
     )
     telemetry_command_ban = (
-        "Operator telemetry CLI is forbidden during active worker runs. "
-        "Do not invoke supervisor helper commands from inside the worker run; use the embedded JSON block and listed files instead.\n\n"
+        "Operator telemetry helpers are forbidden during active worker runs. "
+        "Do not query supervisor telemetry from inside the worker run. "
+        "Those helper calls are dead ends, are treated as failure, and only waste the run. "
+        "Use the embedded JSON block and listed files instead.\n\n"
+    )
+    safe_first_commands = (
+        "Safe first commands if you need orientation, copy them exactly instead of inventing telemetry queries:\n"
+        + "\n".join(safe_first_command_rows[:4])
+        + "\n\n"
     )
     flagship_desktop_non_negotiables = (
         "Desktop flagship non-negotiables:\n"
@@ -5632,14 +5974,44 @@ def build_flagship_product_prompt(
     if compact_prompt:
         compact_scope_text = _compact_prompt_section_lines([str(path) for path in scope_roots], max_lines=4, max_len=120)
         compact_frontier_text = _compact_prompt_section_lines([_milestone_brief(item) for item in frontier], max_lines=3, max_len=180)
-        compact_source_text = _compact_prompt_section_lines([str(path) for path in design_source_paths[:12]], max_lines=8, max_len=140)
+        compact_source_text = _compact_prompt_section_lines([str(path) for path in combined_source_paths[:12]], max_lines=8, max_len=140)
+        if recent_status_helper_loop:
+            return (
+                "Run the flagship full-product delivery pass for Chummer.\n\n"
+                "The previous attempt burned time on supervisor helper loops. This retry is implementation-only.\n\n"
+                f"Assigned slice:\n- {eta.get('summary') or 'unknown'}\n\n"
+                f"Current steering focus:\n{focus_text}\n\n"
+                "Run these exact commands first and do not invent another orientation step:\n"
+                f"1. `cat {TASK_LOCAL_TELEMETRY_FILENAME}`\n"
+                f"2. `sed -n '1,220p' {(combined_source_paths[0] if combined_source_paths else frontier_artifact_path)}`\n"
+                f"3. `sed -n '1,220p' {(combined_source_paths[1] if len(combined_source_paths) > 1 else registry_path)}`\n\n"
+                "Then inspect the target implementation files directly with `sed`, `cat`, and `rg`, and start editing.\n"
+                "Do not run supervisor helper commands inside this worker run.\n\n"
+                "Read these files directly first:\n"
+                f"- {registry_path}\n"
+                f"- {program_milestones_path}\n"
+                f"- {roadmap_path}\n"
+                f"{runtime_handoff_block}"
+                f"- {frontier_artifact_path}\n"
+                f"{compact_source_text}\n\n"
+                f"{flagship_desktop_non_negotiables}"
+                f"{runtime_handoff_guidance}"
+                f"Writable scope roots:\n{compact_scope_text}\n\n"
+                "If you stop, report only:\n"
+                "What shipped: ...\n"
+                "What remains: ...\n"
+                "Exact blocker: ...\n"
+            )
         return (
             "Run the flagship full-product delivery pass for Chummer.\n\n"
             "Current release-proof gates are green, so the supervisor must continue into full product completion instead of stopping.\n\n"
             "This is the hard flagship bar: build the kind of product future work is measured against. Do not trade that bar down for schedule, local green receipts, or desktop-only wins.\n\n"
-            f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n"
-            f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
+            "Blocking audits:\n"
+            f"- completion: {completion_audit.get('status') or 'unknown'} -> {completion_audit.get('reason') or 'unknown'}\n"
+            f"- readiness: {full_product_audit.get('status') or 'unknown'} -> {full_product_audit.get('reason') or 'unknown'}\n"
+            f"- missing flagship coverage: {missing_coverage}\n\n"
             f"{task_local_status_snapshot}"
+            f"{safe_first_commands}"
             f"{telemetry_command_ban}"
             "Read these files directly first:\n"
             f"- {registry_path}\n"
@@ -5664,8 +6036,10 @@ def build_flagship_product_prompt(
             "4. Refresh handoff, mirrors, and readiness proof only when the repos actually justify it.\n"
             "5. Do not accept completion until FLAGSHIP_PRODUCT_READINESS.generated.json is current and covers every required flagship lane with no lowered-standard shortcuts.\n\n"
             "Execution discipline:\n"
-            "- Do not invoke operator telemetry or active-run helper commands from inside worker runs; those helpers are hard-blocked and return non-zero during active runs.\n"
+            "- First action rule: open `TASK_LOCAL_TELEMETRY.generated.json`, then open one listed repo file, then inspect the target implementation files directly before doing anything else.\n"
+            "- Do not query supervisor telemetry from inside the worker run. Those helper calls only waste the run and will be treated as failure.\n"
             "- The operator/OODA loop owns telemetry. Use the embedded JSON block and listed files as your local context instead.\n"
+            f"{safe_first_commands}"
             "- Spend the run implementing or auditing the assigned slice.\n\n"
             "If you stop, report only:\n"
             "What shipped: ...\n"
@@ -5677,10 +6051,13 @@ def build_flagship_product_prompt(
         "The current release-proof gates are green, but that only proves the loop cleared the present closeout gates. "
         "It does not prove the whole Chummer product is finished. Continue across the full design canon until the flagship product readiness proof is current and trusted.\n\n"
         "Use the hard flagship bar: the product should feel like the standard future products are measured against. Reject lowered standards, false-complete claims, narrow desktop-only closure, and proof-only wins that do not survive real product scrutiny.\n\n"
-        "Execution discipline: do not invoke operator telemetry or active-run helper commands from inside worker runs. Those helpers are hard-blocked and return non-zero during active runs. The operator/OODA loop owns telemetry; keep working the assigned slice.\n\n"
-        f"Completion audit:\n- status: {completion_audit.get('status') or 'unknown'}\n- reason: {completion_audit.get('reason') or 'unknown'}\n\n"
-        f"Flagship readiness audit:\n- status: {full_product_audit.get('status') or 'unknown'}\n- reason: {full_product_audit.get('reason') or 'unknown'}\n- missing coverage: {missing_coverage}\n\n"
+        "Execution discipline: do not query supervisor telemetry from inside worker runs. Those helper calls are hard-blocked, count as failure, and only waste the run. Read the listed files directly and keep working the assigned slice.\n\n"
+        "Blocking audits:\n"
+        f"- completion: {completion_audit.get('status') or 'unknown'} -> {completion_audit.get('reason') or 'unknown'}\n"
+        f"- readiness: {full_product_audit.get('status') or 'unknown'} -> {full_product_audit.get('reason') or 'unknown'}\n"
+        f"- missing flagship coverage: {missing_coverage}\n\n"
         f"{task_local_status_snapshot}"
+        f"{safe_first_commands}"
         f"{telemetry_command_ban}"
         "Start by reading these files directly:\n"
         f"- {registry_path}\n"
@@ -5828,16 +6205,24 @@ def _load_openai_escape_accounts(
     account_runtime: Dict[str, Any],
     *,
     model_candidates: Optional[Sequence[str]] = None,
-) -> tuple[argparse.Namespace, List[WorkerAccount], List[str], str]:
+) -> tuple[argparse.Namespace, List[WorkerAccount], List[str], List[str]]:
     escape_args = _openai_escape_hatch_args(args, model_candidates=model_candidates)
     escape_accounts = _load_worker_accounts(escape_args)
     if not escape_accounts:
-        return escape_args, [], [], ""
+        return escape_args, [], [], []
     escape_models = _worker_model_candidates(escape_args)
     requested_worker_lane = str(escape_args.worker_lane or "").strip()
     now = _utc_now()
-    primary_alias_order = {account.alias: index for index, account in enumerate(escape_accounts)}
-    primary_source_keys = {_credential_source_key(account) for account in escape_accounts}
+    workspace_root = Path(
+        str(getattr(args, "workspace_root", DEFAULT_WORKSPACE_ROOT) or DEFAULT_WORKSPACE_ROOT)
+    ).resolve()
+    configured_primary_aliases = [str(item or "").strip() for item in (escape_args.account_alias or []) if str(item or "").strip()]
+    primary_alias_order = {alias: index for index, alias in enumerate(configured_primary_aliases)}
+    fallback_alias_index = len(primary_alias_order)
+    for account in escape_accounts:
+        if account.alias not in primary_alias_order:
+            primary_alias_order[account.alias] = fallback_alias_index
+            fallback_alias_index += 1
     primary_has_runnable_account = any(
         _account_has_runnable_candidate_models(
             account,
@@ -5867,6 +6252,36 @@ def _load_openai_escape_accounts(
             escape_accounts.append(account)
             supplemental_aliases.append(account.alias)
 
+    def identity_key(account: WorkerAccount) -> str:
+        fingerprint = _credential_source_fingerprint(account, workspace_root)
+        if fingerprint:
+            return f"fingerprint:{fingerprint}"
+        return f"source:{_credential_source_key(account)}"
+
+    deduped_escape_accounts: List[WorkerAccount] = []
+    seen_identity_keys: set[str] = set()
+    for account in sorted(
+        escape_accounts,
+        key=lambda item: (
+            primary_alias_order.get(item.alias, 999),
+            item.bridge_priority,
+            item.alias,
+        ),
+    ):
+        account_identity_key = identity_key(account)
+        if account_identity_key in seen_identity_keys:
+            continue
+        seen_identity_keys.add(account_identity_key)
+        deduped_escape_accounts.append(account)
+    escape_accounts = deduped_escape_accounts
+    retained_aliases = {account.alias for account in escape_accounts}
+    supplemental_aliases = [
+        alias for alias in supplemental_aliases if alias in retained_aliases and alias not in primary_alias_order
+    ]
+    primary_source_keys = {
+        _credential_source_key(account) for account in escape_accounts if account.alias in primary_alias_order
+    }
+
     any_runnable_account = any(
         _account_has_runnable_candidate_models(
             account,
@@ -5877,9 +6292,9 @@ def _load_openai_escape_accounts(
         )
         for account in escape_accounts
     )
-    restore_probe_alias = ""
+    restore_probe_aliases: List[str] = []
     if not any_runnable_account:
-        restore_probe_candidates: List[tuple[dt.datetime, int, int, str]] = []
+        restore_probe_candidates_by_source: Dict[str, tuple[dt.datetime, int, int, str]] = {}
         for account in escape_accounts:
             if not _eligible_worker_account_restore_probe(
                 account_runtime,
@@ -5889,16 +6304,20 @@ def _load_openai_escape_accounts(
             ):
                 continue
             backoff_until, _ = _active_source_backoff(account_runtime, account, now=now)
-            restore_probe_candidates.append(
-                (
-                    backoff_until or now,
-                    account.bridge_priority,
-                    primary_alias_order.get(account.alias, 999),
-                    account.alias,
-                )
+            row = (
+                backoff_until or now,
+                account.bridge_priority,
+                primary_alias_order.get(account.alias, 999),
+                account.alias,
             )
-        if restore_probe_candidates:
-            restore_probe_alias = sorted(restore_probe_candidates)[0][3]
+            source_key = _credential_source_key(account)
+            existing = restore_probe_candidates_by_source.get(source_key)
+            if existing is None or row < existing:
+                restore_probe_candidates_by_source[source_key] = row
+        if restore_probe_candidates_by_source:
+            restore_probe_aliases = [
+                row[3] for row in sorted(restore_probe_candidates_by_source.values())
+            ]
 
     def sort_key(account: WorkerAccount) -> tuple[int, int, int, int, int, str]:
         runnable = _account_has_runnable_candidate_models(
@@ -5924,7 +6343,7 @@ def _load_openai_escape_accounts(
         )
 
     escape_accounts.sort(key=sort_key)
-    return escape_args, escape_accounts, supplemental_aliases, restore_probe_alias
+    return escape_args, escape_accounts, supplemental_aliases, restore_probe_aliases
 
 
 def _earliest_worker_account_backoff_until(
@@ -6242,7 +6661,7 @@ def _preferred_openai_escape_model_candidates(
     if not _openai_escape_hatch_enabled():
         return configured_models or list(OPENAI_ESCAPE_MODEL_PREFERENCE)
     ordered_candidates = _ordered_unique_models(OPENAI_ESCAPE_MODEL_PREFERENCE, configured_models)
-    escape_args, escape_accounts, _supplemental_aliases, _restore_probe_alias = _load_openai_escape_accounts(
+    escape_args, escape_accounts, _supplemental_aliases, _restore_probe_aliases = _load_openai_escape_accounts(
         args,
         account_runtime,
         model_candidates=ordered_candidates,
@@ -6320,7 +6739,7 @@ def _model_selection_snapshot(
         state_root,
         current_runtime,
     )
-    escape_args, escape_accounts, supplemental_escape_aliases, restore_probe_alias = _load_openai_escape_accounts(
+    escape_args, escape_accounts, supplemental_escape_aliases, restore_probe_aliases = _load_openai_escape_accounts(
         args,
         current_runtime,
         model_candidates=escape_ordered_models,
@@ -6345,7 +6764,8 @@ def _model_selection_snapshot(
         "selected_model": escape_ordered_models[0] if escape_ordered_models else "",
         "account_aliases": [account.alias for account in escape_accounts],
         "supplemental_aliases": supplemental_escape_aliases,
-        "restore_probe_alias": restore_probe_alias,
+        "restore_probe_alias": restore_probe_aliases[0] if restore_probe_aliases else "",
+        "restore_probe_aliases": restore_probe_aliases,
         "reason": (
             "dynamic ChatGPT escape model selection prefers the best currently runnable escape model"
             if openai_enabled
@@ -6369,6 +6789,9 @@ def _rotate_model_candidates_after_recent_stall(state_root: Path, model_candidat
     if "worker_model_output_stalled" not in blocker:
         return candidates
     stalled_model = str(latest.get("selected_model") or "").strip()
+    if not stalled_model:
+        attempted_models = [str(item or "").strip() for item in (latest.get("attempted_models") or []) if str(item or "").strip()]
+        stalled_model = attempted_models[0] if attempted_models else ""
     if not stalled_model or stalled_model not in candidates:
         return candidates
     return [candidate for candidate in candidates if candidate != stalled_model] + [stalled_model]
@@ -6383,10 +6806,9 @@ def _dedupe_preferred_core_batch_aliases(
     candidates = [str(item or "").strip() for item in (model_candidates or []) if str(item or "").strip()]
     if not candidates:
         return list(model_candidates)
-    requested_worker_lane = _effective_direct_worker_lane(args, worker_lane_health=worker_lane_health)
-    if requested_worker_lane not in CORE_BATCH_WORKER_LANES or candidates[0] != "ea-coder-hard-batch":
-        return candidates
-    return [candidate for candidate in candidates if candidate != "ea-coder-hard"]
+    # Preserve interactive hard-coder candidates for live shard work even when
+    # the lane also supports the batch-compatible variant.
+    return _ordered_unique_models(candidates)
 
 
 def _recent_helper_loop_failure_count(state_root: Path, *, limit: int = 4) -> int:
@@ -6395,45 +6817,43 @@ def _recent_helper_loop_failure_count(state_root: Path, *, limit: int = 4) -> in
         return 0
     count = 0
     for row in reversed(recent_history):
-        if bool(row.get("accepted")):
-            break
         blocker = " ".join(
             [
                 str(row.get("blocker") or "").strip(),
                 str(row.get("acceptance_reason") or "").strip(),
             ]
         ).lower()
-        if "worker_status_helper_loop" not in blocker:
-            break
-        count += 1
+        if "worker_model_output_stalled" in blocker:
+            count += 1
+    return count
+
+
+def _recent_status_helper_loop_failure_count(state_root: Path, *, limit: int = 4) -> int:
+    recent_history = _read_history(_history_payload_path(state_root), limit=max(1, int(limit)))
+    if not recent_history:
+        return 0
+    count = 0
+    for row in reversed(recent_history):
+        blocker = " ".join(
+            [
+                str(row.get("blocker") or "").strip(),
+                str(row.get("acceptance_reason") or "").strip(),
+                str(_run_receipt_status(row)[1] or "").strip(),
+            ]
+        ).lower()
+        if "worker_status_helper_loop" in blocker:
+            count += 1
     return count
 
 
 def _prefer_openai_escape_fastpath_after_recent_helper_loop(state_root: Path) -> bool:
-    if not _openai_escape_hatch_enabled():
-        return False
-    recent_history = _read_history(_history_payload_path(state_root), limit=4)
-    if not recent_history:
-        return False
-    latest = recent_history[-1]
-    if bool(latest.get("accepted")):
-        return False
-    helper_loop_failures = 0
-    for row in recent_history:
-        if bool(row.get("accepted")):
-            continue
-        blocker = " ".join(
-            [
-                str(row.get("blocker") or "").strip(),
-                str(row.get("acceptance_reason") or "").strip(),
-            ]
-        ).lower()
-        if (
-            "worker_status_helper_loop" in blocker
-            or "openai escape pool is currently exhausted after recent helper-loop churn" in blocker
-        ):
-            helper_loop_failures += 1
-    return helper_loop_failures >= 2
+    # Prefer routed EA by default. Escalate to the OpenAI escape pool after a
+    # genuine routed-lane output stall, or after a self-poll helper loop on
+    # the same shard.
+    return (
+        _recent_helper_loop_failure_count(state_root, limit=8) >= 1
+        or _recent_status_helper_loop_failure_count(state_root, limit=8) >= 1
+    )
 
 
 def _worker_lane_candidates(args: argparse.Namespace) -> List[str]:
@@ -6475,7 +6895,15 @@ def _retryable_worker_rejection(reason_text: str, stderr_text: str = "") -> bool
 
 def _self_polling_worker_error(*texts: str) -> bool:
     compact = " ".join(str(text or "") for text in texts).lower()
-    return "worker_self_polling:supervisor_status_loop" in compact
+    return any(
+        signal in compact
+        for signal in (
+            "worker_self_polling:supervisor_status_loop",
+            "worker_status_helper_loop",
+            "status_blocked_inside_worker_run",
+            "worker_status_budget_exhausted",
+        )
+    )
 
 
 def _run_scoped_worker_contract_violation(*texts: str) -> bool:
@@ -6485,9 +6913,6 @@ def _run_scoped_worker_contract_violation(*texts: str) -> bool:
     return any(
         signal in compact
         for signal in (
-            "worker_self_polling:supervisor_status_loop",
-            "worker_model_output_stalled",
-            "worker_status_helper_loop",
             "status_blocked_inside_worker_run",
             "worker_status_budget_exhausted",
         )
@@ -6505,6 +6930,35 @@ def _should_attempt_openai_escape_hatch(acceptance_reason: str, final_message: s
     if not compact:
         return False
     return any(signal in compact for signal in OPENAI_ESCAPE_HATCH_TRIGGER_SIGNALS)
+
+
+def _should_short_circuit_routed_ea_accounts_to_openai_escape(
+    acceptance_reason: str,
+    final_message: str,
+    stderr_text: str,
+) -> bool:
+    if not _should_attempt_openai_escape_hatch(acceptance_reason, final_message, stderr_text):
+        return False
+    if _self_polling_worker_error(acceptance_reason, final_message, stderr_text):
+        return False
+    compact = " ".join(
+        item for item in (str(acceptance_reason or ""), str(final_message or ""), str(stderr_text or "")) if item
+    ).lower()
+    if not compact:
+        return False
+    return any(
+        signal in compact
+        for signal in (
+            "worker_model_output_stalled",
+            "upstream_timeout",
+            "background_timeout",
+            "background timeout",
+            "backend unavailable",
+            "upstream_unavailable",
+            "high demand",
+            "temporary errors",
+        )
+    )
 
 
 def _should_attempt_account_direct_fallback(
@@ -7227,6 +7681,8 @@ def _write_active_run_state(state_root: Path, run: Optional[ActiveWorkerRun]) ->
         payload["active_run"] = _active_run_payload(run)
         payload.pop("idle_reason", None)
     _write_json(state_path, payload)
+    if _running_inside_container():
+        _write_active_shard_manifest_snapshot(state_root)
     _write_runtime_handoff(state_root)
 
 
@@ -7260,6 +7716,8 @@ def _update_active_run_fields(state_root: Path, run_id: str, **fields: Any) -> N
     payload.pop("idle_reason", None)
     payload = _apply_status_alias_fields(payload)
     _write_json(state_path, payload)
+    if _running_inside_container():
+        _write_active_shard_manifest_snapshot(state_root)
     _write_runtime_handoff(state_root)
 
 
@@ -7378,7 +7836,7 @@ def _write_runtime_handoff(state_root: Path) -> None:
                             "",
                             "```text",
                             "Supervisor status polling was observed from inside the active worker run.",
-                            "Do not repeat that pattern; keep working from the prompt, handoff, and frontier artifacts only.",
+                            "This is a run-killing contract violation. Do not repeat it; keep working from the prompt, task-local telemetry, handoff, and frontier artifacts only.",
                             "```",
                         ]
                     )
@@ -7466,11 +7924,14 @@ def _run_worker_attempt(
     handoff_heartbeat_stop = threading.Event()
     self_poll_state = {
         "blocked_status_hits": 0,
-        "status_command_hits": 0,
+        "raw_status_hits": 0,
         "tripped": False,
+        "first_blocked_status_monotonic": 0.0,
+        "first_status_probe_monotonic": 0.0,
     }
     model_wait_state = {
         "first_wait_trace_monotonic": 0.0,
+        "last_wait_trace_monotonic": 0.0,
         "no_progress_started_monotonic": 0.0,
         "persisted_waiting_state": False,
         "tripped": False,
@@ -7643,71 +8104,70 @@ def _run_worker_attempt(
                 if stream_name == "stderr":
                     blocked_status_detected = self_poll_status_marker in chunk
                     raw_status_command_detected = any(marker in chunk for marker in self_poll_command_markers)
+                    status_probe_detected = blocked_status_detected or raw_status_command_detected
                     waiting_for_model_output = _worker_stderr_chunk_is_waiting_trace(chunk)
+                    if status_probe_detected:
+                        now_monotonic = time.monotonic()
+                        if float(self_poll_state["first_status_probe_monotonic"] or 0.0) <= 0.0:
+                            self_poll_state["first_status_probe_monotonic"] = now_monotonic
+                    if raw_status_command_detected:
+                        self_poll_state["raw_status_hits"] = int(self_poll_state["raw_status_hits"]) + 1
                     if blocked_status_detected:
                         self_poll_state["blocked_status_hits"] = int(self_poll_state["blocked_status_hits"]) + 1
+                        if float(self_poll_state["first_blocked_status_monotonic"] or 0.0) <= 0.0:
+                            self_poll_state["first_blocked_status_monotonic"] = now_monotonic
+                    if status_probe_detected:
+                        status_probe_hits = max(
+                            int(self_poll_state["blocked_status_hits"]),
+                            int(self_poll_state["raw_status_hits"]),
+                        )
+                        blocked_status_grace_elapsed = (
+                            float(task_local_status_loop_grace_seconds or 0.0) <= 0.0
+                            or (
+                                now_monotonic - float(self_poll_state["first_status_probe_monotonic"] or 0.0)
+                                >= float(task_local_status_loop_grace_seconds or 0.0)
+                            )
+                        )
                         if (
-                            not progress_state["first_output_recorded"]
-                            and not model_wait_state["tripped"]
+                            not model_wait_state["tripped"]
                             and int(status_helper_loop_trip_threshold) > 0
-                            and int(self_poll_state["blocked_status_hits"]) >= int(status_helper_loop_trip_threshold)
+                            and status_probe_hits >= int(status_helper_loop_trip_threshold)
+                            and blocked_status_grace_elapsed
                         ):
                             model_wait_state["tripped"] = True
                             model_wait_state["termination_reason"] = "blocked_status_helper_loop"
                             _terminate_worker_process(process_holder.get("process"))
-                    if raw_status_command_detected:
-                        self_poll_state["status_command_hits"] = int(self_poll_state["status_command_hits"]) + 1
-                        if (
-                            not progress_state["first_output_recorded"]
-                            and not model_wait_state["tripped"]
-                            and int(self_poll_state["blocked_status_hits"]) <= 0
-                            and (
-                                bool(model_wait_state["persisted_waiting_state"])
-                                or float(model_wait_state["first_wait_trace_monotonic"] or 0.0) > 0.0
-                            )
-                            and int(status_helper_loop_trip_threshold) > 0
-                            and int(self_poll_state["status_command_hits"]) >= int(status_helper_loop_trip_threshold)
-                            and (
-                                float(task_local_status_loop_grace_seconds) <= 0.0
-                                or (
-                                    float(model_wait_state["first_wait_trace_monotonic"] or 0.0) > 0.0
-                                    and (
-                                        time.monotonic() - float(model_wait_state["first_wait_trace_monotonic"] or 0.0)
-                                        >= float(task_local_status_loop_grace_seconds)
-                                    )
-                                )
-                            )
-                        ):
-                            model_wait_state["tripped"] = True
-                            model_wait_state["termination_reason"] = "task_local_status_loop"
-                            _terminate_worker_process(process_holder.get("process"))
-                    if blocked_status_detected or raw_status_command_detected:
                         if (
                             not self_poll_state["tripped"]
                             and int(self_poll_blocked_trip_threshold) > 0
-                            and int(self_poll_state["blocked_status_hits"]) >= self_poll_blocked_trip_threshold
+                            and status_probe_hits >= self_poll_blocked_trip_threshold
+                            and blocked_status_grace_elapsed
                         ):
                             self_poll_state["tripped"] = True
                             _terminate_worker_process(process_holder.get("process"))
                     if waiting_for_model_output and not progress_state["first_output_recorded"]:
                         now_monotonic = time.monotonic()
+                        now_iso = _iso_now()
                         if float(model_wait_state["first_wait_trace_monotonic"] or 0.0) <= 0.0:
                             model_wait_state["first_wait_trace_monotonic"] = now_monotonic
+                        model_wait_state["last_wait_trace_monotonic"] = now_monotonic
                         if not model_wait_state["persisted_waiting_state"]:
                             _update_active_run_fields(
                                 state_root,
                                 run_id,
-                                progress_state="waiting_for_model_output",
+                                worker_last_output_at=now_iso,
+                                progress_state="stream_connected_waiting",
                             )
                             model_wait_state["persisted_waiting_state"] = True
-                        if (
-                            not model_wait_state["tripped"]
-                            and model_output_stall_seconds >= 0.0
-                            and now_monotonic - float(model_wait_state["first_wait_trace_monotonic"] or 0.0)
-                            >= float(model_output_stall_seconds)
-                        ):
-                            model_wait_state["tripped"] = True
-                            _terminate_worker_process(process_holder.get("process"))
+                            progress_state["last_progress_persisted_at"] = now_monotonic
+                        elif now_monotonic - float(progress_state["last_progress_persisted_at"] or 0.0) >= 10.0:
+                            _update_active_run_fields(
+                                state_root,
+                                run_id,
+                                worker_last_output_at=now_iso,
+                                progress_state="stream_connected_waiting",
+                            )
+                            progress_state["last_progress_persisted_at"] = now_monotonic
                 if _chunk_counts_as_progress(chunk, stream_name=stream_name):
                     _persist_output_progress()
         finally:
@@ -7791,6 +8251,9 @@ def _run_worker_attempt(
                 break
             except subprocess.TimeoutExpired:
                 now_monotonic = time.monotonic()
+                # Wait-trace keepalives are not meaningful progress. Anchor the stall budget to the
+                # first wait trace (or initial silent start), not the most recent heartbeat, so a
+                # model that stays in "waiting for model output" cannot hold a shard forever.
                 no_progress_anchor = float(model_wait_state["first_wait_trace_monotonic"] or 0.0)
                 if no_progress_anchor <= 0.0:
                     no_progress_anchor = float(model_wait_state["no_progress_started_monotonic"] or 0.0)
@@ -7871,19 +8334,12 @@ def _run_worker_attempt(
         stdout_text = "".join(stdout_chunks)
         stderr_text = "".join(stderr_chunks)
         termination_reason = str(model_wait_state.get("termination_reason") or "").strip().lower()
-        if termination_reason == "blocked_status_helper_loop":
+        if termination_reason in {"blocked_status_helper_loop", "successful_status_helper_loop"}:
             violation_token = "worker_status_helper_loop:repeated_blocked_status_polling"
             violation_message = (
                 f"Error: {violation_token}\n"
-                "[fleet-supervisor] worker kept polling blocked supervisor status inside an active run without "
-                "meaningful output; killed early and marked retryable\n"
-            )
-        elif termination_reason == "task_local_status_loop":
-            violation_token = "worker_status_helper_loop:repeated_task_local_status_polling"
-            violation_message = (
-                f"Error: {violation_token}\n"
-                "[fleet-supervisor] worker kept polling task-local telemetry inside an active run without "
-                "meaningful output; killed early and marked retryable\n"
+                "[fleet-supervisor] worker kept polling supervisor status inside an active run without "
+                "meaningful repo work; killed early and marked retryable\n"
             )
         else:
             stall_label = f"{float(model_output_stall_seconds):g}s"
@@ -8427,10 +8883,14 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         updated.pop("predicted_completion_at", None)
         updated.pop("range_low_hours", None)
         updated.pop("range_high_hours", None)
+    mode = str(updated.get("mode") or "").strip()
     raw_successor_eta = updated.get("successor_wave_eta")
     successor_eta = _normalize_eta_scope_fields(dict(raw_successor_eta)) if isinstance(raw_successor_eta, dict) and raw_successor_eta else {}
     if successor_eta:
         updated["successor_wave_eta"] = successor_eta
+        if not eta and mode in {"", "successor_wave"}:
+            updated["eta"] = dict(successor_eta)
+            eta = dict(successor_eta)
         successor_eta_human = str(successor_eta.get("eta_human") or "").strip()
         if successor_eta_human:
             updated["successor_wave_eta_human"] = successor_eta_human
@@ -8488,7 +8948,6 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         updated.pop("allowed_active_shards", None)
         updated.pop("host_memory_status", None)
     active_run = dict(updated.get("active_run") or {}) if isinstance(updated.get("active_run"), dict) else {}
-    mode = str(updated.get("mode") or "").strip()
     if active_run:
         active_run_frontier_ids = [_coerce_int(value, 0) for value in (active_run.get("frontier_ids") or [])]
         active_run_frontier_ids = [value for value in active_run_frontier_ids if value > 0]
@@ -8610,7 +9069,12 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
         updated.pop("last_run_finished_at", None)
         updated.pop("last_run_blocker", None)
     idle_reason = str(updated.get("idle_reason") or "").strip()
-    if (
+    aggregate_active_runs = _coerce_int(updated.get("active_runs_count"), 0)
+    if aggregate_active_runs > 0 and not str(updated.get("active_run_id") or "").strip():
+        idle_reason = ""
+        if str(updated.get("active_run_progress_state") or "").strip().startswith("idle_"):
+            updated.pop("active_run_progress_state", None)
+    elif (
         not idle_reason
         and not str(updated.get("active_run_id") or "").strip()
         and list(updated.get("frontier_ids") or [])
@@ -8628,13 +9092,13 @@ def _apply_status_alias_fields(state: Dict[str, Any]) -> Dict[str, Any]:
 def _write_active_shard_manifest_snapshot(aggregate_root: Path) -> None:
     aggregate_root = _aggregate_state_root(aggregate_root)
     manifest_path = _active_shard_manifest_path(aggregate_root)
-    configured_shards = _active_shard_manifest_entries(aggregate_root)
+    configured_shards = _runtime_configured_shard_entries(aggregate_root)
     if not configured_shards and not any(candidate.name.startswith("shard-") for candidate in aggregate_root.iterdir()):
         return
+    _ensure_runtime_configured_shard_roots(aggregate_root)
     topology_fingerprint = hashlib.sha256(
         json.dumps(configured_shards, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    active_shards = _statefile_shard_summaries(aggregate_root)
     generated_at = _iso_now()
     payload: Dict[str, Any] = {
         "generated_at": generated_at,
@@ -8643,10 +9107,16 @@ def _write_active_shard_manifest_snapshot(aggregate_root: Path) -> None:
         "topology_fingerprint": topology_fingerprint,
         "configured_shard_count": len(configured_shards),
         "configured_shards": configured_shards,
-        "active_run_count": sum(1 for item in active_shards if str(item.get("active_run_id") or "").strip()),
-        "active_shards": active_shards,
+        "active_run_count": 0,
+        "active_shards": [],
     }
     _write_json(manifest_path, payload)
+    active_shards = _statefile_shard_summaries(aggregate_root)
+    payload["updated_at"] = _iso_now()
+    payload["active_run_count"] = sum(1 for item in active_shards if str(item.get("active_run_id") or "").strip())
+    payload["active_shards"] = active_shards
+    _write_json(manifest_path, payload)
+    _refresh_aggregate_runtime_state_snapshot(aggregate_root)
 
 
 def _has_current_flagship_pass_proof(state: Dict[str, Any]) -> bool:
@@ -8771,6 +9241,9 @@ def _active_run_started_at_from_run_id(run_id: str) -> str:
     text = str(run_id or "").strip()
     if not text:
         return ""
+    match = re.match(r"^([0-9]{8}T[0-9]{6}Z)(?:-|$)", text)
+    if match:
+        text = str(match.group(1) or "").strip()
     try:
         parsed = dt.datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
     except ValueError:
@@ -8778,19 +9251,87 @@ def _active_run_started_at_from_run_id(run_id: str) -> str:
     return _iso(parsed)
 
 
+def _local_active_run_process_rows(proc_root: Path = Path("/proc")) -> List[tuple[int, str]]:
+    rows: List[tuple[int, str]] = []
+    try:
+        proc_entries = list(proc_root.iterdir())
+    except OSError:
+        proc_entries = []
+    for entry in proc_entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            cmdline = (entry / "cmdline").read_bytes().decode("utf-8", errors="ignore").replace("\x00", " ").strip()
+        except OSError:
+            continue
+        if not cmdline:
+            continue
+        rows.append((_coerce_int(entry.name, 0), cmdline))
+    return rows
+
+
+def _active_run_process_records_from_rows(rows: Sequence[tuple[int, str]]) -> Dict[str, Dict[str, Any]]:
+    records: Dict[str, Dict[str, Any]] = {}
+    for pid, command in rows:
+        command_text = str(command or "").strip()
+        if not command_text:
+            continue
+        match = re.search(
+            r"/var/lib/codex-fleet/chummer_design_supervisor/(shard-[0-9]+)/runs/([^/\s]+)/last_message\.txt",
+            command_text,
+        )
+        if not match:
+            continue
+        shard_name = str(match.group(1) or "").strip()
+        run_id = str(match.group(2) or "").strip()
+        if not shard_name or not run_id:
+            continue
+        current_record = dict(records.get(shard_name) or {})
+        current_run_id = str(current_record.get("run_id") or "").strip()
+        if current_run_id and current_run_id > run_id:
+            continue
+        run_dir = Path("/var/lib/codex-fleet/chummer_design_supervisor") / shard_name / "runs" / run_id
+        model_match = re.search(r"\bexec\s+-m\s+(\S+)", command_text)
+        selected_model = str(model_match.group(1) or "").strip() if model_match else ""
+        records[shard_name] = {
+            "run_id": run_id,
+            "started_at": _active_run_started_at_from_run_id(run_id),
+            "prompt_path": str(run_dir / "prompt.txt"),
+            "stdout_path": str(run_dir / "worker.stdout.log"),
+            "stderr_path": str(run_dir / "worker.stderr.log"),
+            "last_message_path": str(run_dir / "last_message.txt"),
+            "frontier_ids": [],
+            "open_milestone_ids": [],
+            "primary_milestone_id": None,
+            "worker_command": [command_text],
+            "selected_account_alias": "",
+            "selected_model": selected_model,
+            "attempt_index": 1,
+            "total_attempts": 20,
+            "watchdog_timeout_seconds": 0.0,
+            "worker_pid": max(0, int(pid)),
+            "worker_first_output_at": "",
+            "worker_last_output_at": "",
+        }
+    return records
+
+
 def _container_local_active_run_records() -> Dict[str, Dict[str, Any]]:
-    if _running_inside_container():
-        return {}
     now_monotonic = time.monotonic()
     cached_generated_at = _coerce_float(_CONTAINER_LOCAL_ACTIVE_RUN_CACHE.get("generated_at_monotonic")) or 0.0
     if cached_generated_at > 0.0 and now_monotonic - cached_generated_at <= 1.0:
         return {str(key): dict(value or {}) for key, value in dict(_CONTAINER_LOCAL_ACTIVE_RUN_CACHE.get("records") or {}).items()}
+    if _running_inside_container():
+        records = _active_run_process_records_from_rows(_local_active_run_process_rows())
+        _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["generated_at_monotonic"] = now_monotonic
+        _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["records"] = records
+        return {str(key): dict(value or {}) for key, value in records.items()}
     docker_bin = shutil.which("docker")
     if not docker_bin:
         _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["generated_at_monotonic"] = now_monotonic
         _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["records"] = {}
         return {}
-    records: Dict[str, Dict[str, Any]] = {}
+    rows: List[tuple[int, str]] = []
     try:
         completed = subprocess.run(
             [docker_bin, "exec", SUPERVISOR_CONTAINER_NAME, "ps", "-eo", "pid,args"],
@@ -8809,43 +9350,8 @@ def _container_local_active_run_records() -> Dict[str, Dict[str, Any]]:
             parts = line.split(None, 1)
             if len(parts) < 2 or not parts[0].isdigit():
                 continue
-            pid = int(parts[0])
-            command = parts[1].strip()
-            if "/docker/fleet/scripts/codex-shims/codexea" not in command:
-                continue
-            match = re.search(
-                r"/var/lib/codex-fleet/chummer_design_supervisor/(shard-[0-9]+)/runs/([0-9TZ]+)/last_message\.txt",
-                command,
-            )
-            if not match:
-                continue
-            shard_name = str(match.group(1) or "").strip()
-            run_id = str(match.group(2) or "").strip()
-            if not shard_name or not run_id:
-                continue
-            run_dir = Path("/var/lib/codex-fleet/chummer_design_supervisor") / shard_name / "runs" / run_id
-            model_match = re.search(r"\bexec\s+-m\s+(\S+)", command)
-            selected_model = str(model_match.group(1) or "").strip() if model_match else ""
-            records[shard_name] = {
-                "run_id": run_id,
-                "started_at": _active_run_started_at_from_run_id(run_id),
-                "prompt_path": str(run_dir / "prompt.txt"),
-                "stdout_path": str(run_dir / "worker.stdout.log"),
-                "stderr_path": str(run_dir / "worker.stderr.log"),
-                "last_message_path": str(run_dir / "last_message.txt"),
-                "frontier_ids": [],
-                "open_milestone_ids": [],
-                "primary_milestone_id": None,
-                "worker_command": [command],
-                "selected_account_alias": "",
-                "selected_model": selected_model,
-                "attempt_index": 1,
-                "total_attempts": 20,
-                "watchdog_timeout_seconds": 0.0,
-                "worker_pid": pid,
-                "worker_first_output_at": "",
-                "worker_last_output_at": "",
-            }
+            rows.append((int(parts[0]), parts[1].strip()))
+    records = _active_run_process_records_from_rows(rows)
     _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["generated_at_monotonic"] = now_monotonic
     _CONTAINER_LOCAL_ACTIVE_RUN_CACHE["records"] = records
     return {str(key): dict(value or {}) for key, value in records.items()}
@@ -8912,6 +9418,12 @@ def _recover_matching_live_active_run(
         frontier_ids=frontier_ids,
         open_milestone_ids=open_milestone_ids,
     )
+    if _active_run_matches_frontier_shape(
+        recovered,
+        frontier_ids=frontier_ids,
+        open_milestone_ids=open_milestone_ids,
+    ):
+        return recovered
     if _active_run_matches_live_frontier(
         recovered,
         frontier_ids=frontier_ids,
@@ -10470,7 +10982,8 @@ def _hard_flagship_context_if_needed(
     if not _hard_flagship_requested(args, base_context.get("focus_profiles") or []):
         return None
     full_product_audit = _full_product_readiness_audit(args)
-    force_whole_project_frontier = bool(base_context.get("open_milestones"))
+    base_mode = str(base_context.get("mode") or "").strip().lower()
+    force_whole_project_frontier = bool(base_context.get("open_milestones")) and base_mode != "successor_wave"
     if (
         not force_whole_project_frontier
         and str(full_product_audit.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
@@ -10516,6 +11029,7 @@ def derive_successor_wave_context(
     focus_profiles = _text_list([*(context.get("focus_profiles") or []), "next_90_day_successor_wave"])
     focus_owners = _text_list([*(context.get("focus_owners") or []), repo_owner])
     focus_texts = _text_list([*(context.get("focus_texts") or []), package_id, title])
+    history = _completion_review_history(state_root, limit=COMPLETION_AUDIT_HISTORY_LIMIT)
     successor_queue_path = workspace_root / ".codex-studio" / "published" / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
     successor_registry_path = _next_wave_registry_path(workspace_root)
     prompt = build_successor_wave_prompt(
@@ -10532,6 +11046,7 @@ def derive_successor_wave_context(
         focus_owners=focus_owners,
         focus_texts=focus_texts,
         eta_snapshot=successor_eta,
+        recent_status_helper_loop=_history_has_recent_status_helper_loop(history),
     )
     context.update(
         {
@@ -10540,6 +11055,20 @@ def derive_successor_wave_context(
             "frontier": frontier,
             "frontier_ids": [item.id for item in frontier],
             "prompt": prompt,
+            "task_local_telemetry_payload": _successor_wave_task_local_telemetry_payload(
+                eta_snapshot=successor_eta,
+                registry_path=context["registry_path"],
+                program_milestones_path=context["program_milestones_path"],
+                roadmap_path=context["roadmap_path"],
+                successor_queue_path=successor_queue_path,
+                successor_registry_path=successor_registry_path,
+                runtime_handoff_path=context.get("runtime_handoff_path"),
+                focus_profiles=focus_profiles,
+                focus_owners=focus_owners,
+                focus_texts=focus_texts,
+                queue_item=queue_item,
+                frontier=frontier,
+            ),
             "focus_profiles": focus_profiles,
             "focus_owners": focus_owners,
             "focus_texts": focus_texts,
@@ -10601,6 +11130,7 @@ def _empty_completion_recovery_can_continue_to_successor(
     return any(
         token in reason
         for token in (
+            "no supervisor run history recorded",
             "latest worker receipt",
             "worker exit",
             "worker not launched",
@@ -10837,7 +11367,34 @@ def derive_flagship_product_context(
             "frontier": frontier,
             "frontier_ids": [item.id for item in frontier],
             "prompt": prompt,
-            "task_local_telemetry_payload": _flagship_task_local_telemetry_payload(eta_snapshot),
+            "task_local_telemetry_payload": _flagship_task_local_telemetry_payload(
+                eta_snapshot=eta_snapshot,
+                registry_path=context["registry_path"],
+                program_milestones_path=context["program_milestones_path"],
+                roadmap_path=context["roadmap_path"],
+                frontier_artifact_path=Path(frontier_paths[0]),
+                readiness_path=Path(args.flagship_product_readiness_path).resolve(),
+                runtime_handoff_path=context.get("runtime_handoff_path"),
+                focus_profiles=focus_profiles,
+                focus_owners=focus_owners,
+                focus_texts=focus_texts,
+                source_paths=(
+                    [
+                        * _flagship_focus_repo_paths(focus_owners),
+                        * _flagship_design_source_paths(Path(context["program_milestones_path"]).resolve().parent),
+                    ]
+                )[:12],
+                frontier=frontier,
+                missing_coverage=", ".join(
+                    str(item)
+                    for item in (
+                        current_full_product_audit.get("coverage_gap_keys")
+                        or current_full_product_audit.get("missing_coverage_keys")
+                        or []
+                    )
+                )
+                or "none",
+            ),
             "focus_profiles": focus_profiles,
             "focus_owners": focus_owners,
             "focus_texts": focus_texts,
@@ -11543,6 +12100,115 @@ def _fast_status_state(
     return _apply_status_alias_fields(updated)
 
 
+def _runtime_snapshot_args_for_state_root(state_root: Path) -> argparse.Namespace:
+    workspace_root = _workspace_root_for_state_root(state_root)
+    operating_profile = _operating_profile_default_name()
+    accounts_path_default = DEFAULT_ACCOUNTS_PATH if DEFAULT_ACCOUNTS_PATH.exists() else (workspace_root / "config" / "accounts.yaml")
+    return argparse.Namespace(
+        command="status",
+        accounts_path=str(accounts_path_default),
+        workspace_root=str(workspace_root),
+        state_root=str(Path(state_root).resolve()),
+        flagship_product_readiness_path=str(DEFAULT_FLAGSHIP_PRODUCT_READINESS_PATH),
+        worker_bin=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_BIN", DEFAULT_WORKER_BIN),
+        worker_model=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_MODEL", DEFAULT_MODEL),
+        worker_lane=_runtime_env_default("CHUMMER_DESIGN_SUPERVISOR_WORKER_LANE", ""),
+        fallback_worker_model=[],
+        fallback_worker_lane=[],
+        ea_provider_health_url=_runtime_env_default(
+            "CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_URL",
+            DEFAULT_EA_PROVIDER_HEALTH_URL,
+        ),
+        ea_provider_health_timeout_seconds=float(
+            _runtime_env_default(
+                "CHUMMER_DESIGN_SUPERVISOR_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS",
+                str(DEFAULT_EA_PROVIDER_HEALTH_TIMEOUT_SECONDS),
+            )
+        ),
+        operating_profile=operating_profile,
+        memory_dispatch_reserve_gib=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_RESERVE_GIB",
+            _operating_profile_default_float(
+                operating_profile,
+                "memory_dispatch_reserve_gib",
+                DEFAULT_MEMORY_DISPATCH_RESERVE_GIB,
+            ),
+        ),
+        memory_dispatch_shard_budget_gib=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_SHARD_BUDGET_GIB",
+            _operating_profile_default_float(
+                operating_profile,
+                "memory_dispatch_shard_budget_gib",
+                DEFAULT_MEMORY_DISPATCH_SHARD_BUDGET_GIB,
+            ),
+        ),
+        memory_dispatch_warning_available_percent=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT",
+            _operating_profile_default_float(
+                operating_profile,
+                "memory_dispatch_warning_available_percent",
+                DEFAULT_MEMORY_DISPATCH_WARNING_AVAILABLE_PERCENT,
+            ),
+        ),
+        memory_dispatch_critical_available_percent=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT",
+            _operating_profile_default_float(
+                operating_profile,
+                "memory_dispatch_critical_available_percent",
+                DEFAULT_MEMORY_DISPATCH_CRITICAL_AVAILABLE_PERCENT,
+            ),
+        ),
+        memory_dispatch_warning_swap_used_percent=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT",
+            _operating_profile_default_float(
+                operating_profile,
+                "memory_dispatch_warning_swap_used_percent",
+                DEFAULT_MEMORY_DISPATCH_WARNING_SWAP_USED_PERCENT,
+            ),
+        ),
+        memory_dispatch_critical_swap_used_percent=_runtime_env_float_default(
+            "CHUMMER_DESIGN_SUPERVISOR_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT",
+            _operating_profile_default_float(
+                operating_profile,
+                "memory_dispatch_critical_swap_used_percent",
+                DEFAULT_MEMORY_DISPATCH_CRITICAL_SWAP_USED_PERCENT,
+            ),
+        ),
+    )
+
+
+def _refresh_aggregate_runtime_state_snapshot(aggregate_root: Path) -> None:
+    aggregate_root = _aggregate_state_root(aggregate_root)
+    if not _configured_shard_roots(aggregate_root):
+        return
+    state_path = _state_payload_path(aggregate_root)
+    updated = dict(_read_state(state_path))
+    args = _runtime_snapshot_args_for_state_root(aggregate_root)
+    worker_lane_health = _direct_worker_lane_health_snapshot(args, _worker_lane_candidates(args))
+    updated["updated_at"] = _iso_now()
+    updated["model_selection"] = _model_selection_snapshot(
+        args,
+        aggregate_root,
+        worker_lane_health=worker_lane_health,
+    )
+    updated["worker_lane_health"] = worker_lane_health
+    updated["host_memory_pressure"] = _memory_dispatch_snapshot(args, aggregate_root)
+    updated["shards"] = _statefile_shard_summaries(aggregate_root)
+    updated["shard_count"] = len(updated.get("shards") or [])
+    updated["active_runs_count"] = sum(
+        1 for item in (updated.get("shards") or []) if _shard_summary_counts_as_active_run(item)
+    )
+    successor_wave_eta = _successor_wave_eta_snapshot(_workspace_root_for_state_root(aggregate_root))
+    if successor_wave_eta:
+        updated["successor_wave_eta"] = successor_wave_eta
+    else:
+        updated.pop("successor_wave_eta", None)
+    updated = _clear_shard_scoped_aggregate_aliases(updated)
+    updated.update(_reconcile_aggregate_shard_truth(updated))
+    updated = _apply_status_alias_fields(updated)
+    _write_json(state_path, updated)
+
+
 def _status_generated_at(payload: Any) -> Optional[dt.datetime]:
     if not isinstance(payload, dict):
         return None
@@ -12002,6 +12668,10 @@ def _materialize_task_local_telemetry_prompt(prompt: str, telemetry_path: Path) 
             f"{telemetry_text} directly; do not regenerate it via shell, Python, or supervisor helper commands from inside the worker run."
         ),
         1,
+    )
+    rendered = rendered.replace(
+        f"`cat {TASK_LOCAL_TELEMETRY_FILENAME}`",
+        f"`cat {telemetry_text}`",
     )
     return rendered
 
@@ -12473,6 +13143,12 @@ def _fallback_auth_json_path(source_path: Path, workspace_root: Path) -> Path:
         return source_path
     source_text = str(source_path)
     if source_text.startswith("/run/secrets/"):
+        if source_path.name == "chatgpt.auth.json":
+            host_home_text = str(os.environ.get("HOME", "") or "").strip()
+            if host_home_text:
+                host_codex_auth = Path(host_home_text).expanduser() / ".codex" / "auth.json"
+                if host_codex_auth.exists():
+                    return host_codex_auth
         mirrored = workspace_root / "secrets" / source_path.name
         if mirrored.exists():
             return mirrored
@@ -12911,6 +13587,17 @@ def _eligible_worker_account_restore_probe(
     return False
 
 
+def _chatgpt_restore_probe_allowed_for_state_root(state_root: Path) -> bool:
+    resolved_state_root = Path(state_root).resolve()
+    shard_name = resolved_state_root.name
+    if not shard_name.startswith("shard-"):
+        return True
+    primary_probe_shard = str(_primary_probe_shard_name(resolved_state_root) or "").strip()
+    if not primary_probe_shard:
+        return True
+    return shard_name == primary_probe_shard
+
+
 def _eligible_routed_account_restore_probe(
     payload: Dict[str, Any],
     account: WorkerAccount,
@@ -12947,7 +13634,7 @@ def _candidate_models_for_account(
         clean_candidate = str(candidate or "").strip()
         variants = [clean_candidate]
         if requested_lane in CORE_BATCH_WORKER_LANES and clean_candidate in CORE_BATCH_RUNTIME_MODELS:
-            variants = [runtime_model for runtime_model in ("ea-coder-hard-batch", clean_candidate) if runtime_model]
+            variants = [runtime_model for runtime_model in (clean_candidate, "ea-coder-hard-batch") if runtime_model]
         variants.extend(
             fallback
             for fallback in MODEL_COMPATIBILITY_FALLBACKS.get(clean_candidate, ())
@@ -13079,6 +13766,7 @@ def launch_worker(
             attempted_accounts=[],
             attempted_models=[item or "default" for item in model_candidates[:1]],
             selected_account_alias="",
+            selected_model=str(model_candidates[0] or "").strip() if model_candidates else "",
             worker_exit_code=0,
             frontier_ids=frontier_ids,
             open_milestone_ids=open_milestone_ids,
@@ -13321,6 +14009,10 @@ def launch_worker(
                         now = _utc_now()
                         allow_restore_probe = (
                             account.alias in restore_probe_account_aliases
+                            and (
+                                account.auth_kind not in CHATGPT_AUTH_KINDS
+                                or _chatgpt_restore_probe_allowed_for_state_root(state_root)
+                            )
                             and _eligible_worker_account_restore_probe(
                                 account_runtime,
                                 account,
@@ -13530,6 +14222,21 @@ def launch_worker(
                                 )
                                 _write_account_runtime(account_runtime_path, account_runtime)
                                 break
+                            if (
+                                account.auth_kind == "ea"
+                                and _should_short_circuit_routed_ea_accounts_to_openai_escape(
+                                    acceptance_reason,
+                                    final_message,
+                                    completed.stderr,
+                                )
+                            ):
+                                stderr_handle.write(
+                                    "[fleet-supervisor] routed EA attempt hit an escape-worthy upstream stall; "
+                                    "handing off to the openai escape pool instead of cycling the remaining EA accounts\n"
+                                )
+                                stderr_handle.flush()
+                                stop_retrying = True
+                                break
                             if not _retryable_worker_error(completed.stderr):
                                 stop_retrying = True
                                 break
@@ -13596,6 +14303,7 @@ def launch_worker(
                 phase_total_attempts = max(1, len(filtered_lane_candidates) * len(phase_model_candidates))
                 display_total_attempts = max(attempt_offset + phase_total_attempts, attempt_offset + 1)
                 stop_retrying = False
+                allow_account_restore_probe = phase_label == "attempt"
                 if phase_worker_timeout_seconds > phase_configured_timeout_seconds > 0.0:
                     stderr_handle.write(
                         "[fleet-supervisor] raised direct worker watchdog from "
@@ -13613,7 +14321,7 @@ def launch_worker(
                     worker_env = _stamp_worker_supervisor_guard(worker_env, run_id=run_id, run_dir=run_dir)
                     lane_alias = f"lane:{candidate_lane}" if candidate_lane else "default"
                     for candidate_model in phase_model_candidates:
-                        if account_candidates:
+                        if allow_account_restore_probe and account_candidates:
                             now = _utc_now()
                             if _account_restore_probe_due(last_account_restore_probe_at, now=now):
                                 last_account_restore_probe_at = now
@@ -13634,7 +14342,7 @@ def launch_worker(
                                     _write_account_runtime(account_runtime_path, account_runtime)
                                 if restore_accounts:
                                     stderr_handle.write(
-                                        "[fleet-supervisor] OpenAI restore probe found runnable accounts again "
+                                        "[fleet-supervisor] account restore probe found runnable routed accounts again "
                                         f"aliases={','.join(account.alias for account in restore_accounts)} "
                                         f"models={','.join(model_candidates) or 'default'}\n"
                                     )
@@ -13745,7 +14453,7 @@ def launch_worker(
                         escape_args,
                         escape_accounts,
                         supplemental_escape_aliases,
-                        escape_restore_probe_alias,
+                        escape_restore_probe_aliases,
                     ) = _load_openai_escape_accounts(
                         args,
                         account_runtime,
@@ -13754,7 +14462,7 @@ def launch_worker(
                     if escape_accounts:
                         escape_attempt_offset = len(attempted_accounts)
                         stderr_handle.write(
-                            "[fleet-supervisor] recent shard helper-loop churn detected; "
+                            "[fleet-supervisor] recent routed-lane stall or repeated status-helper loop detected; "
                             "trying openai escape hatch before routed EA accounts "
                             f"aliases={','.join(account.alias for account in escape_accounts)} "
                             f"models={','.join(escape_model_candidates)}\n"
@@ -13765,11 +14473,11 @@ def launch_worker(
                                 "widening escape pool to supplemental chatgpt accounts "
                                 f"aliases={','.join(supplemental_escape_aliases)}\n"
                             )
-                        if escape_restore_probe_alias:
-                            restore_probe_account_aliases.add(escape_restore_probe_alias)
+                        if escape_restore_probe_aliases:
+                            restore_probe_account_aliases.update(escape_restore_probe_aliases)
                             stderr_handle.write(
-                                "[fleet-supervisor] probing usage-limited chatgpt escape source "
-                                f"account={escape_restore_probe_alias}\n"
+                                "[fleet-supervisor] probing usage-limited chatgpt escape sources "
+                                f"accounts={','.join(escape_restore_probe_aliases)}\n"
                             )
                         stderr_handle.flush()
                         if run_account_attempts(
@@ -13788,15 +14496,14 @@ def launch_worker(
                                 model_candidates=escape_model_candidates,
                             )
                             if len(attempted_accounts) > escape_attempt_offset or escape_retry_at is not None:
-                                suppress_remaining_account_fallbacks = True
                                 preflight_failure_reason = (
-                                    "openai escape pool is currently exhausted after recent helper-loop churn"
+                                    "openai escape pool is currently exhausted after recent routed-lane stalls or repeated status-helper loops"
                                 )
                                 if escape_retry_at is not None:
                                     preflight_failure_reason += f"; next escape retry at {_iso(escape_retry_at)}"
                                 acceptance_reason = preflight_failure_reason
                                 stderr_handle.write(
-                                    f"[fleet-supervisor] {preflight_failure_reason}; suppressing routed EA fallback\n"
+                                    f"[fleet-supervisor] {preflight_failure_reason}; continuing with routed EA fallback\n"
                                 )
                                 stderr_handle.flush()
                 if not account_phase_succeeded and not suppress_remaining_account_fallbacks:
@@ -13832,7 +14539,7 @@ def launch_worker(
                         escape_args,
                         escape_accounts,
                         supplemental_escape_aliases,
-                        escape_restore_probe_alias,
+                        escape_restore_probe_aliases,
                     ) = _load_openai_escape_accounts(
                         args,
                         account_runtime,
@@ -13851,11 +14558,11 @@ def launch_worker(
                                 "widening escape pool to supplemental chatgpt accounts "
                                 f"aliases={','.join(supplemental_escape_aliases)}\n"
                             )
-                        if escape_restore_probe_alias:
-                            restore_probe_account_aliases.add(escape_restore_probe_alias)
+                        if escape_restore_probe_aliases:
+                            restore_probe_account_aliases.update(escape_restore_probe_aliases)
                             stderr_handle.write(
-                                "[fleet-supervisor] probing usage-limited chatgpt escape source "
-                                f"account={escape_restore_probe_alias}\n"
+                                "[fleet-supervisor] probing usage-limited chatgpt escape sources "
+                                f"accounts={','.join(escape_restore_probe_aliases)}\n"
                             )
                         stderr_handle.flush()
                         if run_account_attempts(
@@ -13960,7 +14667,7 @@ def launch_worker(
                         escape_args,
                         escape_accounts,
                         supplemental_escape_aliases,
-                        escape_restore_probe_alias,
+                        escape_restore_probe_aliases,
                     ) = _load_openai_escape_accounts(
                         args,
                         account_runtime,
@@ -13987,11 +14694,11 @@ def launch_worker(
                                 "widening escape pool to supplemental chatgpt accounts "
                                 f"aliases={','.join(supplemental_escape_aliases)}\n"
                             )
-                        if escape_restore_probe_alias:
-                            restore_probe_account_aliases.add(escape_restore_probe_alias)
+                        if escape_restore_probe_aliases:
+                            restore_probe_account_aliases.update(escape_restore_probe_aliases)
                             stderr_handle.write(
-                                "[fleet-supervisor] probing usage-limited chatgpt escape source "
-                                f"account={escape_restore_probe_alias}\n"
+                                "[fleet-supervisor] probing usage-limited chatgpt escape sources "
+                                f"accounts={','.join(escape_restore_probe_aliases)}\n"
                             )
                         stderr_handle.flush()
                         if run_account_attempts(
@@ -14062,7 +14769,7 @@ def launch_worker(
                             escape_args,
                             escape_accounts,
                             supplemental_escape_aliases,
-                            escape_restore_probe_alias,
+                            escape_restore_probe_aliases,
                         ) = _load_openai_escape_accounts(
                             args,
                             account_runtime,
@@ -14089,11 +14796,11 @@ def launch_worker(
                                     "widening escape pool to supplemental chatgpt accounts "
                                     f"aliases={','.join(supplemental_escape_aliases)}\n"
                                 )
-                            if escape_restore_probe_alias:
-                                restore_probe_account_aliases.add(escape_restore_probe_alias)
+                            if escape_restore_probe_aliases:
+                                restore_probe_account_aliases.update(escape_restore_probe_aliases)
                                 stderr_handle.write(
-                                    "[fleet-supervisor] probing usage-limited chatgpt escape source "
-                                    f"account={escape_restore_probe_alias}\n"
+                                    "[fleet-supervisor] probing usage-limited chatgpt escape sources "
+                                    f"accounts={','.join(escape_restore_probe_aliases)}\n"
                                 )
                             stderr_handle.flush()
                             run_account_attempts(
@@ -14166,6 +14873,7 @@ def launch_worker(
         attempted_accounts=attempted_accounts,
         attempted_models=attempted_models,
         selected_account_alias=selected_account_alias,
+        selected_model=(attempted_models[-1] if attempted_models else ""),
         worker_exit_code=exit_code,
         frontier_ids=frontier_ids,
         open_milestone_ids=open_milestone_ids,
@@ -14383,6 +15091,52 @@ def _persist_live_state_snapshot(state_root: Path, state: Dict[str, Any]) -> Non
     _write_json(_state_payload_path(state_root), payload)
     if _running_inside_container():
         _write_active_shard_manifest_snapshot(state_root)
+        _write_status_live_refresh_snapshot(state_root)
+
+
+def _write_status_live_refresh_snapshot(state_root: Path) -> None:
+    aggregate_root = _aggregate_state_root(state_root)
+    configured_shards = _configured_shard_roots(aggregate_root)
+    if not configured_shards:
+        return
+    shard_rows = _statefile_shard_summaries(aggregate_root)
+    active_runs: List[Dict[str, Any]] = []
+    for row in shard_rows:
+        if not isinstance(row, dict):
+            continue
+        active_run_id = str(row.get("active_run_id") or "").strip()
+        progress_state = str(row.get("active_run_progress_state") or "").strip()
+        if not active_run_id and progress_state.lower() in {"", "idle", "idle_waiting_for_local_frontier_slice"}:
+            continue
+        active_runs.append(
+            {
+                "_shard": str(row.get("shard_id") or row.get("name") or "").strip(),
+                "run_id": active_run_id,
+                "frontier_ids": list(row.get("active_frontier_ids") or row.get("frontier_ids") or []),
+                "open_milestone_ids": list(row.get("open_milestone_ids") or []),
+                "progress_state": progress_state,
+                "started_at": str(row.get("active_run_started_at") or "").strip(),
+                "selected_account_alias": str(row.get("selected_account_alias") or "").strip(),
+                "selected_model": str(row.get("selected_model") or "").strip(),
+                "worker_pid": _coerce_int(row.get("active_run_worker_pid"), 0),
+                "worker_first_output_at": str(row.get("active_run_worker_first_output_at") or "").strip(),
+                "worker_last_output_at": str(row.get("active_run_worker_last_output_at") or "").strip(),
+                "output_updated_at": str(row.get("active_run_output_updated_at") or "").strip(),
+                "output_sizes": dict(row.get("active_run_output_sizes") or {}),
+                "process_alive": row.get("active_run_process_alive"),
+                "process_state": str(row.get("active_run_process_state") or "").strip(),
+                "process_cpu_seconds": row.get("active_run_process_cpu_seconds"),
+            }
+        )
+    payload = {
+        "contract_name": "fleet.chummer_design_supervisor.status_live_refresh",
+        "generated_at": _iso_now(),
+        "state_root": str(aggregate_root),
+        "configured_shard_count": len(configured_shards),
+        "active_run_count": len(active_runs),
+        "active_runs": active_runs,
+    }
+    _write_json(_status_live_refresh_path(aggregate_root), payload)
 
 
 def _render_status(state: Dict[str, Any]) -> str:
@@ -15099,7 +15853,16 @@ def _run_receipt_status(run: Dict[str, Any]) -> tuple[bool, str]:
             return True, ""
         if reparsed_accepted:
             return True, ""
-        return False, str(run.get("acceptance_reason") or "").strip() or "worker result rejected"
+        reason = str(run.get("acceptance_reason") or "").strip()
+        blocker = str(run.get("blocker") or "").strip()
+        if (
+            reason
+            and blocker
+            and reason.lower().startswith("worker exit")
+            and "worker_status_helper_loop" in blocker.lower()
+        ):
+            return False, f"{reason}: {blocker}"
+        return False, reason or "worker result rejected"
     return reparsed_accepted, reparsed_reason
 
 
@@ -15258,7 +16021,13 @@ def _synthetic_completion_receipt_audit(
         "accepted receipt is missing structured closeout content" in normalized_reason
         or "missing structured closeout content" in normalized_reason
     )
-    if not latest_reason or (not is_external_blocker and not allow_noop_not_launched and not allow_receipt_shape_gap):
+    allow_helper_loop_timeout = "worker_status_helper_loop" in normalized_reason
+    if not latest_reason or (
+        not is_external_blocker
+        and not allow_noop_not_launched
+        and not allow_receipt_shape_gap
+        and not allow_helper_loop_timeout
+    ):
         return None
     synthetic_audit = dict(receipt_audit)
     accepted_run_ids = list(synthetic_audit.get("accepted_run_ids") or [])
@@ -16488,30 +17257,36 @@ def _linux_desktop_exit_gate_audit(args: argparse.Namespace) -> Dict[str, Any]:
             audit["status"] = "fail"
             audit["reason"] = "linux desktop exit gate proof is missing start/finish git snapshots"
             return audit
-        if not audit["proof_git_identity_stable"]:
+        source_snapshot_matches_start = (
+            audit["source_snapshot_worktree_sha256"] == audit["proof_git_start_tracked_diff_sha256"]
+            and audit["source_snapshot_finish_worktree_sha256"] == audit["proof_git_start_tracked_diff_sha256"]
+        )
+        proof_head_stable = audit["proof_git_start_head"] == audit["proof_git_finish_head"]
+        if not audit["proof_git_identity_stable"] and not (proof_head_stable and source_snapshot_matches_start):
             audit["status"] = "fail"
             audit["reason"] = "linux desktop exit gate repo changed while the proof run was executing"
             return audit
-        if (
-            audit["proof_git_start_head"] != audit["proof_git_finish_head"]
-            or audit["proof_git_start_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-            or audit["proof_git_head"] != audit["proof_git_finish_head"]
-            or audit["proof_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-        ):
-            audit["status"] = "fail"
-            audit["reason"] = "linux desktop exit gate proof recorded inconsistent git snapshots"
-            return audit
-        if (
-            audit["source_snapshot_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
-            or audit["source_snapshot_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
-            or audit["source_snapshot_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-            or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
-            or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
-            or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
-        ):
-            audit["status"] = "fail"
-            audit["reason"] = "linux desktop exit gate proof source snapshot does not match the recorded git worktree fingerprint"
-            return audit
+        if audit["proof_git_identity_stable"]:
+            if (
+                audit["proof_git_start_head"] != audit["proof_git_finish_head"]
+                or audit["proof_git_start_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+                or audit["proof_git_head"] != audit["proof_git_finish_head"]
+                or audit["proof_tracked_diff_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+            ):
+                audit["status"] = "fail"
+                audit["reason"] = "linux desktop exit gate proof recorded inconsistent git snapshots"
+                return audit
+            if (
+                audit["source_snapshot_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
+                or audit["source_snapshot_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
+                or audit["source_snapshot_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+                or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_tracked_diff_sha256"]
+                or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_start_tracked_diff_sha256"]
+                or audit["source_snapshot_finish_worktree_sha256"] != audit["proof_git_finish_tracked_diff_sha256"]
+            ):
+                audit["status"] = "fail"
+                audit["reason"] = "linux desktop exit gate proof source snapshot does not match the recorded git worktree fingerprint"
+                return audit
     if audit["primary_package_kind"] != "deb":
         audit["status"] = "fail"
         audit["reason"] = (
@@ -16949,6 +17724,8 @@ def _render_trace(state: Dict[str, Any], history: List[Dict[str, Any]]) -> str:
 def run_once(args: argparse.Namespace) -> int:
     state_root = Path(args.state_root).resolve()
     _ensure_dir(state_root)
+    if _running_inside_container():
+        _write_active_shard_manifest_snapshot(_aggregate_state_root(state_root))
     _refresh_flagship_product_readiness_artifact(args)
     context = derive_context(args)
     forced_flagship_context = _hard_flagship_context_if_needed(args, state_root, context)
@@ -17399,6 +18176,8 @@ def run_once(args: argparse.Namespace) -> int:
 def run_loop(args: argparse.Namespace) -> int:
     state_root = Path(args.state_root).resolve()
     _ensure_dir(state_root)
+    if _running_inside_container():
+        _write_active_shard_manifest_snapshot(_aggregate_state_root(state_root))
     _refresh_flagship_product_readiness_artifact(args)
     lock_path = _lock_payload_path(state_root)
     try:
@@ -17923,25 +18702,19 @@ def main() -> None:
         os.environ["CHUMMER_DESIGN_SUPERVISOR_IGNORE_NONLINUX_DESKTOP_HOST_PROOF_BLOCKERS"] = "1"
     if args.command in {"status", "eta"} and _inside_active_worker_run():
         allowed, blocked_reason = _enforce_worker_status_budget()
-        if allowed:
-            payload = _worker_status_task_local_payload(args, blocked_reason)
-            payload["command"] = str(args.command)
-            payload["nonfatal_fallback"] = True
-            if args.json:
-                print(json.dumps(payload, indent=2, sort_keys=True))
-            else:
-                print(_render_worker_status_task_local_payload(payload))
-            raise SystemExit(0)
-        blocked_payload = _worker_status_task_local_payload(args, blocked_reason)
-        blocked_payload["command"] = str(args.command)
-        blocked_payload["nonfatal_fallback"] = True
-        blocked_payload["status_budget_exhausted"] = True
+        payload = _worker_status_task_local_payload(args, blocked_reason)
+        payload["command"] = str(args.command)
+        payload["nonfatal_fallback"] = True
+        if not allowed:
+            payload["status_budget_exhausted"] = True
         if args.json:
-            print(json.dumps(blocked_payload, indent=2, sort_keys=True))
+            print(json.dumps(payload, indent=2, sort_keys=True))
         else:
-            print(_render_worker_status_task_local_payload(blocked_payload))
-        print(_worker_status_block_message(args, blocked_reason), file=sys.stderr)
-        raise SystemExit(2)
+            print(_render_worker_status_task_local_payload(payload))
+        if not allowed:
+            print(_worker_status_block_message(args, blocked_reason), file=sys.stderr)
+            raise SystemExit(2)
+        raise SystemExit(0)
     if args.command == "status":
         state_root = Path(args.state_root).resolve()
         include_shards = not state_root.name.startswith("shard-")

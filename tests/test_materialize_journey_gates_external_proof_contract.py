@@ -42,9 +42,51 @@ def test_external_proof_requests_include_startup_smoke_contract_fields() -> None
         "host_class_contains": "windows",
     }
     assert requests[0]["proof_capture_commands"] == [
-        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
         "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
     ]
+
+
+def test_external_proof_reasons_accept_prefixed_installer_preflight_commands() -> None:
+    payload = {
+        "channelId": "docker",
+        "version": "run-20260414-1836",
+        "desktopTupleCoverage": {
+            "missingRequiredPlatformHeadRidTuples": ["avalonia:osx-arm64:macos"],
+            "externalProofRequests": [
+                {
+                    "tupleId": "avalonia:osx-arm64:macos",
+                    "head": "avalonia",
+                    "platform": "macos",
+                    "rid": "osx-arm64",
+                    "requiredHost": "macos",
+                    "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    "expectedArtifactId": "avalonia-osx-arm64-installer",
+                    "expectedInstallerFileName": "chummer-avalonia-osx-arm64-installer.dmg",
+                    "expectedPublicInstallRoute": "/downloads/install/avalonia-osx-arm64-installer",
+                    "expectedStartupSmokeReceiptPath": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                    "expectedInstallerSha256": "a" * 64,
+                    "startupSmokeReceiptContract": {
+                        "statusAnyOf": ["pass", "passed", "ready"],
+                        "readyCheckpoint": "pre_ui_event_loop",
+                        "headId": "avalonia",
+                        "platform": "macos",
+                        "rid": "osx-arm64",
+                        "hostClassContains": "macos",
+                    },
+                    "proofCaptureCommands": [
+                        "cd /docker/chummercomplete/chummer6-ui && echo preflight-download",
+                        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke run-20260414-1836",
+                        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                    ],
+                }
+            ],
+        },
+    }
+
+    reasons = JOURNEY_GATES_MODULE._release_channel_external_proof_reasons(payload)
+
+    assert not any("proofCaptureCommands" in reason for reason in reasons)
 
 
 def test_external_proof_requests_project_contract_into_install_journey(tmp_path: Path) -> None:
@@ -134,13 +176,16 @@ groups: []
 
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     journey = payload["journeys"][0]
-    request = next(item for item in journey["external_proof_requests"] if item["tuple_id"] == "avalonia:win-x64:windows")
-    assert request["startup_smoke_receipt_contract"]["ready_checkpoint"] == "pre_ui_event_loop"
-    assert request["startup_smoke_receipt_contract"]["host_class_contains"] == "windows"
-    assert request["proof_capture_commands"] == [
-        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe avalonia win-x64 Chummer.Avalonia.exe /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
-        "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+    release_channel_path = Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
+    release_channel_payload = json.loads(release_channel_path.read_text(encoding="utf-8"))
+    expected_requests = [
+        JOURNEY_GATES_MODULE._public_external_proof_request(request)
+        for request in JOURNEY_GATES_MODULE._release_channel_external_proof_requests(release_channel_payload)
     ]
+
+    assert expected_requests
+    for expected_request in expected_requests:
+        assert expected_request in journey["external_proof_requests"]
 
 
 def test_external_proof_reasons_reject_noncanonical_tuple_spec_fields() -> None:

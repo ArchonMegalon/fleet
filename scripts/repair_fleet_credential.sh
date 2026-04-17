@@ -93,13 +93,42 @@ path.write_text(text, encoding="utf-8")
 PY
 }
 
+escape_curl_config_value() {
+  local value="${1:-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
+build_openai_validation_auth_config() {
+  local candidate="$1"
+  local config_path=""
+  local escaped_candidate=""
+
+  [[ -n "$candidate" ]] || return 1
+  config_path="$(mktemp "${TMPDIR:-/tmp}/fleet-openai-validate-auth.XXXXXX")"
+  chmod 600 "$config_path" || true
+  escaped_candidate="$(escape_curl_config_value "$candidate")"
+  printf 'header = "Authorization: Bearer %s"\n' "$escaped_candidate" > "$config_path"
+  printf '%s' "$config_path"
+}
+
+cleanup_curl_auth_config() {
+  local config_path="${1:-}"
+  [[ -n "$config_path" ]] || return 0
+  rm -f "$config_path"
+}
+
 validate_openai_key() {
   local candidate="$1"
   local http_code
   local body_file
+  local auth_config=""
   body_file="$(mktemp)"
-  http_code="$(curl -sS -o "$body_file" -w '%{http_code}' "$FLEET_OPENAI_VALIDATION_URL" -H "Authorization: Bearer $candidate" || true)"
+  auth_config="$(build_openai_validation_auth_config "$candidate" || true)"
+  http_code="$(curl -sS -o "$body_file" -w '%{http_code}' -K "$auth_config" "$FLEET_OPENAI_VALIDATION_URL" || true)"
   if [[ "$http_code" == "200" ]]; then
+    cleanup_curl_auth_config "$auth_config"
     rm -f "$body_file"
     return 0
   fi
@@ -108,6 +137,7 @@ validate_openai_key() {
     head -c 400 "$body_file" >&2 || true
     printf '\n' >&2
   fi
+  cleanup_curl_auth_config "$auth_config"
   rm -f "$body_file"
   return 1
 }

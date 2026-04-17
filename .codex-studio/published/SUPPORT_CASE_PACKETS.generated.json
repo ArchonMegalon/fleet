@@ -7,42 +7,51 @@
     "followthrough_row_count": 0,
     "gate_counts": {
       "current_install_on_fixed_build": 0,
+      "feedback_loop_ready": 0,
       "fixed_channel_receipted": 0,
+      "fixed_receipt_installation_bound": 0,
       "fixed_version_receipted": 0,
       "install_receipt_ready": 0,
       "install_truth_ready": 0,
       "installed_build_receipt_channel_matches": 0,
       "installed_build_receipt_id_present": 0,
       "installed_build_receipt_installation_bound": 0,
+      "installed_build_receipt_tuple_bound": 0,
       "installed_build_receipt_version_matches": 0,
       "installed_build_receipted": 0,
+      "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-15T18:52:43Z",
+    "generated_at": "2026-04-17T20:38:45Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
     "ready_count": 0,
     "required_gates": [
+      "feedback_loop_ready",
       "install_truth_ready",
       "release_receipt_ready",
+      "release_receipt_id_present",
       "fixed_version_receipted",
       "fixed_channel_receipted",
+      "fixed_receipt_installation_bound",
       "installed_build_receipt_id_present",
       "installed_build_receipt_installation_bound",
       "installed_build_receipt_version_matches",
-      "installed_build_receipt_channel_matches"
+      "installed_build_receipt_channel_matches",
+      "installed_build_receipt_tuple_bound"
     ],
-    "source_rule": "Fix-available, please-test, and recovery followthrough may leave hold only when install truth, installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, and release-channel receipts agree.",
+    "source_rule": "Feedback, fix-available, please-test, and recovery followthrough may leave hold only when install truth, installation-bound installed-build receipts, and release-channel receipts agree; fix-bearing loops additionally require fixed-version receipts and fixed-channel receipts.",
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-15T18:52:43Z",
+  "generated_at": "2026-04-17T20:38:45Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
       "blocked_missing_install_receipts": [],
       "blocked_receipt_mismatch": [],
+      "feedback": [],
       "fix_available": [],
       "hold_until_fix_receipt": [],
       "please_test": [],
@@ -50,20 +59,34 @@
     },
     "blocked_missing_install_receipts_count": 0,
     "blocked_receipt_mismatch_count": 0,
-    "generated_at": "2026-04-15T18:52:43Z",
+    "feedback_ready_count": 0,
+    "fix_available_ready_count": 0,
+    "generated_at": "2026-04-17T20:38:45Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
+    "please_test_ready_count": 0,
     "ready_count": 0,
-    "source_rule": "Reporter followthrough is compiled from support packets only after install truth, installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, and release-channel receipts agree."
+    "recovery_loop_ready_count": 0,
+    "source_rule": "Reporter feedback, fix-available, please-test, and recovery followthrough is compiled from support packets only after install truth, installation-bound installed-build receipts, and release-channel receipts agree; fix-bearing loops additionally require fixed-version receipts and fixed-channel receipts."
   },
   "schema_version": 1,
   "source": {
     "case_materialized_count": 0,
+    "fix_receipt_feed_state": "not_provided",
+    "fix_receipt_hydrated_case_count": 0,
+    "fix_receipt_indexed_count": 0,
+    "fix_receipt_missing_case_count": 0,
+    "fix_receipt_source_count": 0,
+    "install_receipt_feed_state": "not_provided",
+    "install_receipt_hydrated_case_count": 0,
+    "install_receipt_indexed_count": 0,
+    "install_receipt_missing_case_count": 0,
+    "install_receipt_source_count": 0,
     "materialized_count": 0,
     "operator_packet_count": 0,
     "reported_count": 0,
-    "source_kind": "local_file"
+    "source_kind": "remote_url"
   },
   "successor_package_verification": {
     "allowed_paths": [
@@ -73,6 +96,7 @@
       "feedback"
     ],
     "design_queue_source_frontier_id": "2454416974",
+    "design_queue_source_item_count": 1,
     "design_queue_source_item_found": true,
     "design_queue_source_milestone_id": 102,
     "design_queue_source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
@@ -99,6 +123,7 @@
     ],
     "package_id": "next90-m102-fleet-reporter-receipts",
     "queue_frontier_id": "2454416974",
+    "queue_item_count": 1,
     "queue_milestone_id": 102,
     "queue_repo": "fleet",
     "queue_staging_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
@@ -113,6 +138,7 @@
     "registry_status": "in_progress",
     "registry_title": "Desktop-native claim, update, rollback, and support followthrough",
     "registry_wave": "W6",
+    "registry_work_task_count": 1,
     "registry_work_task_id": "102.4",
     "registry_work_task_status": "complete",
     "registry_work_task_title": "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.",
@@ -139,14 +165,20 @@
       "design-owned queue source",
       "generated support-packet proof hygiene",
       "stale generated support proof gaps",
+      "generated support successor scope drift",
+      "generated support successor closure-field drift",
       "weekly/support receipt-count drift",
       "weekly/support generated_at freshness",
+      "future-dated support and weekly generated_at receipts fail the standalone verifier",
       "weekly support-packet source-path drift",
       "design queue source path rejects active-run helper paths",
       "weekly governor source-path hygiene and worker command guard",
       "design-owned queue source proof markers",
+      "successor verifier fail-closes missing Fleet proof anchors",
       "telemetry command proof markers fail the standalone verifier and shared successor authority check",
-      "distinct queue proof anti-collapse guard"
+      "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
+      "distinct queue proof anti-collapse guard",
+      "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_support_case_packets.py",
@@ -160,8 +192,13 @@
       "fixed-channel receipts",
       "release-channel receipts",
       "weekly/support generated_at freshness",
+      "future-dated generated_at receipts",
       "verify_script_bootstrap_no_pythonpath.py",
-      "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0"
+      "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+      "duplicate next90-m102-fleet-reporter-receipts queue rows",
+      "generated successor scope-drift",
+      "missing Fleet proof-anchor markers",
+      "runtime handoff metadata proof markers"
     ],
     "status": "pass"
   },
@@ -171,6 +208,7 @@
     "external_proof_required_case_count": 0,
     "external_proof_required_host_counts": {},
     "external_proof_required_tuple_counts": {},
+    "feedback_followthrough_ready_count": 0,
     "fix_available_ready_count": 0,
     "install_truth_state_counts": {},
     "lane_counts": {},
@@ -210,11 +248,11 @@
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-04-16T08:11:58Z",
-    "generated_at": "2026-04-15T18:52:43Z",
+    "capture_deadline_utc": "2026-04-18T12:03:23Z",
+    "generated_at": "2026-04-17T20:38:45Z",
     "host_groups": {},
     "hosts": [],
-    "release_channel_generated_at": "2026-04-15T08:11:58Z",
+    "release_channel_generated_at": "2026-04-17T12:03:23Z",
     "request_count": 0
   }
 }

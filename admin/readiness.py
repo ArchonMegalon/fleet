@@ -56,7 +56,7 @@ ACTIVE_QUEUE_STATUSES = {
     "in_progress",
     "active",
 }
-MILESTONE_TERMINAL_STATUSES = {"released"}
+MILESTONE_TERMINAL_STATUSES = {"released", "complete", "completed", "done", "closed"}
 WORKLIST_CHECKLIST_RE = re.compile(
     r"^\s*[-*]\s+\[(?P<status>[^\]]+)\]\s+(?:(?P<task_id>[A-Za-z0-9._-]+)\s+)?(?P<task>.+?)\s*$"
 )
@@ -233,6 +233,19 @@ def _select_latest_active_tasks(entries: List[tuple[str, str]]) -> List[str]:
     return [task for _, task in active_items if task]
 
 
+def _queue_entry_status(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    return str(item.get("status") or item.get("state") or "").strip().lower().replace("_", " ")
+
+
+def _queue_entry_active(item: Any) -> bool:
+    status = _queue_entry_status(item)
+    if not status:
+        return True
+    return status not in MILESTONE_TERMINAL_STATUSES
+
+
 def _load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
     path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "WORKLIST.md")))
     if not path.exists() or not path.is_file():
@@ -259,6 +272,93 @@ def _load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]
         task = str(match.group("task") or "").strip().strip("`")
         entries.append((status, task))
     return _select_latest_active_tasks(entries)
+
+
+def _feedback_heading_targeted(heading: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(heading or "").strip().lower())
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return False
+    return normalized in {
+        "required next work",
+        "required next steps",
+        "immediate follow on work",
+        "immediate follow on work after current flagship closeout",
+        "next work",
+    }
+
+
+def _load_feedback_notes_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_file(project_cfg, str(source_cfg.get("path", "feedback")))
+    if not path.exists():
+        return []
+    candidate_paths: List[pathlib.Path] = []
+    if path.is_file():
+        candidate_paths = [path]
+    elif path.is_dir():
+        pattern = str(source_cfg.get("glob") or "*.md").strip() or "*.md"
+        candidate_paths = sorted(
+            (candidate for candidate in path.glob(pattern) if candidate.is_file()),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+        max_files = max(0, int(source_cfg.get("max_files") or 0))
+        if max_files > 0:
+            candidate_paths = candidate_paths[:max_files]
+    tasks: List[str] = []
+    for candidate in candidate_paths:
+        try:
+            lines = candidate.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            continue
+        section_active = False
+        section_level = 0
+        current_parent = ""
+        for raw_line in lines:
+            heading_match = re.match(r"^(#{1,6})\s+(.*)$", raw_line)
+            if heading_match:
+                level = len(heading_match.group(1) or "")
+                heading = str(heading_match.group(2) or "").strip()
+                if _feedback_heading_targeted(heading):
+                    section_active = True
+                    section_level = level
+                    current_parent = ""
+                elif section_active and level <= section_level:
+                    section_active = False
+                    current_parent = ""
+                continue
+            if not section_active:
+                continue
+            bullet_match = re.match(r"^(?P<indent>\s*)-\s+(?P<task>.+?)\s*$", raw_line)
+            if not bullet_match:
+                continue
+            indent = len(str(bullet_match.group("indent") or "").expandtabs(2))
+            task = str(bullet_match.group("task") or "").strip().strip("`")
+            if not task:
+                continue
+            if indent <= 1:
+                current_parent = task
+                if not task.endswith(":"):
+                    tasks.append(task)
+                continue
+            if current_parent:
+                parent = current_parent.rstrip(":").strip()
+                if parent:
+                    tasks.append(f"{parent}: {task}")
+                    continue
+            tasks.append(task)
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for task in tasks:
+        normalized = " ".join(str(task or "").split()).strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped
 
 
 def _load_tasks_work_log_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
@@ -328,12 +428,15 @@ def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Di
 
 
 def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
+    queue = [item for item in queue if _queue_entry_active(item)]
     fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
     if fallback_only_if_empty and queue:
         return list(queue)
     kind = str(source_cfg.get("kind", "") or "").strip().lower()
     if kind == "worklist":
         items = _load_worklist_queue(project_cfg, source_cfg)
+    elif kind == "feedback_notes":
+        items = _load_feedback_notes_queue(project_cfg, source_cfg)
     elif kind == "tasks_work_log":
         items = _load_tasks_work_log_queue(project_cfg, source_cfg)
     elif kind == "milestone_capabilities":

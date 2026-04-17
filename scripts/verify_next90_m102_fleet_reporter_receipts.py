@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -47,14 +48,18 @@ VERIFIER_PROOF_MARKER = "/docker/fleet/scripts/verify_next90_m102_fleet_reporter
 TEST_PROOF_MARKER = "/docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py"
 UTC = dt.timezone.utc
 REQUIRED_GATE_NAMES = {
+    "feedback_loop_ready",
     "install_truth_ready",
     "release_receipt_ready",
+    "release_receipt_id_present",
     "fixed_version_receipted",
     "fixed_channel_receipted",
+    "fixed_receipt_installation_bound",
     "installed_build_receipt_id_present",
     "installed_build_receipt_installation_bound",
     "installed_build_receipt_version_matches",
     "installed_build_receipt_channel_matches",
+    "installed_build_receipt_tuple_bound",
 }
 REQUIRED_GATE_COUNT_NAMES = REQUIRED_GATE_NAMES | {
     "install_receipt_ready",
@@ -62,6 +67,7 @@ REQUIRED_GATE_COUNT_NAMES = REQUIRED_GATE_NAMES | {
     "current_install_on_fixed_build",
 }
 REQUIRED_ACTION_GROUPS = {
+    "feedback",
     "fix_available",
     "please_test",
     "recovery",
@@ -70,14 +76,53 @@ REQUIRED_ACTION_GROUPS = {
     "hold_until_fix_receipt",
 }
 REQUIRED_WEEKLY_SUPPORT_KEYS = {
+    "reporter_followthrough_ready_count",
+    "feedback_followthrough_ready_count",
+    "fix_available_ready_count",
+    "please_test_ready_count",
+    "recovery_loop_ready_count",
+    "reporter_followthrough_blocked_missing_install_receipts_count",
+    "reporter_followthrough_blocked_receipt_mismatch_count",
     "followthrough_receipt_gates_ready_count",
     "followthrough_receipt_gates_blocked_missing_install_receipts_count",
     "followthrough_receipt_gates_blocked_receipt_mismatch_count",
     "followthrough_receipt_gates_installation_bound_count",
     "followthrough_receipt_gates_installed_build_receipted_count",
+    "feedback_followthrough_ready_count",
     "reporter_followthrough_plan_ready_count",
     "reporter_followthrough_plan_blocked_missing_install_receipts_count",
     "reporter_followthrough_plan_blocked_receipt_mismatch_count",
+}
+REQUIRED_SUPPORT_SUMMARY_KEYS = {
+    "reporter_followthrough_ready_count",
+    "feedback_followthrough_ready_count",
+    "fix_available_ready_count",
+    "please_test_ready_count",
+    "recovery_loop_ready_count",
+    "reporter_followthrough_blocked_missing_install_receipts_count",
+    "reporter_followthrough_blocked_receipt_mismatch_count",
+}
+REQUIRED_PLAN_COUNT_KEYS = {
+    "ready_count",
+    "feedback_ready_count",
+    "fix_available_ready_count",
+    "please_test_ready_count",
+    "recovery_loop_ready_count",
+    "blocked_missing_install_receipts_count",
+    "blocked_receipt_mismatch_count",
+    "hold_until_fix_receipt_count",
+}
+REQUIRED_SUPPORT_SOURCE_KEYS = {
+    "install_receipt_feed_state",
+    "install_receipt_source_count",
+    "install_receipt_indexed_count",
+    "install_receipt_hydrated_case_count",
+    "install_receipt_missing_case_count",
+    "fix_receipt_feed_state",
+    "fix_receipt_source_count",
+    "fix_receipt_indexed_count",
+    "fix_receipt_hydrated_case_count",
+    "fix_receipt_missing_case_count",
 }
 REQUIRED_WEEKLY_WORKER_GUARD_RULE_MARKERS = (
     "repo-local files",
@@ -111,6 +156,7 @@ REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "registry_title",
     "registry_wave",
     "registry_work_task_id",
+    "registry_work_task_count",
     "registry_work_task_title",
     "registry_work_task_status",
     "queue_task",
@@ -120,7 +166,9 @@ REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "queue_status",
     "queue_title",
     "queue_frontier_id",
+    "queue_item_count",
     "design_queue_source_path",
+    "design_queue_source_item_count",
     "design_queue_source_item_found",
     "design_queue_source_title",
     "design_queue_source_task",
@@ -131,12 +179,25 @@ REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "design_queue_source_frontier_id",
 }
 REQUIRED_RULE_MARKERS = (
+    "feedback",
     "install truth",
     "installation-bound installed-build receipts",
     "fixed-version receipts",
     "fixed-channel receipts",
     "release-channel receipts",
 )
+REQUIRED_RECEIPT_BACKED_ACTION_GROUPS = {
+    "feedback",
+    "fix_available",
+    "please_test",
+    "recovery",
+}
+REQUIRED_ACTION_NEXT_ACTIONS = {
+    "feedback": {"send_feedback_progress"},
+    "fix_available": {"send_fix_available", "send_fix_available_with_update"},
+    "please_test": {"send_please_test"},
+    "recovery": {"send_recovery"},
+}
 DISALLOWED_WORKER_PROOF_MARKERS = SUCCESSOR_DISALLOWED_PROOF_MARKERS
 REQUIRED_WEEKLY_WORKER_GUARD_MARKERS = set(DISALLOWED_WORKER_PROOF_MARKERS)
 REQUIRED_WEEKLY_WORKER_GUARD_MARKERS.update(
@@ -151,6 +212,8 @@ REQUIRED_QUEUE_NEGATIVE_PROOF_MARKERS = {
     "standalone verifier rejects missing receipt-gate names",
     "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
     "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+    "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
+    "future-dated support and weekly generated_at receipts fail the standalone verifier",
 }
 REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES = {
     VERIFIER_PROOF_MARKER,
@@ -160,7 +223,10 @@ REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES = {
     "standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries",
     "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
     "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+    "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
+    "future-dated support and weekly generated_at receipts fail the standalone verifier",
 }
+GENERATED_AT_MAX_FUTURE_SKEW_SECONDS = 300
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -198,6 +264,13 @@ def _read_yaml(path: Path) -> Dict[str, Any]:
 def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _sha256_file(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError:
         return ""
 
@@ -250,6 +323,16 @@ def _parse_iso_utc(value: Any) -> dt.datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _future_timestamp_drifts(timestamps: Dict[str, dt.datetime | None]) -> Dict[str, str]:
+    now = dt.datetime.now(UTC)
+    max_future = now + dt.timedelta(seconds=GENERATED_AT_MAX_FUTURE_SKEW_SECONDS)
+    return {
+        name: parsed.isoformat().replace("+00:00", "Z")
+        for name, parsed in sorted(timestamps.items())
+        if parsed is not None and parsed > max_future
+    }
+
+
 def _queue_proof_entries(queue_path: Path) -> List[str]:
     queue = _read_yaml(queue_path)
     item = _find_successor_queue_item(queue)
@@ -295,6 +378,301 @@ def _disallowed_input_paths(paths: Iterable[Path]) -> List[str]:
 def _missing_distinct_queue_proof_entries(entries: Iterable[str]) -> List[str]:
     normalized_entries = {_normalize_text(entry) for entry in entries if _normalize_text(entry)}
     return sorted(marker for marker in REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES if marker not in normalized_entries)
+
+
+def _action_group_receipt_issues(action_groups: Dict[str, Any]) -> List[str]:
+    issues: List[str] = []
+    for group_name in sorted(REQUIRED_RECEIPT_BACKED_ACTION_GROUPS):
+        rows = action_groups.get(group_name)
+        if not isinstance(rows, list):
+            continue
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                issues.append(f"{group_name}[{index}] is not a receipt-backed row")
+                continue
+            row_label = _normalize_text(row.get("packet_id")) or f"{group_name}[{index}]"
+            next_action = _normalize_text(row.get("next_action")).lower()
+            expected_next_actions = REQUIRED_ACTION_NEXT_ACTIONS.get(group_name, set())
+            if expected_next_actions and next_action not in expected_next_actions:
+                issues.append(
+                    f"{group_name} row {row_label} routes to {next_action or 'missing_next_action'} "
+                    f"instead of receipt-backed {', '.join(sorted(expected_next_actions))}"
+                )
+            base_missing: List[str] = []
+            if not bool(row.get("feedback_loop_ready")):
+                base_missing.append("feedback_loop_ready")
+            if not bool(row.get("install_receipt_ready")):
+                base_missing.append("install_receipt_ready")
+            if _normalize_text(row.get("install_truth_state")).lower() != "promoted_tuple_match":
+                base_missing.append("install_truth_state=promoted_tuple_match")
+            if _normalize_text(row.get("release_receipt_state")).lower() != "release_receipt_ready":
+                base_missing.append("release_receipt_ready")
+            if not _normalize_text(row.get("release_receipt_id")):
+                base_missing.append("release_receipt_id")
+            if _normalize_text(row.get("release_receipt_source")) != "release_channel":
+                base_missing.append("release_receipt_source=release_channel")
+            if not _normalize_text(row.get("release_receipt_channel")):
+                base_missing.append("release_receipt_channel")
+            if not _normalize_text(row.get("release_receipt_version")):
+                base_missing.append("release_receipt_version")
+            if not bool(row.get("installed_build_receipted")):
+                base_missing.append("installed_build_receipted")
+            if bool(row.get("installed_build_receipted")) and not bool(row.get("installed_build_receipt_identity_matches")):
+                base_missing.append("installed_build_receipt_tuple_bound")
+            base_install_fields = (
+                "installation_id",
+                "installed_build_receipt_id",
+                "installed_build_receipt_installation_id",
+                "installed_build_receipt_version",
+                "installed_build_receipt_channel",
+                "installed_build_receipt_source",
+                "installed_build_receipt_installation_source",
+                "installed_build_receipt_version_source",
+                "installed_build_receipt_channel_source",
+            )
+            if _normalize_text(row.get("installed_build_receipt_id")):
+                base_install_fields += (
+                    "installed_build_receipt_head_id",
+                    "installed_build_receipt_platform",
+                    "installed_build_receipt_rid",
+                    "installed_build_receipt_tuple_id",
+                )
+            for field in base_install_fields:
+                if not _normalize_text(row.get(field)):
+                    base_missing.append(field)
+            for field in (
+                "installed_build_receipt_source",
+                "installed_build_receipt_installation_source",
+                "installed_build_receipt_version_source",
+                "installed_build_receipt_channel_source",
+            ):
+                if _normalize_text(row.get(field)) != "install_receipts":
+                    base_missing.append(f"{field}=install_receipts")
+            if base_missing:
+                issues.append(
+                    f"{group_name} row {row_label} is missing install-aware receipt gates: "
+                    + ", ".join(sorted(set(base_missing)))
+                )
+            value_mismatches: List[str] = []
+            installation_id = _normalize_text(row.get("installation_id")).lower()
+            installed_version = _normalize_text(row.get("installed_version")).lower()
+            release_channel = _normalize_text(row.get("release_channel")).lower()
+            head_id = _normalize_text(row.get("head_id")).lower()
+            platform = _normalize_text(row.get("platform")).lower()
+            arch = _normalize_text(row.get("arch")).lower()
+            release_receipt_channel = _normalize_text(row.get("release_receipt_channel")).lower()
+            installed_build_receipt_installation_id = _normalize_text(
+                row.get("installed_build_receipt_installation_id")
+            ).lower()
+            installed_build_receipt_version = _normalize_text(row.get("installed_build_receipt_version")).lower()
+            installed_build_receipt_channel = _normalize_text(row.get("installed_build_receipt_channel")).lower()
+            installed_build_receipt_head_id = _normalize_text(row.get("installed_build_receipt_head_id")).lower()
+            installed_build_receipt_platform = _normalize_text(row.get("installed_build_receipt_platform")).lower()
+            installed_build_receipt_rid = _normalize_text(row.get("installed_build_receipt_rid")).lower()
+            installed_build_receipt_tuple_id = _normalize_text(row.get("installed_build_receipt_tuple_id")).lower()
+            expected_rid = ""
+            if platform:
+                normalized_arch = {"amd64": "x64", "x86_64": "x64"}.get(arch, arch)
+                if platform == "windows":
+                    expected_rid = "win-arm64" if normalized_arch == "arm64" else "win-x64"
+                elif platform == "linux":
+                    expected_rid = "linux-arm64" if normalized_arch == "arm64" else "linux-x64"
+                elif platform == "macos":
+                    expected_rid = "osx-x64" if normalized_arch == "x64" else "osx-arm64"
+            expected_tuple_id = (
+                f"{head_id}:{expected_rid}:{platform}"
+                if head_id and expected_rid and platform
+                else ""
+            )
+            if (
+                installation_id
+                and installed_build_receipt_installation_id
+                and installed_build_receipt_installation_id != installation_id
+            ):
+                value_mismatches.append("installed_build_receipt_installation_id!=installation_id")
+            if installed_version and installed_build_receipt_version and installed_build_receipt_version != installed_version:
+                value_mismatches.append("installed_build_receipt_version!=installed_version")
+            if (
+                release_receipt_channel
+                and installed_build_receipt_channel
+                and installed_build_receipt_channel != release_receipt_channel
+            ):
+                value_mismatches.append("installed_build_receipt_channel!=release_receipt_channel")
+            if release_channel and release_receipt_channel and release_channel != release_receipt_channel:
+                value_mismatches.append("release_channel!=release_receipt_channel")
+            if installed_build_receipt_head_id and head_id and installed_build_receipt_head_id != head_id:
+                value_mismatches.append("installed_build_receipt_head_id!=head_id")
+            if installed_build_receipt_platform and platform and installed_build_receipt_platform != platform:
+                value_mismatches.append("installed_build_receipt_platform!=platform")
+            if installed_build_receipt_rid and expected_rid and installed_build_receipt_rid != expected_rid:
+                value_mismatches.append("installed_build_receipt_rid!=expected_rid")
+            if (
+                installed_build_receipt_tuple_id
+                and expected_tuple_id
+                and installed_build_receipt_tuple_id != expected_tuple_id
+            ):
+                value_mismatches.append("installed_build_receipt_tuple_id!=expected_tuple_id")
+            if value_mismatches:
+                issues.append(
+                    f"{group_name} row {row_label} has install-aware receipt value mismatches: "
+                    + ", ".join(sorted(set(value_mismatches)))
+                )
+            row_has_fix_truth = bool(
+                _normalize_text(row.get("fixed_version"))
+                or _normalize_text(row.get("fixed_channel"))
+                or bool(row.get("fixed_version_receipted"))
+                or bool(row.get("fixed_channel_receipted"))
+            )
+            if group_name in {"fix_available", "please_test", "recovery"} or (
+                group_name == "feedback" and row_has_fix_truth
+            ):
+                fix_missing: List[str] = []
+                if not _normalize_text(row.get("fixed_version")):
+                    fix_missing.append("fixed_version")
+                if not _normalize_text(row.get("fixed_channel")):
+                    fix_missing.append("fixed_channel")
+                if not bool(row.get("fixed_version_receipted")):
+                    fix_missing.append("fixed_version_receipted")
+                if not bool(row.get("fixed_channel_receipted")):
+                    fix_missing.append("fixed_channel_receipted")
+                for field in (
+                    "fixed_version_receipt_id",
+                    "fixed_channel_receipt_id",
+                    "fixed_receipt_installation_id",
+                    "fixed_receipt_installation_source",
+                    "fixed_version_receipt_source",
+                    "fixed_channel_receipt_source",
+                ):
+                    if not _normalize_text(row.get(field)):
+                        fix_missing.append(field)
+                if not bool(row.get("fixed_receipt_installation_matches")):
+                    fix_missing.append("fixed_receipt_installation_bound")
+                for field in (
+                    "fixed_version_receipt_source",
+                    "fixed_channel_receipt_source",
+                    "fixed_receipt_installation_source",
+                ):
+                    if _normalize_text(row.get(field)) != "fix_receipts":
+                        fix_missing.append(f"{field}=fix_receipts")
+                if fix_missing:
+                    issues.append(
+                        f"{group_name} row {row_label} is missing fix receipt gates: "
+                        + ", ".join(sorted(set(fix_missing)))
+                    )
+                fix_value_mismatches: List[str] = []
+                fixed_version = _normalize_text(row.get("fixed_version")).lower()
+                fixed_channel = _normalize_text(row.get("fixed_channel")).lower()
+                fixed_receipt_installation_id = _normalize_text(row.get("fixed_receipt_installation_id")).lower()
+                release_receipt_version = _normalize_text(row.get("release_receipt_version")).lower()
+                if fixed_version and release_receipt_version and fixed_version != release_receipt_version:
+                    fix_value_mismatches.append("fixed_version!=release_receipt_version")
+                if fixed_channel and release_receipt_channel and fixed_channel != release_receipt_channel:
+                    fix_value_mismatches.append("fixed_channel!=release_receipt_channel")
+                if fixed_receipt_installation_id and installation_id and fixed_receipt_installation_id != installation_id:
+                    fix_value_mismatches.append("fixed_receipt_installation_id!=installation_id")
+                if (
+                    group_name == "please_test"
+                    and fixed_version
+                    and installed_version
+                    and installed_version != fixed_version
+                ):
+                    fix_value_mismatches.append("installed_version!=fixed_version")
+                if fix_value_mismatches:
+                    issues.append(
+                        f"{group_name} row {row_label} has fix receipt value mismatches: "
+                        + ", ".join(sorted(set(fix_value_mismatches)))
+                    )
+            if group_name == "please_test" and not bool(row.get("current_install_on_fixed_build")):
+                issues.append(f"please_test row {row_label} is not on the fixed installed build")
+            if group_name == "recovery" and not bool(row.get("recovery_loop_ready")):
+                issues.append(f"recovery row {row_label} is missing recovery_loop_ready")
+    return issues
+
+
+def _receipt_feed_source_issues(support_source: Dict[str, Any], action_groups: Dict[str, Any]) -> List[str]:
+    issues: List[str] = []
+    missing_source_keys = sorted(REQUIRED_SUPPORT_SOURCE_KEYS - set(support_source.keys()))
+    if missing_source_keys:
+        issues.append("support packet source is missing install/fix receipt feed metadata")
+        return issues
+
+    ready_rows = [
+        row
+        for group_name in sorted(REQUIRED_RECEIPT_BACKED_ACTION_GROUPS)
+        for row in (action_groups.get(group_name) or [])
+        if isinstance(row, dict)
+    ]
+    if not ready_rows:
+        return issues
+
+    if _normalize_text(support_source.get("refresh_mode")) == "cached_packets_fallback":
+        issues.append("ready reporter followthrough exists from cached packet fallback instead of refreshed receipt truth")
+
+    fix_bearing_rows = [
+        row
+        for row in ready_rows
+        if (
+            _normalize_text(row.get("fixed_version"))
+            or _normalize_text(row.get("fixed_channel"))
+            or bool(row.get("fixed_version_receipted"))
+            or bool(row.get("fixed_channel_receipted"))
+        )
+    ]
+
+    if _normalize_text(support_source.get("install_receipt_feed_state")) != "provided":
+        issues.append("ready reporter followthrough exists without an authoritative install receipt feed")
+    if _as_int(support_source.get("install_receipt_indexed_count")) <= 0:
+        issues.append("ready reporter followthrough exists without indexed install receipts")
+    if _as_int(support_source.get("install_receipt_hydrated_case_count")) <= 0:
+        issues.append("ready reporter followthrough exists without hydrated install receipt cases")
+
+    if fix_bearing_rows:
+        if _normalize_text(support_source.get("fix_receipt_feed_state")) != "provided":
+            issues.append("fix-bearing reporter followthrough exists without an authoritative fix receipt feed")
+        if _as_int(support_source.get("fix_receipt_indexed_count")) <= 0:
+            issues.append("fix-bearing reporter followthrough exists without indexed fix receipts")
+        if _as_int(support_source.get("fix_receipt_hydrated_case_count")) <= 0:
+            issues.append("fix-bearing reporter followthrough exists without hydrated fix receipt cases")
+
+    return issues
+
+
+def _action_group_rows(action_groups: Dict[str, Any], group_name: str) -> List[Dict[str, Any]]:
+    rows = action_groups.get(group_name)
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _distinct_packet_count(rows: Iterable[Dict[str, Any]]) -> int:
+    return len(
+        {
+            _normalize_text(row.get("packet_id"))
+            for row in rows
+            if _normalize_text(row.get("packet_id"))
+        }
+    )
+
+
+def _computed_plan_counts(action_groups: Dict[str, Any]) -> Dict[str, int]:
+    ready_group_names = ("feedback", "fix_available", "please_test", "recovery")
+    ready_rows = [
+        row
+        for group_name in ready_group_names
+        for row in _action_group_rows(action_groups, group_name)
+    ]
+    return {
+        "ready_count": _distinct_packet_count(ready_rows),
+        "feedback_ready_count": len(_action_group_rows(action_groups, "feedback")),
+        "fix_available_ready_count": len(_action_group_rows(action_groups, "fix_available")),
+        "please_test_ready_count": len(_action_group_rows(action_groups, "please_test")),
+        "recovery_loop_ready_count": len(_action_group_rows(action_groups, "recovery")),
+        "blocked_missing_install_receipts_count": len(
+            _action_group_rows(action_groups, "blocked_missing_install_receipts")
+        ),
+        "blocked_receipt_mismatch_count": len(_action_group_rows(action_groups, "blocked_receipt_mismatch")),
+        "hold_until_fix_receipt_count": len(_action_group_rows(action_groups, "hold_until_fix_receipt")),
+    }
 
 
 def verify(
@@ -434,6 +812,90 @@ def verify(
     plan_rule_missing = _contains_all_markers(_normalize_text(plan.get("source_rule")), REQUIRED_RULE_MARKERS)
     if plan_rule_missing:
         issues.append("reporter followthrough plan rule is missing receipt markers")
+    missing_plan_count_keys = sorted(REQUIRED_PLAN_COUNT_KEYS - set(plan.keys()))
+    if missing_plan_count_keys:
+        issues.append("reporter followthrough plan is missing receipt-backed loop counters")
+    computed_plan_counts = _computed_plan_counts(action_groups)
+    plan_count_mismatches = {
+        "ready_count": {
+            "receipt_backed_action_groups": computed_plan_counts["ready_count"],
+            "reporter_followthrough_plan": _as_int(plan.get("ready_count")),
+        }
+    } if _as_int(plan.get("ready_count")) != computed_plan_counts["ready_count"] else {}
+    for plan_key, computed_key in (
+        ("feedback_ready_count", "feedback_ready_count"),
+        ("fix_available_ready_count", "fix_available_ready_count"),
+        ("please_test_ready_count", "please_test_ready_count"),
+        ("recovery_loop_ready_count", "recovery_loop_ready_count"),
+        ("blocked_missing_install_receipts_count", "blocked_missing_install_receipts_count"),
+        ("blocked_receipt_mismatch_count", "blocked_receipt_mismatch_count"),
+        ("hold_until_fix_receipt_count", "hold_until_fix_receipt_count"),
+    ):
+        if plan_key in plan and _as_int(plan.get(plan_key)) != computed_plan_counts[computed_key]:
+            plan_count_mismatches[plan_key] = {
+                "receipt_backed_action_groups": computed_plan_counts[computed_key],
+                "reporter_followthrough_plan": _as_int(plan.get(plan_key)),
+            }
+    if plan_count_mismatches:
+        issues.append("reporter followthrough plan counts disagree with receipt-backed action groups")
+    action_group_receipt_issues = _action_group_receipt_issues(action_groups)
+    if action_group_receipt_issues:
+        issues.append("reporter followthrough action groups contain rows without receipt gates")
+    receipt_gate_plan_count_mismatches = {
+        "ready_count": {
+            "receipt_backed_action_groups": computed_plan_counts["ready_count"],
+            "followthrough_receipt_gates": _as_int(receipt_gates.get("ready_count")),
+        }
+    } if _as_int(receipt_gates.get("ready_count")) != computed_plan_counts["ready_count"] else {}
+    for receipt_gate_key, computed_key in (
+        ("blocked_missing_install_receipts_count", "blocked_missing_install_receipts_count"),
+        ("blocked_receipt_mismatch_count", "blocked_receipt_mismatch_count"),
+        ("hold_until_fix_receipt_count", "hold_until_fix_receipt_count"),
+    ):
+        if receipt_gate_key in receipt_gates and _as_int(receipt_gates.get(receipt_gate_key)) != computed_plan_counts[computed_key]:
+            receipt_gate_plan_count_mismatches[receipt_gate_key] = {
+                "receipt_backed_action_groups": computed_plan_counts[computed_key],
+                "followthrough_receipt_gates": _as_int(receipt_gates.get(receipt_gate_key)),
+            }
+    if receipt_gate_plan_count_mismatches:
+        issues.append("followthrough receipt gate counts disagree with receipt-backed action groups")
+    support_source = support_packets.get("source")
+    if not isinstance(support_source, dict):
+        support_source = {}
+    receipt_feed_source_issues = _receipt_feed_source_issues(support_source, action_groups)
+    if receipt_feed_source_issues:
+        issues.append("support packet source receipt-feed metadata does not back ready followthrough")
+
+    support_summary = support_packets.get("summary")
+    if not isinstance(support_summary, dict):
+        support_summary = {}
+        issues.append("SUPPORT_CASE_PACKETS.generated.json summary is missing")
+    missing_support_summary_keys = sorted(REQUIRED_SUPPORT_SUMMARY_KEYS - set(support_summary.keys()))
+    if missing_support_summary_keys:
+        issues.append("SUPPORT_CASE_PACKETS.generated.json summary is missing receipt-gated followthrough keys")
+    expected_support_summary_counts = {
+        "reporter_followthrough_ready_count": computed_plan_counts["ready_count"],
+        "feedback_followthrough_ready_count": computed_plan_counts["feedback_ready_count"],
+        "fix_available_ready_count": computed_plan_counts["fix_available_ready_count"],
+        "please_test_ready_count": computed_plan_counts["please_test_ready_count"],
+        "recovery_loop_ready_count": computed_plan_counts["recovery_loop_ready_count"],
+        "reporter_followthrough_blocked_missing_install_receipts_count": _as_int(
+            computed_plan_counts["blocked_missing_install_receipts_count"]
+        ),
+        "reporter_followthrough_blocked_receipt_mismatch_count": _as_int(
+            computed_plan_counts["blocked_receipt_mismatch_count"]
+        ),
+    }
+    support_summary_count_mismatches = {
+        key: {
+            "receipt_backed_plan": expected,
+            "support_packet_summary": _as_int(support_summary.get(key)),
+        }
+        for key, expected in expected_support_summary_counts.items()
+        if key in support_summary and _as_int(support_summary.get(key)) != expected
+    }
+    if support_summary_count_mismatches:
+        issues.append("SUPPORT_CASE_PACKETS.generated.json summary disagrees with receipt-backed followthrough plan")
 
     weekly_sources = weekly.get("source_input_health")
     if not isinstance(weekly_sources, dict):
@@ -460,6 +922,13 @@ def verify(
         issues.append("weekly governor support-packets input path cites active-run telemetry or helper paths")
     elif _normalize_text(support_input.get("source_path")) != str(support_packets_path):
         issues.append("weekly governor support-packets input path disagrees with verified support packet")
+    else:
+        weekly_support_sha256 = _normalize_text(support_input.get("source_sha256")).lower()
+        actual_support_sha256 = _sha256_file(support_packets_path)
+        if not weekly_support_sha256:
+            issues.append("weekly governor support-packets input is missing source_sha256")
+        elif weekly_support_sha256 != actual_support_sha256:
+            issues.append("weekly governor support-packets input sha256 disagrees with verified support packet")
     missing_weekly_source_path_markers: List[str] = []
     if source_path_hygiene:
         source_path_markers = set(_normalize_list(source_path_hygiene.get("blocked_markers")))
@@ -503,6 +972,8 @@ def verify(
     receipt_gates_generated_at = _parse_iso_utc(receipt_gates.get("generated_at"))
     reporter_plan_generated_at = _parse_iso_utc(plan.get("generated_at"))
     weekly_generated_at = _parse_iso_utc(weekly.get("generated_at"))
+    markdown_values = _markdown_label_values(weekly_markdown)
+    markdown_generated_at = _markdown_generated_at(weekly_markdown)
     if not support_generated_at:
         issues.append("SUPPORT_CASE_PACKETS.generated.json generated_at is missing or invalid")
     if not receipt_gates_generated_at:
@@ -525,6 +996,18 @@ def verify(
         issues.append("WEEKLY_GOVERNOR_PACKET.generated.json generated_at is missing or invalid")
     if support_generated_at and weekly_generated_at and weekly_generated_at < support_generated_at:
         issues.append("weekly governor packet predates support-packet receipt gates")
+    weekly_markdown_generated_at_parsed = _parse_iso_utc(markdown_generated_at)
+    future_timestamp_drifts = _future_timestamp_drifts(
+        {
+            "support_packets.generated_at": support_generated_at,
+            "followthrough_receipt_gates.generated_at": receipt_gates_generated_at,
+            "reporter_followthrough_plan.generated_at": reporter_plan_generated_at,
+            "weekly_governor_packet.generated_at": weekly_generated_at,
+            "weekly_governor_markdown.generated_at": weekly_markdown_generated_at_parsed,
+        }
+    )
+    if future_timestamp_drifts:
+        issues.append("generated receipt timestamps are future-dated")
     truth_inputs = weekly.get("truth_inputs") if isinstance(weekly.get("truth_inputs"), dict) else {}
     support_summary = truth_inputs.get("support_summary") if isinstance(truth_inputs.get("support_summary"), dict) else {}
     missing_weekly_keys = sorted(REQUIRED_WEEKLY_SUPPORT_KEYS - set(support_summary.keys()))
@@ -544,12 +1027,23 @@ def verify(
         "followthrough_receipt_gates_installed_build_receipted_count": _as_int(
             gate_counts.get("installed_build_receipted")
         ),
-        "reporter_followthrough_plan_ready_count": _as_int(plan.get("ready_count")),
+        "reporter_followthrough_ready_count": computed_plan_counts["ready_count"],
+        "feedback_followthrough_ready_count": computed_plan_counts["feedback_ready_count"],
+        "fix_available_ready_count": computed_plan_counts["fix_available_ready_count"],
+        "please_test_ready_count": computed_plan_counts["please_test_ready_count"],
+        "recovery_loop_ready_count": computed_plan_counts["recovery_loop_ready_count"],
+        "reporter_followthrough_blocked_missing_install_receipts_count": _as_int(
+            computed_plan_counts["blocked_missing_install_receipts_count"]
+        ),
+        "reporter_followthrough_blocked_receipt_mismatch_count": _as_int(
+            computed_plan_counts["blocked_receipt_mismatch_count"]
+        ),
+        "reporter_followthrough_plan_ready_count": computed_plan_counts["ready_count"],
         "reporter_followthrough_plan_blocked_missing_install_receipts_count": _as_int(
-            plan.get("blocked_missing_install_receipts_count")
+            computed_plan_counts["blocked_missing_install_receipts_count"]
         ),
         "reporter_followthrough_plan_blocked_receipt_mismatch_count": _as_int(
-            plan.get("blocked_receipt_mismatch_count")
+            computed_plan_counts["blocked_receipt_mismatch_count"]
         ),
     }
     weekly_count_mismatches = {
@@ -563,17 +1057,16 @@ def verify(
     if weekly_count_mismatches:
         issues.append("weekly governor support summary disagrees with support-packet receipt gates")
 
-    markdown_values = _markdown_label_values(weekly_markdown)
-    markdown_generated_at = _markdown_generated_at(weekly_markdown)
     if not weekly_markdown:
         issues.append("WEEKLY_GOVERNOR_PACKET.generated.md is missing or unreadable")
     elif markdown_generated_at != _normalize_text(weekly.get("generated_at")):
         issues.append("weekly governor markdown generated timestamp disagrees with JSON packet")
     expected_markdown_counts = {
-        "Reporter followthrough ready": _as_int(plan.get("ready_count")),
-        "Fix-available ready": len(action_groups.get("fix_available") or []),
-        "Please-test ready": len(action_groups.get("please_test") or []),
-        "Recovery-loop ready": len(action_groups.get("recovery") or []),
+        "Reporter followthrough ready": computed_plan_counts["ready_count"],
+        "Feedback followthrough ready": computed_plan_counts["feedback_ready_count"],
+        "Fix-available ready": computed_plan_counts["fix_available_ready_count"],
+        "Please-test ready": computed_plan_counts["please_test_ready_count"],
+        "Recovery-loop ready": computed_plan_counts["recovery_loop_ready_count"],
         "Followthrough blocked on install receipts": _as_int(
             receipt_gates.get("blocked_missing_install_receipts_count")
         ),
@@ -622,12 +1115,21 @@ def verify(
         "missing_gate_names": missing_gate_names,
         "missing_gate_counts": missing_gate_counts,
         "missing_action_groups": missing_action_groups,
+        "missing_plan_count_keys": missing_plan_count_keys,
+        "plan_count_mismatches": plan_count_mismatches,
+        "receipt_gate_plan_count_mismatches": receipt_gate_plan_count_mismatches,
+        "action_group_receipt_issues": action_group_receipt_issues,
+        "receipt_feed_source_issues": receipt_feed_source_issues,
+        "missing_support_source_keys": sorted(REQUIRED_SUPPORT_SOURCE_KEYS - set(support_source.keys())),
+        "missing_support_summary_keys": missing_support_summary_keys,
+        "support_summary_count_mismatches": support_summary_count_mismatches,
         "missing_weekly_support_keys": missing_weekly_keys,
         "missing_weekly_source_path_hygiene_markers": missing_weekly_source_path_markers,
         "missing_weekly_worker_guard_markers": missing_weekly_worker_guard_markers,
         "missing_queue_negative_proof_markers": missing_queue_negative_proof_markers,
         "missing_distinct_queue_proof_entries": missing_distinct_queue_proof_entries,
         "weekly_count_mismatches": weekly_count_mismatches,
+        "future_timestamp_drifts": future_timestamp_drifts,
         "missing_weekly_markdown_labels": missing_markdown_labels,
         "weekly_markdown_count_mismatches": weekly_markdown_count_mismatches,
         "support_packets_generated_at": _normalize_text(support_packets.get("generated_at")),

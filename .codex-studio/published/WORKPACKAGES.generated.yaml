@@ -1,6 +1,6 @@
-source_queue_fingerprint: ec4df63d5aa04a297c632d519e30265e3032a9ed
+source_queue_fingerprint: 7bd98f74031f7ba65a0f1ee36c1909f5296b46ae
 work_packages:
-- package_id: fleet-package-compile-ec4df63d5a
+- package_id: fleet-package-compile-7bd98f7403
   package_kind: package_compile
   horizon_family: package-compile
   title: Compile booster-ready work packages from queue truth

@@ -76,6 +76,15 @@ def _flagship_claim_status() -> Dict[str, Any]:
         warning_keys = sorted(
             key for key, value in coverage.items() if str(key).strip() and str(value).strip().lower() == "warning"
         )
+    if not warning_keys:
+        readiness_planes = dict(payload.get("readiness_planes") or {})
+        warning_keys = sorted(
+            key
+            for key, value in readiness_planes.items()
+            if str(key).strip()
+            and isinstance(value, dict)
+            and str(value.get("status") or "").strip().lower() in {"warning", "missing"}
+        )
     return {
         "status": str(payload.get("status") or "").strip().lower() or "unknown",
         "warning_keys": warning_keys,
@@ -236,7 +245,8 @@ def _infer_fallback_readiness_stage(
                 return "boundary_pure"
     elif project_id == "core":
         import_parity = _load_json_file(published_dir / "IMPORT_PARITY_CERTIFICATION.generated.json")
-        if _proof_passed(import_parity):
+        engine_proof_pack = _load_json_file(published_dir / "ENGINE_PROOF_PACK.generated.json")
+        if _proof_passed(import_parity) and _proof_passed(engine_proof_pack):
             return "boundary_pure"
     elif project_id == "media-factory":
         media_local_release_proof = _load_json_file(published_dir / "MEDIA_LOCAL_RELEASE_PROOF.generated.json")

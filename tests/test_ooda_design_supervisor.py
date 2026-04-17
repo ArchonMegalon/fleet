@@ -134,6 +134,25 @@ def test_freshest_updated_at_prefers_live_shard_timestamp() -> None:
     assert freshest == module.parse_iso("2026-04-01T05:18:38Z")
 
 
+def test_eta_payload_from_state_prefers_successor_wave_eta_when_primary_eta_missing() -> None:
+    payload = module.eta_payload_from_state(
+        {
+            "mode": "successor_wave",
+            "successor_wave_eta": {
+                "status": "tracked",
+                "eta_human": "5.6d-2w",
+                "summary": "6 milestones remain.",
+            },
+        }
+    )
+
+    assert payload == {
+        "status": "tracked",
+        "eta_human": "5.6d-2w",
+        "summary": "6 milestones remain.",
+    }
+
+
 def test_parse_supervisor_status_text_extracts_effective_shard_modes() -> None:
     payload = module.parse_supervisor_status_text(
         "\n".join(
@@ -445,6 +464,106 @@ def test_run_cycle_treats_complete_idle_snapshot_as_non_stale(
     assert payload["aggregate_stale"] is False
     assert payload["aggregate_timestamp_stale"] is True
     assert payload["steady_complete_quiet"] is True
+
+
+def test_run_cycle_persists_structured_eta_payload_for_successor_wave(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    state_root = tmp_path / "state" / "chummer_design_supervisor"
+    shard_root = state_root / "shard-1"
+    shard_root.mkdir(parents=True)
+    (state_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-04-01T04:48:34Z",
+                "mode": "successor_wave",
+                "active_runs_count": 6,
+                "eta_status": "tracked",
+                "successor_wave_eta": {
+                    "status": "tracked",
+                    "eta_human": "5.6d-2w",
+                    "summary": "6 next-wave milestones remain.",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (shard_root / "state.json").write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-04-01T04:48:34Z",
+                "mode": "successor_wave",
+                "active_run": {
+                    "started_at": "2026-04-01T04:48:34Z",
+                    "watchdog_timeout_seconds": 21600.0,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log_path = tmp_path / "monitor" / "ooda.log"
+    event_path = tmp_path / "monitor" / "events.jsonl"
+    state_path = tmp_path / "monitor" / "state.json"
+    args = argparse.Namespace(
+        workspace_root=str(workspace_root),
+        state_root=str(state_root),
+        monitor_root=str(tmp_path / "monitor"),
+        poll_seconds=300,
+        duration_seconds=28800,
+        repair_cooldown_seconds=1800,
+        stale_seconds=900,
+        once=True,
+    )
+
+    def fake_run_command(command, *, cwd, env=None):  # type: ignore[no-untyped-def]
+        if command[:3] == ["python3", "scripts/chummer_design_supervisor.py", "status"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(
+                    "updated_at: 2026-04-01T04:48:34Z\n"
+                    "mode: successor_wave\n"
+                    "shard.shard-1: updated_at=2026-04-01T04:48:34Z "
+                    "mode=successor_wave open=none frontier=1 active_run=20260401T044834Z\n"
+                ),
+                stderr="",
+            )
+        if command[:7] == [
+            "/usr/bin/curl",
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--unix-socket",
+            module.DOCKER_SOCKET_PATH,
+            "-X",
+        ]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout='{"State": {"Status": "running"}}\n',
+                stderr="",
+            )
+        if command[-2:] == ["compose", "version"]:
+            return subprocess.CompletedProcess(command, 0, stdout="Docker Compose version v2.0.0\n", stderr="")
+        if command[-3:] == ["compose", "ps", "fleet-controller"] or command[-3:] == ["compose", "ps", "fleet-design-supervisor"]:
+            return subprocess.CompletedProcess(command, 0, stdout="service Up\n", stderr="")
+        raise AssertionError(command)
+
+    monkeypatch.setattr(module, "utc_now", _now)
+    monkeypatch.setattr(module, "run_command", fake_run_command)
+
+    module.run_cycle(args, log_path=log_path, event_path=event_path, state_path=state_path)
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["eta"]["status"] == "tracked"
+    assert payload["eta"]["eta_human"] == "5.6d-2w"
+    assert payload["eta_human"] == "5.6d-2w"
+    assert payload["eta_status"] == "tracked"
 
 
 def test_run_cycle_treats_flagship_product_quiet_snapshot_as_non_stale(

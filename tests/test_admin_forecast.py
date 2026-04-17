@@ -1713,6 +1713,8 @@ class AdminForecastTests(unittest.TestCase):
 
         self.assertEqual(payload["progress_report"]["state"], "fresh")
         self.assertEqual(payload["progress_report"]["at"], "2026-03-26T11:45:00Z")
+        self.assertEqual(payload["weekly_governor_packet"]["state"], "fresh")
+        self.assertEqual(payload["weekly_governor_packet"]["at"], "2026-03-26T11:40:00Z")
 
     def test_published_artifact_freshness_marks_source_drift_as_stale(self) -> None:
         fixed_now = self.admin.dt.datetime(2026, 3, 26, 12, 0, tzinfo=self.admin.UTC)
@@ -1742,6 +1744,7 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["progress_report"]["state"], "stale")
         self.assertEqual(payload["progress_history"]["state"], "stale")
         self.assertEqual(payload["status_plane"]["state"], "stale")
+        self.assertEqual(payload["weekly_governor_packet"]["state"], "fresh")
         self.assertEqual(payload["progress_report"]["source_updated_at"], "2026-03-26T11:59:30Z")
         self.assertEqual(payload["status_plane"]["source_updated_at"], "2026-03-26T11:58:00Z")
         self.assertIn("published progress report", payload["progress_report"]["reason"])
@@ -1871,8 +1874,49 @@ class AdminForecastTests(unittest.TestCase):
                 "materialize_public_progress_report.py",
                 "materialize_support_case_packets.py",
                 "materialize_journey_gates.py",
+                "materialize_weekly_governor_packet.py",
             ],
         )
+
+    def test_publish_readiness_warns_when_weekly_governor_packet_is_stale(self) -> None:
+        status = {
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+        artifact_freshness = {
+            "status_plane": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
+            "release_channel": {"state": "fresh"},
+            "weekly_governor_packet": {
+                "state": "stale",
+                "reason": "Weekly governor packet is older than the measured rollout window.",
+            },
+        }
+        support_surface = {"summary": {}, "freshness": {"state": "fresh"}}
+        journey_gates = {"summary": {"overall_state": "ready"}}
+        release_channel = {
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "supportabilityState": "supported",
+            "release_proof": {"status": "passed"},
+            "proof_freshness": {"state": "fresh"},
+        }
+
+        payload = self.admin.publish_readiness_payload(
+            status,
+            artifact_freshness=artifact_freshness,
+            support_surface=support_surface,
+            journey_gates=journey_gates,
+            release_channel=release_channel,
+            provider_routes=[],
+        )
+
+        self.assertEqual(payload["state"], "warning")
+        self.assertIn(
+            "Weekly governor packet is older than the measured rollout window.",
+            payload["warning_reasons"],
+        )
+        self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
 
     def test_public_progress_report_payload_refreshes_stale_artifact_before_loading_generated_bundle(self) -> None:
         stale = {

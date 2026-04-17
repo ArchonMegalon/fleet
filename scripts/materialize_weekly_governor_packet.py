@@ -2223,6 +2223,65 @@ def _decision_receipts(
     }
 
 
+def _weekly_operator_handoff(
+    *,
+    schedule: Dict[str, Any],
+    launch_gate_summary: Dict[str, Any],
+    decision_action_routes: Dict[str, Any],
+    decision_receipts: Dict[str, Any],
+) -> Dict[str, Any]:
+    receipt_by_action = {
+        str(row.get("action") or "").strip(): row
+        for row in decision_receipts.get("rows") or []
+        if isinstance(row, dict)
+    }
+    rows: List[Dict[str, Any]] = []
+    incomplete_actions: List[str] = []
+    for route in decision_action_routes.get("rows") or []:
+        if not isinstance(route, dict):
+            continue
+        action = str(route.get("action") or "").strip()
+        if action not in REQUIRED_DECISION_ACTIONS:
+            continue
+        receipt = dict(receipt_by_action.get(action) or {})
+        row = {
+            "action": action,
+            "state": str(route.get("state") or "").strip() or "unknown",
+            "route": str(route.get("route") or "").strip() or "missing",
+            "operator_action": str(route.get("operator_action") or "").strip() or "missing",
+            "receipt_id": str(receipt.get("receipt_id") or "").strip() or "missing",
+            "blocking_gate_count": _coerce_int(route.get("blocking_gate_count"), 0),
+            "blocking_gates": _norm_list(route.get("blocking_gates")),
+            "next_decision": str(route.get("next_decision") or "").strip(),
+        }
+        if (
+            row["route"] == "missing"
+            or row["operator_action"] == "missing"
+            or row["receipt_id"] == "missing"
+            or not row["next_decision"]
+        ):
+            incomplete_actions.append(action)
+        rows.append(row)
+    present_actions = {row["action"] for row in rows}
+    missing_actions = [
+        action for action in REQUIRED_DECISION_ACTIONS if action not in present_actions
+    ]
+    return {
+        "status": "pass" if not missing_actions and not incomplete_actions else "fail",
+        "cadence": str(schedule.get("cadence") or "").strip() or "weekly",
+        "schedule_ref": "governor_packet_schedule.next_packet_due_at",
+        "source": "measured_rollout_loop.decision_action_routes+decision_receipts",
+        "required_actions": list(REQUIRED_DECISION_ACTIONS),
+        "action_count": len(rows),
+        "missing_actions": missing_actions,
+        "incomplete_actions": incomplete_actions,
+        "launch_gate_blocking_names": _norm_list(
+            launch_gate_summary.get("blocking_gate_names")
+        ),
+        "rows": rows,
+    }
+
+
 def _launch_gate_summary(launch_gate_ledger: List[Dict[str, Any]]) -> Dict[str, Any]:
     states: Dict[str, int] = {}
     blocking_gate_names: List[str] = []
@@ -2704,13 +2763,20 @@ def build_payload(
     launch_gate_summary = _launch_gate_summary(launch_gate_ledger)
     source_input_fingerprint = _source_input_fingerprint(source_input_health)
     generated_at = iso_now()
+    governor_packet_schedule = _packet_schedule(generated_at)
+    weekly_operator_handoff = _weekly_operator_handoff(
+        schedule=governor_packet_schedule,
+        launch_gate_summary=launch_gate_summary,
+        decision_action_routes=decision_action_routes,
+        decision_receipts=decision_receipts,
+    )
     return {
         "contract_name": "fleet.weekly_governor_packet",
         "schema_version": 1,
         "status": packet_status,
         "status_reason": status_reason,
         "generated_at": generated_at,
-        "governor_packet_schedule": _packet_schedule(generated_at),
+        "governor_packet_schedule": governor_packet_schedule,
         "as_of": str(weekly_pulse.get("as_of") or "").strip(),
         "program_wave": "next_90_day_product_advance",
         "wave_id": WAVE_ID,
@@ -2789,6 +2855,7 @@ def build_payload(
             "decision_source_coverage": decision_source_coverage,
             "decision_action_routes": decision_action_routes,
             "decision_receipts": decision_receipts,
+            "weekly_operator_handoff": weekly_operator_handoff,
             "evidence_requirements": [
                 "successor registry and queue item match package authority",
                 "design-owned queue staging and Fleet queue mirror both carry the completed package proof",
@@ -2853,6 +2920,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
     launch_gate_summary = dict(loop.get("launch_gate_summary") or {})
     source_coverage = dict(loop.get("decision_source_coverage") or {})
     action_routes = dict(loop.get("decision_action_routes") or {})
+    operator_handoff = dict(loop.get("weekly_operator_handoff") or {})
     risk_clusters = payload.get("risk_clusters") if isinstance(payload.get("risk_clusters"), list) else []
 
     lines = [
@@ -2902,6 +2970,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Decision source coverage: {_markdown_status(source_coverage.get('status'))}",
             f"- Decision sources covered: {source_coverage.get('covered_action_count', 0)} / {source_coverage.get('required_action_count', 0)}",
             f"- Decision action routing: {_markdown_status(action_routes.get('status'))}",
+            f"- Weekly operator handoff: {_markdown_status(operator_handoff.get('status'))}",
+            f"- Weekly operator handoff actions: {operator_handoff.get('action_count', 0)} / {len(operator_handoff.get('required_actions') or [])}",
             f"- Launch expansion ready: {bool(loop.get('launch_expansion_ready'))}",
             f"- Launch gates green: {bool(launch_gate_summary.get('all_green'))}",
             f"- Launch gate pass count: {launch_gate_summary.get('pass_count', 0)}",
@@ -3077,6 +3147,35 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
         lines.append(
             "| none | unknown | unknown | unknown | unknown | False | unknown | unknown | unknown | none | none | False |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## Weekly Operator Handoff",
+            "",
+            f"- Source: {_markdown_status(operator_handoff.get('source'))}",
+            f"- Cadence: {_markdown_status(operator_handoff.get('cadence'))}",
+            f"- Schedule ref: {_markdown_status(operator_handoff.get('schedule_ref'))}",
+            f"- Launch gate blocking names: {_markdown_list(operator_handoff.get('launch_gate_blocking_names'))}",
+            "",
+            "| Action | State | Route | Operator action | Receipt | Blocking gates | Next decision |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in operator_handoff.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| {_markdown_status(row.get('action'))} | "
+            f"{_markdown_status(row.get('state'))} | "
+            f"{_markdown_status(row.get('route'))} | "
+            f"{_markdown_status(row.get('operator_action'))} | "
+            f"{_markdown_status(row.get('receipt_id'))} | "
+            f"{_markdown_list(row.get('blocking_gates'))} | "
+            f"{_markdown_status(row.get('next_decision'))} |"
+        )
+    if not operator_handoff.get("rows"):
+        lines.append("| none | unknown | unknown | unknown | missing | none | none |")
 
     lines.extend(["", "## Evidence Requirements", ""])
     for requirement in loop.get("evidence_requirements") or []:

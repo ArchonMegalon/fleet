@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -372,6 +373,13 @@ def _parse_utc_datetime(value: Any) -> dt.datetime | None:
     return parsed.astimezone(dt.timezone.utc)
 
 
+def _isoformat_utc(value: Any) -> str | None:
+    parsed = _parse_utc_datetime(value)
+    if parsed is None:
+        return None
+    return parsed.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _humanize_age(timestamp: dt.datetime, *, now: dt.datetime) -> str:
     delta = now - timestamp
     if delta.total_seconds() <= 0:
@@ -387,6 +395,350 @@ def _humanize_age(timestamp: dt.datetime, *, now: dt.datetime) -> str:
         return f"{hours}h ago"
     days = hours // 24
     return f"{days}d ago"
+
+
+def _onemin_renewal_ledger_path() -> Path:
+    raw = str(os.environ.get("CODEXEA_ONEMIN_RENEWAL_LEDGER_PATH") or "").strip()
+    return Path(raw) if raw else (ROOT / "state" / "onemin_renewal_ledger.json")
+
+
+def _onemin_renewal_schedule_path() -> Path:
+    raw = str(os.environ.get("CODEXEA_ONEMIN_RENEWAL_SCHEDULE_PATH") or "").strip()
+    return Path(raw) if raw else (ROOT / "state" / "onemin_credit_renewal_schedule.json")
+
+
+def _onemin_daily_bonus_horizon_days() -> int:
+    return max(1, int(_env_float("CODEXEA_ONEMIN_DAILY_BONUS_HORIZON_DAYS", 14.0)))
+
+
+def _onemin_default_daily_bonus_credits() -> int:
+    return max(0, int(_env_float("CODEXEA_ONEMIN_DAILY_BONUS_CREDITS", 15000.0)))
+
+
+def _json_file_payload(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _onemin_cycle_interval(cycle: str) -> dt.timedelta | None:
+    normalized = str(cycle or "").strip().upper()
+    if normalized in {"MONTHLY", "MONTH", "SUBSCRIPTION", "RECURRING"}:
+        return dt.timedelta(days=30)
+    if normalized in {"YEARLY", "ANNUAL", "YEAR"}:
+        return dt.timedelta(days=365)
+    return None
+
+
+def _onemin_next_daily_bonus_reset(now: dt.datetime) -> dt.datetime:
+    pacific_now = now.astimezone(ZoneInfo("America/Los_Angeles"))
+    next_reset_local = pacific_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if pacific_now >= next_reset_local:
+        next_reset_local += dt.timedelta(days=1)
+    return next_reset_local.astimezone(dt.timezone.utc)
+
+
+def _onemin_project_future_occurrence(anchor: dt.datetime, interval: dt.timedelta, now: dt.datetime) -> dt.datetime:
+    projected = anchor
+    while projected <= now:
+        projected += interval
+    return projected
+
+
+def _onemin_renewal_account_rows(aggregate: dict[str, Any]) -> list[dict[str, Any]]:
+    lookup = ((aggregate.get("billing_lookup") or {}).get("global_aggregate_snapshot") or {})
+    account_rows = lookup.get("accounts")
+    if not isinstance(account_rows, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for account in account_rows:
+        if not isinstance(account, dict):
+            continue
+        credentials = [row for row in (account.get("credentials") or []) if isinstance(row, dict)]
+        if not credentials:
+            credentials = [account]
+        for credential in credentials:
+            details = credential.get("details_json") if isinstance(credential.get("details_json"), dict) else None
+            if not isinstance(details, dict) or not details:
+                details = account.get("details_json") if isinstance(account.get("details_json"), dict) else {}
+            account_label = (
+                str(account.get("account_label") or credential.get("account_id") or credential.get("secret_env_name") or details.get("slot_env_name") or "").strip()
+            )
+            if not account_label:
+                continue
+            rows.append(
+                {
+                    "account_label": account_label,
+                    "owner_email": str(credential.get("owner_email") or account.get("owner_email") or details.get("owner_email") or "").strip(),
+                    "billing_cycle": str(details.get("billing_cycle") or "").strip().upper() or None,
+                    "billing_plan_name": str(details.get("billing_plan_name") or "").strip() or None,
+                    "billing_next_topup_at": _isoformat_utc(details.get("billing_next_topup_at")),
+                    "billing_topup_amount": _coerce_float(details.get("billing_topup_amount")),
+                    "billing_remaining_credits": _coerce_float(
+                        _coalesce(
+                            details.get("billing_remaining_credits"),
+                            credential.get("remaining_credits"),
+                            account.get("actual_remaining_credits"),
+                            account.get("remaining_credits"),
+                            details.get("estimated_remaining_credits"),
+                        )
+                    ),
+                    "billing_max_credits": _coerce_float(
+                        _coalesce(
+                            details.get("billing_max_credits"),
+                            credential.get("max_credits"),
+                            account.get("actual_max_credits"),
+                            account.get("max_credits"),
+                            details.get("max_credits"),
+                        )
+                    ),
+                    "billing_daily_bonus_available": _bool_or_none(details.get("billing_daily_bonus_available")),
+                    "billing_daily_bonus_credits": _coerce_int(
+                        _coalesce(details.get("billing_daily_bonus_credits"), _onemin_default_daily_bonus_credits())
+                    ),
+                    "topup_detected": bool(details.get("topup_detected")),
+                    "topup_delta": _coerce_float(details.get("topup_delta")),
+                    "last_billing_snapshot_at": _isoformat_utc(
+                        _coalesce(details.get("last_billing_snapshot_at"), account.get("last_billing_snapshot_at"))
+                    ),
+                    "last_member_reconciliation_at": _isoformat_utc(
+                        _coalesce(details.get("member_reconciliation_at"), account.get("last_member_reconciliation_at"))
+                    ),
+                    "billing_basis": str(details.get("billing_basis") or "").strip() or None,
+                    "billing_subscription_status": str(details.get("billing_subscription_status") or "").strip() or None,
+                }
+            )
+    return rows
+
+
+def _onemin_schedule_summary(schedule: dict[str, Any]) -> dict[str, Any]:
+    rows = schedule.get("upcoming_credits")
+    if not isinstance(rows, list):
+        rows = []
+    return {
+        "path": str(_onemin_renewal_schedule_path()),
+        "updated_at": _isoformat_utc(schedule.get("updated_at")),
+        "account_count": _coerce_int(schedule.get("account_count")) or 0,
+        "provider_topup_account_count": _coerce_int(schedule.get("provider_topup_account_count")) or 0,
+        "daily_bonus_confirmed_account_count": _coerce_int(schedule.get("daily_bonus_confirmed_account_count")) or 0,
+        "daily_bonus_unknown_account_count": _coerce_int(schedule.get("daily_bonus_unknown_account_count")) or 0,
+        "schedule_row_count": len(rows),
+        "next_credit_event": rows[0] if rows else None,
+        "upcoming_credits": rows[: min(len(rows), 16)],
+        "notes": [str(note) for note in (schedule.get("notes") or []) if str(note).strip()],
+    }
+
+
+def _update_onemin_renewal_schedule(aggregate: dict[str, Any]) -> dict[str, Any] | None:
+    ledger_path = _onemin_renewal_ledger_path()
+    schedule_path = _onemin_renewal_schedule_path()
+    rows = _onemin_renewal_account_rows(aggregate)
+    if not rows:
+        existing_schedule = _json_file_payload(schedule_path)
+        return _onemin_schedule_summary(existing_schedule) if isinstance(existing_schedule, dict) else None
+
+    now = _utc_now()
+    existing_ledger = _json_file_payload(ledger_path) or {}
+    existing_accounts = existing_ledger.get("accounts")
+    if not isinstance(existing_accounts, dict):
+        existing_accounts = {}
+
+    ledger_accounts: dict[str, Any] = {}
+    provider_rows: list[dict[str, Any]] = []
+    daily_confirmed_accounts = 0
+    daily_unknown_accounts = 0
+    daily_confirmed_per_account = 0
+
+    for row in rows:
+        account_label = str(row.get("account_label") or "").strip()
+        existing = existing_accounts.get(account_label)
+        if not isinstance(existing, dict):
+            existing = {}
+        previous_remaining = _coerce_float(existing.get("last_remaining_credits"))
+        current_remaining = _coerce_float(row.get("billing_remaining_credits"))
+        observed_increase = None
+        if previous_remaining is not None and current_remaining is not None:
+            delta = round(float(current_remaining) - float(previous_remaining), 2)
+            if delta > 0:
+                observed_increase = delta
+        event_amount = _coerce_float(row.get("topup_delta"))
+        if event_amount in (None, 0) and bool(row.get("topup_detected")):
+            event_amount = observed_increase
+        events = list(existing.get("observed_topups") or [])
+        snapshot_at = _isoformat_utc(row.get("last_billing_snapshot_at"))
+        if snapshot_at and event_amount not in (None, 0):
+            event_key = (snapshot_at, round(float(event_amount), 2))
+            known_event_keys = {
+                (
+                    str(event.get("observed_at") or "").strip(),
+                    round(float(_coerce_float(event.get("amount")) or 0.0), 2),
+                )
+                for event in events
+                if isinstance(event, dict)
+            }
+            if event_key not in known_event_keys:
+                events.append(
+                    {
+                        "observed_at": snapshot_at,
+                        "amount": round(float(event_amount), 2),
+                        "source": "provider_topup_detected" if bool(row.get("topup_detected")) else "balance_increase",
+                    }
+                )
+                events = events[-12:]
+
+        projected_topup_at = _isoformat_utc(row.get("billing_next_topup_at"))
+        projected_topup_amount = _coerce_float(row.get("billing_topup_amount"))
+        projection_source = None
+        if projected_topup_at:
+            projection_source = "provider_explicit"
+        else:
+            interval = _onemin_cycle_interval(str(row.get("billing_cycle") or ""))
+            if interval is not None and events:
+                last_event = events[-1]
+                anchor = _parse_utc_datetime(last_event.get("observed_at"))
+                event_amount = _coerce_float(last_event.get("amount"))
+                if anchor is not None and event_amount not in (None, 0):
+                    projected_topup_at = _isoformat_utc(_onemin_project_future_occurrence(anchor, interval, now))
+                    projected_topup_amount = event_amount
+                    projection_source = "observed_cycle_anchor"
+
+        daily_bonus_available = _bool_or_none(row.get("billing_daily_bonus_available"))
+        daily_bonus_credits = _coerce_int(row.get("billing_daily_bonus_credits")) or _onemin_default_daily_bonus_credits()
+        if daily_bonus_available is True:
+            daily_confirmed_accounts += 1
+            daily_confirmed_per_account = daily_bonus_credits
+        elif daily_bonus_available is None:
+            daily_unknown_accounts += 1
+
+        account_payload = {
+            "account_label": account_label,
+            "owner_email": str(row.get("owner_email") or "").strip(),
+            "billing_cycle": row.get("billing_cycle"),
+            "billing_plan_name": row.get("billing_plan_name"),
+            "billing_subscription_status": row.get("billing_subscription_status"),
+            "billing_basis": row.get("billing_basis"),
+            "last_billing_snapshot_at": snapshot_at,
+            "last_member_reconciliation_at": _isoformat_utc(row.get("last_member_reconciliation_at")),
+            "last_remaining_credits": current_remaining,
+            "last_max_credits": _coerce_float(row.get("billing_max_credits")),
+            "billing_next_topup_at": _isoformat_utc(row.get("billing_next_topup_at")),
+            "billing_topup_amount": _coerce_float(row.get("billing_topup_amount")),
+            "daily_bonus_available": daily_bonus_available,
+            "daily_bonus_credits": daily_bonus_credits,
+            "projected_topup_at": projected_topup_at,
+            "projected_topup_amount": projected_topup_amount,
+            "projection_source": projection_source,
+            "observed_topups": events,
+            "updated_at": _isoformat_utc(now),
+        }
+        ledger_accounts[account_label] = account_payload
+
+        projected_topup_dt = _parse_utc_datetime(projected_topup_at)
+        if projected_topup_dt is not None and projected_topup_amount not in (None, 0):
+            provider_rows.append(
+                {
+                    "scheduled_for": _isoformat_utc(projected_topup_dt),
+                    "date": projected_topup_dt.date().isoformat(),
+                    "kind": "provider_topup",
+                    "credit_amount": int(round(float(projected_topup_amount))),
+                    "account_count": 1,
+                    "accounts": [account_label],
+                    "source": projection_source or "provider_explicit",
+                }
+            )
+
+    ledger_payload = {
+        "updated_at": _isoformat_utc(now),
+        "account_count": len(ledger_accounts),
+        "accounts": ledger_accounts,
+    }
+    _write_json_atomic(ledger_path, ledger_payload)
+
+    horizon_days = _onemin_daily_bonus_horizon_days()
+    upcoming_rows: list[dict[str, Any]] = []
+    provider_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in provider_rows:
+        key = (str(row.get("scheduled_for") or ""), str(row.get("kind") or ""))
+        current = provider_by_key.get(key)
+        if current is None:
+            provider_by_key[key] = dict(row)
+            continue
+        current["credit_amount"] = int(current.get("credit_amount") or 0) + int(row.get("credit_amount") or 0)
+        current["account_count"] = int(current.get("account_count") or 0) + int(row.get("account_count") or 0)
+        current["accounts"] = sorted({*(current.get("accounts") or []), *(row.get("accounts") or [])})
+    upcoming_rows.extend(provider_by_key.values())
+
+    daily_reset = _onemin_next_daily_bonus_reset(now)
+    for day_offset in range(horizon_days):
+        scheduled_for = daily_reset + dt.timedelta(days=day_offset)
+        scheduled_iso = _isoformat_utc(scheduled_for)
+        date_key = scheduled_for.date().isoformat()
+        if daily_confirmed_accounts > 0 and daily_confirmed_per_account > 0:
+            upcoming_rows.append(
+                {
+                    "scheduled_for": scheduled_iso,
+                    "date": date_key,
+                    "kind": "daily_bonus_confirmed",
+                    "credit_amount": daily_confirmed_accounts * daily_confirmed_per_account,
+                    "account_count": daily_confirmed_accounts,
+                    "per_account_amount": daily_confirmed_per_account,
+                    "source": "billing_daily_bonus_available",
+                }
+            )
+        if daily_unknown_accounts > 0 and daily_confirmed_per_account > 0:
+            upcoming_rows.append(
+                {
+                    "scheduled_for": scheduled_iso,
+                    "date": date_key,
+                    "kind": "daily_bonus_possible",
+                    "credit_amount": daily_unknown_accounts * daily_confirmed_per_account,
+                    "account_count": daily_unknown_accounts,
+                    "per_account_amount": daily_confirmed_per_account,
+                    "source": "billing_daily_bonus_unknown",
+                }
+            )
+
+    upcoming_rows.sort(key=lambda row: (str(row.get("scheduled_for") or ""), str(row.get("kind") or "")))
+    cumulative_confirmed = 0
+    cumulative_upper_bound = 0
+    for row in upcoming_rows:
+        amount = int(_coerce_int(row.get("credit_amount")) or 0)
+        kind = str(row.get("kind") or "").strip()
+        if kind != "daily_bonus_possible":
+            cumulative_confirmed += amount
+        cumulative_upper_bound += amount
+        row["cumulative_confirmed_credits"] = cumulative_confirmed
+        row["cumulative_upper_bound_credits"] = cumulative_upper_bound
+
+    notes: list[str] = []
+    if not provider_rows:
+        notes.append("No account currently exposes an explicit provider top-up ETA; waiting for provider data or an observed renewal anchor.")
+    if daily_unknown_accounts > 0:
+        notes.append(
+            f"{daily_unknown_accounts} account(s) do not yet expose daily bonus eligibility in the billing snapshot; possible rows are upper bounds."
+        )
+
+    schedule_payload = {
+        "updated_at": _isoformat_utc(now),
+        "horizon_days": horizon_days,
+        "account_count": len(ledger_accounts),
+        "provider_topup_account_count": len(provider_rows),
+        "daily_bonus_confirmed_account_count": daily_confirmed_accounts,
+        "daily_bonus_unknown_account_count": daily_unknown_accounts,
+        "upcoming_credits": upcoming_rows,
+        "notes": notes,
+    }
+    _write_json_atomic(schedule_path, schedule_payload)
+    return _onemin_schedule_summary(schedule_payload)
 
 
 def _prefer_runtime_auth_values() -> bool:
@@ -1906,6 +2258,11 @@ def _onemin_aggregate_response(
                 "and a live `codexea onemin --probe-all` run."
             ),
         }
+    if isinstance(billing_refresh_payload, dict):
+        aggregate = {**aggregate, "billing_lookup": billing_refresh_payload}
+    renewal_schedule = _update_onemin_renewal_schedule(aggregate)
+    if isinstance(renewal_schedule, dict):
+        aggregate = {**aggregate, "renewal_schedule": renewal_schedule}
     rendered = _render_onemin_aggregate(aggregate, include_slots=include_slots, slots_detail=slots_detail)
     fragments: list[str] = []
     source_notice = _source_notice(
@@ -1917,7 +2274,6 @@ def _onemin_aggregate_response(
     if source_notice:
         fragments.append(source_notice)
     if isinstance(billing_refresh_payload, dict):
-        aggregate = {**aggregate, "billing_lookup": billing_refresh_payload}
         if (not billing_full_refresh) and _billing_refresh_used_cached_state(billing_refresh_payload, aggregate):
             fragments.append(
                 _render_onemin_billing_refresh_cached_note(

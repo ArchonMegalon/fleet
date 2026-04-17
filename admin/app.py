@@ -208,6 +208,8 @@ PROGRESS_HISTORY_FILENAME = "PROGRESS_HISTORY.generated.json"
 STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
 JOURNEY_GATES_FILENAME = "JOURNEY_GATES.generated.json"
+WEEKLY_GOVERNOR_PACKET_FILENAME = "WEEKLY_GOVERNOR_PACKET.generated.json"
+WEEKLY_GOVERNOR_PACKET_MARKDOWN_FILENAME = "WEEKLY_GOVERNOR_PACKET.generated.md"
 CHUMMER_RELEASE_CHANNEL_PATH = pathlib.Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
 CHUMMER_RELEASE_REGISTRY_CURRENT_URL = str(os.environ.get("CHUMMER_RELEASE_REGISTRY_CURRENT_URL", "") or "").strip()
 CHUMMER_HUB_REGISTRY_BASE_URL = str(os.environ.get("CHUMMER_HUB_REGISTRY_BASE_URL", "") or "").strip()
@@ -287,7 +289,7 @@ QUEUE_SOURCE_ACTIVE_STATUSES = {
     "active",
     "queued",
 }
-QUEUE_SOURCE_MILESTONE_TERMINAL_STATUSES = {"released"}
+QUEUE_SOURCE_MILESTONE_TERMINAL_STATUSES = {"released", "complete", "completed", "done", "closed"}
 QUEUE_SOURCE_WORKLIST_CHECKLIST_RE = re.compile(r"^\s*-\s*\[(?P<done>[ xX])\]\s*(?P<task>.+?)\s*(?:\((?P<status>[^()]+)\))?\s*$")
 DEFAULT_COMPILE_FRESHNESS_HOURS = {
     "planned": 720,
@@ -1807,6 +1809,93 @@ def _load_worklist_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]
     return _select_latest_active_tasks(entries)
 
 
+def _feedback_heading_targeted(heading: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(heading or "").strip().lower())
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return False
+    return normalized in {
+        "required next work",
+        "required next steps",
+        "immediate follow on work",
+        "immediate follow on work after current flagship closeout",
+        "next work",
+    }
+
+
+def _load_feedback_notes_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
+    path = _resolve_project_queue_source_file(project_cfg, str(source_cfg.get("path", "feedback")))
+    if not path.exists():
+        return []
+    candidate_paths: List[pathlib.Path] = []
+    if path.is_file():
+        candidate_paths = [path]
+    elif path.is_dir():
+        pattern = str(source_cfg.get("glob") or "*.md").strip() or "*.md"
+        candidate_paths = sorted(
+            (candidate for candidate in path.glob(pattern) if candidate.is_file()),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+        max_files = max(0, int(source_cfg.get("max_files") or 0))
+        if max_files > 0:
+            candidate_paths = candidate_paths[:max_files]
+    tasks: List[str] = []
+    for candidate in candidate_paths:
+        try:
+            lines = candidate.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            continue
+        section_active = False
+        section_level = 0
+        current_parent = ""
+        for raw_line in lines:
+            heading_match = re.match(r"^(#{1,6})\s+(.*)$", raw_line)
+            if heading_match:
+                level = len(heading_match.group(1) or "")
+                heading = str(heading_match.group(2) or "").strip()
+                if _feedback_heading_targeted(heading):
+                    section_active = True
+                    section_level = level
+                    current_parent = ""
+                elif section_active and level <= section_level:
+                    section_active = False
+                    current_parent = ""
+                continue
+            if not section_active:
+                continue
+            bullet_match = re.match(r"^(?P<indent>\s*)-\s+(?P<task>.+?)\s*$", raw_line)
+            if not bullet_match:
+                continue
+            indent = len(str(bullet_match.group("indent") or "").expandtabs(2))
+            task = str(bullet_match.group("task") or "").strip().strip("`")
+            if not task:
+                continue
+            if indent <= 1:
+                current_parent = task
+                if not task.endswith(":"):
+                    tasks.append(task)
+                continue
+            if current_parent:
+                parent = current_parent.rstrip(":").strip()
+                if parent:
+                    tasks.append(f"{parent}: {task}")
+                    continue
+            tasks.append(task)
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for task in tasks:
+        normalized = " ".join(str(task or "").split()).strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped
+
+
 def _load_tasks_work_log_queue(project_cfg: Dict[str, Any], source_cfg: Dict[str, Any]) -> List[str]:
     path = _resolve_project_queue_source_file(project_cfg, str(source_cfg.get("path", "TASKS_WORK_LOG.md")))
     if not path.exists() or not path.is_file():
@@ -1873,13 +1962,29 @@ def _load_milestone_capability_queue(project_cfg: Dict[str, Any], source_cfg: Di
     return items
 
 
+def _queue_entry_status(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    return str(item.get("status") or item.get("state") or "").strip().lower().replace("_", " ")
+
+
+def _queue_entry_active(item: Any) -> bool:
+    status = _queue_entry_status(item)
+    if not status:
+        return True
+    return status not in QUEUE_SOURCE_MILESTONE_TERMINAL_STATUSES
+
+
 def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cfg: Dict[str, Any]) -> List[Any]:
+    queue = [item for item in queue if _queue_entry_active(item)]
     fallback_only_if_empty = bool(source_cfg.get("fallback_only_if_empty"))
     if fallback_only_if_empty and queue:
         return list(queue)
     kind = str(source_cfg.get("kind", "") or "").strip().lower()
     if kind == "worklist":
         items = _load_worklist_queue(project_cfg, source_cfg)
+    elif kind == "feedback_notes":
+        items = _load_feedback_notes_queue(project_cfg, source_cfg)
     elif kind == "tasks_work_log":
         items = _load_tasks_work_log_queue(project_cfg, source_cfg)
     elif kind == "milestone_capabilities":
@@ -1895,10 +2000,10 @@ def _apply_queue_source(project_cfg: Dict[str, Any], queue: List[Any], source_cf
 
 
 def _base_queue_for_project(project_cfg: Dict[str, Any]) -> List[Any]:
-    queue = list(project_cfg.get("queue") or [])
+    queue = [item for item in (project_cfg.get("queue") or []) if _queue_entry_active(item)]
     for source_cfg in project_cfg.get("queue_sources") or []:
         if isinstance(source_cfg, dict):
-            queue = _apply_queue_source(project_cfg, queue, source_cfg)
+            queue = [item for item in _apply_queue_source(project_cfg, queue, source_cfg) if _queue_entry_active(item)]
     return queue
 
 
@@ -9173,6 +9278,257 @@ def truth_freshness_payload(status: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def load_design_supervisor_active_shards_payload() -> Dict[str, Any]:
+    path = _normalized_design_supervisor_state_root() / "active_shards.json"
+    payload = load_json_payload(path)
+    return payload if isinstance(payload, dict) else {}
+
+
+def load_completion_review_frontier_payload() -> Dict[str, Any]:
+    payload = load_published_yaml_payload("COMPLETION_REVIEW_FRONTIER.generated.yaml")
+    return payload if isinstance(payload, dict) else {}
+
+
+def _count_by_clean_state(items: Sequence[Any], key: str, *, default: str = "unknown") -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for item in items:
+        value = default
+        if isinstance(item, dict):
+            value = str(item.get(key) or default).strip().lower().replace("_", " ") or default
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _operator_state_from_counts(counts: Dict[str, int]) -> str:
+    if any(counts.get(key, 0) for key in ("red", "blocked", "critical", "action needed", "missing", "stale")):
+        return "blocked"
+    if any(counts.get(key, 0) for key in ("yellow", "warning", "degraded", "attention", "unknown")):
+        return "attention"
+    return "nominal"
+
+
+def operator_surface_payload(
+    status: Dict[str, Any],
+    *,
+    active_shards_payload: Optional[Dict[str, Any]] = None,
+    artifact_freshness: Optional[Dict[str, Any]] = None,
+    completion_frontier: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    cockpit = status.get("cockpit") or {}
+    projects = status.get("projects") or (status.get("config") or {}).get("projects") or []
+    groups = status.get("groups") or (status.get("config") or {}).get("groups") or []
+    account_pools = status.get("account_pools") or []
+    workers = cockpit.get("workers") or status.get("workers") or []
+    worker_breakdown = cockpit.get("worker_breakdown") or build_worker_breakdown(status)
+    queue_forecast = cockpit.get("queue_forecast") or {}
+    capacity_forecast = cockpit.get("capacity_forecast") or {}
+    blocker_forecast = cockpit.get("blocker_forecast") or {}
+    runtime_healing = status.get("runtime_healing") or {}
+    runtime_healing_summary = runtime_healing.get("summary") or {}
+    active_shards = dict(active_shards_payload if active_shards_payload is not None else load_design_supervisor_active_shards_payload())
+    shard_rows = [dict(item) for item in (active_shards.get("active_shards") or []) if isinstance(item, dict)]
+    freshness = dict(artifact_freshness if artifact_freshness is not None else published_artifact_freshness_payload())
+    frontier_payload = dict(completion_frontier if completion_frontier is not None else load_completion_review_frontier_payload())
+    frontier_rows = [dict(item) for item in (frontier_payload.get("frontier") or []) if isinstance(item, dict)]
+
+    running_shards = [
+        item
+        for item in shard_rows
+        if bool(item.get("active_run_process_alive"))
+        or str(item.get("active_run_id") or "").strip()
+        or str(item.get("active_run_progress_state") or "").strip().lower() not in {"", "idle_waiting_for_local_frontier_slice", "idle"}
+    ]
+    shard_modes = _count_by_clean_state(shard_rows, "mode")
+    shard_progress = _count_by_clean_state(shard_rows, "active_run_progress_state", default="idle")
+    focus_owner_counts: Dict[str, int] = {}
+    for item in shard_rows:
+        for owner in item.get("focus_owners") or []:
+            clean = str(owner or "").strip()
+            if clean:
+                focus_owner_counts[clean] = focus_owner_counts.get(clean, 0) + 1
+    focus_owners = [
+        {"owner": owner, "shards": count}
+        for owner, count in sorted(focus_owner_counts.items(), key=lambda row: (-row[1], row[0]))[:8]
+    ]
+    shard_mix = {
+        "configured_shard_count": int(active_shards.get("configured_shard_count") or len(active_shards.get("configured_shards") or []) or len(shard_rows)),
+        "observed_shard_count": len(shard_rows),
+        "active_run_count": int(active_shards.get("active_run_count") or len(running_shards)),
+        "running_shard_count": len(running_shards),
+        "open_milestone_count": sum(len(item.get("open_milestone_ids") or []) for item in shard_rows),
+        "modes": shard_modes,
+        "progress_states": shard_progress,
+        "focus_owners": focus_owners,
+        "updated_at": str(active_shards.get("updated_at") or active_shards.get("generated_at") or "").strip(),
+    }
+
+    project_rows: List[Dict[str, Any]] = []
+    blocked_projects: List[Dict[str, Any]] = []
+    review_waiting_projects: List[Dict[str, Any]] = []
+    queue_open_count = 0
+    for project in projects:
+        project_id = str(project.get("id") or "").strip()
+        queue_len = project_queue_length(project)
+        runtime_status = str(project.get("runtime_status") or project.get("runtime_status_internal") or "").strip()
+        if queue_len > 0:
+            queue_open_count += 1
+        row = {
+            "id": project_id,
+            "runtime_status": runtime_status,
+            "queue_length": queue_len,
+            "current_slice": str(project.get("current_slice") or current_queue_item_text(project) or "").strip(),
+            "queue_source_health": str(project.get("queue_source_health") or "").strip(),
+            "selected_lane": str(project.get("selected_lane") or "").strip(),
+        }
+        project_rows.append(row)
+        if runtime_status in {"blocked", "decision_required", "manual_hold", "blocked_credit_burn_disabled", "source_backlog_open"}:
+            blocked_projects.append(row)
+        if runtime_status in REVIEW_WAITING_STATUSES or runtime_status in REVIEW_VISIBLE_STATUSES:
+            review_waiting_projects.append(row)
+    queue_health = {
+        "state": "blocked" if blocked_projects else ("attention" if review_waiting_projects else "nominal"),
+        "project_count": len(project_rows),
+        "open_queue_project_count": queue_open_count,
+        "blocked_project_count": len(blocked_projects),
+        "review_waiting_project_count": len(review_waiting_projects),
+        "now": queue_forecast.get("now") or {},
+        "next": queue_forecast.get("next") or {},
+        "blocked_projects": blocked_projects[:8],
+        "review_waiting_projects": review_waiting_projects[:8],
+    }
+
+    proof_rows = []
+    proof_state_counts: Dict[str, int] = {}
+    for key, value in sorted(freshness.items()):
+        if not isinstance(value, dict):
+            continue
+        state = str(value.get("state") or "unknown").strip().lower() or "unknown"
+        proof_state_counts[state] = proof_state_counts.get(state, 0) + 1
+        proof_rows.append(
+            {
+                "key": key,
+                "state": state,
+                "label": str(value.get("label") or state).strip(),
+                "at": str(value.get("at") or value.get("source_updated_at") or "").strip(),
+                "age": str(value.get("age") or value.get("source_drift_human") or "").strip(),
+                "reason": str(value.get("reason") or "").strip(),
+            }
+        )
+    proof_freshness = {
+        "state": _operator_state_from_counts(proof_state_counts),
+        "counts": proof_state_counts,
+        "stale_or_missing_count": sum(proof_state_counts.get(key, 0) for key in ("stale", "missing")),
+        "rows": proof_rows,
+    }
+
+    account_rows: List[Dict[str, Any]] = []
+    account_state_counts: Dict[str, int] = {}
+    for pool in account_pools:
+        pressure = account_pressure_state(pool)
+        account_state_counts[pressure] = account_state_counts.get(pressure, 0) + 1
+        account_rows.append(
+            {
+                "alias": str(pool.get("alias") or "").strip(),
+                "pressure_state": pressure,
+                "auth_status": str(pool.get("auth_status") or "").strip(),
+                "pool_state": str(pool.get("pool_state") or "").strip(),
+                "token_status": account_token_status_text(pool),
+                "left": account_pool_left_text(pool),
+                "active_runs": int(pool.get("active_runs") or 0),
+                "max_parallel_runs": int(pool.get("max_parallel_runs") or 0),
+                "last_error": str(pool.get("last_error") or "").strip(),
+            }
+        )
+    account_health = {
+        "state": _operator_state_from_counts(account_state_counts),
+        "counts": account_state_counts,
+        "account_count": len(account_rows),
+        "attention_accounts": [item for item in account_rows if item["pressure_state"] != "green"][:8],
+    }
+
+    resource_pressure = {
+        "state": str(capacity_forecast.get("critical_path_stop") or capacity_forecast.get("mission_runway") or "unknown").strip(),
+        "active_workers": int(worker_breakdown.get("active_workers") or 0),
+        "active_coding_workers": int(worker_breakdown.get("active_coding_workers") or 0),
+        "active_review_workers": int(worker_breakdown.get("active_review_workers") or 0),
+        "review_pressure_workers": int(worker_breakdown.get("review_pressure_workers") or 0),
+        "healing_workers": int(worker_breakdown.get("healing_workers") or 0),
+        "critical_path_lane": str(capacity_forecast.get("critical_path_lane") or "").strip(),
+        "mission_runway": str(capacity_forecast.get("mission_runway") or "").strip(),
+        "pool_runway": str(capacity_forecast.get("pool_runway") or "").strip(),
+        "runtime_healing_alert_state": str(runtime_healing_summary.get("alert_state") or "unknown").strip(),
+        "runtime_healing_recent_restarts": int(runtime_healing_summary.get("recent_restart_count") or 0),
+        "workers": workers[:8],
+    }
+
+    blocked_milestones: List[Dict[str, Any]] = []
+    for group in groups:
+        remaining = [str(item).strip() for item in (group.get("remaining_milestones") or []) if str(item).strip()]
+        blockers = [str(item).strip() for item in (group.get("contract_blockers") or group.get("dispatch_blockers") or []) if str(item).strip()]
+        if remaining or blockers or str(group.get("status") or "").strip() in {"group_blocked", "contract_blocked"}:
+            blocked_milestones.append(
+                {
+                    "scope": f"group:{group.get('id')}",
+                    "status": str(group.get("status") or "").strip(),
+                    "remaining_count": len(remaining),
+                    "remaining": remaining[:5],
+                    "blockers": blockers[:5],
+                    "eta": group.get("milestone_eta") or group.get("program_eta") or {},
+                }
+            )
+    for item in frontier_rows:
+        blocked_milestones.append(
+            {
+                "scope": f"frontier:{item.get('id')}",
+                "status": str(item.get("status") or "").strip(),
+                "remaining_count": len(item.get("exit_criteria") or []),
+                "remaining": [str(item.get("title") or "").strip()],
+                "blockers": [str(criteria).strip() for criteria in (item.get("exit_criteria") or [])[:3] if str(criteria).strip()],
+                "eta": frontier_payload.get("eta") or {},
+            }
+        )
+
+    alerts: List[str] = []
+    completion_status = str(((frontier_payload.get("completion_audit") or {}).get("status")) or "").strip().lower()
+    if completion_status == "fail":
+        alerts.append(str((frontier_payload.get("completion_audit") or {}).get("reason") or "completion audit is failing").strip())
+    if blocked_projects:
+        alerts.append(f"{len(blocked_projects)} project(s) are blocked")
+    if proof_freshness["stale_or_missing_count"]:
+        alerts.append(f"{proof_freshness['stale_or_missing_count']} proof artifact(s) are stale or missing")
+    if account_health["state"] == "blocked":
+        alerts.append("one or more account pools are red")
+    if not alerts and blocked_milestones:
+        alerts.append("frontier or milestone work remains open")
+    if not alerts:
+        alerts.append("no immediate operator page")
+
+    section_states = {
+        "shard_mix": "attention" if shard_mix["running_shard_count"] < shard_mix["active_run_count"] else "nominal",
+        "queue_health": queue_health["state"],
+        "proof_freshness": proof_freshness["state"],
+        "account_health": account_health["state"],
+        "resource_pressure": "attention" if str(resource_pressure["runtime_healing_alert_state"]).lower() in {"degraded", "action_needed"} else "nominal",
+        "blocked_milestones": "blocked" if blocked_milestones else "nominal",
+    }
+    overall_state = "blocked" if "blocked" in section_states.values() else ("attention" if "attention" in section_states.values() else "nominal")
+    return {
+        "contract_name": "fleet.operator_surface",
+        "schema_version": 1,
+        "generated_at": status.get("generated_at") or iso(utc_now()),
+        "overall_state": overall_state,
+        "next_page": alerts[0],
+        "section_states": section_states,
+        "shard_mix": shard_mix,
+        "queue_health": queue_health,
+        "proof_freshness": proof_freshness,
+        "account_health": account_health,
+        "resource_pressure": resource_pressure,
+        "blocked_milestones": blocked_milestones[:12],
+        "blocker_forecast": blocker_forecast,
+    }
+
+
 def mission_active_project(status: Dict[str, Any], queue_forecast: Dict[str, Any]) -> Dict[str, Any]:
     now_project_id = str((queue_forecast.get("now") or {}).get("project_id") or "").strip()
     if not now_project_id:
@@ -10236,6 +10592,7 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
     progress_report = load_published_json_payload(PROGRESS_REPORT_FILENAME)
     progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
+    weekly_governor_packet = load_published_json_payload(WEEKLY_GOVERNOR_PACKET_FILENAME)
     compile_manifest = compile_manifest_surface_payload()
     support_packets = support_case_surface_payload()
     journey_gates = journey_gates_surface_payload()
@@ -10247,6 +10604,10 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
         "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
         "journey_gates": journey_gates.get("freshness") or artifact_freshness_payload(at=""),
         "release_channel": release_channel.get("freshness") or artifact_freshness_payload(at=""),
+        "weekly_governor_packet": artifact_freshness_payload(
+            at=str(weekly_governor_packet.get("generated_at") or "").strip(),
+            stale_after_hours=24 * 8,
+        ),
         "progress_report": _apply_source_drift_freshness(
             artifact_freshness_payload(
                 at=str(progress_report.get("generated_at") or progress_report.get("as_of") or "").strip(),
@@ -10347,6 +10708,15 @@ def publish_readiness_payload(
         warning_reasons.append(
             str(support_freshness.get("reason") or f"Support packet freshness is {support_state}.").strip()
         )
+    weekly_governor_freshness = dict(resolved_artifact_freshness.get("weekly_governor_packet") or {})
+    weekly_governor_state = str(weekly_governor_freshness.get("state") or "").strip().lower()
+    if weekly_governor_state in {"stale", "missing"}:
+        warning_reasons.append(
+            str(
+                weekly_governor_freshness.get("reason")
+                or f"Weekly governor packet freshness is {weekly_governor_state}."
+            ).strip()
+        )
     if int(support_summary.get("closure_waiting_on_release_truth") or 0) > 0:
         warning_reasons.append("Support closure is waiting on release truth.")
     if int(support_summary.get("needs_human_response") or 0) > 0:
@@ -10398,6 +10768,7 @@ def publish_readiness_payload(
             "journey_gates_freshness_state": str((resolved_artifact_freshness.get("journey_gates") or {}).get("state") or "").strip(),
             "release_channel_freshness_state": release_channel_freshness_state or "unknown",
             "support_freshness_state": support_state or "unknown",
+            "weekly_governor_packet_freshness_state": weekly_governor_state or "unknown",
             "journey_gate_state": journey_state or "unknown",
             "release_channel_status": release_channel_status or "unknown",
             "release_channel_rollout_state": rollout_state or "unknown",
@@ -10473,6 +10844,11 @@ def _refreshable_artifact_keys(freshness: Dict[str, Any]) -> List[str]:
         or any(key in keys for key in {"status_plane", "progress_report", "progress_history", "support_packets"})
     ):
         keys.append("journey_gates")
+    if (
+        _artifact_refresh_needed(dict(freshness.get("weekly_governor_packet") or {}))
+        or any(key in keys for key in {"status_plane", "journey_gates", "support_packets"})
+    ):
+        keys.append("weekly_governor_packet")
     return sorted(set(keys))
 
 
@@ -10580,6 +10956,22 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
             results.append(
                 {
                     "artifact": "journey_gates",
+                    "ok": bool(result.get("ok")),
+                    "state": "refreshed" if result.get("ok") else "error",
+                    "detail": result.get("stdout") or result.get("stderr") or "",
+                }
+            )
+        if force or "weekly_governor_packet" in refreshable:
+            result = _run_repo_python_script(
+                "materialize_weekly_governor_packet.py",
+                "--out",
+                str(published_artifact_path(WEEKLY_GOVERNOR_PACKET_FILENAME)),
+                "--markdown-out",
+                str(published_artifact_path(WEEKLY_GOVERNOR_PACKET_MARKDOWN_FILENAME)),
+            )
+            results.append(
+                {
+                    "artifact": "weekly_governor_packet",
                     "ok": bool(result.get("ok")),
                     "state": "refreshed" if result.get("ok") else "error",
                     "detail": result.get("stdout") or result.get("stderr") or "",
@@ -12342,6 +12734,161 @@ def api_cockpit_status() -> Dict[str, Any]:
             for project in status.get("projects", [])
         ],
     }
+
+
+@app.get("/api/cockpit/operator-surface")
+def api_cockpit_operator_surface() -> Dict[str, Any]:
+    status = admin_status_payload()
+    return operator_surface_payload(status)
+
+
+def render_operator_surface() -> str:
+    payload = operator_surface_payload(admin_status_payload())
+
+    def td(value: Any) -> str:
+        return html.escape("" if value is None else str(value))
+
+    def chip(value: Any, *, tone: str = "") -> str:
+        clean = str(value or "unknown").strip() or "unknown"
+        clean_tone = str(tone or clean).strip().lower().replace("_", "-")
+        return f'<span class="chip chip-{html.escape(clean_tone)}">{td(clean)}</span>'
+
+    def state_tone(value: Any) -> str:
+        clean = str(value or "").strip().lower()
+        if clean in {"blocked", "red", "critical", "missing", "stale", "action_needed"}:
+            return "blocked"
+        if clean in {"attention", "yellow", "warning", "degraded", "unknown"}:
+            return "attention"
+        return "nominal"
+
+    def metric(label: str, value: Any, sub: str = "") -> str:
+        return (
+            '<article class="metric">'
+            f'<div class="metric-label">{td(label)}</div>'
+            f'<div class="metric-value">{td(value)}</div>'
+            f'<div class="metric-sub">{td(sub)}</div>'
+            '</article>'
+        )
+
+    shard_mix = payload.get("shard_mix") or {}
+    queue = payload.get("queue_health") or {}
+    proof = payload.get("proof_freshness") or {}
+    accounts = payload.get("account_health") or {}
+    resources = payload.get("resource_pressure") or {}
+    blocked = payload.get("blocked_milestones") or []
+
+    proof_rows = "".join(
+        f"<tr><td>{td(row.get('key'))}</td><td>{chip(row.get('state'), tone=state_tone(row.get('state')))}</td><td>{td(row.get('age') or row.get('at'))}</td><td>{td(row.get('reason'))}</td></tr>"
+        for row in (proof.get("rows") or [])[:8]
+    )
+    account_rows = "".join(
+        f"<tr><td>{td(row.get('alias'))}</td><td>{chip(row.get('pressure_state'), tone=state_tone(row.get('pressure_state')))}</td><td>{td(row.get('token_status'))}</td><td>{td(row.get('left'))}</td><td>{td(row.get('last_error'))}</td></tr>"
+        for row in (accounts.get("attention_accounts") or [])[:8]
+    )
+    blocked_rows = "".join(
+        f"<tr><td>{td(row.get('scope'))}</td><td>{td(row.get('status'))}</td><td>{td(row.get('remaining_count'))}</td><td>{td('; '.join(row.get('remaining') or []))}</td><td>{td('; '.join(row.get('blockers') or []))}</td></tr>"
+        for row in blocked
+    )
+    blocked_project_rows = "".join(
+        f"<tr><td>{td(row.get('id'))}</td><td>{td(row.get('runtime_status'))}</td><td>{td(row.get('queue_length'))}</td><td>{td(row.get('current_slice'))}</td><td>{td(row.get('selected_lane'))}</td></tr>"
+        for row in (queue.get("blocked_projects") or [])[:8]
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fleet Operator Surface</title>
+    <style>
+      :root {{
+        --bg: #f5f2ec;
+        --panel: #fffdfa;
+        --line: #d2c7b6;
+        --text: #1d1a16;
+        --muted: #685f52;
+        --blocked: #8d2d22;
+        --attention: #8a5b11;
+        --nominal: #2f6b41;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{ margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; }}
+      .page {{ width: min(1280px, calc(100vw - 28px)); margin: 18px auto 28px; }}
+      .hero, .panel, .metric {{ background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 22px rgba(29, 26, 22, 0.06); }}
+      .hero {{ padding: 18px; display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }}
+      h1 {{ margin: 4px 0 8px; font-size: 28px; }}
+      h2 {{ margin: 0 0 10px; font-size: 18px; }}
+      p {{ margin: 0; }}
+      a {{ color: inherit; }}
+      .muted, .metric-sub, .metric-label {{ color: var(--muted); }}
+      .links {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+      .links a {{ border: 1px solid var(--line); border-radius: 999px; padding: 8px 11px; text-decoration: none; background: #f8f3ea; font-weight: 700; }}
+      .grid {{ display: grid; gap: 12px; }}
+      .metrics {{ grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 12px 0; }}
+      .main {{ grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); align-items: start; }}
+      .panel {{ padding: 14px; }}
+      .metric {{ padding: 12px; min-height: 96px; }}
+      .metric-value {{ font-size: 24px; font-weight: 800; margin: 6px 0 4px; }}
+      .chip {{ display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 800; background: #ebe2d4; }}
+      .chip-blocked {{ background: #f3d3cf; color: var(--blocked); }}
+      .chip-attention {{ background: #f4e5bd; color: var(--attention); }}
+      .chip-nominal, .chip-green {{ background: #d8eadc; color: var(--nominal); }}
+      table {{ width: 100%; border-collapse: collapse; }}
+      th, td {{ text-align: left; vertical-align: top; padding: 8px; border-top: 1px solid var(--line); }}
+      th {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }}
+      @media (max-width: 900px) {{ .hero, .main {{ grid-template-columns: 1fr; display: grid; }} }}
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <div class="muted">Operator Surface</div>
+          <h1>{chip(payload.get('overall_state'), tone=state_tone(payload.get('overall_state')))} {td(payload.get('next_page'))}</h1>
+          <p class="muted">Generated {td(payload.get('generated_at'))}. Compact view for shard mix, queue health, proof freshness, accounts, resources, and blocked milestones.</p>
+        </div>
+        <nav class="links">
+          <a href="/admin">Command Deck</a>
+          <a href="/admin/details">Explorer</a>
+          <a href="/api/cockpit/operator-surface">API</a>
+          <a href="/api/cockpit/status">Cockpit API</a>
+        </nav>
+      </section>
+
+      <section class="grid metrics">
+        {metric('Shard Mix', f"{shard_mix.get('running_shard_count', 0)} / {shard_mix.get('configured_shard_count', 0)}", f"open milestones {shard_mix.get('open_milestone_count', 0)}")}
+        {metric('Queue Health', queue.get('state', 'unknown'), f"{queue.get('open_queue_project_count', 0)} open, {queue.get('blocked_project_count', 0)} blocked")}
+        {metric('Proof Freshness', proof.get('state', 'unknown'), f"{proof.get('stale_or_missing_count', 0)} stale or missing")}
+        {metric('Account Health', accounts.get('state', 'unknown'), f"{accounts.get('account_count', 0)} pools")}
+        {metric('Resource Pressure', resources.get('critical_path_lane') or 'unknown', resources.get('mission_runway') or resources.get('state') or 'unknown')}
+        {metric('Blocked Milestones', len(blocked), resources.get('runtime_healing_alert_state') or 'runtime unknown')}
+      </section>
+
+      <section class="grid main">
+        <div class="grid">
+          <section class="panel">
+            <h2>Blocked Projects</h2>
+            <table><thead><tr><th>Project</th><th>Status</th><th>Queue</th><th>Slice</th><th>Lane</th></tr></thead><tbody>{blocked_project_rows or '<tr><td colspan="5" class="muted">No blocked projects.</td></tr>'}</tbody></table>
+          </section>
+          <section class="panel">
+            <h2>Blocked Milestones and Frontier</h2>
+            <table><thead><tr><th>Scope</th><th>Status</th><th>Remaining</th><th>Work</th><th>Blockers</th></tr></thead><tbody>{blocked_rows or '<tr><td colspan="5" class="muted">No blocked milestones.</td></tr>'}</tbody></table>
+          </section>
+        </div>
+        <div class="grid">
+          <section class="panel">
+            <h2>Proof Freshness</h2>
+            <table><thead><tr><th>Artifact</th><th>State</th><th>Age</th><th>Reason</th></tr></thead><tbody>{proof_rows or '<tr><td colspan="4" class="muted">No proof artifacts found.</td></tr>'}</tbody></table>
+          </section>
+          <section class="panel">
+            <h2>Account Pressure</h2>
+            <table><thead><tr><th>Account</th><th>State</th><th>Token</th><th>Left</th><th>Error</th></tr></thead><tbody>{account_rows or '<tr><td colspan="5" class="muted">No pressured accounts.</td></tr>'}</tbody></table>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>"""
 
 
 @app.post("/api/cockpit/refresh-artifacts")
@@ -16203,6 +16750,13 @@ def render_admin_dashboard(*, show_details: bool = False, initial_focus_id: str 
       </body>
     </html>
     """
+
+
+@app.get("/ops", response_class=HTMLResponse)
+@app.get("/ops/", response_class=HTMLResponse)
+@app.get("/admin/operator", response_class=HTMLResponse)
+def admin_operator_surface() -> str:
+    return render_operator_surface()
 
 
 @app.get("/admin", response_class=HTMLResponse)

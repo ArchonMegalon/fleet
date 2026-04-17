@@ -67,7 +67,7 @@ def install_fastapi_stubs() -> None:
 
 install_fastapi_stubs()
 
-from app import COMPILE_MANIFEST_FILENAME, compile_manifest_payload
+from app import COMPILE_MANIFEST_FILENAME, compile_manifest_payload, safe_relative_publish_path
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -131,6 +131,13 @@ def _published_files(repo_root: Path) -> List[Dict[str, str]]:
         if not path.is_file():
             continue
         if path.name == COMPILE_MANIFEST_FILENAME:
+            continue
+        try:
+            safe_relative_publish_path(path.name)
+        except ValueError:
+            # Atomic publish writes use <canonical-stem>.<random><suffix> temp names.
+            # Ignore any leaked noncanonical leftovers so compile-manifest refresh stays
+            # driven by the real published artifact set.
             continue
         files.append(
             {

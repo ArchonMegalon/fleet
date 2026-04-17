@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import hashlib
 import json
 import sys
 import tempfile
@@ -29,6 +30,23 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _release_receipt_fields() -> dict:
+    return {
+        "release_receipt_id": "release-channel:preview:1.2.3:passed",
+        "release_receipt_source": "release_channel",
+        "release_receipt_channel": "preview",
+        "release_receipt_version": "1.2.3",
+        "head_id": "avalonia",
+        "platform": "linux",
+        "arch": "x64",
+        "installed_build_receipt_head_id": "avalonia",
+        "installed_build_receipt_platform": "linux",
+        "installed_build_receipt_rid": "linux-x64",
+        "installed_build_receipt_tuple_id": "avalonia:linux-x64:linux",
+        "installed_build_receipt_identity_matches": True,
+    }
+
+
 def _write_registry(path: Path, *, evidence_tail: str = "") -> None:
     path.write_text(
         f"""
@@ -54,8 +72,13 @@ milestones:
           - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json reports successor_package_verification.status=pass.
           - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json projects fix-available, please-test, and recovery counts.
           - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly/support generated_at freshness drift so WEEKLY_GOVERNOR_PACKET.generated.json cannot predate the SUPPORT_CASE_PACKETS.generated.json receipt gates it summarizes.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly support-packet source sha256 drift so WEEKLY_GOVERNOR_PACKET.generated.json must name the exact SUPPORT_CASE_PACKETS.generated.json bytes it summarizes.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes future-dated generated_at receipts so support and weekly proof cannot outrun wall-clock truth.
           - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M102 verifier in no-PYTHONPATH bootstrap proof.
           - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0.
+          - /docker/fleet/scripts/materialize_support_case_packets.py now fail-closes duplicate next90-m102-fleet-reporter-receipts queue rows, duplicate design-queue rows, and duplicate registry work-task rows so stale closure proof cannot hide behind the first matching row.
+          - /docker/fleet/scripts/materialize_support_case_packets.py now requires generated successor scope-drift, closure-field drift, and missing Fleet proof-anchor markers in both the Fleet queue mirror and design-owned queue source so future shards verify the closed proof floor instead of repeating it.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py now fail-closes runtime handoff metadata proof markers so copied worker-run metadata cannot close the package.
 {evidence_tail}
 """.lstrip(),
         encoding="utf-8",
@@ -98,14 +121,20 @@ items:
       - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
       - generated support-packet proof hygiene requires empty disallowed active-run proof entries
       - stale generated support proof gaps fail the standalone verifier
+      - generated support successor scope drift fails the standalone verifier
+      - generated support successor closure-field drift fails the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - future-dated support and weekly generated_at receipts fail the standalone verifier
       - weekly support-packet source-path drift fails the standalone verifier
       - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
+      - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check
       - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
+      - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
       - design-owned queue source row matches the Fleet completed queue proof assignment
 {proof_tail}
     allowed_paths:
@@ -153,14 +182,20 @@ items:
       - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
       - generated support-packet proof hygiene requires empty disallowed active-run proof entries
       - stale generated support proof gaps fail the standalone verifier
+      - generated support successor scope drift fails the standalone verifier
+      - generated support successor closure-field drift fails the standalone verifier
       - weekly/support receipt-count drift fails the standalone verifier
       - weekly/support generated_at freshness fails the standalone verifier
+      - future-dated support and weekly generated_at receipts fail the standalone verifier
       - weekly support-packet source-path drift fails the standalone verifier
       - design queue source path rejects active-run helper paths
       - weekly governor source-path hygiene and worker command guard fail the standalone verifier
       - design-owned queue source proof markers fail the standalone verifier
+      - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
       - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check
       - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
+      - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
       - design-owned queue source row matches the Fleet completed queue proof assignment
     allowed_paths:
       - scripts
@@ -179,36 +214,65 @@ def _support_packets_payload() -> dict:
     return {
         "contract_name": "fleet.support_case_packets",
         "generated_at": "2026-04-15T14:11:15Z",
+        "source": {
+            "install_receipt_feed_state": "provided",
+            "install_receipt_source_count": 0,
+            "install_receipt_indexed_count": 0,
+            "install_receipt_hydrated_case_count": 0,
+            "install_receipt_missing_case_count": 0,
+            "fix_receipt_feed_state": "provided",
+            "fix_receipt_source_count": 0,
+            "fix_receipt_indexed_count": 0,
+            "fix_receipt_hydrated_case_count": 0,
+            "fix_receipt_missing_case_count": 0,
+        },
+        "summary": {
+            "reporter_followthrough_ready_count": 0,
+            "feedback_followthrough_ready_count": 0,
+            "fix_available_ready_count": 0,
+            "please_test_ready_count": 0,
+            "recovery_loop_ready_count": 0,
+            "reporter_followthrough_blocked_missing_install_receipts_count": 0,
+            "reporter_followthrough_blocked_receipt_mismatch_count": 0,
+        },
         "followthrough_receipt_gates": {
             "package_id": "next90-m102-fleet-reporter-receipts",
             "milestone_id": 102,
             "generated_at": "2026-04-15T14:11:15Z",
             "source_rule": (
-                "Fix-available, please-test, and recovery followthrough may leave hold only when install truth, "
-                "installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, "
-                "and release-channel receipts agree."
+                "Feedback, fix-available, please-test, and recovery followthrough may leave hold only when install truth, "
+                "installation-bound installed-build receipts, and release-channel receipts agree; fix-bearing loops additionally require "
+                "fixed-version receipts and fixed-channel receipts."
             ),
             "required_gates": [
+                "feedback_loop_ready",
                 "install_truth_ready",
                 "release_receipt_ready",
+                "release_receipt_id_present",
                 "fixed_version_receipted",
                 "fixed_channel_receipted",
+                "fixed_receipt_installation_bound",
                 "installed_build_receipt_id_present",
                 "installed_build_receipt_installation_bound",
                 "installed_build_receipt_version_matches",
                 "installed_build_receipt_channel_matches",
+                "installed_build_receipt_tuple_bound",
             ],
             "gate_counts": {
                 "install_receipt_ready": 0,
                 "install_truth_ready": 0,
+                "feedback_loop_ready": 0,
                 "release_receipt_ready": 0,
+                "release_receipt_id_present": 0,
                 "fixed_version_receipted": 0,
                 "fixed_channel_receipted": 0,
+                "fixed_receipt_installation_bound": 0,
                 "installed_build_receipted": 0,
                 "installed_build_receipt_id_present": 0,
                 "installed_build_receipt_installation_bound": 0,
                 "installed_build_receipt_version_matches": 0,
                 "installed_build_receipt_channel_matches": 0,
+                "installed_build_receipt_tuple_bound": 0,
                 "current_install_on_fixed_build": 0,
             },
         },
@@ -216,11 +280,20 @@ def _support_packets_payload() -> dict:
             "package_id": "next90-m102-fleet-reporter-receipts",
             "generated_at": "2026-04-15T14:11:15Z",
             "source_rule": (
-                "Reporter followthrough is compiled from support packets only after install truth, "
-                "installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, "
-                "and release-channel receipts agree."
+                "Reporter feedback, fix-available, please-test, and recovery followthrough is compiled from support packets only after install truth, "
+                "installation-bound installed-build receipts, and release-channel receipts agree; fix-bearing loops additionally require "
+                "fixed-version receipts and fixed-channel receipts."
             ),
+            "ready_count": 0,
+            "feedback_ready_count": 0,
+            "fix_available_ready_count": 0,
+            "please_test_ready_count": 0,
+            "recovery_loop_ready_count": 0,
+            "blocked_missing_install_receipts_count": 0,
+            "blocked_receipt_mismatch_count": 0,
+            "hold_until_fix_receipt_count": 0,
             "action_groups": {
+                "feedback": [],
                 "fix_available": [],
                 "please_test": [],
                 "recovery": [],
@@ -244,6 +317,7 @@ def _support_packets_payload() -> dict:
             "registry_title": "Desktop-native claim, update, rollback, and support followthrough",
             "registry_dependencies": [101],
             "registry_work_task_id": "102.4",
+            "registry_work_task_count": 1,
             "registry_work_task_title": "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.",
             "registry_work_task_status": "complete",
             "queue_title": "Gate fix followthrough against real install and receipt truth",
@@ -253,7 +327,9 @@ def _support_packets_payload() -> dict:
             "queue_milestone_id": 102,
             "queue_status": "complete",
             "queue_frontier_id": "2454416974",
+            "queue_item_count": 1,
             "design_queue_source_path": "",
+            "design_queue_source_item_count": 1,
             "design_queue_source_item_found": True,
             "design_queue_source_title": "Gate fix followthrough against real install and receipt truth",
             "design_queue_source_task": "Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.",
@@ -284,8 +360,13 @@ def _support_packets_payload() -> dict:
                 "fixed-channel receipts",
                 "release-channel receipts",
                 "weekly/support generated_at freshness",
+                "future-dated generated_at receipts",
                 "verify_script_bootstrap_no_pythonpath.py",
                 "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+                "duplicate next90-m102-fleet-reporter-receipts queue rows",
+                "generated successor scope-drift",
+                "missing Fleet proof-anchor markers",
+                "runtime handoff metadata proof markers",
             ],
             "required_queue_proof_markers": [
                 "/docker/fleet/scripts/materialize_support_case_packets.py",
@@ -309,14 +390,20 @@ def _support_packets_payload() -> dict:
                 "design-owned queue source",
                 "generated support-packet proof hygiene",
                 "stale generated support proof gaps",
+                "generated support successor scope drift",
+                "generated support successor closure-field drift",
                 "weekly/support receipt-count drift",
                 "weekly/support generated_at freshness",
+                "future-dated support and weekly generated_at receipts fail the standalone verifier",
                 "weekly support-packet source-path drift",
                 "design queue source path rejects active-run helper paths",
                 "weekly governor source-path hygiene and worker command guard",
                 "design-owned queue source proof markers",
+                "successor verifier fail-closes missing Fleet proof anchors",
                 "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+                "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
                 "distinct queue proof anti-collapse guard",
+                "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check",
             ],
         },
     }
@@ -338,6 +425,15 @@ def _weekly_payload() -> dict:
                         "/var/lib/codex-fleet",
                         "ACTIVE_RUN_HANDOFF.generated.md",
                         "TASK_LOCAL_TELEMETRY.generated.json",
+                        "frontier ids:",
+                        "open milestone ids:",
+                        "successor frontier detail:",
+                        "mode: successor_wave",
+                        "active run",
+                        "run id:",
+                        "prompt path",
+                        "recent stderr tail",
+                        "status: complete; owners:",
                         "operator telemetry",
                         "active-run telemetry",
                         "active-run helper",
@@ -360,6 +456,15 @@ def _weekly_payload() -> dict:
                     "/var/lib/codex-fleet",
                     "ACTIVE_RUN_HANDOFF.generated.md",
                     "TASK_LOCAL_TELEMETRY.generated.json",
+                    "frontier ids:",
+                    "open milestone ids:",
+                    "successor frontier detail:",
+                    "mode: successor_wave",
+                    "active run",
+                    "run id:",
+                    "prompt path",
+                    "recent stderr tail",
+                    "status: complete; owners:",
                     "operator telemetry",
                     "active-run telemetry",
                     "active-run helper",
@@ -380,11 +485,18 @@ def _weekly_payload() -> dict:
         },
         "truth_inputs": {
             "support_summary": {
+                "reporter_followthrough_ready_count": 0,
                 "followthrough_receipt_gates_ready_count": 0,
                 "followthrough_receipt_gates_blocked_missing_install_receipts_count": 0,
                 "followthrough_receipt_gates_blocked_receipt_mismatch_count": 0,
                 "followthrough_receipt_gates_installation_bound_count": 0,
                 "followthrough_receipt_gates_installed_build_receipted_count": 0,
+                "feedback_followthrough_ready_count": 0,
+                "fix_available_ready_count": 0,
+                "please_test_ready_count": 0,
+                "recovery_loop_ready_count": 0,
+                "reporter_followthrough_blocked_missing_install_receipts_count": 0,
+                "reporter_followthrough_blocked_receipt_mismatch_count": 0,
                 "reporter_followthrough_plan_ready_count": 0,
                 "reporter_followthrough_plan_blocked_missing_install_receipts_count": 0,
                 "reporter_followthrough_plan_blocked_receipt_mismatch_count": 0,
@@ -402,6 +514,7 @@ Generated: 2026-04-15T14:13:33Z
 ## Measured Truth
 
 - Reporter followthrough ready: 0
+- Feedback followthrough ready: 0
 - Fix-available ready: 0
 - Please-test ready: 0
 - Recovery-loop ready: 0
@@ -426,7 +539,10 @@ def _align_successor_verification_paths(
 
 
 def _align_weekly_support_path(payload: dict, *, support: Path) -> None:
-    payload["source_input_health"]["required_inputs"]["support_packets"]["source_path"] = str(support)
+    support_input = payload["source_input_health"]["required_inputs"]["support_packets"]
+    support_input["source_path"] = str(support)
+    if support.is_file():
+        support_input["source_sha256"] = hashlib.sha256(support.read_bytes()).hexdigest()
 
 
 def _fixture_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
@@ -450,6 +566,8 @@ def _fixture_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path, Path]:
         design_queue=design_queue,
     )
     _write_json(support, support_payload)
+    _align_weekly_support_path(weekly_payload, support=support)
+    _write_json(weekly, weekly_payload)
     return support, weekly, weekly_markdown, registry, queue, design_queue
 
 
@@ -467,6 +585,94 @@ def test_verify_next90_m102_fleet_reporter_receipts_passes_closed_package(tmp_pa
 
     assert result["status"] == "pass"
     assert result["issues"] == []
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_rejects_ready_rows_from_cached_packet_fallback(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["source"].update(
+        {
+            "refresh_mode": "cached_packets_fallback",
+            "install_receipt_feed_state": "provided",
+            "install_receipt_source_count": 1,
+            "install_receipt_indexed_count": 1,
+            "install_receipt_hydrated_case_count": 1,
+        }
+    )
+    payload["reporter_followthrough_plan"]["ready_count"] = 1
+    payload["reporter_followthrough_plan"]["feedback_ready_count"] = 1
+    payload["reporter_followthrough_plan"]["action_groups"]["feedback"].append(
+        {
+            "packet_id": "support_packet_cached_fallback_ready",
+            "state": "no_fix_recorded",
+            "next_action": "send_feedback_progress",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-cached-fallback",
+            "release_channel": "preview",
+            "installed_version": "1.2.3",
+            "installed_build_receipt_id": "install-receipt-cached-fallback",
+            "installed_build_receipt_installation_id": "install-cached-fallback",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+        }
+    )
+    payload["followthrough_receipt_gates"]["ready_count"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["feedback_loop_ready"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["install_receipt_ready"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["install_truth_ready"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["release_receipt_ready"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["release_receipt_id_present"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipted"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipt_installation_bound"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipt_version_matches"] = 1
+    payload["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipt_channel_matches"] = 1
+    payload["summary"]["reporter_followthrough_ready_count"] = 1
+    payload["summary"]["feedback_followthrough_ready_count"] = 1
+    _write_json(support, payload)
+
+    weekly_payload = _weekly_payload()
+    weekly_payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["feedback_followthrough_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["reporter_followthrough_plan_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installed_build_receipted_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installation_bound_count"] = 1
+    _align_weekly_support_path(weekly_payload, support=support)
+    _write_json(weekly, weekly_payload)
+    weekly_markdown.write_text(
+        _weekly_markdown()
+        .replace("- Reporter followthrough ready: 0", "- Reporter followthrough ready: 1")
+        .replace("- Feedback followthrough ready: 0", "- Feedback followthrough ready: 1")
+        .replace("- Receipt-gated followthrough ready: 0", "- Receipt-gated followthrough ready: 1")
+        .replace("- Receipt-gated installed-build receipts: 0", "- Receipt-gated installed-build receipts: 1"),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "support packet source receipt-feed metadata does not back ready followthrough" in result["issues"]
+    assert result["receipt_feed_source_issues"] == [
+        "ready reporter followthrough exists from cached packet fallback instead of refreshed receipt truth"
+    ]
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_gate_names(tmp_path: Path) -> None:
@@ -487,6 +693,693 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_gate_names(tmp
     assert result["status"] == "fail"
     assert "followthrough receipt gates are missing required gate names" in result["issues"]
     assert result["missing_gate_names"] == ["fixed_channel_receipted"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_plan_ready_count_without_rows(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    support_payload = _support_packets_payload()
+    support_payload["reporter_followthrough_plan"]["ready_count"] = 1
+    support_payload["summary"]["reporter_followthrough_ready_count"] = 1
+    _write_json(support, support_payload)
+
+    weekly_payload = _weekly_payload()
+    weekly_payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["reporter_followthrough_plan_ready_count"] = 1
+    _align_weekly_support_path(weekly_payload, support=support)
+    _write_json(weekly, weekly_payload)
+    weekly_markdown.write_text(
+        _weekly_markdown().replace("- Reporter followthrough ready: 0", "- Reporter followthrough ready: 1"),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough plan counts disagree with receipt-backed action groups" in result["issues"]
+    assert "SUPPORT_CASE_PACKETS.generated.json summary disagrees with receipt-backed followthrough plan" in result["issues"]
+    assert "weekly governor support summary disagrees with support-packet receipt gates" in result["issues"]
+    assert "weekly governor markdown disagrees with support-packet receipt gates" in result["issues"]
+    assert result["plan_count_mismatches"] == {
+        "ready_count": {
+            "receipt_backed_action_groups": 0,
+            "reporter_followthrough_plan": 1,
+        }
+    }
+    assert result["support_summary_count_mismatches"]["reporter_followthrough_ready_count"] == {
+        "receipt_backed_plan": 0,
+        "support_packet_summary": 1,
+    }
+    assert result["weekly_count_mismatches"]["reporter_followthrough_ready_count"] == {
+        "support_packets": 0,
+        "weekly_governor_packet": 1,
+    }
+    assert result["weekly_markdown_count_mismatches"]["Reporter followthrough ready"] == {
+        "support_packets": 0,
+        "weekly_governor_markdown": 1,
+    }
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_action_group_rows_without_receipts(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["fix_available"].append(
+        {
+            "packet_id": "support_packet_stale_fix_row",
+            "state": "fix_available_ready",
+            "next_action": "send_fix_available",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            "installation_id": "install-stale-1",
+            "installed_build_receipt_id": "",
+            "installed_build_receipt_installation_id": "",
+            "installed_build_receipt_version": "",
+            "installed_build_receipt_channel": "",
+            "installed_build_receipted": False,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-stale-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-stale-1",
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "fix_available row support_packet_stale_fix_row is missing install-aware receipt gates: "
+        "installed_build_receipt_channel, installed_build_receipt_channel_source, "
+        "installed_build_receipt_channel_source=install_receipts, installed_build_receipt_id, "
+        "installed_build_receipt_installation_id, installed_build_receipt_installation_source, "
+        "installed_build_receipt_installation_source=install_receipts, "
+        "installed_build_receipt_source, installed_build_receipt_source=install_receipts, "
+        "installed_build_receipt_version, installed_build_receipt_version_source, "
+        "installed_build_receipt_version_source=install_receipts, "
+        "installed_build_receipted, release_receipt_channel, release_receipt_id, "
+        "release_receipt_source=release_channel, release_receipt_version",
+        "fix_available row support_packet_stale_fix_row is missing fix receipt gates: "
+        "fixed_receipt_installation_bound, fixed_receipt_installation_id, "
+        "fixed_receipt_installation_source, fixed_receipt_installation_source=fix_receipts"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_ready_row_without_promoted_install_truth(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["feedback"].append(
+        {
+            "packet_id": "support_packet_install_truth_drift",
+            "kind": "feedback",
+            "status": "released_to_reporter_channel",
+            "state": "no_fix_recorded",
+            "next_action": "send_feedback_progress",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "queued_support_state_only",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-truth-drift-1",
+            "release_channel": "preview",
+            "installed_version": "1.2.3",
+            "installed_build_receipt_id": "install-receipt-truth-drift-1",
+            "installed_build_receipt_installation_id": "install-truth-drift-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "feedback row support_packet_install_truth_drift is missing install-aware receipt gates: "
+        "install_truth_state=promoted_tuple_match"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_recovery_row_with_fix_available_action(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["recovery"].append(
+        {
+            "packet_id": "support_packet_recovery_action_drift",
+            "state": "fix_available_update_required",
+            "next_action": "send_fix_available_with_update",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-recovery-action-1",
+            "release_channel": "preview",
+            "installed_version": "1.2.2",
+            "installed_build_receipt_id": "install-receipt-recovery-action-1",
+            "installed_build_receipt_installation_id": "install-recovery-action-1",
+            "installed_build_receipt_version": "1.2.2",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-recovery-action-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-recovery-action-1",
+            "fixed_receipt_installation_id": "install-recovery-action-1",
+            "fixed_receipt_installation_source": "fix_receipts",
+            "fixed_receipt_installation_matches": True,
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+            "current_install_on_fixed_build": False,
+            "recovery_loop_ready": True,
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "recovery row support_packet_recovery_action_drift routes to send_fix_available_with_update "
+        "instead of receipt-backed send_recovery"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_fix_bearing_feedback_without_fix_receipts(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["feedback"].append(
+        {
+            "packet_id": "support_packet_feedback_fix_row",
+            "state": "released_to_reporter_channel",
+            "next_action": "send_feedback_progress",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-feedback-1",
+            "installed_build_receipt_id": "install-receipt-feedback-1",
+            "installed_build_receipt_installation_id": "install-feedback-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "installedBuildReceiptId",
+            "installed_build_receipt_installation_source": "installedBuildReceiptInstallationId",
+            "installed_build_receipt_version_source": "installedBuildReceiptVersion",
+            "installed_build_receipt_channel_source": "installedBuildReceiptChannel",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": False,
+            "fixed_channel_receipted": False,
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "feedback row support_packet_feedback_fix_row is missing install-aware receipt gates: "
+        "installed_build_receipt_channel_source=install_receipts, "
+        "installed_build_receipt_installation_source=install_receipts, "
+        "installed_build_receipt_source=install_receipts, "
+        "installed_build_receipt_version_source=install_receipts",
+        "feedback row support_packet_feedback_fix_row is missing fix receipt gates: "
+        "fixed_channel_receipt_id, fixed_channel_receipt_source, fixed_channel_receipt_source=fix_receipts, "
+        "fixed_channel_receipted, fixed_receipt_installation_bound, fixed_receipt_installation_id, "
+        "fixed_receipt_installation_source, fixed_receipt_installation_source=fix_receipts, "
+        "fixed_version_receipt_id, fixed_version_receipt_source, fixed_version_receipt_source=fix_receipts, "
+        "fixed_version_receipted"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_fix_row_without_fix_receipt_identity(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["fix_available"].append(
+        {
+            "packet_id": "support_packet_fix_without_receipt_identity",
+            "state": "fix_available_ready",
+            "next_action": "send_fix_available",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-fix-identity-1",
+            "installed_build_receipt_id": "install-receipt-fix-identity-1",
+            "installed_build_receipt_installation_id": "install-fix-identity-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "fix_available row support_packet_fix_without_receipt_identity is missing fix receipt gates: "
+        "fixed_channel_receipt_id, fixed_channel_receipt_source, fixed_channel_receipt_source=fix_receipts, "
+        "fixed_receipt_installation_bound, fixed_receipt_installation_id, "
+        "fixed_receipt_installation_source, fixed_receipt_installation_source=fix_receipts, "
+        "fixed_version_receipt_id, fixed_version_receipt_source, fixed_version_receipt_source=fix_receipts"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_ready_row_receipt_value_mismatch(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["please_test"].append(
+        {
+            "packet_id": "support_packet_mismatched_receipt_values",
+            "state": "please_test_ready",
+            "next_action": "send_please_test",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-value-match-1",
+            "installed_version": "1.2.2",
+            "installed_build_receipt_id": "install-receipt-value-match-1",
+            "installed_build_receipt_installation_id": "install-other-1",
+            "installed_build_receipt_version": "1.2.2",
+            "installed_build_receipt_channel": "stable",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "stable",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-value-match-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-value-match-1",
+            "fixed_receipt_installation_id": "install-other-fix-1",
+            "fixed_receipt_installation_source": "fix_receipts",
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+            "current_install_on_fixed_build": True,
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "please_test row support_packet_mismatched_receipt_values has install-aware receipt value mismatches: "
+        "installed_build_receipt_channel!=release_receipt_channel, "
+        "installed_build_receipt_installation_id!=installation_id",
+        "please_test row support_packet_mismatched_receipt_values is missing fix receipt gates: "
+        "fixed_receipt_installation_bound",
+        "please_test row support_packet_mismatched_receipt_values has fix receipt value mismatches: "
+        "fixed_channel!=release_receipt_channel, fixed_receipt_installation_id!=installation_id, "
+        "installed_version!=fixed_version",
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_ready_row_install_tuple_mismatch(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["fix_available"].append(
+        {
+            "packet_id": "support_packet_install_tuple_drift",
+            "state": "fix_available_ready",
+            "next_action": "send_fix_available",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-tuple-drift-1",
+            "release_channel": "preview",
+            "head_id": "avalonia",
+            "platform": "linux",
+            "arch": "x64",
+            "installed_version": "1.2.3",
+            "installed_build_receipt_id": "install-receipt-tuple-drift-1",
+            "installed_build_receipt_installation_id": "install-tuple-drift-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_head_id": "avalonia",
+            "installed_build_receipt_platform": "windows",
+            "installed_build_receipt_rid": "win-x64",
+            "installed_build_receipt_tuple_id": "avalonia:win-x64:windows",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-tuple-drift-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-tuple-drift-1",
+            "fixed_receipt_installation_id": "install-tuple-drift-1",
+            "fixed_receipt_installation_source": "fix_receipts",
+            "fixed_receipt_installation_matches": True,
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "fix_available row support_packet_install_tuple_drift has install-aware receipt value mismatches: "
+        "installed_build_receipt_platform!=platform, installed_build_receipt_rid!=expected_rid, "
+        "installed_build_receipt_tuple_id!=expected_tuple_id",
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_ready_row_release_channel_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["fix_available"].append(
+        {
+            "packet_id": "support_packet_release_channel_drift",
+            "state": "fix_available_ready",
+            "next_action": "send_fix_available",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            "release_channel": "stable",
+            **_release_receipt_fields(),
+            "installation_id": "install-release-channel-drift-1",
+            "installed_version": "1.2.2",
+            "installed_build_receipt_id": "install-receipt-release-channel-drift-1",
+            "installed_build_receipt_installation_id": "install-release-channel-drift-1",
+            "installed_build_receipt_version": "1.2.2",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-release-channel-drift-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-release-channel-drift-1",
+            "fixed_receipt_installation_id": "install-release-channel-drift-1",
+            "fixed_receipt_installation_source": "fix_receipts",
+            "fixed_receipt_installation_matches": True,
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "fix_available row support_packet_release_channel_drift has install-aware receipt value mismatches: "
+        "release_channel!=release_receipt_channel",
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_ready_rows_without_receipt_feed_source(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["source"].update(
+        {
+            "install_receipt_feed_state": "not_provided",
+            "install_receipt_source_count": 0,
+            "install_receipt_indexed_count": 0,
+            "install_receipt_hydrated_case_count": 0,
+            "fix_receipt_feed_state": "not_provided",
+            "fix_receipt_source_count": 0,
+            "fix_receipt_indexed_count": 0,
+            "fix_receipt_hydrated_case_count": 0,
+        }
+    )
+    payload["reporter_followthrough_plan"]["action_groups"]["fix_available"].append(
+        {
+            "packet_id": "support_packet_feed_source_missing",
+            "state": "fix_available_ready",
+            "next_action": "send_fix_available",
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-feed-source-1",
+            "release_channel": "preview",
+            "head_id": "avalonia",
+            "platform": "linux",
+            "arch": "x64",
+            "installed_version": "1.2.3",
+            "installed_build_receipt_id": "install-receipt-feed-source-1",
+            "installed_build_receipt_installation_id": "install-feed-source-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_head_id": "avalonia",
+            "installed_build_receipt_platform": "linux",
+            "installed_build_receipt_rid": "linux-x64",
+            "installed_build_receipt_tuple_id": "avalonia:linux-x64:linux",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-feed-source-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-feed-source-1",
+            "fixed_receipt_installation_id": "install-feed-source-1",
+            "fixed_receipt_installation_source": "fix_receipts",
+            "fixed_receipt_installation_matches": True,
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "support packet source receipt-feed metadata does not back ready followthrough" in result["issues"]
+    assert result["receipt_feed_source_issues"] == [
+        "ready reporter followthrough exists without an authoritative install receipt feed",
+        "ready reporter followthrough exists without indexed install receipts",
+        "ready reporter followthrough exists without hydrated install receipt cases",
+        "fix-bearing reporter followthrough exists without an authoritative fix receipt feed",
+        "fix-bearing reporter followthrough exists without indexed fix receipts",
+        "fix-bearing reporter followthrough exists without hydrated fix receipt cases",
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_queued_summary_overclaim(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["summary"]["reporter_followthrough_ready_count"] = 3
+    payload["summary"]["feedback_followthrough_ready_count"] = 2
+    payload["summary"]["fix_available_ready_count"] = 1
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "SUPPORT_CASE_PACKETS.generated.json summary disagrees with receipt-backed followthrough plan"
+        in result["issues"]
+    )
+    assert result["support_summary_count_mismatches"] == {
+        "feedback_followthrough_ready_count": {
+            "receipt_backed_plan": 0,
+            "support_packet_summary": 2,
+        },
+        "fix_available_ready_count": {
+            "receipt_backed_plan": 0,
+            "support_packet_summary": 1,
+        },
+        "reporter_followthrough_ready_count": {
+            "receipt_backed_plan": 0,
+            "support_packet_summary": 3,
+        },
+    }
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_receipt_gate_count_overclaim(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    support_payload = _support_packets_payload()
+    support_payload["followthrough_receipt_gates"]["ready_count"] = 1
+    _write_json(support, support_payload)
+
+    weekly_payload = _weekly_payload()
+    weekly_payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_ready_count"] = 1
+    _align_weekly_support_path(weekly_payload, support=support)
+    _write_json(weekly, weekly_payload)
+    weekly_markdown.write_text(
+        _weekly_markdown().replace(
+            "- Receipt-gated followthrough ready: 0",
+            "- Receipt-gated followthrough ready: 1",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "followthrough receipt gate counts disagree with receipt-backed action groups" in result["issues"]
+    assert result["receipt_gate_plan_count_mismatches"] == {
+        "ready_count": {
+            "receipt_backed_action_groups": 0,
+            "followthrough_receipt_gates": 1,
+        }
+    }
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_successor_issues(
@@ -574,6 +1467,31 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_telemetry_command_proo
     assert result["blocked_queue_proof_entries"] == [
         "codexea --telemetry --telemetry-answer remaining"
     ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_runtime_handoff_metadata_proof(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    _write_queue(
+        queue,
+        design_queue,
+        proof_tail="      - 'Frontier ids: 2454416974'\n",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert "successor queue proof cites active-run telemetry or helper commands" in result["issues"]
+    assert result["blocked_queue_proof_entries"] == ["Frontier ids: 2454416974"]
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_supervisor_helper_command_proof(
@@ -785,6 +1703,132 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_collapsed_queue_proof_
     ]
 
 
+def test_verify_next90_m102_fleet_reporter_receipts_fails_duplicate_queue_package_rows(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8")
+        + """
+  - title: Gate fix followthrough against real install and receipt truth
+    task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
+    package_id: next90-m102-fleet-reporter-receipts
+    frontier_id: 2454416974
+    milestone_id: 102
+    wave: W6
+    repo: fleet
+    status: complete
+    proof:
+      - stale duplicate row
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - feedback_loop_ready:install_receipts
+      - product_governor:followthrough
+""",
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert (
+        "successor queue item next90-m102-fleet-reporter-receipts appears more than once"
+        in result["successor_authority_issues"]
+    )
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_duplicate_design_queue_rows(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, design_queue = _fixture_paths(tmp_path)
+    design_queue.write_text(
+        design_queue.read_text(encoding="utf-8")
+        + """
+  - title: Gate fix followthrough against real install and receipt truth
+    task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
+    package_id: next90-m102-fleet-reporter-receipts
+    frontier_id: 2454416974
+    milestone_id: 102
+    wave: W6
+    repo: fleet
+    status: complete
+    proof:
+      - stale duplicate design-source row
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - feedback_loop_ready:install_receipts
+      - product_governor:followthrough
+""",
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert (
+        "successor design queue source item next90-m102-fleet-reporter-receipts appears more than once"
+        in result["successor_authority_issues"]
+    )
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_duplicate_registry_work_tasks(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    registry.write_text(
+        registry.read_text(encoding="utf-8")
+        + """
+      - id: 102.4
+        owner: fleet
+        title: Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.
+        status: complete
+        evidence:
+          - stale duplicate registry work-task row
+""",
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert result["successor_authority_status"] == "fail"
+    assert (
+        "successor registry work task 102.4 appears more than once"
+        in result["successor_authority_issues"]
+    )
+
+
 def test_verify_next90_m102_fleet_reporter_receipts_fails_missing_weekly_markdown_proof(
     tmp_path: Path,
 ) -> None:
@@ -909,6 +1953,51 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_support_input_p
     assert result["status"] == "fail"
     assert (
         "weekly governor support-packets input path disagrees with verified support packet"
+        in result["issues"]
+    )
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_requires_weekly_support_input_sha256(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = json.loads(weekly.read_text(encoding="utf-8"))
+    payload["source_input_health"]["required_inputs"]["support_packets"].pop("source_sha256")
+    _write_json(weekly, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "weekly governor support-packets input is missing source_sha256" in result["issues"]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_support_input_sha256_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = json.loads(weekly.read_text(encoding="utf-8"))
+    payload["source_input_health"]["required_inputs"]["support_packets"]["source_sha256"] = "0" * 64
+    _write_json(weekly, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert (
+        "weekly governor support-packets input sha256 disagrees with verified support packet"
         in result["issues"]
     )
 
@@ -1475,6 +2564,10 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_count_drift(
     weekly_payload["truth_inputs"]["support_summary"][
         "reporter_followthrough_plan_ready_count"
     ] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["fix_available_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["please_test_ready_count"] = 1
+    weekly_payload["truth_inputs"]["support_summary"]["recovery_loop_ready_count"] = 1
     _write_json(weekly, weekly_payload)
     weekly_markdown.write_text(
         _weekly_markdown()
@@ -1500,23 +2593,35 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_count_drift(
         "weekly governor support summary disagrees with support-packet receipt gates"
         in result["issues"]
     )
-    assert result["weekly_count_mismatches"] == {
-        "followthrough_receipt_gates_installed_build_receipted_count": {
-            "support_packets": 1,
-            "weekly_governor_packet": 0,
-        },
-        "followthrough_receipt_gates_installation_bound_count": {
-            "support_packets": 2,
-            "weekly_governor_packet": 0,
-        },
-        "followthrough_receipt_gates_ready_count": {
-            "support_packets": 2,
-            "weekly_governor_packet": 1,
-        },
-        "reporter_followthrough_plan_ready_count": {
-            "support_packets": 2,
-            "weekly_governor_packet": 1,
-        },
+    assert result["weekly_count_mismatches"][
+        "followthrough_receipt_gates_installed_build_receipted_count"
+    ] == {"support_packets": 1, "weekly_governor_packet": 0}
+    assert result["weekly_count_mismatches"][
+        "followthrough_receipt_gates_installation_bound_count"
+    ] == {"support_packets": 2, "weekly_governor_packet": 0}
+    assert result["weekly_count_mismatches"]["followthrough_receipt_gates_ready_count"] == {
+        "support_packets": 2,
+        "weekly_governor_packet": 1,
+    }
+    assert result["weekly_count_mismatches"]["reporter_followthrough_ready_count"] == {
+        "support_packets": 0,
+        "weekly_governor_packet": 1,
+    }
+    assert result["weekly_count_mismatches"]["reporter_followthrough_plan_ready_count"] == {
+        "support_packets": 0,
+        "weekly_governor_packet": 1,
+    }
+    assert result["weekly_count_mismatches"]["fix_available_ready_count"] == {
+        "support_packets": 0,
+        "weekly_governor_packet": 1,
+    }
+    assert result["weekly_count_mismatches"]["please_test_ready_count"] == {
+        "support_packets": 0,
+        "weekly_governor_packet": 1,
+    }
+    assert result["weekly_count_mismatches"]["recovery_loop_ready_count"] == {
+        "support_packets": 0,
+        "weekly_governor_packet": 1,
     }
 
 
@@ -1541,6 +2646,44 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_weekly_packet(
     assert "weekly governor packet predates support-packet receipt gates" in result["issues"]
     assert result["support_packets_generated_at"] == "2026-04-15T14:11:15Z"
     assert result["weekly_governor_packet_generated_at"] == "2026-04-15T14:00:00Z"
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_future_generated_at(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    future_generated_at = "2099-04-15T14:11:15Z"
+    support_payload = json.loads(support.read_text(encoding="utf-8"))
+    support_payload["generated_at"] = future_generated_at
+    support_payload["followthrough_receipt_gates"]["generated_at"] = future_generated_at
+    support_payload["reporter_followthrough_plan"]["generated_at"] = future_generated_at
+    _write_json(support, support_payload)
+    weekly_payload = json.loads(weekly.read_text(encoding="utf-8"))
+    weekly_payload["generated_at"] = future_generated_at
+    _write_json(weekly, weekly_payload)
+    weekly_markdown.write_text(
+        _weekly_markdown().replace("2026-04-15T14:13:33Z", future_generated_at),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "generated receipt timestamps are future-dated" in result["issues"]
+    assert result["future_timestamp_drifts"] == {
+        "followthrough_receipt_gates.generated_at": future_generated_at,
+        "reporter_followthrough_plan.generated_at": future_generated_at,
+        "support_packets.generated_at": future_generated_at,
+        "weekly_governor_markdown.generated_at": future_generated_at,
+        "weekly_governor_packet.generated_at": future_generated_at,
+    }
 
 
 def test_verify_next90_m102_fleet_reporter_receipts_fails_stale_embedded_support_timestamps(
@@ -1616,7 +2759,6 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_markdown_count_
             "support_packets": 2,
             "weekly_governor_markdown": 0,
         },
-        "Reporter followthrough ready": {"support_packets": 2, "weekly_governor_markdown": 0},
     }
 
 

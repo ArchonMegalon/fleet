@@ -72,6 +72,16 @@ def parse_iso(value: str) -> Optional[dt.datetime]:
         return None
 
 
+def eta_payload_from_state(state_payload: Dict[str, Any]) -> Dict[str, Any]:
+    primary = state_payload.get("eta")
+    if isinstance(primary, dict) and primary:
+        return dict(primary)
+    successor = state_payload.get("successor_wave_eta")
+    if isinstance(successor, dict) and successor:
+        return dict(successor)
+    return {}
+
+
 def path_modified_at(path: Path) -> Optional[dt.datetime]:
     try:
         return dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc)
@@ -665,6 +675,18 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
 
     state_payload = read_json(state_root / "state.json")
     account_runtime = read_json(state_root / "account_runtime.json")
+    eta_payload = eta_payload_from_state(state_payload)
+    eta_status = str(eta_payload.get("status") or state_payload.get("eta_status") or "").strip()
+    eta_human = str(eta_payload.get("eta_human") or state_payload.get("eta_human") or "").strip()
+    blocking_reason = str(state_payload.get("blocking_reason") or "").strip()
+    try:
+        active_runs_count = int(state_payload.get("active_runs_count") or 0)
+    except (TypeError, ValueError):
+        active_runs_count = 0
+    try:
+        remaining_open_milestones = int(state_payload.get("remaining_open_milestones") or 0)
+    except (TypeError, ValueError):
+        remaining_open_milestones = 0
     supervisor_fields = {
         "mode": str(state_payload.get("mode") or "").strip(),
         "updated_at": str(state_payload.get("updated_at") or "").strip(),
@@ -754,6 +776,12 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
                 "aggregate_stale": stale,
                 "aggregate_timestamp_stale": aggregate_timestamp_stale,
                 "frontier_ids": frontier_ids,
+                "eta": eta_payload,
+                "eta_human": eta_human,
+                "eta_status": eta_status,
+                "blocking_reason": blocking_reason,
+                "active_runs_count": active_runs_count,
+                "remaining_open_milestones": remaining_open_milestones,
                 "failure_hint": ((state_payload.get("last_run") or {}).get("failure_hint") or ""),
                 "stale_shards": stale_shards,
                 "inactive_shards": inactive_shards,
@@ -797,6 +825,12 @@ def run_cycle(args: argparse.Namespace, *, log_path: Path, event_path: Path, sta
     monitor_state["aggregate_stale"] = stale
     monitor_state["aggregate_timestamp_stale"] = aggregate_timestamp_stale
     monitor_state["frontier_ids"] = frontier_ids
+    monitor_state["eta"] = eta_payload
+    monitor_state["eta_human"] = eta_human
+    monitor_state["eta_status"] = eta_status
+    monitor_state["blocking_reason"] = blocking_reason
+    monitor_state["active_runs_count"] = active_runs_count
+    monitor_state["remaining_open_milestones"] = remaining_open_milestones
     monitor_state["supervisor_reported_mode"] = str(supervisor_fields.get("mode") or "")
     monitor_state["supervisor_reported_updated_at"] = str(supervisor_fields.get("updated_at") or "")
     monitor_state["steady_complete_quiet"] = steady_complete_quiet

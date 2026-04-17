@@ -156,3 +156,54 @@ def test_materialize_compile_manifest_accepts_generated_release_proof_artifacts(
     assert "UI_LOCAL_RELEASE_PROOF.generated.json" in payload["artifacts"]
     assert "RELEASE_CHANNEL.generated.json" in payload["artifacts"]
     assert "releases.json" in payload["artifacts"]
+
+
+def test_materialize_compile_manifest_ignores_leaked_atomic_temp_artifacts(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    published = repo_root / ".codex-studio" / "published"
+    projects_dir = tmp_path / "config" / "projects"
+    published.mkdir(parents=True, exist_ok=True)
+    projects_dir.mkdir(parents=True, exist_ok=True)
+
+    (projects_dir / "fleet.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": "fleet",
+                "path": str(repo_root),
+                "lifecycle": "dispatchable",
+                "queue": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (published / "WORKPACKAGES.generated.yaml").write_text(
+        "source_queue_fingerprint: 97d170e1550eee4afc0af065b78cda302a97674c\nwork_packages: []\n",
+        encoding="utf-8",
+    )
+    (published / "JOURNEY_GATES.generated.json").write_text("{}\n", encoding="utf-8")
+    (published / "JOURNEY_GATES.generated.654xn6et.json").write_text("{}\n", encoding="utf-8")
+    (published / "SUPPORT_CASE_SOURCE_MIRROR.generated.q19zfnwe.json").write_text("{}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(repo_root),
+            "--out",
+            str(published / "compile.manifest.json"),
+            "--projects-dir",
+            str(projects_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd="/docker/fleet",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((published / "compile.manifest.json").read_text(encoding="utf-8"))
+    assert "JOURNEY_GATES.generated.json" in payload["artifacts"]
+    assert "JOURNEY_GATES.generated.654xn6et.json" not in payload["artifacts"]
+    assert "SUPPORT_CASE_SOURCE_MIRROR.generated.q19zfnwe.json" not in payload["artifacts"]

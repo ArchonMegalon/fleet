@@ -4,29 +4,19 @@ set -euo pipefail
 REAL_PYTHON3="${CHUMMER_DESIGN_SUPERVISOR_REAL_PYTHON3:-/usr/bin/python3}"
 ACTIVE_RUN_DIR="${CHUMMER_DESIGN_SUPERVISOR_ACTIVE_RUN_DIR:-}"
 SUPERVISOR_SCRIPT="/docker/fleet/scripts/chummer_design_supervisor.py"
-
 if [[ -n "${ACTIVE_RUN_DIR}" && $# -ge 2 ]]; then
-  script_path="$1"
+  command_script="$1"
   command_name="$2"
   telemetry_path="${ACTIVE_RUN_DIR}/TASK_LOCAL_TELEMETRY.generated.json"
-  if [[ "${script_path}" == "${SUPERVISOR_SCRIPT}" && ( "${command_name}" == "status" || "${command_name}" == "eta" ) && -f "${telemetry_path}" ]]; then
-    CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH="${telemetry_path}" \
-    CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_COMMAND="${command_name}" \
-    exec "${REAL_PYTHON3}" - <<'PY'
+  if [[ -f "${telemetry_path}" && "${command_script}" == "${SUPERVISOR_SCRIPT}" && ( "${command_name}" == "status" || "${command_name}" == "eta" ) ]]; then
+    "${REAL_PYTHON3}" - "${telemetry_path}" "${command_name}" <<'PY'
 import json
-import os
 import sys
+from pathlib import Path
 
-path = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_PATH", "") or "").strip()
-command = str(os.environ.get("CHUMMER_DESIGN_SUPERVISOR_TASK_LOCAL_TELEMETRY_COMMAND", "") or "").strip() or "status"
-payload = {}
-if path:
-    try:
-        with open(path, encoding="utf-8") as handle:
-            payload = json.load(handle) or {}
-    except Exception:
-        payload = {}
-
+telemetry_path = Path(sys.argv[1])
+command_name = str(sys.argv[2] or "status").strip() or "status"
+payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
 eta = {
     "status": "tracked",
     "scope_kind": "task_local_only",
@@ -37,7 +27,7 @@ eta = {
     "eta_human": payload.get("eta_human"),
     "summary": payload.get("summary"),
 }
-if command == "eta":
+if command_name == "eta":
     response = eta
 else:
     response = {
@@ -49,9 +39,71 @@ else:
         "warning": "task_local_telemetry_file",
         "guidance": "read TASK_LOCAL_TELEMETRY.generated.json directly inside the active worker run",
     }
-json.dump(response, sys.stdout, separators=(",", ":"))
-sys.stdout.write("\n")
+print(json.dumps(response, separators=(",", ":")))
 PY
+    exit 0
+  fi
+fi
+
+if [[ -n "${ACTIVE_RUN_DIR}" && $# -ge 2 && "$1" == "-c" ]]; then
+  parser_script="$2"
+  telemetry_path="${ACTIVE_RUN_DIR}/TASK_LOCAL_TELEMETRY.generated.json"
+  if [[ -f "${telemetry_path}" \
+    && "${parser_script}" == *"payload=json.load(sys.stdin)"* \
+    && "${parser_script}" == *"remaining_open_milestones"* \
+    && "${parser_script}" == *"eta_human"* \
+    && ( "${parser_script}" == *"payload.get(\"eta\")"* \
+      || "${parser_script}" == *"payload.get('eta')"* \
+      || "${parser_script}" == *"payload[\"eta\"]"* \
+      || "${parser_script}" == *"payload['eta']"* \
+      || "${parser_script}" == *"task_local_only"* ) ]]; then
+    cat >/dev/null || true
+    hit_counter_path="${ACTIVE_RUN_DIR}/.status_helper_pipeline_hits"
+    hit_count=0
+    if [[ -f "${hit_counter_path}" ]]; then
+      hit_count="$(cat "${hit_counter_path}" 2>/dev/null || printf '0')"
+    fi
+    case "${hit_count}" in
+      ''|*[!0-9]*)
+        hit_count=0
+        ;;
+    esac
+    hit_count="$((hit_count + 1))"
+    printf '%s\n' "${hit_count}" > "${hit_counter_path}"
+    "${REAL_PYTHON3}" - "${telemetry_path}" "${hit_count}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+telemetry_path = Path(sys.argv[1])
+hit_count = int(sys.argv[2])
+payload = json.loads(telemetry_path.read_text(encoding="utf-8"))
+commands = payload.get("first_commands") or []
+summary_parts = [
+    "Task-local telemetry already provided.",
+    "Do not rerun supervisor status inside this worker run.",
+]
+if hit_count > 1:
+    summary_parts.append("Repeated status helper request ignored.")
+if commands:
+    summary_parts.append(f"Next: {commands[0]}")
+    if len(commands) > 1:
+        summary_parts.append(f"Then: {commands[1]}")
+print(
+    json.dumps(
+        {
+            "active_runs_count": None,
+            "remaining_open_milestones": None,
+            "remaining_not_started_milestones": None,
+            "remaining_in_progress_milestones": None,
+            "eta_human": "implementation-only",
+            "summary": " ".join(summary_parts),
+        },
+        separators=(",", ":"),
+    )
+)
+PY
+    exit 0
   fi
 fi
 

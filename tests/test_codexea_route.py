@@ -36,11 +36,15 @@ class CodexEaRouteTests(unittest.TestCase):
         self.addCleanup(self.tempdir.cleanup)
         self.fleet_db_path = Path(self.tempdir.name) / "fleet.db"
         self.runtime_env_path = Path(self.tempdir.name) / "runtime.ea.env"
+        self.onemin_renewal_ledger_path = Path(self.tempdir.name) / "onemin_renewal_ledger.json"
+        self.onemin_renewal_schedule_path = Path(self.tempdir.name) / "onemin_credit_renewal_schedule.json"
         self.env_patcher = mock.patch.dict(
             os.environ,
             {
                 "CODEXEA_FLEET_DB_PATH": str(self.fleet_db_path),
                 "CODEXEA_RUNTIME_EA_ENV_PATH": str(self.runtime_env_path),
+                "CODEXEA_ONEMIN_RENEWAL_LEDGER_PATH": str(self.onemin_renewal_ledger_path),
+                "CODEXEA_ONEMIN_RENEWAL_SCHEDULE_PATH": str(self.onemin_renewal_schedule_path),
             },
             clear=False,
         )
@@ -762,6 +766,167 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("- Amount: 2,000,000", response["message"])
         self.assertIn("- Including next top-up, 7d average: 167.0d", response["message"])
         self.assertIn("Member reconciliation: 1 slot with member snapshots", response["message"])
+
+    def test_onemin_aggregate_response_persists_daily_bonus_renewal_schedule(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 4_450_000,
+                "sum_free_credits": 23_265,
+                "remaining_percent_total": 0.52,
+                "incoming_topups_excluded": True,
+            }
+        }
+        billing_refresh = {
+            "global_aggregate_snapshot": {
+                "accounts": [
+                    {
+                        "account_label": "ONEMIN_AI_API_KEY",
+                        "owner_email": "tibor.girschele@gmail.com",
+                        "details_json": {},
+                        "credentials": [
+                            {
+                                "account_id": "ONEMIN_AI_API_KEY",
+                                "owner_email": "tibor.girschele@gmail.com",
+                                "details_json": {
+                                    "billing_cycle": "MONTHLY",
+                                    "billing_plan_name": "FREE",
+                                    "billing_daily_bonus_available": True,
+                                    "billing_daily_bonus_credits": 15000,
+                                    "billing_remaining_credits": 23265.0,
+                                    "billing_max_credits": 4450000.0,
+                                    "last_billing_snapshot_at": "2026-04-15T10:09:56Z",
+                                    "topup_detected": False,
+                                    "topup_delta": None,
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_utc_now", return_value=dt.datetime(2026, 4, 16, 6, 30, tzinfo=dt.timezone.utc)):
+            with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh):
+                with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                    response = self.route_module._onemin_aggregate_response(billing=True)
+
+        self.assertTrue(response["ok"])
+        renewal_schedule = response["data"]["renewal_schedule"]
+        self.assertEqual(renewal_schedule["daily_bonus_confirmed_account_count"], 1)
+        self.assertEqual(renewal_schedule["provider_topup_account_count"], 0)
+        self.assertTrue(self.onemin_renewal_ledger_path.exists())
+        self.assertTrue(self.onemin_renewal_schedule_path.exists())
+        schedule_payload = json.loads(self.onemin_renewal_schedule_path.read_text(encoding="utf-8"))
+        first_row = schedule_payload["upcoming_credits"][0]
+        self.assertEqual(first_row["kind"], "daily_bonus_confirmed")
+        self.assertEqual(first_row["credit_amount"], 15000)
+        self.assertEqual(first_row["scheduled_for"], "2026-04-16T07:00:00Z")
+        self.assertIn("No account currently exposes an explicit provider top-up ETA", renewal_schedule["notes"][0])
+
+    def test_onemin_aggregate_response_persists_explicit_provider_topup_schedule(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 4_450_000,
+                "sum_free_credits": 4_265_000,
+                "remaining_percent_total": 95.84,
+                "incoming_topups_excluded": True,
+            }
+        }
+        billing_refresh = {
+            "global_aggregate_snapshot": {
+                "accounts": [
+                    {
+                        "account_label": "ONEMIN_AI_API_KEY_FALLBACK_59",
+                        "owner_email": "oie.Sepp@chummer.run",
+                        "details_json": {},
+                        "credentials": [
+                            {
+                                "account_id": "ONEMIN_AI_API_KEY_FALLBACK_59",
+                                "owner_email": "oie.Sepp@chummer.run",
+                                "details_json": {
+                                    "billing_cycle": "MONTHLY",
+                                    "billing_plan_name": "BUSINESS",
+                                    "billing_remaining_credits": 4265000.0,
+                                    "billing_max_credits": 4450000.0,
+                                    "billing_next_topup_at": "2026-04-20T00:00:00Z",
+                                    "billing_topup_amount": 250000,
+                                    "billing_daily_bonus_available": False,
+                                    "last_billing_snapshot_at": "2026-04-16T12:35:32Z",
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_utc_now", return_value=dt.datetime(2026, 4, 16, 6, 30, tzinfo=dt.timezone.utc)):
+            with mock.patch.object(self.route_module, "_ea_onemin_billing_refresh_payload", return_value=billing_refresh):
+                with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                    response = self.route_module._onemin_aggregate_response(billing=True)
+
+        self.assertTrue(response["ok"])
+        renewal_schedule = response["data"]["renewal_schedule"]
+        self.assertEqual(renewal_schedule["provider_topup_account_count"], 1)
+        schedule_payload = json.loads(self.onemin_renewal_schedule_path.read_text(encoding="utf-8"))
+        provider_rows = [row for row in schedule_payload["upcoming_credits"] if row["kind"] == "provider_topup"]
+        self.assertEqual(len(provider_rows), 1)
+        self.assertEqual(provider_rows[0]["scheduled_for"], "2026-04-20T00:00:00Z")
+        self.assertEqual(provider_rows[0]["credit_amount"], 250000)
+        self.assertEqual(provider_rows[0]["accounts"], ["ONEMIN_AI_API_KEY_FALLBACK_59"])
+
+    def test_onemin_aggregate_response_reuses_persisted_renewal_schedule_without_billing_lookup(self) -> None:
+        self.write_config({})
+        self.onemin_renewal_schedule_path.write_text(
+            json.dumps(
+                {
+                    "updated_at": "2026-04-16T07:00:00Z",
+                    "account_count": 1,
+                    "provider_topup_account_count": 0,
+                    "daily_bonus_confirmed_account_count": 1,
+                    "daily_bonus_unknown_account_count": 0,
+                    "upcoming_credits": [
+                        {
+                            "scheduled_for": "2026-04-17T07:00:00Z",
+                            "date": "2026-04-17",
+                            "kind": "daily_bonus_confirmed",
+                            "credit_amount": 15000,
+                            "account_count": 1,
+                            "cumulative_confirmed_credits": 15000,
+                            "cumulative_upper_bound_credits": 15000,
+                        }
+                    ],
+                    "notes": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 1,
+                "slot_count_with_known_balance": 1,
+                "sum_max_credits": 100,
+                "sum_free_credits": 50,
+                "remaining_percent_total": 50.0,
+                "incoming_topups_excluded": True,
+            }
+        }
+
+        with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+            response = self.route_module._onemin_aggregate_response()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["data"]["renewal_schedule"]["daily_bonus_confirmed_account_count"], 1)
+        self.assertEqual(response["data"]["renewal_schedule"]["next_credit_event"]["credit_amount"], 15000)
 
     def test_onemin_aggregate_response_surfaces_probe_gap_and_slot_flags(self) -> None:
         self.write_config({})

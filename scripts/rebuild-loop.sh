@@ -340,7 +340,7 @@ run_rebuild() {
   current_day="$(date -u +'%Y-%m-%d')"
   export CODEX_NPM_REFRESH_TOKEN
   CODEX_NPM_REFRESH_TOKEN="$(refresh_token)"
-  log "starting rebuild for services: $services (refresh_token=$CODEX_NPM_REFRESH_TOKEN)"
+  log "starting rebuild for services: $services (refresh_token=rotated)"
   if ! rebuild_with_canary "$services"; then
     log "rebuild failed"
     return 1

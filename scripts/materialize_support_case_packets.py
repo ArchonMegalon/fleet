@@ -9,6 +9,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -70,8 +71,13 @@ SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS = [
     "fixed-channel receipts",
     "release-channel receipts",
     "weekly/support generated_at freshness",
+    "future-dated generated_at receipts",
     "verify_script_bootstrap_no_pythonpath.py",
     "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
+    "duplicate next90-m102-fleet-reporter-receipts queue rows",
+    "generated successor scope-drift",
+    "missing Fleet proof-anchor markers",
+    "runtime handoff metadata proof markers",
 ]
 SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/scripts/materialize_support_case_packets.py",
@@ -95,19 +101,34 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "design-owned queue source",
     "generated support-packet proof hygiene",
     "stale generated support proof gaps",
+    "generated support successor scope drift",
+    "generated support successor closure-field drift",
     "weekly/support receipt-count drift",
     "weekly/support generated_at freshness",
+    "future-dated support and weekly generated_at receipts fail the standalone verifier",
     "weekly support-packet source-path drift",
     "design queue source path rejects active-run helper paths",
     "weekly governor source-path hygiene and worker command guard",
     "design-owned queue source proof markers",
+    "successor verifier fail-closes missing Fleet proof anchors",
     "telemetry command proof markers fail the standalone verifier and shared successor authority check",
+    "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
     "distinct queue proof anti-collapse guard",
+    "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check",
 ]
 SUCCESSOR_DISALLOWED_PROOF_MARKERS = (
     "/var/lib/codex-fleet",
     "ACTIVE_RUN_HANDOFF.generated.md",
     "TASK_LOCAL_TELEMETRY.generated.json",
+    "frontier ids:",
+    "open milestone ids:",
+    "successor frontier detail:",
+    "mode: successor_wave",
+    "active run",
+    "run id:",
+    "prompt path",
+    "recent stderr tail",
+    "status: complete; owners:",
     "run_ooda_design_supervisor_until_quiet",
     "ooda_design_supervisor.py",
     "chummer_design_supervisor.py",
@@ -124,6 +145,7 @@ RUNTIME_ENV_PATHS_ENV = "FLEET_RUNTIME_ENV_PATHS"
 EXTERNAL_PROOF_CAPTURE_DEADLINE_HOURS = 24
 REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
 REQUIRED_STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 300
+RECEIPT_MAX_FUTURE_SKEW_SECONDS = 300
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -273,6 +295,29 @@ def _support_source_request_headers(source: str, *, bearer_token: str = "") -> D
     return headers
 
 
+def _escape_curl_config_value(value: str) -> str:
+    return str(value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _write_curl_header_config(headers: Dict[str, str]) -> Path | None:
+    rows = [(str(key or "").strip(), str(value or "").strip()) for key, value in (headers or {}).items()]
+    rows = [(key, value) for key, value in rows if key and value]
+    if not rows:
+        return None
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        prefix="support-case-curl-",
+        suffix=".cfg",
+        delete=False,
+    ) as handle:
+        path = Path(handle.name)
+        for key, value in rows:
+            handle.write(f'header = "{_escape_curl_config_value(f"{key}: {value}")}"\n')
+    path.chmod(0o600)
+    return path
+
+
 def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str, Any], str]:
     raw = str(source or "").strip()
     if not raw:
@@ -315,16 +360,21 @@ def _load_json_source(source: str, *, bearer_token: str = "") -> tuple[Dict[str,
 
 def _load_json_source_via_curl(source: str, *, bearer_token: str = "") -> Any | None:
     cmd = ["curl", "-fsSL", "--max-time", "20"]
-    for key, value in _support_source_request_headers(source, bearer_token=bearer_token).items():
-        cmd.extend(["-H", f"{key}: {value}"])
+    config_path = _write_curl_header_config(_support_source_request_headers(source, bearer_token=bearer_token))
+    if config_path is not None:
+        cmd.extend(["-K", str(config_path)])
     cmd.append(source)
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if result.returncode != 0:
-        return None
     try:
-        return json.loads(str(result.stdout or "").strip() or "{}")
-    except json.JSONDecodeError:
-        return None
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        try:
+            return json.loads(str(result.stdout or "").strip() or "{}")
+        except json.JSONDecodeError:
+            return None
+    finally:
+        if config_path is not None:
+            config_path.unlink(missing_ok=True)
 
 
 def _source_kind(source_label: str) -> str:
@@ -379,6 +429,7 @@ def _source_items_from_cached_packets(existing_payload: Dict[str, Any]) -> List[
         if not isinstance(packet, dict) or not bool(packet.get("support_case_backed")):
             continue
         fix_confirmation = dict(packet.get("fix_confirmation") or {})
+        reporter_followthrough = dict(packet.get("reporter_followthrough") or {})
         item: Dict[str, Any] = {
             "caseId": _normalize_text(packet.get("case_id") or packet.get("packet_id")),
             "clusterKey": _normalize_text(packet.get("cluster_key") or packet.get("packet_id")),
@@ -395,34 +446,724 @@ def _source_items_from_cached_packets(existing_payload: Dict[str, Any]) -> List[
             "arch": _normalize_text(packet.get("arch")),
             "fixedVersion": _normalize_text(packet.get("fixed_version") or fix_confirmation.get("fixed_version")),
             "fixedChannel": _normalize_text(packet.get("fixed_channel") or fix_confirmation.get("fixed_channel")),
+            "fixedVersionReceiptId": _normalize_text(
+                packet.get("fixed_version_receipt_id")
+                or fix_confirmation.get("fixed_version_receipt_id")
+                or reporter_followthrough.get("fixed_version_receipt_id")
+            ),
+            "fixedChannelReceiptId": _normalize_text(
+                packet.get("fixed_channel_receipt_id")
+                or fix_confirmation.get("fixed_channel_receipt_id")
+                or reporter_followthrough.get("fixed_channel_receipt_id")
+            ),
+            "fixedReceiptInstallationId": _normalize_text(
+                packet.get("fixed_receipt_installation_id")
+                or fix_confirmation.get("fixed_receipt_installation_id")
+                or reporter_followthrough.get("fixed_receipt_installation_id")
+            ),
             "installedVersion": _normalize_text(packet.get("installed_version") or fix_confirmation.get("installed_version")),
             "installedBuildReceiptId": _normalize_text(
-                packet.get("installed_build_receipt_id") or fix_confirmation.get("installed_build_receipt_id")
+                packet.get("installed_build_receipt_id")
+                or fix_confirmation.get("installed_build_receipt_id")
+                or reporter_followthrough.get("installed_build_receipt_id")
             ),
             "installedBuildReceiptInstallationId": _normalize_text(
                 packet.get("installed_build_receipt_installation_id")
                 or fix_confirmation.get("installed_build_receipt_installation_id")
+                or reporter_followthrough.get("installed_build_receipt_installation_id")
             ),
             "installedBuildReceiptVersion": _normalize_text(
-                packet.get("installed_build_receipt_version") or fix_confirmation.get("installed_build_receipt_version")
+                packet.get("installed_build_receipt_version")
+                or fix_confirmation.get("installed_build_receipt_version")
+                or reporter_followthrough.get("installed_build_receipt_version")
             ),
             "installedBuildReceiptChannel": _normalize_text(
-                packet.get("installed_build_receipt_channel") or fix_confirmation.get("installed_build_receipt_channel")
+                packet.get("installed_build_receipt_channel")
+                or fix_confirmation.get("installed_build_receipt_channel")
+                or reporter_followthrough.get("installed_build_receipt_channel")
             ),
         }
         items.append({key: value for key, value in item.items() if value not in {"", None}})
     return items
 
 
+INSTALLED_BUILD_RECEIPT_FIELD_NAMES = (
+    "installedBuildReceiptId",
+    "installed_build_receipt_id",
+    "installReceiptId",
+    "install_receipt_id",
+    "installedBuildReceiptInstallationId",
+    "installed_build_receipt_installation_id",
+    "installReceiptInstallationId",
+    "install_receipt_installation_id",
+    "installedBuildReceiptVersion",
+    "installed_build_receipt_version",
+    "installReceiptVersion",
+    "install_receipt_version",
+    "installedBuildReceiptChannel",
+    "installed_build_receipt_channel",
+    "installReceiptChannel",
+    "install_receipt_channel",
+    "installedBuildReceiptHeadId",
+    "installed_build_receipt_head_id",
+    "installReceiptHeadId",
+    "install_receipt_head_id",
+    "installedBuildReceiptPlatform",
+    "installed_build_receipt_platform",
+    "installReceiptPlatform",
+    "install_receipt_platform",
+    "installedBuildReceiptRid",
+    "installed_build_receipt_rid",
+    "installReceiptRid",
+    "install_receipt_rid",
+    "installedBuildReceiptTupleId",
+    "installed_build_receipt_tuple_id",
+    "installReceiptTupleId",
+    "install_receipt_tuple_id",
+)
+FIX_RECEIPT_FIELD_NAMES = (
+    "fixedVersion",
+    "fixed_version",
+    "fixedChannel",
+    "fixed_channel",
+    "fixedVersionReceiptId",
+    "fixed_version_receipt_id",
+    "fixedVersionReceiptVersion",
+    "fixed_version_receipt_version",
+    "fixedChannelReceiptId",
+    "fixed_channel_receipt_id",
+    "fixedChannelReceiptChannel",
+    "fixed_channel_receipt_channel",
+    "fixedReceiptInstallationId",
+    "fixed_receipt_installation_id",
+    "fixReceiptInstallationId",
+    "fix_receipt_installation_id",
+    "fixReceiptId",
+    "fix_receipt_id",
+)
+
+
+def _install_receipt_rows(source_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for key in (
+        "installReceipts",
+        "install_receipts",
+        "installedBuildReceipts",
+        "installed_build_receipts",
+        "installationReceipts",
+        "installation_receipts",
+    ):
+        key_rows = source_payload.get(key)
+        if isinstance(key_rows, list):
+            rows.extend(dict(row) for row in key_rows if isinstance(row, dict))
+    return rows
+
+
+def _install_receipt_feed_present(source_payload: Dict[str, Any]) -> bool:
+    return any(
+        isinstance(source_payload.get(key), list)
+        for key in (
+            "installReceipts",
+            "install_receipts",
+            "installedBuildReceipts",
+            "installed_build_receipts",
+            "installationReceipts",
+            "installation_receipts",
+        )
+    )
+
+
+def _receipt_installation_id(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("installationId")
+        or row.get("installation_id")
+        or row.get("installId")
+        or row.get("install_id")
+    )
+
+
+def _receipt_id(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("receiptId")
+        or row.get("receipt_id")
+        or row.get("installedBuildReceiptId")
+        or row.get("installed_build_receipt_id")
+        or row.get("installReceiptId")
+        or row.get("install_receipt_id")
+        or row.get("id")
+    )
+
+
+def _receipt_version(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("version")
+        or row.get("installedVersion")
+        or row.get("installed_version")
+        or row.get("installedBuildVersion")
+        or row.get("installed_build_version")
+        or row.get("buildVersion")
+        or row.get("build_version")
+    )
+
+
+def _receipt_channel(row: Dict[str, Any]) -> str:
+    return _normalize_text(row.get("channel") or row.get("releaseChannel") or row.get("release_channel")).lower()
+
+
+def _receipt_head_id(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("headId")
+        or row.get("head_id")
+        or row.get("desktopHeadId")
+        or row.get("desktop_head_id")
+        or row.get("head")
+    ).lower()
+
+
+def _receipt_platform(row: Dict[str, Any]) -> str:
+    return _normalize_platform(
+        row.get("platform")
+        or row.get("operatingSystem")
+        or row.get("operating_system")
+        or row.get("os")
+    )
+
+
+def _receipt_rid(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("rid")
+        or row.get("runtimeIdentifier")
+        or row.get("runtime_identifier")
+        or row.get("runtimeId")
+        or row.get("runtime_id")
+    ).lower()
+
+
+def _receipt_tuple_id(row: Dict[str, Any]) -> str:
+    return _canonical_tuple_id(
+        row.get("desktopTupleId")
+        or row.get("desktop_tuple_id")
+        or row.get("tupleId")
+        or row.get("tuple_id")
+        or row.get("installTupleId")
+        or row.get("install_tuple_id"),
+        head=_receipt_head_id(row),
+        platform=_receipt_platform(row),
+        rid=_receipt_rid(row),
+    )
+
+
+def _receipt_current_flag(row: Dict[str, Any]) -> bool:
+    for key in (
+        "current",
+        "isCurrent",
+        "is_current",
+        "active",
+        "isActive",
+        "is_active",
+        "latest",
+        "isLatest",
+        "is_latest",
+    ):
+        if key in row:
+            return _normalize_bool(row.get(key))
+    return False
+
+
+def _receipt_has_explicit_current_flag(row: Dict[str, Any]) -> bool:
+    return any(
+        key in row
+        for key in (
+            "current",
+            "isCurrent",
+            "is_current",
+            "active",
+            "isActive",
+            "is_active",
+            "latest",
+            "isLatest",
+            "is_latest",
+        )
+    )
+
+
+def _receipt_is_usable(row: Dict[str, Any]) -> bool:
+    state = _normalize_text(
+        row.get("state")
+        or row.get("status")
+        or row.get("receiptState")
+        or row.get("receipt_state")
+    ).lower()
+    if state in {"inactive", "revoked", "superseded", "expired", "deleted", "void", "voided", "stale"}:
+        return False
+    if _receipt_has_explicit_current_flag(row) and not _receipt_current_flag(row):
+        return False
+    timestamp_values = _receipt_timestamp_values(row)
+    if timestamp_values:
+        max_future = datetime.now(timezone.utc) + timedelta(seconds=RECEIPT_MAX_FUTURE_SKEW_SECONDS)
+        if any(observed_at > max_future for observed_at in timestamp_values):
+            return False
+    return True
+
+
+def _receipt_timestamp_values(row: Dict[str, Any]) -> List[datetime]:
+    timestamps: List[datetime] = []
+    for key in _RECEIPT_TIMESTAMP_KEYS:
+        parsed = _parse_iso(row.get(key))
+        if parsed is not None:
+            timestamps.append(parsed)
+    return timestamps
+
+
+_RECEIPT_TIMESTAMP_KEYS = (
+        "observedAtUtc",
+        "observed_at_utc",
+        "recordedAtUtc",
+        "recorded_at_utc",
+        "installedAtUtc",
+        "installed_at_utc",
+        "completedAtUtc",
+        "completed_at_utc",
+        "generatedAt",
+        "generated_at",
+        "createdAt",
+        "created_at",
+        "updatedAt",
+        "updated_at",
+)
+
+
+def _receipt_observed_at(row: Dict[str, Any]) -> datetime | None:
+    for key in _RECEIPT_TIMESTAMP_KEYS:
+        parsed = _parse_iso(row.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _receipt_sequence(row: Dict[str, Any]) -> int:
+    for key in ("sequence", "seq", "revision", "rev", "generation"):
+        raw = _normalize_text(row.get(key))
+        if not raw:
+            continue
+        try:
+            return int(raw)
+        except ValueError:
+            continue
+    return 0
+
+
+def _receipt_rank(row: Dict[str, Any], ordinal: int) -> tuple[int, float, int, int]:
+    observed_at = _receipt_observed_at(row)
+    observed_timestamp = observed_at.timestamp() if observed_at is not None else float("-inf")
+    return (
+        1 if _receipt_current_flag(row) else 0,
+        observed_timestamp,
+        _receipt_sequence(row),
+        ordinal,
+    )
+
+
+def _should_replace_receipt(
+    existing: Dict[str, Any] | None,
+    candidate_row: Dict[str, Any],
+    ordinal: int,
+) -> bool:
+    if not existing:
+        return True
+    return _receipt_rank(candidate_row, ordinal) >= tuple(existing.get("_rank") or ())
+
+
+def _install_receipt_index(source_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    index: Dict[str, Dict[str, str]] = {}
+    for ordinal, row in enumerate(_install_receipt_rows(source_payload)):
+        if not _receipt_is_usable(row):
+            continue
+        installation_id = _receipt_installation_id(row)
+        receipt_id = _receipt_id(row)
+        if not installation_id or not receipt_id:
+            continue
+        if not _should_replace_receipt(index.get(installation_id), row, ordinal):
+            continue
+        index[installation_id] = {
+            "receipt_id": receipt_id,
+            "installation_id": installation_id,
+            "version": _receipt_version(row),
+            "channel": _receipt_channel(row),
+            "head_id": _receipt_head_id(row),
+            "platform": _receipt_platform(row),
+            "rid": _receipt_rid(row),
+            "tuple_id": _receipt_tuple_id(row),
+            "source": "install_receipts",
+            "_rank": _receipt_rank(row, ordinal),
+        }
+    return {
+        key: {field: value for field, value in row.items() if not field.startswith("_")}
+        for key, row in index.items()
+    }
+
+
+def _fix_receipt_rows(source_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for key in (
+        "fixedReleaseReceipts",
+        "fixed_release_receipts",
+        "fixReceipts",
+        "fix_receipts",
+        "releaseFixReceipts",
+        "release_fix_receipts",
+    ):
+        key_rows = source_payload.get(key)
+        if isinstance(key_rows, list):
+            rows.extend(dict(row) for row in key_rows if isinstance(row, dict))
+    return rows
+
+
+def _fix_receipt_feed_present(source_payload: Dict[str, Any]) -> bool:
+    return any(
+        isinstance(source_payload.get(key), list)
+        for key in (
+            "fixedReleaseReceipts",
+            "fixed_release_receipts",
+            "fixReceipts",
+            "fix_receipts",
+            "releaseFixReceipts",
+            "release_fix_receipts",
+        )
+    )
+
+
+def _fix_receipt_case_id(row: Dict[str, Any]) -> str:
+    return _normalize_text(row.get("caseId") or row.get("case_id") or row.get("supportCaseId") or row.get("support_case_id"))
+
+
+def _fix_receipt_version(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("fixedVersion")
+        or row.get("fixed_version")
+        or row.get("version")
+        or row.get("releaseVersion")
+        or row.get("release_version")
+    )
+
+
+def _fix_receipt_channel(row: Dict[str, Any]) -> str:
+    return _normalize_text(
+        row.get("fixedChannel")
+        or row.get("fixed_channel")
+        or row.get("channel")
+        or row.get("releaseChannel")
+        or row.get("release_channel")
+    ).lower()
+
+
+def _fix_receipt_id(row: Dict[str, Any], *field_names: str, allow_generic: bool = True) -> str:
+    for field_name in field_names:
+        value = _normalize_text(row.get(field_name))
+        if value:
+            return value
+    if not allow_generic:
+        return _normalize_text(
+            row.get("receiptId")
+            or row.get("receipt_id")
+            or row.get("fixReceiptId")
+            or row.get("fix_receipt_id")
+            or row.get("id")
+        )
+    return _normalize_text(
+        row.get("receiptId")
+        or row.get("receipt_id")
+        or row.get("fixReceiptId")
+        or row.get("fix_receipt_id")
+        or row.get("releaseReceiptId")
+        or row.get("release_receipt_id")
+        or row.get("id")
+    )
+
+
+def _fix_receipt_index(
+    source_payload: Dict[str, Any],
+    *,
+    include_rank: bool = False,
+    ) -> Dict[str, Dict[str, Any]]:
+    index: Dict[str, Dict[str, str]] = {}
+    for ordinal, row in enumerate(_fix_receipt_rows(source_payload)):
+        if not _receipt_is_usable(row):
+            continue
+        case_id = _fix_receipt_case_id(row)
+        installation_id = _receipt_installation_id(row)
+        version = _fix_receipt_version(row)
+        channel = _fix_receipt_channel(row)
+        version_receipt_id = _fix_receipt_id(
+            row,
+            "fixedVersionReceiptId",
+            "fixed_version_receipt_id",
+            "versionReceiptId",
+            "version_receipt_id",
+            allow_generic=False,
+        )
+        channel_receipt_id = _fix_receipt_id(
+            row,
+            "fixedChannelReceiptId",
+            "fixed_channel_receipt_id",
+            "channelReceiptId",
+            "channel_receipt_id",
+            allow_generic=False,
+        )
+        if not version and not channel:
+            continue
+        receipt = {
+            "case_id": case_id,
+            "fixed_version": version,
+            "fixed_channel": channel,
+            "fixed_version_receipt_id": version_receipt_id,
+            "fixed_channel_receipt_id": channel_receipt_id,
+            "fixed_receipt_installation_id": installation_id,
+            "source": "fix_receipts",
+            "_rank": _receipt_rank(row, ordinal),
+        }
+        if case_id and _should_replace_receipt(index.get(f"case:{case_id}"), row, ordinal):
+            index[f"case:{case_id}"] = receipt
+        if installation_id and _should_replace_receipt(index.get(f"install:{installation_id}"), row, ordinal):
+            index[f"install:{installation_id}"] = receipt
+    if include_rank:
+        return index
+    return {
+        key: {field: value for field, value in row.items() if not field.startswith("_")}
+        for key, row in index.items()
+    }
+
+
+def _select_fix_receipt(
+    receipt_index: Dict[str, Dict[str, Any]],
+    *,
+    case_id: str,
+    installation_id: str,
+) -> Dict[str, Any] | None:
+    case_receipt = receipt_index.get(f"case:{case_id}") if case_id else None
+    install_receipt = receipt_index.get(f"install:{installation_id}") if installation_id else None
+    if isinstance(install_receipt, dict) and case_id:
+        install_case_id = _normalize_text(install_receipt.get("case_id"))
+        if install_case_id and not _receipt_field_matches(install_case_id, case_id):
+            install_receipt = None
+    if isinstance(case_receipt, dict) and isinstance(install_receipt, dict) and installation_id:
+        case_installation_id = _normalize_text(case_receipt.get("fixed_receipt_installation_id"))
+        if case_installation_id and not _receipt_field_matches(case_installation_id, installation_id):
+            case_receipt = None
+    if isinstance(case_receipt, dict) and isinstance(install_receipt, dict):
+        case_rank = tuple(case_receipt.get("_rank") or ())
+        install_rank = tuple(install_receipt.get("_rank") or ())
+        if install_rank[:3] > case_rank[:3]:
+            return install_receipt
+        return case_receipt
+    if isinstance(case_receipt, dict):
+        return case_receipt
+    if isinstance(install_receipt, dict):
+        return install_receipt
+    return None
+
+
+def _strip_embedded_installed_build_receipts(item: Dict[str, Any]) -> Dict[str, Any]:
+    clean = dict(item)
+    for field_name in INSTALLED_BUILD_RECEIPT_FIELD_NAMES:
+        clean.pop(field_name, None)
+    return clean
+
+
+def _strip_embedded_fix_receipts(item: Dict[str, Any]) -> Dict[str, Any]:
+    clean = dict(item)
+    for field_name in FIX_RECEIPT_FIELD_NAMES:
+        clean.pop(field_name, None)
+    return clean
+
+
+def _strip_embedded_fix_receipt_ids(item: Dict[str, Any]) -> Dict[str, Any]:
+    clean = dict(item)
+    for field_name in (
+        "fixedVersionReceiptId",
+        "fixed_version_receipt_id",
+        "fixedVersionReceiptVersion",
+        "fixed_version_receipt_version",
+        "fixedChannelReceiptId",
+        "fixed_channel_receipt_id",
+        "fixedChannelReceiptChannel",
+        "fixed_channel_receipt_channel",
+        "fixedReceiptInstallationId",
+        "fixed_receipt_installation_id",
+        "fixReceiptInstallationId",
+        "fix_receipt_installation_id",
+        "fixReceiptId",
+        "fix_receipt_id",
+    ):
+        clean.pop(field_name, None)
+    return clean
+
+
+def _items_with_install_receipt_truth(
+    source_payload: Dict[str, Any],
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    raw_items = [dict(item) for item in (source_payload.get("items") or []) if isinstance(item, dict)]
+    receipt_rows = _install_receipt_rows(source_payload)
+    receipt_index = _install_receipt_index(source_payload)
+    if not _install_receipt_feed_present(source_payload):
+        embedded_items: List[Dict[str, Any]] = []
+        missing_count = 0
+        for item in raw_items:
+            clean = dict(item)
+            clean["installedBuildReceiptTruthSource"] = (
+                "support_case_embedded"
+                if _receipt_id(clean)
+                else "install_receipts_missing"
+            )
+            if _normalize_text(clean.get("installationId") or clean.get("installation_id")):
+                missing_count += 1
+            embedded_items.append(clean)
+        return embedded_items, {
+            "install_receipt_feed_state": "not_provided",
+            "install_receipt_source_count": 0,
+            "install_receipt_indexed_count": 0,
+            "install_receipt_hydrated_case_count": 0,
+            "install_receipt_missing_case_count": missing_count,
+        }
+
+    hydrated: List[Dict[str, Any]] = []
+    hydrated_count = 0
+    missing_count = 0
+    for item in raw_items:
+        installation_id = _normalize_text(item.get("installationId") or item.get("installation_id"))
+        receipt = receipt_index.get(installation_id)
+        clean = _strip_embedded_installed_build_receipts(item)
+        if receipt:
+            receipt_head_id = receipt["head_id"] or _normalize_text(item.get("headId") or item.get("head_id")).lower()
+            receipt_platform = receipt["platform"] or _normalize_platform(item.get("platform"))
+            receipt_rid = receipt["rid"] or _rid_for_platform_arch(
+                receipt_platform,
+                _normalize_text(item.get("arch") or item.get("architecture")),
+            )
+            receipt_tuple_id = receipt["tuple_id"] or _canonical_tuple_id(
+                item.get("desktopTupleId") or item.get("tupleId") or item.get("tuple_id"),
+                head=receipt_head_id,
+                platform=receipt_platform,
+                rid=receipt_rid,
+            )
+            clean["installedBuildReceiptId"] = receipt["receipt_id"]
+            clean["installedBuildReceiptInstallationId"] = receipt["installation_id"]
+            clean["installedBuildReceiptVersion"] = receipt["version"]
+            clean["installedBuildReceiptChannel"] = receipt["channel"]
+            clean["installedBuildReceiptHeadId"] = receipt_head_id
+            clean["installedBuildReceiptPlatform"] = receipt_platform
+            clean["installedBuildReceiptRid"] = receipt_rid
+            clean["installedBuildReceiptTupleId"] = receipt_tuple_id
+            clean["installedBuildReceiptTruthSource"] = receipt["source"]
+            if not _normalize_text(clean.get("installedVersion") or clean.get("installed_version")) and receipt["version"]:
+                clean["installedVersion"] = receipt["version"]
+            hydrated_count += 1
+        else:
+            clean["installedBuildReceiptTruthSource"] = "install_receipts_missing"
+            if installation_id:
+                missing_count += 1
+        hydrated.append(clean)
+
+    return hydrated, {
+        "install_receipt_feed_state": "provided",
+        "install_receipt_source_count": len(receipt_rows),
+        "install_receipt_indexed_count": len(receipt_index),
+        "install_receipt_hydrated_case_count": hydrated_count,
+        "install_receipt_missing_case_count": missing_count,
+    }
+
+
+def _items_with_fix_receipt_truth(
+    items: List[Dict[str, Any]],
+    source_payload: Dict[str, Any],
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    receipt_rows = _fix_receipt_rows(source_payload)
+    receipt_index = _fix_receipt_index(source_payload, include_rank=True)
+    if not _fix_receipt_feed_present(source_payload):
+        embedded_items: List[Dict[str, Any]] = []
+        missing_count = 0
+        for item in items:
+            clean = dict(item)
+            clean["fixedReceiptTruthSource"] = (
+                "support_case_embedded"
+                if _fix_receipt_id(clean)
+                else "fix_receipts_missing"
+            )
+            if (
+                _normalize_text(clean.get("caseId") or clean.get("case_id"))
+                or _normalize_text(clean.get("installationId") or clean.get("installation_id"))
+            ) and (
+                _normalize_text(clean.get("fixedVersion") or clean.get("fixed_version"))
+                or _normalize_text(clean.get("fixedChannel") or clean.get("fixed_channel"))
+            ):
+                missing_count += 1
+            embedded_items.append(clean)
+        return embedded_items, {
+            "fix_receipt_feed_state": "not_provided",
+            "fix_receipt_source_count": 0,
+            "fix_receipt_indexed_count": 0,
+            "fix_receipt_hydrated_case_count": 0,
+            "fix_receipt_missing_case_count": missing_count,
+        }
+
+    hydrated: List[Dict[str, Any]] = []
+    hydrated_count = 0
+    missing_count = 0
+    for item in items:
+        case_id = _normalize_text(item.get("caseId") or item.get("case_id"))
+        installation_id = _normalize_text(item.get("installationId") or item.get("installation_id"))
+        receipt = _select_fix_receipt(receipt_index, case_id=case_id, installation_id=installation_id)
+        clean = _strip_embedded_fix_receipts(item)
+        if receipt:
+            clean["fixedVersion"] = receipt["fixed_version"]
+            clean["fixedChannel"] = receipt["fixed_channel"]
+            clean["fixedVersionReceiptId"] = receipt["fixed_version_receipt_id"]
+            clean["fixedChannelReceiptId"] = receipt["fixed_channel_receipt_id"]
+            clean["fixedReceiptInstallationId"] = receipt["fixed_receipt_installation_id"]
+            clean["fixedReceiptTruthSource"] = receipt["source"]
+            hydrated_count += 1
+        else:
+            clean["fixedReceiptTruthSource"] = "fix_receipts_missing"
+            if case_id or installation_id:
+                missing_count += 1
+        hydrated.append(clean)
+
+    return hydrated, {
+        "fix_receipt_feed_state": "provided",
+        "fix_receipt_source_count": len(receipt_rows),
+        "fix_receipt_indexed_count": len(receipt_index),
+        "fix_receipt_hydrated_case_count": hydrated_count,
+        "fix_receipt_missing_case_count": missing_count,
+    }
+
+
 def _build_source_mirror_payload(source_payload: Dict[str, Any], *, source_label: str) -> Dict[str, Any]:
     items = [dict(item) for item in (source_payload.get("items") or []) if isinstance(item, dict)]
-    return {
+    mirror_payload: Dict[str, Any] = {
         "items": items,
         "count": int(source_payload.get("count") or len(items)),
         "mirrored_at": _utc_now_iso(),
         "origin_source_label": _normalize_text(source_label),
         "origin_source_kind": _source_kind(source_label),
     }
+    for key in (
+        "installReceipts",
+        "install_receipts",
+        "installedBuildReceipts",
+        "installed_build_receipts",
+        "installationReceipts",
+        "installation_receipts",
+        "fixedReleaseReceipts",
+        "fixed_release_receipts",
+        "fixReceipts",
+        "fix_receipts",
+        "releaseFixReceipts",
+        "release_fix_receipts",
+    ):
+        rows = source_payload.get(key)
+        if isinstance(rows, list):
+            mirror_payload[key] = [dict(row) for row in rows if isinstance(row, dict)]
+    return mirror_payload
 
 
 def _write_source_mirror(path: Path, source_payload: Dict[str, Any], *, source_label: str) -> None:
@@ -624,17 +1365,29 @@ def _find_successor_milestone(registry: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _find_successor_queue_item(queue: Dict[str, Any]) -> Dict[str, Any]:
-    for row in queue.get("items") or []:
-        if isinstance(row, dict) and _normalize_text(row.get("package_id")) == SUCCESSOR_PACKAGE_ID:
-            return row
-    return {}
+    matches = _find_successor_queue_items(queue)
+    return matches[0] if matches else {}
+
+
+def _find_successor_queue_items(queue: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in (queue.get("items") or [])
+        if isinstance(row, dict) and _normalize_text(row.get("package_id")) == SUCCESSOR_PACKAGE_ID
+    ]
 
 
 def _find_successor_work_task(milestone: Dict[str, Any]) -> Dict[str, Any]:
-    for row in milestone.get("work_tasks") or []:
-        if isinstance(row, dict) and _normalize_text(row.get("id")) == SUCCESSOR_WORK_TASK_ID:
-            return row
-    return {}
+    matches = _find_successor_work_tasks(milestone)
+    return matches[0] if matches else {}
+
+
+def _find_successor_work_tasks(milestone: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in (milestone.get("work_tasks") or [])
+        if isinstance(row, dict) and _normalize_text(row.get("id")) == SUCCESSOR_WORK_TASK_ID
+    ]
 
 
 def _successor_queue_source_path(queue: Dict[str, Any], queue_path: Path) -> Path | None:
@@ -728,9 +1481,12 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
     registry = _load_yaml_mapping(registry_path)
     queue = _load_yaml_mapping(queue_path)
     milestone = _find_successor_milestone(registry)
+    registry_work_tasks = _find_successor_work_tasks(milestone) if milestone else []
+    queue_items = _find_successor_queue_items(queue)
     queue_item = _find_successor_queue_item(queue)
     queue_source_path = _successor_queue_source_path(queue, queue_path)
     queue_source = _load_yaml_mapping(queue_source_path) if queue_source_path and queue_source_path.exists() else {}
+    queue_source_items = _find_successor_queue_items(queue_source) if queue_source else []
     queue_source_item = _find_successor_queue_item(queue_source) if queue_source else {}
     work_task = _find_successor_work_task(milestone) if milestone else {}
     registry_evidence = _normalize_list(work_task.get("evidence")) if work_task else []
@@ -753,6 +1509,8 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         issues.append(f"successor milestone {SUCCESSOR_MILESTONE_ID} missing")
     if not queue_item:
         issues.append(f"successor queue item {SUCCESSOR_PACKAGE_ID} missing")
+    if len(queue_items) > 1:
+        issues.append(f"successor queue item {SUCCESSOR_PACKAGE_ID} appears more than once")
     if milestone:
         if _normalize_text(milestone.get("title")) != SUCCESSOR_MILESTONE_TITLE:
             issues.append("successor milestone 102 title drifted")
@@ -803,6 +1561,8 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         elif not queue_source_item:
             issues.append(f"successor design queue source item {SUCCESSOR_PACKAGE_ID} missing")
         else:
+            if len(queue_source_items) > 1:
+                issues.append(f"successor design queue source item {SUCCESSOR_PACKAGE_ID} appears more than once")
             issues.extend(_source_queue_assignment_issues(queue_source_item, queue_item))
             for marker in missing_source_queue_proof:
                 issues.append(f"successor design queue source proof missing marker: {marker}")
@@ -817,6 +1577,8 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         if not work_task:
             issues.append(f"successor registry work task {SUCCESSOR_WORK_TASK_ID} missing")
         else:
+            if len(registry_work_tasks) > 1:
+                issues.append(f"successor registry work task {SUCCESSOR_WORK_TASK_ID} appears more than once")
             if _normalize_text(work_task.get("owner")) != "fleet":
                 issues.append(f"successor registry work task {SUCCESSOR_WORK_TASK_ID} owner is not fleet")
             if _normalize_text(work_task.get("title")) != SUCCESSOR_WORK_TASK_TITLE:
@@ -840,6 +1602,7 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "registry_path": str(registry_path),
         "queue_staging_path": str(queue_path),
         "design_queue_source_path": str(queue_source_path) if queue_source_path else "",
+        "design_queue_source_item_count": len(queue_source_items),
         "design_queue_source_item_found": bool(queue_source_item),
         "design_queue_source_title": _normalize_text(queue_source_item.get("title")),
         "design_queue_source_task": _normalize_text(queue_source_item.get("task")),
@@ -860,6 +1623,7 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             if _coerce_int(dep, -1) >= 0
         ],
         "registry_work_task_id": SUCCESSOR_WORK_TASK_ID,
+        "registry_work_task_count": len(registry_work_tasks),
         "registry_work_task_title": _normalize_text(work_task.get("title")),
         "registry_work_task_status": _normalize_text(work_task.get("status")),
         "required_registry_evidence_markers": list(SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS),
@@ -873,6 +1637,7 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "queue_milestone_id": _coerce_int(queue_item.get("milestone_id"), -1),
         "queue_status": _normalize_text(queue_item.get("status")),
         "queue_frontier_id": _normalize_text(queue_item.get("frontier_id")),
+        "queue_item_count": len(queue_items),
         "required_queue_proof_markers": list(SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS),
         "missing_queue_proof_markers": missing_queue_proof,
         "missing_queue_proof_anchor_paths": missing_queue_proof_anchor_paths,
@@ -1028,6 +1793,7 @@ def _derive_proof_capture_commands(
 
 def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
     channel_id = _normalize_text(release_channel.get("channelId") or release_channel.get("channel")).lower()
+    release_proof = release_channel.get("releaseProof") if isinstance(release_channel.get("releaseProof"), dict) else {}
     tuple_rows = []
     external_proof_rows = []
     coverage = release_channel.get("desktopTupleCoverage")
@@ -1163,6 +1929,24 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         row["tuple_entry_count"] = external_request_tuple_counts.get(tuple_id, 0)
         row["tuple_unique"] = external_request_tuple_counts.get(tuple_id, 0) <= 1
 
+    release_proof_status = _normalize_text(
+        release_proof.get("status") if release_proof else release_channel.get("releaseProofStatus")
+    ).lower()
+    release_receipt_id = _normalize_text(
+        release_channel.get("releaseReceiptId")
+        or release_channel.get("release_receipt_id")
+        or release_proof.get("receiptId")
+        or release_proof.get("receipt_id")
+        or release_proof.get("generatedAt")
+        or release_proof.get("generated_at")
+        or release_channel.get("generatedAt")
+        or release_channel.get("generated_at")
+    )
+    if not release_receipt_id and channel_id and _normalize_text(release_channel.get("version")) and release_proof_status:
+        release_receipt_id = (
+            f"release-channel:{channel_id}:{_normalize_text(release_channel.get('version'))}:{release_proof_status}"
+        )
+
     return {
         "channel_id": channel_id,
         "generated_at": _normalize_text(release_channel.get("generatedAt") or release_channel.get("generated_at")),
@@ -1172,11 +1956,9 @@ def _release_channel_index(release_channel: Dict[str, Any]) -> Dict[str, Any]:
         "supportability_state": _normalize_text(
             release_channel.get("supportabilityState") or release_channel.get("supportability_state")
         ).lower(),
-        "release_proof_status": _normalize_text(
-            (release_channel.get("releaseProof") or {}).get("status")
-            if isinstance(release_channel.get("releaseProof"), dict)
-            else release_channel.get("releaseProofStatus")
-        ).lower(),
+        "release_proof_status": release_proof_status,
+        "release_receipt_id": release_receipt_id,
+        "release_receipt_source": "release_channel",
         "fix_availability_summary": _normalize_text(release_channel.get("fixAvailabilitySummary") or release_channel.get("fix_availability_summary")),
         "proof_capture_command_normalization_counts": proof_capture_command_normalization_counts,
         "promoted_tuples": rows,
@@ -1281,6 +2063,13 @@ def _release_receipt_state(
     return "release_receipt_ready"
 
 
+def _release_receipt_identity(release_channel_index: Dict[str, Any]) -> tuple[str, str]:
+    receipt_id = _normalize_text(release_channel_index.get("release_receipt_id"))
+    if not receipt_id:
+        return "", ""
+    return receipt_id, _normalize_text(release_channel_index.get("release_receipt_source"), "release_channel")
+
+
 def _version_matches(value: str, expected: str) -> bool:
     if not value or not expected:
         return False
@@ -1293,6 +2082,14 @@ def _receipt_field_matches(value: str, expected: str) -> bool:
     return value.strip().lower() == expected.strip().lower()
 
 
+def _first_receipt_field(item: Dict[str, Any], field_names: Iterable[str]) -> tuple[str, str]:
+    for field_name in field_names:
+        value = _normalize_text(item.get(field_name))
+        if value:
+            return value, field_name
+    return "", ""
+
+
 def _reporter_followthrough(
     *,
     status: str,
@@ -1302,24 +2099,76 @@ def _reporter_followthrough(
     installed_build_receipt_installation_id: str,
     installed_build_receipt_version: str,
     installed_build_receipt_channel: str,
+    installed_build_receipt_head_id: str,
+    installed_build_receipt_platform: str,
+    installed_build_receipt_rid: str,
+    installed_build_receipt_tuple_id: str,
+    installed_build_receipt_source: str,
+    installed_build_receipt_installation_source: str,
+    installed_build_receipt_version_source: str,
+    installed_build_receipt_channel_source: str,
+    expected_head_id: str,
+    expected_platform: str,
+    expected_rid: str,
+    expected_tuple_id: str,
     fixed_version: str,
     fixed_channel: str,
+    fixed_version_receipt_id: str,
+    fixed_channel_receipt_id: str,
+    fixed_receipt_installation_id: str,
+    fixed_receipt_installation_source: str,
+    fixed_version_receipt_source: str,
+    fixed_channel_receipt_source: str,
     release_channel: str,
     registry_channel: str,
     registry_version: str,
+    release_receipt_id: str,
+    release_receipt_source: str,
     install_truth_state: str,
     release_receipt_state: str,
     update_required: bool,
     recovery_path: Dict[str, str],
 ) -> Dict[str, Any]:
     has_fix = bool(fixed_version or fixed_channel)
-    fixed_version_receipted = bool(fixed_version and _version_matches(fixed_version, registry_version))
-    fixed_channel_receipted = bool(
+    install_receipt_from_feed = (
+        installed_build_receipt_source == "install_receipts"
+        and installed_build_receipt_installation_source == "install_receipts"
+        and installed_build_receipt_version_source == "install_receipts"
+        and installed_build_receipt_channel_source == "install_receipts"
+    )
+    fixed_version_receipt_from_feed = fixed_version_receipt_source == "fix_receipts"
+    fixed_channel_receipt_from_feed = fixed_channel_receipt_source == "fix_receipts"
+    fixed_receipt_installation_from_feed = fixed_receipt_installation_source == "fix_receipts"
+    fixed_version_matches_release_receipt = bool(fixed_version and _version_matches(fixed_version, registry_version))
+    fixed_channel_matches_release_receipt = bool(
         fixed_channel
         and registry_channel
         and fixed_channel.strip().lower() == registry_channel.strip().lower()
     )
-    release_receipt_ready = release_receipt_state == "release_receipt_ready"
+    fixed_version_receipt_ready = bool(
+        fixed_version_matches_release_receipt and fixed_version_receipt_id and fixed_version_receipt_from_feed
+    )
+    fixed_channel_receipt_ready = bool(
+        fixed_channel_matches_release_receipt and fixed_channel_receipt_id and fixed_channel_receipt_from_feed
+    )
+    fixed_receipt_installation_required = bool(
+        has_fix and fixed_version_receipt_ready and fixed_channel_receipt_ready
+    )
+    fixed_receipt_installation_matches = (
+        bool(
+            installation_id
+            and fixed_receipt_installation_from_feed
+            and _receipt_field_matches(fixed_receipt_installation_id, installation_id)
+        )
+        if fixed_receipt_installation_required
+        else True
+    )
+    release_receipt_from_channel = release_receipt_source == "release_channel"
+    release_receipt_ready = bool(
+        release_receipt_state == "release_receipt_ready"
+        and release_receipt_id
+        and release_receipt_from_channel
+    )
     install_receipt_ready = bool(installation_id) and install_truth_state == "promoted_tuple_match"
     installed_build_receipt_version_matches = _receipt_field_matches(
         installed_build_receipt_version,
@@ -1333,7 +2182,37 @@ def _reporter_followthrough(
         installed_build_receipt_channel,
         release_channel or registry_channel,
     )
-    installed_build_receipted = bool(
+    installed_build_receipt_head_matches = bool(
+        not installed_build_receipt_head_id
+        or (expected_head_id and _receipt_field_matches(installed_build_receipt_head_id, expected_head_id))
+    )
+    installed_build_receipt_platform_matches = bool(
+        not installed_build_receipt_platform
+        or (expected_platform and _receipt_field_matches(installed_build_receipt_platform, expected_platform))
+    )
+    installed_build_receipt_rid_matches = bool(
+        not installed_build_receipt_rid
+        or (expected_rid and _receipt_field_matches(installed_build_receipt_rid, expected_rid))
+    )
+    installed_build_receipt_tuple_matches = bool(
+        not installed_build_receipt_tuple_id
+        or (expected_tuple_id and _receipt_field_matches(installed_build_receipt_tuple_id, expected_tuple_id))
+    )
+    installed_build_receipt_identity_matches = bool(
+        expected_head_id
+        and expected_platform
+        and expected_rid
+        and expected_tuple_id
+        and installed_build_receipt_head_id
+        and installed_build_receipt_platform
+        and installed_build_receipt_rid
+        and installed_build_receipt_tuple_id
+        and installed_build_receipt_head_matches
+        and installed_build_receipt_platform_matches
+        and installed_build_receipt_rid_matches
+        and installed_build_receipt_tuple_matches
+    )
+    installed_build_receipt_matches_install = bool(
         installed_version
         and registry_version
         and installed_build_receipt_id
@@ -1343,20 +2222,31 @@ def _reporter_followthrough(
         and installed_build_receipt_installation_matches
         and installed_build_receipt_version_matches
         and installed_build_receipt_channel_matches
+        and (installed_build_receipt_identity_matches or not install_receipt_from_feed)
     )
+    installed_build_receipt_ready = bool(installed_build_receipt_matches_install and install_receipt_from_feed)
     current_install_on_fixed_build = bool(
         fixed_version and installed_version and _version_matches(installed_version, fixed_version)
     )
     recovery_action_id = _normalize_text((recovery_path or {}).get("action_id")).lower()
+    feedback_loop_ready = bool(
+        installation_id
+        and install_receipt_ready
+        and release_receipt_ready
+        and installed_build_receipt_ready
+        and (not has_fix or (fixed_version_receipt_ready and fixed_channel_receipt_ready))
+        and fixed_receipt_installation_matches
+    )
     fix_available_ready = bool(
         fixed_version
         and fixed_channel
         and installation_id
         and install_receipt_ready
         and release_receipt_ready
-        and installed_build_receipted
-        and fixed_version_receipted
-        and fixed_channel_receipted
+        and installed_build_receipt_ready
+        and fixed_version_receipt_ready
+        and fixed_channel_receipt_ready
+        and fixed_receipt_installation_matches
     )
     recovery_loop_ready = bool(
         has_fix
@@ -1364,12 +2254,12 @@ def _reporter_followthrough(
         and installation_id
         and install_receipt_ready
         and release_receipt_ready
-        and installed_build_receipted
+        and installed_build_receipt_ready
         and recovery_action_id in {"open_downloads", "open_support_timeline", "open_account_access"}
     )
     please_test_ready = bool(
         fix_available_ready
-        and installed_build_receipted
+        and installed_build_receipt_ready
         and current_install_on_fixed_build
         and status in {"fixed", "released_to_reporter_channel", "user_notified"}
     )
@@ -1380,14 +2270,24 @@ def _reporter_followthrough(
         blockers.append(f"install_truth_state:{install_truth_state or 'unknown'}")
     if has_fix and not release_receipt_ready:
         blockers.append(f"release_receipt_state:{release_receipt_state or 'unknown'}")
+    if has_fix and release_receipt_state == "release_receipt_ready" and not release_receipt_id:
+        blockers.append("release_receipt_id_missing")
+    if has_fix and release_receipt_id and not release_receipt_from_channel:
+        blockers.append("release_receipt_source_not_release_channel")
     if has_fix and not fixed_version:
         blockers.append("fixed_version_missing")
     if has_fix and not fixed_channel:
         blockers.append("fixed_channel_missing")
-    if fixed_version and not fixed_version_receipted:
+    if fixed_version and not fixed_version_matches_release_receipt:
         blockers.append("fixed_version_not_on_release_receipt")
-    if fixed_channel and not fixed_channel_receipted:
+    if fixed_channel and not fixed_channel_matches_release_receipt:
         blockers.append("fixed_channel_not_on_release_receipt")
+    if fixed_receipt_installation_required and not fixed_receipt_installation_id:
+        blockers.append("fixed_receipt_installation_missing")
+    if fixed_receipt_installation_required and fixed_receipt_installation_id and not fixed_receipt_installation_from_feed:
+        blockers.append("fixed_receipt_installation_source_not_fix_receipts")
+    if fixed_receipt_installation_required and fixed_receipt_installation_id and not fixed_receipt_installation_matches:
+        blockers.append("fixed_receipt_installation_mismatch")
     if has_fix and install_receipt_ready and release_receipt_ready and not installed_version:
         blockers.append("installed_version_missing")
     if has_fix and install_receipt_ready and release_receipt_ready and installed_version and not installed_build_receipt_id:
@@ -1398,12 +2298,28 @@ def _reporter_followthrough(
         blockers.append("installed_build_receipt_version_missing")
     if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_channel:
         blockers.append("installed_build_receipt_channel_missing")
+    if has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_head_id:
+        blockers.append("installed_build_receipt_head_missing")
+    if has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_platform:
+        blockers.append("installed_build_receipt_platform_missing")
+    if has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_rid:
+        blockers.append("installed_build_receipt_rid_missing")
+    if has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_tuple_id:
+        blockers.append("installed_build_receipt_tuple_missing")
     if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_installation_id and not installed_build_receipt_installation_matches:
         blockers.append("installed_build_receipt_installation_mismatch")
     if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_version and not installed_build_receipt_version_matches:
         blockers.append("installed_build_receipt_version_mismatch")
     if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_channel and not installed_build_receipt_channel_matches:
         blockers.append("installed_build_receipt_channel_mismatch")
+    if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_head_id and not installed_build_receipt_head_matches:
+        blockers.append("installed_build_receipt_head_mismatch")
+    if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_platform and not installed_build_receipt_platform_matches:
+        blockers.append("installed_build_receipt_platform_mismatch")
+    if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_rid and not installed_build_receipt_rid_matches:
+        blockers.append("installed_build_receipt_rid_mismatch")
+    if has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_tuple_id and not installed_build_receipt_tuple_matches:
+        blockers.append("installed_build_receipt_tuple_mismatch")
     if not has_fix and install_receipt_ready and release_receipt_ready and installed_version and not installed_build_receipt_id:
         blockers.append("installed_build_receipt_missing_for_recovery")
     if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_version:
@@ -1412,13 +2328,29 @@ def _reporter_followthrough(
         blockers.append("installed_build_receipt_installation_missing_for_recovery")
     if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_channel:
         blockers.append("installed_build_receipt_channel_missing_for_recovery")
+    if not has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_head_id:
+        blockers.append("installed_build_receipt_head_missing_for_recovery")
+    if not has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_platform:
+        blockers.append("installed_build_receipt_platform_missing_for_recovery")
+    if not has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_rid:
+        blockers.append("installed_build_receipt_rid_missing_for_recovery")
+    if not has_fix and install_receipt_from_feed and install_receipt_ready and release_receipt_ready and installed_build_receipt_id and not installed_build_receipt_tuple_id:
+        blockers.append("installed_build_receipt_tuple_missing_for_recovery")
     if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_installation_id and not installed_build_receipt_installation_matches:
         blockers.append("installed_build_receipt_installation_mismatch_for_recovery")
     if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_version and not installed_build_receipt_version_matches:
         blockers.append("installed_build_receipt_version_mismatch_for_recovery")
     if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_channel and not installed_build_receipt_channel_matches:
         blockers.append("installed_build_receipt_channel_mismatch_for_recovery")
-    if fix_available_ready and installed_build_receipted and update_required:
+    if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_head_id and not installed_build_receipt_head_matches:
+        blockers.append("installed_build_receipt_head_mismatch_for_recovery")
+    if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_platform and not installed_build_receipt_platform_matches:
+        blockers.append("installed_build_receipt_platform_mismatch_for_recovery")
+    if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_rid and not installed_build_receipt_rid_matches:
+        blockers.append("installed_build_receipt_rid_mismatch_for_recovery")
+    if not has_fix and install_receipt_ready and release_receipt_ready and installed_build_receipt_tuple_id and not installed_build_receipt_tuple_matches:
+        blockers.append("installed_build_receipt_tuple_mismatch_for_recovery")
+    if fix_available_ready and installed_build_receipt_ready and update_required:
         blockers.append("installed_build_behind_fixed_receipt")
 
     if please_test_ready:
@@ -1443,25 +2375,53 @@ def _reporter_followthrough(
     return {
         "state": state,
         "next_action": next_action,
+        "feedback_loop_ready": feedback_loop_ready,
         "fix_available_ready": fix_available_ready,
         "please_test_ready": please_test_ready,
         "recovery_loop_ready": recovery_loop_ready,
         "install_receipt_ready": install_receipt_ready,
         "release_receipt_state": release_receipt_state,
-        "fixed_version_receipted": fixed_version_receipted,
-        "fixed_channel_receipted": fixed_channel_receipted,
-        "installed_build_receipted": installed_build_receipted,
+        "release_receipt_id": release_receipt_id,
+        "release_receipt_source": release_receipt_source,
+        "fixed_version_receipted": fixed_version_receipt_ready,
+        "fixed_channel_receipted": fixed_channel_receipt_ready,
+        "fixed_version_matches_release_receipt": fixed_version_matches_release_receipt,
+        "fixed_channel_matches_release_receipt": fixed_channel_matches_release_receipt,
+        "fixed_version_receipt_id": fixed_version_receipt_id,
+        "fixed_channel_receipt_id": fixed_channel_receipt_id,
+        "fixed_receipt_installation_id": fixed_receipt_installation_id,
+        "fixed_receipt_installation_matches": fixed_receipt_installation_matches,
+        "fixed_receipt_installation_source": fixed_receipt_installation_source,
+        "fixed_version_receipt_source": fixed_version_receipt_source,
+        "fixed_channel_receipt_source": fixed_channel_receipt_source,
+        "installed_build_receipted": installed_build_receipt_ready,
+        "installed_build_receipt_matches_install": installed_build_receipt_matches_install,
         "installed_build_receipt_id": installed_build_receipt_id,
         "installed_build_receipt_installation_id": installed_build_receipt_installation_id,
         "installed_build_receipt_version": installed_build_receipt_version,
         "installed_build_receipt_channel": installed_build_receipt_channel,
+        "installed_build_receipt_head_id": installed_build_receipt_head_id,
+        "installed_build_receipt_platform": installed_build_receipt_platform,
+        "installed_build_receipt_rid": installed_build_receipt_rid,
+        "installed_build_receipt_tuple_id": installed_build_receipt_tuple_id,
+        "installed_build_receipt_source": installed_build_receipt_source,
+        "installed_build_receipt_installation_source": installed_build_receipt_installation_source,
+        "installed_build_receipt_version_source": installed_build_receipt_version_source,
+        "installed_build_receipt_channel_source": installed_build_receipt_channel_source,
         "installed_build_receipt_installation_matches": installed_build_receipt_installation_matches,
         "installed_build_receipt_version_matches": installed_build_receipt_version_matches,
         "installed_build_receipt_channel_matches": installed_build_receipt_channel_matches,
+        "installed_build_receipt_head_matches": installed_build_receipt_head_matches,
+        "installed_build_receipt_platform_matches": installed_build_receipt_platform_matches,
+        "installed_build_receipt_rid_matches": installed_build_receipt_rid_matches,
+        "installed_build_receipt_tuple_matches": installed_build_receipt_tuple_matches,
+        "installed_build_receipt_identity_matches": installed_build_receipt_identity_matches,
         "current_install_on_fixed_build": current_install_on_fixed_build,
         "blockers": blockers,
         "registry_channel": registry_channel,
         "registry_version": registry_version,
+        "release_receipt_channel": registry_channel,
+        "release_receipt_version": registry_version,
         "case_release_channel": release_channel,
     }
 
@@ -1578,48 +2538,125 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         or item.get("currentVersion")
         or item.get("current_version")
     )
-    installed_build_receipt_id = _normalize_text(
-        item.get("installedBuildReceiptId")
-        or item.get("installed_build_receipt_id")
-        or item.get("installReceiptId")
-        or item.get("install_receipt_id")
-        or item.get("releaseReceiptId")
-        or item.get("release_receipt_id")
-        or item.get("receiptId")
-        or item.get("receipt_id")
+    installed_build_receipt_id, installed_build_receipt_source = _first_receipt_field(
+        item,
+        (
+            "installedBuildReceiptId",
+            "installed_build_receipt_id",
+            "installReceiptId",
+            "install_receipt_id",
+        ),
     )
-    installed_build_receipt_installation_id = _normalize_text(
-        item.get("installedBuildReceiptInstallationId")
-        or item.get("installed_build_receipt_installation_id")
-        or item.get("installReceiptInstallationId")
-        or item.get("install_receipt_installation_id")
-        or item.get("receiptInstallationId")
-        or item.get("receipt_installation_id")
+    (
+        installed_build_receipt_installation_id,
+        installed_build_receipt_installation_source,
+    ) = _first_receipt_field(
+        item,
+        (
+            "installedBuildReceiptInstallationId",
+            "installed_build_receipt_installation_id",
+            "installReceiptInstallationId",
+            "install_receipt_installation_id",
+        ),
     )
-    installed_build_receipt_version = _normalize_text(
-        item.get("installedBuildReceiptVersion")
-        or item.get("installed_build_receipt_version")
-        or item.get("installReceiptVersion")
-        or item.get("install_receipt_version")
-        or item.get("receiptVersion")
-        or item.get("receipt_version")
+    installed_build_receipt_version, installed_build_receipt_version_source = _first_receipt_field(
+        item,
+        (
+            "installedBuildReceiptVersion",
+            "installed_build_receipt_version",
+            "installReceiptVersion",
+            "install_receipt_version",
+        ),
     )
-    installed_build_receipt_channel = _normalize_text(
-        item.get("installedBuildReceiptChannel")
-        or item.get("installed_build_receipt_channel")
-        or item.get("installReceiptChannel")
-        or item.get("install_receipt_channel")
-        or item.get("receiptChannel")
-        or item.get("receipt_channel")
+    installed_build_receipt_channel, installed_build_receipt_channel_source = _first_receipt_field(
+        item,
+        (
+            "installedBuildReceiptChannel",
+            "installed_build_receipt_channel",
+            "installReceiptChannel",
+            "install_receipt_channel",
+        ),
+    )
+    installed_build_receipt_channel = installed_build_receipt_channel.lower()
+    installed_build_receipt_head_id = _normalize_text(
+        item.get("installedBuildReceiptHeadId")
+        or item.get("installed_build_receipt_head_id")
+        or item.get("installReceiptHeadId")
+        or item.get("install_receipt_head_id")
     ).lower()
+    installed_build_receipt_platform = _normalize_platform(
+        item.get("installedBuildReceiptPlatform")
+        or item.get("installed_build_receipt_platform")
+        or item.get("installReceiptPlatform")
+        or item.get("install_receipt_platform")
+    )
+    installed_build_receipt_rid = _normalize_text(
+        item.get("installedBuildReceiptRid")
+        or item.get("installed_build_receipt_rid")
+        or item.get("installReceiptRid")
+        or item.get("install_receipt_rid")
+    ).lower()
+    installed_build_receipt_tuple_id = _canonical_tuple_id(
+        item.get("installedBuildReceiptTupleId")
+        or item.get("installed_build_receipt_tuple_id")
+        or item.get("installReceiptTupleId")
+        or item.get("install_receipt_tuple_id"),
+        head=installed_build_receipt_head_id,
+        platform=installed_build_receipt_platform,
+        rid=installed_build_receipt_rid,
+    )
+    installed_build_receipt_truth_source = _normalize_text(
+        item.get("installedBuildReceiptTruthSource") or item.get("installed_build_receipt_truth_source")
+    )
+    if installed_build_receipt_truth_source == "install_receipts":
+        installed_build_receipt_source = installed_build_receipt_truth_source
+        installed_build_receipt_installation_source = installed_build_receipt_truth_source
+        installed_build_receipt_version_source = installed_build_receipt_truth_source
+        installed_build_receipt_channel_source = installed_build_receipt_truth_source
     tuple_id = _normalize_text(item.get("desktopTupleId") or item.get("tupleId") or item.get("tuple_id")).lower()
     expected_tuple_id = _canonical_tuple_id(tuple_id)
+    expected_rid = ""
     if not expected_tuple_id and head_id and platform:
         expected_rid = _rid_for_platform_arch(platform, arch)
         if expected_rid:
             expected_tuple_id = f"{head_id}:{expected_rid}:{platform}"
+    elif expected_tuple_id:
+        tuple_parts = [token.strip().lower() for token in expected_tuple_id.split(":")]
+        expected_rid = tuple_parts[1] if len(tuple_parts) == 3 else ""
     fixed_version = _normalize_text(item.get("fixedVersion") or item.get("fixed_version"))
     fixed_channel = _normalize_text(item.get("fixedChannel") or item.get("fixed_channel"))
+    fixed_version_receipt_id, fixed_version_receipt_source = _first_receipt_field(
+        item,
+        (
+            "fixedVersionReceiptId",
+            "fixed_version_receipt_id",
+            "fixReceiptId",
+            "fix_receipt_id",
+        ),
+    )
+    fixed_channel_receipt_id, fixed_channel_receipt_source = _first_receipt_field(
+        item,
+        (
+            "fixedChannelReceiptId",
+            "fixed_channel_receipt_id",
+            "fixReceiptId",
+            "fix_receipt_id",
+        ),
+    )
+    fixed_receipt_installation_id = _normalize_text(
+        item.get("fixedReceiptInstallationId")
+        or item.get("fixed_receipt_installation_id")
+        or item.get("fixReceiptInstallationId")
+        or item.get("fix_receipt_installation_id")
+    )
+    fixed_receipt_installation_source = ""
+    fixed_receipt_truth_source = _normalize_text(
+        item.get("fixedReceiptTruthSource") or item.get("fixed_receipt_truth_source")
+    )
+    if fixed_receipt_truth_source == "fix_receipts":
+        fixed_version_receipt_source = fixed_receipt_truth_source
+        fixed_channel_receipt_source = fixed_receipt_truth_source
+        fixed_receipt_installation_source = fixed_receipt_truth_source
     promoted_tuple = _lookup_promoted_tuple(
         index=release_channel_index,
         head=head_id,
@@ -1654,6 +2691,7 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         promoted_tuple=promoted_tuple,
         external_proof_request=external_proof_request,
     )
+    release_receipt_id, release_receipt_source = _release_receipt_identity(release_channel_index)
     reporter_followthrough = _reporter_followthrough(
         status=status,
         installation_id=installation_id,
@@ -1662,11 +2700,31 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         installed_build_receipt_installation_id=installed_build_receipt_installation_id,
         installed_build_receipt_version=installed_build_receipt_version,
         installed_build_receipt_channel=installed_build_receipt_channel,
+        installed_build_receipt_head_id=installed_build_receipt_head_id,
+        installed_build_receipt_platform=installed_build_receipt_platform,
+        installed_build_receipt_rid=installed_build_receipt_rid,
+        installed_build_receipt_tuple_id=installed_build_receipt_tuple_id,
+        installed_build_receipt_source=installed_build_receipt_source,
+        installed_build_receipt_installation_source=installed_build_receipt_installation_source,
+        installed_build_receipt_version_source=installed_build_receipt_version_source,
+        installed_build_receipt_channel_source=installed_build_receipt_channel_source,
+        expected_head_id=head_id,
+        expected_platform=platform,
+        expected_rid=expected_rid,
+        expected_tuple_id=expected_tuple_id,
         fixed_version=fixed_version,
         fixed_channel=fixed_channel,
+        fixed_version_receipt_id=fixed_version_receipt_id,
+        fixed_channel_receipt_id=fixed_channel_receipt_id,
+        fixed_receipt_installation_id=fixed_receipt_installation_id,
+        fixed_receipt_installation_source=fixed_receipt_installation_source,
+        fixed_version_receipt_source=fixed_version_receipt_source,
+        fixed_channel_receipt_source=fixed_channel_receipt_source,
         release_channel=release_channel,
         registry_channel=_normalize_text(release_channel_index.get("channel_id")).lower(),
         registry_version=_normalize_text(release_channel_index.get("version")),
+        release_receipt_id=release_receipt_id,
+        release_receipt_source=release_receipt_source,
         install_truth_state=install_truth_state,
         release_receipt_state=release_receipt_state,
         update_required=update_required,
@@ -1696,8 +2754,24 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
         "installed_build_receipt_installation_id": installed_build_receipt_installation_id,
         "installed_build_receipt_version": installed_build_receipt_version,
         "installed_build_receipt_channel": installed_build_receipt_channel,
+        "installed_build_receipt_head_id": installed_build_receipt_head_id,
+        "installed_build_receipt_platform": installed_build_receipt_platform,
+        "installed_build_receipt_rid": installed_build_receipt_rid,
+        "installed_build_receipt_tuple_id": installed_build_receipt_tuple_id,
+        "installed_build_receipt_source": installed_build_receipt_source,
+        "installed_build_receipt_installation_source": installed_build_receipt_installation_source,
+        "installed_build_receipt_version_source": installed_build_receipt_version_source,
+        "installed_build_receipt_channel_source": installed_build_receipt_channel_source,
+        "installed_build_receipt_truth_source": installed_build_receipt_truth_source,
         "fixed_version": fixed_version,
         "fixed_channel": fixed_channel,
+        "fixed_version_receipt_id": fixed_version_receipt_id,
+        "fixed_channel_receipt_id": fixed_channel_receipt_id,
+        "fixed_receipt_installation_id": fixed_receipt_installation_id,
+        "fixed_receipt_installation_source": fixed_receipt_installation_source,
+        "fixed_version_receipt_source": fixed_version_receipt_source,
+        "fixed_channel_receipt_source": fixed_channel_receipt_source,
+        "fixed_receipt_truth_source": fixed_receipt_truth_source,
         "install_truth_state": install_truth_state,
         "install_diagnosis": {
             "registry_channel_id": _normalize_text(release_channel_index.get("channel_id")),
@@ -1706,6 +2780,8 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "registry_rollout_state": _normalize_text(release_channel_index.get("rollout_state")),
             "registry_supportability_state": _normalize_text(release_channel_index.get("supportability_state")),
             "registry_release_proof_status": _normalize_text(release_channel_index.get("release_proof_status")),
+            "registry_release_receipt_id": _normalize_text(release_channel_index.get("release_receipt_id")),
+            "registry_release_receipt_source": _normalize_text(release_channel_index.get("release_receipt_source")),
             "case_channel_matches_registry": bool(
                 release_channel
                 and _normalize_text(release_channel_index.get("channel_id"))
@@ -1768,6 +2844,7 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "case_installed_build_receipt_installation_id": installed_build_receipt_installation_id,
             "case_installed_build_receipt_version": installed_build_receipt_version,
             "case_installed_build_receipt_channel": installed_build_receipt_channel,
+            "case_installed_build_receipt_truth_source": installed_build_receipt_truth_source,
             "case_version_matches_registry_release": bool(
                 installed_version
                 and _normalize_text(release_channel_index.get("version"))
@@ -1778,6 +2855,10 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
                 and _normalize_text(release_channel_index.get("version"))
                 and fixed_version.lower() == _normalize_text(release_channel_index.get("version")).lower()
             ),
+            "case_fixed_version_receipt_id": fixed_version_receipt_id,
+            "case_fixed_channel_receipt_id": fixed_channel_receipt_id,
+            "case_fixed_receipt_installation_id": fixed_receipt_installation_id,
+            "case_fixed_receipt_truth_source": fixed_receipt_truth_source,
         },
         "fix_confirmation": {
             "state": fix_confirmation_state,
@@ -1789,8 +2870,13 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
             "installed_build_receipt_installation_id": installed_build_receipt_installation_id,
             "installed_build_receipt_version": installed_build_receipt_version,
             "installed_build_receipt_channel": installed_build_receipt_channel,
+            "installed_build_receipt_truth_source": installed_build_receipt_truth_source,
             "fixed_version": fixed_version,
             "fixed_channel": fixed_channel,
+            "fixed_version_receipt_id": fixed_version_receipt_id,
+            "fixed_channel_receipt_id": fixed_channel_receipt_id,
+            "fixed_receipt_installation_id": fixed_receipt_installation_id,
+            "fixed_receipt_truth_source": fixed_receipt_truth_source,
             "update_required": update_required,
         },
         "reporter_followthrough": reporter_followthrough,
@@ -2250,6 +3336,7 @@ def _is_non_external_packet(packet: Dict[str, Any]) -> bool:
 
 def _reporter_followthrough_plan(packets: List[Dict[str, Any]], *, generated_at: str) -> Dict[str, Any]:
     groups: Dict[str, List[Dict[str, Any]]] = {
+        "feedback": [],
         "fix_available": [],
         "please_test": [],
         "recovery": [],
@@ -2291,18 +3378,64 @@ def _reporter_followthrough_plan(packets: List[Dict[str, Any]], *, generated_at:
             "installed_build_receipt_channel": _normalize_text(
                 followthrough.get("installed_build_receipt_channel")
             ),
+            "installed_build_receipt_head_id": _normalize_text(
+                followthrough.get("installed_build_receipt_head_id")
+            ),
+            "installed_build_receipt_platform": _normalize_text(
+                followthrough.get("installed_build_receipt_platform")
+            ),
+            "installed_build_receipt_rid": _normalize_text(
+                followthrough.get("installed_build_receipt_rid")
+            ),
+            "installed_build_receipt_tuple_id": _normalize_text(
+                followthrough.get("installed_build_receipt_tuple_id")
+            ),
+            "installed_build_receipt_source": _normalize_text(followthrough.get("installed_build_receipt_source")),
+            "installed_build_receipt_installation_source": _normalize_text(
+                followthrough.get("installed_build_receipt_installation_source")
+            ),
+            "installed_build_receipt_version_source": _normalize_text(
+                followthrough.get("installed_build_receipt_version_source")
+            ),
+            "installed_build_receipt_channel_source": _normalize_text(
+                followthrough.get("installed_build_receipt_channel_source")
+            ),
             "fixed_version": _normalize_text(packet.get("fixed_version")),
             "fixed_channel": _normalize_text(packet.get("fixed_channel")),
+            "fixed_version_receipt_id": _normalize_text(followthrough.get("fixed_version_receipt_id")),
+            "fixed_channel_receipt_id": _normalize_text(followthrough.get("fixed_channel_receipt_id")),
+            "fixed_receipt_installation_id": _normalize_text(followthrough.get("fixed_receipt_installation_id")),
+            "fixed_receipt_installation_source": _normalize_text(
+                followthrough.get("fixed_receipt_installation_source")
+            ),
+            "fixed_receipt_installation_matches": bool(followthrough.get("fixed_receipt_installation_matches")),
+            "fixed_version_receipt_source": _normalize_text(followthrough.get("fixed_version_receipt_source")),
+            "fixed_channel_receipt_source": _normalize_text(followthrough.get("fixed_channel_receipt_source")),
             "install_truth_state": _normalize_text(packet.get("install_truth_state")),
             "release_receipt_state": _normalize_text(followthrough.get("release_receipt_state")),
+            "release_receipt_id": _normalize_text(followthrough.get("release_receipt_id")),
+            "release_receipt_source": _normalize_text(followthrough.get("release_receipt_source")),
+            "release_receipt_channel": _normalize_text(followthrough.get("release_receipt_channel")),
+            "release_receipt_version": _normalize_text(followthrough.get("release_receipt_version")),
             "state": state,
             "next_action": next_action,
+            "feedback_loop_ready": bool(followthrough.get("feedback_loop_ready")),
+            "install_receipt_ready": bool(followthrough.get("install_receipt_ready")),
+            "fixed_version_receipted": bool(followthrough.get("fixed_version_receipted")),
+            "fixed_channel_receipted": bool(followthrough.get("fixed_channel_receipted")),
+            "installed_build_receipted": bool(followthrough.get("installed_build_receipted")),
+            "installed_build_receipt_identity_matches": bool(
+                followthrough.get("installed_build_receipt_identity_matches")
+            ),
+            "current_install_on_fixed_build": bool(followthrough.get("current_install_on_fixed_build")),
             "recovery_loop_ready": bool(followthrough.get("recovery_loop_ready")),
             "blockers": blockers,
             "recovery_path": dict(packet.get("recovery_path") or {}),
         }
+        if bool(row["feedback_loop_ready"]):
+            groups["feedback"].append({**row, "next_action": "send_feedback_progress"})
         if bool(row["recovery_loop_ready"]):
-            groups["recovery"].append(row)
+            groups["recovery"].append({**row, "next_action": "send_recovery"})
         if state == "please_test_ready":
             groups["please_test"].append(row)
         elif state in {"fix_available_ready", "fix_available_update_required"}:
@@ -2332,18 +3465,22 @@ def _reporter_followthrough_plan(packets: List[Dict[str, Any]], *, generated_at:
         "package_id": SUCCESSOR_PACKAGE_ID,
         "milestone_id": SUCCESSOR_MILESTONE_ID,
         "source_rule": (
-            "Reporter followthrough is compiled from support packets only after install truth, "
-            "installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, "
-            "and release-channel receipts agree."
+            "Reporter feedback, fix-available, please-test, and recovery followthrough is compiled from support packets only after install truth, "
+            "installation-bound installed-build receipts, and release-channel receipts agree; fix-bearing loops additionally require "
+            "fixed-version receipts and fixed-channel receipts."
         ),
         "ready_count": len(
             {
                 row["packet_id"]
-                for key in ("fix_available", "please_test", "recovery")
+                for key in ("feedback", "fix_available", "please_test", "recovery")
                 for row in groups[key]
                 if row["packet_id"]
             }
         ),
+        "feedback_ready_count": len(groups["feedback"]),
+        "fix_available_ready_count": len(groups["fix_available"]),
+        "please_test_ready_count": len(groups["please_test"]),
+        "recovery_loop_ready_count": len(groups["recovery"]),
         "blocked_missing_install_receipts_count": len(groups["blocked_missing_install_receipts"]),
         "blocked_receipt_mismatch_count": len(groups["blocked_receipt_mismatch"]),
         "hold_until_fix_receipt_count": len(groups["hold_until_fix_receipt"]),
@@ -2379,26 +3516,30 @@ def _followthrough_receipt_gates(packets: List[Dict[str, Any]], *, generated_at:
         "package_id": SUCCESSOR_PACKAGE_ID,
         "milestone_id": SUCCESSOR_MILESTONE_ID,
         "source_rule": (
-            "Fix-available, please-test, and recovery followthrough may leave hold only when install truth, "
-            "installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, "
-            "and release-channel receipts agree."
+            "Feedback, fix-available, please-test, and recovery followthrough may leave hold only when install truth, "
+            "installation-bound installed-build receipts, and release-channel receipts agree; fix-bearing loops additionally require "
+            "fixed-version receipts and fixed-channel receipts."
         ),
         "required_gates": [
+            "feedback_loop_ready",
             "install_truth_ready",
             "release_receipt_ready",
+            "release_receipt_id_present",
             "fixed_version_receipted",
             "fixed_channel_receipted",
+            "fixed_receipt_installation_bound",
             "installed_build_receipt_id_present",
             "installed_build_receipt_installation_bound",
             "installed_build_receipt_version_matches",
             "installed_build_receipt_channel_matches",
+            "installed_build_receipt_tuple_bound",
         ],
         "support_case_backed_count": len(support_packets),
         "followthrough_row_count": len(followthrough_rows),
         "ready_count": sum(
             1
             for row in followthrough_rows
-            if _normalize_text(row.get("state")).lower() in ready_states
+            if bool(row.get("feedback_loop_ready")) or _normalize_text(row.get("state")).lower() in ready_states
         ),
         "blocked_missing_install_receipts_count": state_counts.get("blocked_missing_install_receipts", 0),
         "blocked_receipt_mismatch_count": receipt_mismatch_count,
@@ -2408,13 +3549,23 @@ def _followthrough_receipt_gates(packets: List[Dict[str, Any]], *, generated_at:
         "gate_counts": {
             "install_receipt_ready": sum(1 for row in followthrough_rows if bool(row.get("install_receipt_ready"))),
             "install_truth_ready": sum(1 for row in followthrough_rows if bool(row.get("install_receipt_ready"))),
+            "feedback_loop_ready": sum(1 for row in followthrough_rows if bool(row.get("feedback_loop_ready"))),
             "release_receipt_ready": sum(
                 1
                 for row in followthrough_rows
                 if _normalize_text(row.get("release_receipt_state")).lower() == "release_receipt_ready"
             ),
+            "release_receipt_id_present": sum(
+                1
+                for row in followthrough_rows
+                if bool(_normalize_text(row.get("release_receipt_id")))
+                and _normalize_text(row.get("release_receipt_source")) == "release_channel"
+            ),
             "fixed_version_receipted": sum(1 for row in followthrough_rows if bool(row.get("fixed_version_receipted"))),
             "fixed_channel_receipted": sum(1 for row in followthrough_rows if bool(row.get("fixed_channel_receipted"))),
+            "fixed_receipt_installation_bound": sum(
+                1 for row in followthrough_rows if bool(row.get("fixed_receipt_installation_matches"))
+            ),
             "installed_build_receipted": sum(1 for row in followthrough_rows if bool(row.get("installed_build_receipted"))),
             "installed_build_receipt_id_present": sum(
                 1 for row in followthrough_rows if bool(_normalize_text(row.get("installed_build_receipt_id")))
@@ -2434,6 +3585,11 @@ def _followthrough_receipt_gates(packets: List[Dict[str, Any]], *, generated_at:
                 for row in followthrough_rows
                 if bool(row.get("installed_build_receipt_channel_matches"))
             ),
+            "installed_build_receipt_tuple_bound": sum(
+                1
+                for row in followthrough_rows
+                if bool(row.get("installed_build_receipt_identity_matches"))
+            ),
             "current_install_on_fixed_build": sum(
                 1 for row in followthrough_rows if bool(row.get("current_install_on_fixed_build"))
             ),
@@ -2443,7 +3599,8 @@ def _followthrough_receipt_gates(packets: List[Dict[str, Any]], *, generated_at:
 
 def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, release_channel_index: Dict[str, Any]) -> Dict[str, Any]:
     generated_at = _utc_now_iso()
-    raw_items = source_payload.get("items") or []
+    raw_items, install_receipt_source = _items_with_install_receipt_truth(source_payload)
+    raw_items, fix_receipt_source = _items_with_fix_receipt_truth(raw_items, source_payload)
     open_statuses = {
         "new",
         "clustered",
@@ -2480,6 +3637,8 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
     packets = case_packets + operator_packets
     open_packets = packets
     non_external_packets = [dict(item) for item in open_packets if _is_non_external_packet(item)]
+    reporter_followthrough_plan = _reporter_followthrough_plan(packets, generated_at=generated_at)
+    followthrough_receipt_gates = _followthrough_receipt_gates(packets, generated_at=generated_at)
     open_items = [
         dict(item)
         for item in raw_items
@@ -2496,6 +3655,8 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
             "materialized_count": len(packets),
             "case_materialized_count": len(case_packets),
             "operator_packet_count": len(operator_packets),
+            **install_receipt_source,
+            **fix_receipt_source,
         },
         "summary": {
             "open_case_count": len(case_packets),
@@ -2535,36 +3696,17 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
                 if bool((item.get("fix_confirmation") or {}).get("update_required"))
                 and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
             ),
-            "reporter_followthrough_ready_count": sum(
-                1
-                for item in open_packets
-                if _normalize_text((item.get("reporter_followthrough") or {}).get("state")).lower()
-                in {"fix_available_ready", "fix_available_update_required", "please_test_ready", "recovery_ready"}
+            "reporter_followthrough_ready_count": int(reporter_followthrough_plan.get("ready_count") or 0),
+            "feedback_followthrough_ready_count": int(reporter_followthrough_plan.get("feedback_ready_count") or 0),
+            "reporter_followthrough_blocked_missing_install_receipts_count": int(
+                reporter_followthrough_plan.get("blocked_missing_install_receipts_count") or 0
             ),
-            "reporter_followthrough_blocked_missing_install_receipts_count": sum(
-                1
-                for item in open_packets
-                if _normalize_text((item.get("reporter_followthrough") or {}).get("state")).lower()
-                == "blocked_missing_install_receipts"
+            "reporter_followthrough_blocked_receipt_mismatch_count": int(
+                reporter_followthrough_plan.get("blocked_receipt_mismatch_count") or 0
             ),
-            "reporter_followthrough_blocked_receipt_mismatch_count": sum(
-                1
-                for item in open_packets
-                if any(
-                    _normalize_text(blocker).endswith("_mismatch")
-                    or "_mismatch_for_recovery" in _normalize_text(blocker)
-                    for blocker in ((item.get("reporter_followthrough") or {}).get("blockers") or [])
-                )
-            ),
-            "fix_available_ready_count": sum(
-                1 for item in open_packets if bool((item.get("reporter_followthrough") or {}).get("fix_available_ready"))
-            ),
-            "please_test_ready_count": sum(
-                1 for item in open_packets if bool((item.get("reporter_followthrough") or {}).get("please_test_ready"))
-            ),
-            "recovery_loop_ready_count": sum(
-                1 for item in open_packets if bool((item.get("reporter_followthrough") or {}).get("recovery_loop_ready"))
-            ),
+            "fix_available_ready_count": int(reporter_followthrough_plan.get("fix_available_ready_count") or 0),
+            "please_test_ready_count": int(reporter_followthrough_plan.get("please_test_ready_count") or 0),
+            "recovery_loop_ready_count": int(reporter_followthrough_plan.get("recovery_loop_ready_count") or 0),
             "external_proof_required_case_count": sum(
                 1 for item in case_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
@@ -2587,8 +3729,8 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
         },
         "unresolved_external_proof": dict(unresolved_external_proof),
         "unresolved_external_proof_execution_plan": dict(unresolved_external_proof_execution_plan),
-        "reporter_followthrough_plan": _reporter_followthrough_plan(packets, generated_at=generated_at),
-        "followthrough_receipt_gates": _followthrough_receipt_gates(packets, generated_at=generated_at),
+        "reporter_followthrough_plan": reporter_followthrough_plan,
+        "followthrough_receipt_gates": followthrough_receipt_gates,
         "packets": packets,
     }
 
@@ -2641,126 +3783,21 @@ def _cached_packets_fallback_payload(
     release_channel_index: Dict[str, Any],
     refresh_error: str,
 ) -> Dict[str, Any]:
-    generated_at = _utc_now_iso()
-    packets = [dict(item) for item in (existing_payload.get("packets") or []) if isinstance(item, dict)]
-    case_packets = [dict(item) for item in packets if bool(item.get("support_case_backed"))]
-    operator_packets = [dict(item) for item in packets if not bool(item.get("support_case_backed"))]
-    non_external_packets = [dict(item) for item in packets if _is_non_external_packet(item)]
-    unresolved_external_proof = _external_proof_backlog_summary(release_channel_index)
-    unresolved_external_proof_execution_plan = _external_proof_execution_plan(
-        release_channel_index,
-        generated_at=generated_at,
+    cached_items = _source_items_from_cached_packets(existing_payload)
+    payload = build_packets_payload(
+        {"items": cached_items, "count": len(cached_items)},
+        source_label,
+        release_channel_index=release_channel_index,
     )
-    source = dict(existing_payload.get("source") or {})
+    source = dict(payload.get("source") or {})
     previous_generated_at = _normalize_text(existing_payload.get("generated_at"))
-    source["source_kind"] = _source_kind(source_label) if _normalize_text(source_label) else _normalize_text(source.get("source_kind"))
-    source["reported_count"] = int(source.get("reported_count") or len(case_packets))
-    source["materialized_count"] = len(packets)
-    source["case_materialized_count"] = len(case_packets)
-    source["operator_packet_count"] = len(operator_packets)
     source["refresh_mode"] = "cached_packets_fallback"
     source["refresh_error"] = _normalize_text(refresh_error)
+    source["cached_packet_source_count"] = len(cached_items)
     if previous_generated_at:
         source["cached_snapshot_generated_at"] = previous_generated_at
-    return {
-        "contract_name": _normalize_text(existing_payload.get("contract_name"), "fleet.support_case_packets"),
-        "schema_version": int(existing_payload.get("schema_version") or 1),
-        "generated_at": generated_at,
-        "source": source,
-        "summary": {
-            "open_case_count": len(case_packets),
-            "open_packet_count": len(packets),
-            "open_non_external_packet_count": len(non_external_packets),
-            "support_case_backed_open_count": sum(1 for item in packets if bool(item.get("support_case_backed"))),
-            "operator_packet_count": len(operator_packets),
-            "design_impact_count": sum(1 for item in case_packets if item.get("design_impact_suspected")),
-            "owner_repo_counts": _counter_map(
-                _normalize_text(item.get("target_repo") or item.get("candidateOwnerRepo") or item.get("candidate_owner_repo"), "chummer6-hub")
-                for item in packets
-            ),
-            "lane_counts": _counter_map(_normalize_text(item.get("primary_lane")) for item in packets),
-            "status_counts": _counter_map(_normalize_text(item.get("status")) for item in packets),
-            "closure_waiting_on_release_truth": sum(1 for item in packets if _closure_waiting_on_release_truth(item)),
-            "needs_human_response": sum(1 for item in packets if _needs_human_response(item)),
-            "non_external_needs_human_response": sum(1 for item in non_external_packets if _needs_human_response(item)),
-            "non_external_packets_without_named_owner": sum(
-                1 for item in non_external_packets if not _normalize_text(item.get("target_repo"))
-            ),
-            "non_external_packets_without_lane": sum(
-                1 for item in non_external_packets if not _normalize_text(item.get("primary_lane"))
-            ),
-            "install_truth_state_counts": _counter_map(_normalize_text(item.get("install_truth_state")) for item in packets),
-            "update_required_case_count": sum(
-                1 for item in packets if bool((item.get("fix_confirmation") or {}).get("update_required"))
-            ),
-            "update_required_routed_to_downloads_count": sum(
-                1
-                for item in packets
-                if bool((item.get("fix_confirmation") or {}).get("update_required"))
-                and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() == "open_downloads"
-            ),
-            "update_required_misrouted_case_count": sum(
-                1
-                for item in packets
-                if bool((item.get("fix_confirmation") or {}).get("update_required"))
-                and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
-            ),
-            "reporter_followthrough_ready_count": sum(
-                1
-                for item in packets
-                if _normalize_text((item.get("reporter_followthrough") or {}).get("state")).lower()
-                in {"fix_available_ready", "fix_available_update_required", "please_test_ready", "recovery_ready"}
-            ),
-            "reporter_followthrough_blocked_missing_install_receipts_count": sum(
-                1
-                for item in packets
-                if _normalize_text((item.get("reporter_followthrough") or {}).get("state")).lower()
-                == "blocked_missing_install_receipts"
-            ),
-            "reporter_followthrough_blocked_receipt_mismatch_count": sum(
-                1
-                for item in packets
-                if any(
-                    _normalize_text(blocker).endswith("_mismatch")
-                    or "_mismatch_for_recovery" in _normalize_text(blocker)
-                    for blocker in ((item.get("reporter_followthrough") or {}).get("blockers") or [])
-                )
-            ),
-            "fix_available_ready_count": sum(
-                1 for item in packets if bool((item.get("reporter_followthrough") or {}).get("fix_available_ready"))
-            ),
-            "please_test_ready_count": sum(
-                1 for item in packets if bool((item.get("reporter_followthrough") or {}).get("please_test_ready"))
-            ),
-            "recovery_loop_ready_count": sum(
-                1 for item in packets if bool((item.get("reporter_followthrough") or {}).get("recovery_loop_ready"))
-            ),
-            "external_proof_required_case_count": sum(
-                1 for item in case_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
-            ),
-            "external_proof_required_host_counts": _counter_map(
-                _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("required_host"))
-                for item in case_packets
-                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
-            ),
-            "external_proof_required_tuple_counts": _counter_map(
-                _normalize_text((item.get("install_diagnosis") or {}).get("external_proof_request", {}).get("tuple_id"))
-                for item in case_packets
-                if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
-            ),
-            "unresolved_external_proof_request_count": int(unresolved_external_proof["count"]),
-            "unresolved_external_proof_request_host_counts": dict(unresolved_external_proof["host_counts"]),
-            "unresolved_external_proof_request_tuple_counts": dict(unresolved_external_proof["tuple_counts"]),
-            "unresolved_external_proof_request_hosts": list(unresolved_external_proof["hosts"]),
-            "unresolved_external_proof_request_tuples": list(unresolved_external_proof["tuples"]),
-            "unresolved_external_proof_request_specs": dict(unresolved_external_proof["specs"]),
-        },
-        "unresolved_external_proof": dict(unresolved_external_proof),
-        "unresolved_external_proof_execution_plan": dict(unresolved_external_proof_execution_plan),
-        "reporter_followthrough_plan": _reporter_followthrough_plan(packets, generated_at=generated_at),
-        "followthrough_receipt_gates": _followthrough_receipt_gates(packets, generated_at=generated_at),
-        "packets": packets,
-    }
+    payload["source"] = source
+    return payload
 
 
 def _source_mirror_fallback_payload(

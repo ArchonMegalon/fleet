@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import subprocess
 import sys
+import tarfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -25,8 +28,100 @@ def _load_runbook_module():
         sys.path[:] = previous_sys_path
 
 
+def _iso_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _write_bundle_archive(
+    *,
+    archive_path: Path,
+    manifest_payload: dict,
+    installer_relative_path: str,
+    installer_bytes: bytes,
+    receipt_relative_path: str,
+    receipt_payload: dict,
+) -> None:
+    bundle_root = archive_path.parent / "bundle-fixture"
+    if bundle_root.exists():
+        subprocess.run(["rm", "-rf", str(bundle_root)], check=True)
+    (bundle_root / Path(installer_relative_path).parent).mkdir(parents=True, exist_ok=True)
+    (bundle_root / Path(receipt_relative_path).parent).mkdir(parents=True, exist_ok=True)
+    (bundle_root / "external-proof-manifest.json").write_text(
+        json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (bundle_root / installer_relative_path).write_bytes(installer_bytes)
+    (bundle_root / receipt_relative_path).write_text(
+        json.dumps(receipt_payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(bundle_root, arcname=".")
+    subprocess.run(["rm", "-rf", str(bundle_root)], check=True)
+
+
+def test_sanitize_proof_capture_command_preserves_version_hint_and_canonical_os_hint() -> None:
+    module = _load_runbook_module()
+
+    normalized = module._sanitize_proof_capture_command(
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke run-20260414-1836"
+        ,
+        required_host="macos",
+        platform="macos",
+    )
+
+    assert normalized == (
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host "
+        "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS "
+        "./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/"
+        "chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia "
+        "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke run-20260414-1836"
+    )
+
+
+def test_commands_for_request_preserves_shell_quoted_capture_commands_without_duplicate_preflight() -> None:
+    module = _load_runbook_module()
+    request = {
+        "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+        "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+        "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+        "expected_installer_sha256": "424b3216afedf86347494eea985cc1e7ceca7cb8cbf7aff04a475456a15973f4",
+    }
+    provided_preflight = module._installer_fetch_preflight_command(request)
+
+    commands = module._commands_for_request(
+        {
+            **request,
+            "proof_capture_commands": [
+                provided_preflight,
+                "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke unpublished",
+            ],
+        }
+    )
+
+    assert commands[0] == provided_preflight
+    assert commands.count(provided_preflight) == 1
+    assert len(commands) == 2
+
+
+def test_proof_capture_command_dedupe_key_ignores_optional_version_hint() -> None:
+    module = _load_runbook_module()
+
+    dedupe_key = module._proof_capture_command_dedupe_key(
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=macOS ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke run-20260414-1836"
+    )
+
+    assert dedupe_key == (
+        "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host "
+        "./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/"
+        "chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia "
+        "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke"
+    )
+
+
 def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Path) -> None:
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
     out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
     support_packets.write_text(
         json.dumps(
@@ -102,6 +197,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
         + "\n",
         encoding="utf-8",
     )
+    journey_gates.write_text(json.dumps({"journeys": []}, indent=2) + "\n", encoding="utf-8")
 
     result = subprocess.run(
         [
@@ -109,6 +205,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
             str(SCRIPT),
             "--support-packets",
             str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
             "--out",
             str(out),
         ],
@@ -187,6 +285,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in payload
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
     assert "receipt-contract-mismatch" in payload
+    assert "startup-smoke-receipt-stale" in payload
+    assert "max_age_seconds=86400" in payload
     assert "readyCheckpoint" in payload
     assert "hostClass" in payload
     assert "\"head_id\": \"avalonia\"" in payload
@@ -200,7 +300,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" in payload
     assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in payload
     assert "python3 scripts/verify_public_release_channel.py" in payload
-    assert f"--release-channel {module.DEFAULT_RELEASE_CHANNEL}" in payload
+    assert f"--release-channel {module.REGISTRY_RELEASE_CHANNEL_PATH}" in payload
     assert payload.index("python3 scripts/materialize_status_plane.py") < payload.index(
         "python3 scripts/materialize_journey_gates.py"
     )
@@ -208,9 +308,15 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
         "python3 scripts/materialize_journey_gates.py"
     )
     assert "python3 scripts/materialize_journey_gates.py" in payload
+    assert "--journey-gates /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json" in payload
     assert "python3 scripts/verify_external_proof_closure.py" in payload
     assert "--external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md" in payload
     assert "--external-proof-commands-dir .codex-studio/published/external-proof-commands" in payload
+    assert (
+        "python3 scripts/materialize_flagship_product_readiness.py --out "
+        ".codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out "
+        "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json"
+    ) in payload
     assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
     assert windows_preflight.is_file()
     assert windows_capture.is_file()
@@ -258,37 +364,349 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "installer-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
-    assert "bash -lc 'echo windows-proof'" in windows_capture_ps1.read_text(encoding="utf-8")
-    assert "bash -lc 'SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"'" in windows_bundle_ps1.read_text(encoding="utf-8")
-    assert "tar -czf \"$SCRIPT_DIR/windows-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" ." in windows_bundle.read_text(
+    assert "startup-smoke-receipt-stale" in windows_validate.read_text(encoding="utf-8")
+    assert "max_age_seconds=86400" in windows_validate.read_text(encoding="utf-8")
+    assert "startup-smoke-receipt-stale" in macos_validate.read_text(encoding="utf-8")
+    assert "max_age_seconds=86400" in macos_validate.read_text(encoding="utf-8")
+    assert "startup-smoke-receipt-stale" in windows_ingest.read_text(encoding="utf-8")
+    assert "max_age_seconds=86400" in windows_ingest.read_text(encoding="utf-8")
+    assert "startup-smoke-receipt-stale" in macos_ingest.read_text(encoding="utf-8")
+    assert "max_age_seconds=86400" in macos_ingest.read_text(encoding="utf-8")
+
+
+def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates_when_support_plan_is_empty(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-14T21:17:39Z",
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 0,
+                    "hosts": [],
+                    "host_groups": {},
+                    "generated_at": "2026-04-14T21:17:39Z",
+                    "release_channel_generated_at": "2026-04-14T20:59:34Z",
+                    "capture_deadline_hours": 24,
+                    "capture_deadline_utc": "2026-04-15T20:59:34Z",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journey_gates.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-14T21:17:18Z",
+                "journeys": [
+                    {
+                        "id": "install_claim_restore_continue",
+                        "external_proof_requests": [
+                            {
+                                "tuple_id": "avalonia:osx-arm64:macos",
+                                "required_host": "macos",
+                                "required_proofs": [
+                                    "promoted_installer_artifact",
+                                    "startup_smoke_receipt",
+                                ],
+                                "head_id": "avalonia",
+                                "platform": "macos",
+                                "rid": "osx-arm64",
+                                "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+                                "expected_installer_sha256": "a" * 64,
+                                "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                "startup_smoke_receipt_contract": {
+                                    "ready_checkpoint": "pre_ui_event_loop",
+                                    "head_id": "avalonia",
+                                    "platform": "macos",
+                                    "rid": "osx-arm64",
+                                    "host_class_contains": "macos",
+                                    "status_any_of": ["pass", "passed", "ready"],
+                                },
+                                "proof_capture_commands": [
+                                    "cd /docker/chummercomplete/chummer6-ui && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=macos-host ./scripts/run-desktop-startup-smoke.sh /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg avalonia osx-arm64 Chummer.Avalonia /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke",
+                                    "cd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh",
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = out.read_text(encoding="utf-8")
+    assert "- unresolved_request_count: 1" in payload
+    assert "- unresolved_hosts: macos" in payload
+    assert "- plan_generated_at: 2026-04-14T21:17:39Z" in payload
+    assert "`avalonia:osx-arm64:macos`" in payload
+    assert "No unresolved external-proof requests are currently queued." not in payload
+    commands_dir = out.parent / "external-proof-commands"
+    macos_capture = commands_dir / "capture-macos-proof.sh"
+    macos_bundle = commands_dir / "bundle-macos-proof.sh"
+    macos_ingest = commands_dir / "ingest-macos-proof-bundle.sh"
+    post_capture = commands_dir / "republish-after-host-proof.sh"
+    finalize = commands_dir / "finalize-external-host-proof.sh"
+    assert "run-desktop-startup-smoke.sh" in macos_capture.read_text(encoding="utf-8")
+    assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in macos_bundle.read_text(encoding="utf-8")
+    assert "tar -czf \"$SCRIPT_DIR/macos-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" ." in macos_bundle.read_text(
         encoding="utf-8"
     )
-    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in windows_bundle.read_text(
+    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg" in macos_bundle.read_text(
         encoding="utf-8"
     )
-    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in windows_bundle.read_text(
+    assert "cp -f /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json" in macos_bundle.read_text(
         encoding="utf-8"
     )
-    ingest_payload = windows_ingest.read_text(encoding="utf-8")
-    assert "BUNDLE_ARCHIVE=\"$SCRIPT_DIR/windows-proof-bundle.tgz\"" in ingest_payload
+    ingest_payload = macos_ingest.read_text(encoding="utf-8")
+    assert "BUNDLE_ARCHIVE=\"$SCRIPT_DIR/macos-proof-bundle.tgz\"" in ingest_payload
+    assert "BUNDLE_DIR=\"$SCRIPT_DIR/host-proof-bundles/macos\"" in ingest_payload
+    assert "if [ ! -s \"$BUNDLE_ARCHIVE\" ]; then" in ingest_payload
     assert "external-proof-bundle-path-unsafe" in ingest_payload
+    assert "import os, pathlib, shutil" in ingest_payload
+    assert "shutil.copy2(source, destination)" in ingest_payload
+    assert "source.is_absolute()" not in ingest_payload
     assert "tar -xzf \"$BUNDLE_ARCHIVE\" -C \"$TARGET_ROOT\"" in ingest_payload
-    assert "test -s \"$TARGET_ROOT/files/chummer-avalonia-win-x64-installer.exe\"" in ingest_payload
-    assert "test -s \"$TARGET_ROOT/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json\"" in ingest_payload
+    assert "if [ ! -d \"$BUNDLE_DIR\" ]; then" in ingest_payload
+    assert "external-proof-bundle-empty" in ingest_payload
+    assert "test -s \"$TARGET_ROOT/files/chummer-avalonia-osx-arm64-installer.dmg\"" in ingest_payload
+    assert "test -s \"$TARGET_ROOT/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json\"" in ingest_payload
     assert "installer-contract-mismatch" in ingest_payload
     assert "receipt-contract-mismatch" in ingest_payload
     assert "external-proof-bundle-installer-missing" in ingest_payload
     assert "external-proof-bundle-receipt-missing" in ingest_payload
-    assert "bash -lc 'SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"'" in windows_ingest_ps1.read_text(encoding="utf-8")
+    assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in macos_ingest.read_text(encoding="utf-8")
     assert "python3 scripts/materialize_support_case_packets.py" in post_capture.read_text(encoding="utf-8")
     assert "--proof /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCAL_RELEASE_PROOF.generated.json" in post_capture.read_text(encoding="utf-8")
     assert "--ui-localization-release-gate /docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LOCALIZATION_RELEASE_GATE.generated.json" in post_capture.read_text(encoding="utf-8")
+    assert "python3 scripts/chummer_design_supervisor.py status" not in post_capture.read_text(encoding="utf-8")
     finalize_payload = finalize.read_text(encoding="utf-8")
-    assert "./validate-windows-proof.sh" in finalize_payload
-    assert "./ingest-windows-proof-bundle.sh" in finalize_payload
     assert "./validate-macos-proof.sh" in finalize_payload
     assert "./ingest-macos-proof-bundle.sh" in finalize_payload
     assert "./republish-after-host-proof.sh" in finalize_payload
+    assert finalize_payload.index("./ingest-macos-proof-bundle.sh") < finalize_payload.index(
+        "./validate-macos-proof.sh"
+    )
+
+
+def test_materialize_external_proof_runbook_accepts_release_channel_override(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    support_packets.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-14T21:17:39Z",
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 1,
+                    "hosts": ["windows"],
+                    "generated_at": "2026-04-14T21:17:39Z",
+                    "release_channel_generated_at": "2026-04-14T20:59:34Z",
+                    "capture_deadline_hours": 24,
+                    "capture_deadline_utc": "2026-04-15T20:59:34Z",
+                    "host_groups": {
+                        "windows": {
+                            "request_count": 1,
+                            "tuples": ["avalonia:win-x64:windows"],
+                            "requests": [
+                                {
+                                    "tuple_id": "avalonia:win-x64:windows",
+                                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expected_artifact_id": "avalonia-win-x64-installer",
+                                    "expected_installer_file_name": "chummer-avalonia-win-x64-installer.exe",
+                                    "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+                                    "expected_installer_sha256": "a" * 64,
+                                    "expected_public_install_route": "/downloads/install/avalonia-win-x64-installer",
+                                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "avalonia",
+                                        "platform": "windows",
+                                        "rid": "win-x64",
+                                        "host_class_contains": "windows",
+                                        "status_any_of": ["pass", "ready"],
+                                    },
+                                    "proof_capture_commands": ["echo windows-proof"],
+                                }
+                            ],
+                        }
+                    },
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journey_gates.write_text(json.dumps({"journeys": []}, indent=2) + "\n", encoding="utf-8")
+    release_channel.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-14T20:59:34Z",
+                "channel": {"artifacts": []},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = out.read_text(encoding="utf-8")
+    assert "## After Host Proof Capture" in payload
+    republish_payload = (out.parent / "external-proof-commands" / "republish-after-host-proof.sh").read_text(
+        encoding="utf-8"
+    )
+    assert f"--release-channel {release_channel}" in republish_payload
+
+
+def test_materialize_external_proof_runbook_removes_stale_existing_bundle_archive(tmp_path: Path) -> None:
+    module = _load_runbook_module()
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    installer_bytes = bytes.fromhex("44" * 32)
+    installer_sha256 = hashlib.sha256(installer_bytes).hexdigest()
+    support_packets.write_text(
+        json.dumps(
+            {
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 1,
+                    "hosts": ["macos"],
+                    "host_groups": {
+                        "macos": {
+                            "request_count": 1,
+                            "tuples": ["avalonia:osx-arm64:macos"],
+                            "requests": [
+                                {
+                                    "tuple_id": "avalonia:osx-arm64:macos",
+                                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                    "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                    "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+                                    "expected_installer_sha256": "424b3216afedf86347494eea985cc1e7ceca7cb8cbf7aff04a475456a15973f4",
+                                    "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "avalonia",
+                                        "platform": "macos",
+                                        "rid": "osx-arm64",
+                                        "host_class_contains": "macos",
+                                        "status_any_of": ["pass", "passed", "ready"],
+                                    },
+                                    "proof_capture_commands": [
+                                        "echo macos-proof",
+                                    ],
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journey_gates.write_text(json.dumps({"journeys": []}, indent=2) + "\n", encoding="utf-8")
+    commands_dir.mkdir(parents=True, exist_ok=True)
+
+    group = json.loads(support_packets.read_text(encoding="utf-8"))["unresolved_external_proof_execution_plan"][
+        "host_groups"
+    ]["macos"]
+    expected_manifest = module._bundle_manifest_payload_for_group(group, host="macos")
+    bundle_archive = commands_dir / "macos-proof-bundle.tgz"
+    installer_bytes = b"fixture-installer-bytes"
+    expected_manifest["requests"][0]["expected_installer_sha256"] = hashlib.sha256(installer_bytes).hexdigest()
+    stale_receipt = {
+        "headId": "avalonia",
+        "platform": "macos",
+        "rid": "osx-arm64",
+        "hostClass": "macos-host",
+        "readyCheckpoint": "pre_ui_event_loop",
+        "status": "pass",
+        "recordedAtUtc": _iso_z(datetime.now(timezone.utc) - timedelta(days=3)),
+    }
+    _write_bundle_archive(
+        archive_path=bundle_archive,
+        manifest_payload=expected_manifest,
+        installer_relative_path="files/chummer-avalonia-osx-arm64-installer.dmg",
+        installer_bytes=installer_bytes,
+        receipt_relative_path="startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+        receipt_payload=stale_receipt,
+    )
+    assert bundle_archive.is_file()
+    assert module._bundle_archive_is_reusable(bundle_archive, expected_manifest=expected_manifest) is False
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--commands-dir",
+            str(commands_dir),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not bundle_archive.exists()
 
 
 def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequences(tmp_path: Path) -> None:
@@ -429,6 +847,8 @@ def test_materialize_external_proof_runbook_normalizes_legacy_capture_command_to
     script_payload = capture_script.read_text(encoding="utf-8")
     assert "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=linux" not in payload
     assert "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=linux" not in script_payload
+    assert "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows" in script_payload
+    assert "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows" in script_payload
     assert "CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host" in script_payload
 
 
@@ -1164,3 +1584,141 @@ def test_materialize_external_proof_runbook_fails_when_request_required_proofs_a
 
     assert result.returncode == 1
     assert "required_proofs is missing required tokens: startup_smoke_receipt" in result.stderr
+
+
+def test_materialize_external_proof_runbook_reports_stale_directory_bundle_state(tmp_path: Path) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    installer_bytes = bytes.fromhex("44" * 32)
+    installer_sha256 = hashlib.sha256(installer_bytes).hexdigest()
+    support_packets.write_text(
+        json.dumps(
+            {
+                "unresolved_external_proof_execution_plan": {
+                    "request_count": 1,
+                    "hosts": ["macos"],
+                    "generated_at": "2026-04-14T23:19:34Z",
+                    "release_channel_generated_at": "2026-04-14T22:45:00Z",
+                    "capture_deadline_hours": 24,
+                    "capture_deadline_utc": "2026-04-15T22:45:00Z",
+                    "host_groups": {
+                        "macos": {
+                            "request_count": 1,
+                            "tuples": ["avalonia:osx-arm64:macos"],
+                            "requests": [
+                                {
+                                    "tuple_id": "avalonia:osx-arm64:macos",
+                                    "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                                    "expected_artifact_id": "avalonia-osx-arm64-installer",
+                                    "expected_installer_file_name": "chummer-avalonia-osx-arm64-installer.dmg",
+                                    "expected_installer_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+                                        "expected_installer_sha256": installer_sha256,
+                                    "expected_public_install_route": "/downloads/install/avalonia-osx-arm64-installer",
+                                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                    "startup_smoke_receipt_contract": {
+                                        "ready_checkpoint": "pre_ui_event_loop",
+                                        "head_id": "avalonia",
+                                        "platform": "macos",
+                                        "rid": "osx-arm64",
+                                        "host_class_contains": "macos",
+                                        "status_any_of": ["pass", "passed", "ready"],
+                                    },
+                                    "proof_capture_commands": ["echo macos-proof"],
+                                    "local_evidence": {
+                                        "installer_artifact": {
+                                            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-osx-arm64-installer.dmg",
+                                            "present": True,
+                                            "state": "present_sha256_match",
+                                        },
+                                        "startup_smoke_receipt": {
+                                            "path": "/docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                                            "present": True,
+                                            "state": "stale",
+                                            "recorded_at_utc": "2026-04-11T20:19:47.089302+00:00",
+                                            "age_seconds": 270101,
+                                        },
+                                    },
+                                }
+                            ],
+                        }
+                    },
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journey_gates.write_text(json.dumps({"journeys": []}, indent=2) + "\n", encoding="utf-8")
+
+    bundle_dir = commands_dir / "host-proof-bundles" / "macos"
+    (bundle_dir / "files").mkdir(parents=True, exist_ok=True)
+    (bundle_dir / "startup-smoke").mkdir(parents=True, exist_ok=True)
+    (bundle_dir / "external-proof-manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "host": "macos",
+                "request_count": 1,
+                "requests": [
+                        {
+                            "tuple_id": "avalonia:osx-arm64:macos",
+                            "expected_installer_bundle_relative_path": "files/chummer-avalonia-osx-arm64-installer.dmg",
+                            "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json",
+                            "expected_installer_sha256": installer_sha256,
+                        }
+                    ],
+                },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (bundle_dir / "files" / "chummer-avalonia-osx-arm64-installer.dmg").write_bytes(installer_bytes)
+    (bundle_dir / "startup-smoke" / "startup-smoke-avalonia-osx-arm64.receipt.json").write_text(
+        json.dumps(
+            {
+                "headId": "avalonia",
+                "platform": "macos",
+                "rid": "osx-arm64",
+                "hostClass": "macos-host",
+                "readyCheckpoint": "pre_ui_event_loop",
+                "status": "pass",
+                "recordedAtUtc": _iso_z(datetime.now(timezone.utc) - timedelta(days=3)),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--commands-dir",
+            str(commands_dir),
+            "--out",
+            str(out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = out.read_text(encoding="utf-8")
+    assert "cached_bundle_status: `stale_directory`" in payload
+    assert "cached_bundle_detail: `receipt_stale:recorded_at=" in payload
+    assert "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`" in payload
+    assert f"cached_bundle_directory_path: `{bundle_dir}`" in payload
+    assert "local_startup_smoke_receipt_state: `stale`" in payload
+    assert "local_startup_smoke_receipt_recorded_at: `2026-04-11T20:19:47.089302+00:00`" in payload
+    assert "local_startup_smoke_receipt_age_seconds: `270101`" in payload
