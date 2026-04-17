@@ -764,6 +764,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit cfb928b pins the M101 queue proof citation floor so canonical registry and queue staging cite the current completed-package proof floor.
       - /docker/chummercomplete/chummer-hub-registry commit 2f7a422 tightens the M101 duplicate route-truth guard so future shards reject repeated desktopTupleCoverage.desktopRouteTruth tuple ids instead of repeating the completed package.
       - /docker/chummercomplete/chummer-hub-registry commit b3a945b tightens the M101 tuple rationale and encoded helper proof floor so future shards verify the current completed-package proof instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit c8829ac tightens the M101 closed queue proof so Fleet and design queue rows must carry verify_closed_package_only plus a package-specific do-not-reopen reason before future shards trust the completed package row.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
