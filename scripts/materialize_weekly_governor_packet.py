@@ -105,6 +105,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "83d2d21",
     "e74a7ec",
     "8fb8d40",
+    "dd5fdb5",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -176,6 +177,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit 83d2d21 pinned for M106 OODA telemetry ownership guard",
     "local proof floor commit e74a7ec pinned for M106 OODA telemetry proof floor",
     "local proof floor commit 8fb8d40 pinned for M106 refreshed packet artifact floor",
+    "local proof floor commit dd5fdb5 pinned for M106 weekly governor proof floor",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -234,6 +236,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "local proof floor commit 83d2d21",
     "local proof floor commit e74a7ec",
     "local proof floor commit 8fb8d40",
+    "local proof floor commit dd5fdb5",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
