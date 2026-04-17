@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T02:20:43Z",
+  "generated_at": "2026-04-17T02:23:16Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -585,6 +585,10 @@
         {
           "commit": "81e1de8",
           "status": "present"
+        },
+        {
+          "commit": "941c54d",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -629,7 +633,8 @@
         "5882234",
         "6c376e0",
         "00e870e",
-        "81e1de8"
+        "81e1de8",
+        "941c54d"
       ],
       "status": "pass"
     },
@@ -674,7 +679,8 @@
       "5882234",
       "6c376e0",
       "00e870e",
-      "81e1de8"
+      "81e1de8",
+      "941c54d"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -774,6 +780,7 @@
       "local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard",
       "local proof floor commit 00e870e pinned for M106 direct fixture runner guard",
       "local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor",
+      "local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -848,6 +855,7 @@
       "local proof floor commit 6c376e0",
       "local proof floor commit 00e870e",
       "local proof floor commit 81e1de8",
+      "local proof floor commit 941c54d",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -1061,6 +1069,10 @@
         {
           "commit": "81e1de8",
           "status": "present"
+        },
+        {
+          "commit": "941c54d",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -1105,7 +1117,8 @@
         "5882234",
         "6c376e0",
         "00e870e",
-        "81e1de8"
+        "81e1de8",
+        "941c54d"
       ],
       "status": "pass"
     },
@@ -1150,7 +1163,8 @@
       "5882234",
       "6c376e0",
       "00e870e",
-      "81e1de8"
+      "81e1de8",
+      "941c54d"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
