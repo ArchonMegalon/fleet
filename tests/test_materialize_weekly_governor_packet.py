@@ -2288,7 +2288,7 @@ def test_verify_next90_m106_governor_packet_rejects_markdown_proof_floor_prefix(
     markdown_path = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md"
     markdown = markdown_path.read_text(encoding="utf-8")
     markdown_path.write_text(
-        markdown.replace(", 52fe086\n", "\n"),
+        markdown.replace(", 52fe086", ""),
         encoding="utf-8",
     )
 
