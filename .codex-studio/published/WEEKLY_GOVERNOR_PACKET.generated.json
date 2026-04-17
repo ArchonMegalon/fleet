@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T02:23:16Z",
+  "generated_at": "2026-04-17T02:57:40Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -589,6 +589,10 @@
         {
           "commit": "941c54d",
           "status": "present"
+        },
+        {
+          "commit": "6981667",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -634,7 +638,8 @@
         "6c376e0",
         "00e870e",
         "81e1de8",
-        "941c54d"
+        "941c54d",
+        "6981667"
       ],
       "status": "pass"
     },
@@ -680,7 +685,8 @@
       "6c376e0",
       "00e870e",
       "81e1de8",
-      "941c54d"
+      "941c54d",
+      "6981667"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -781,6 +787,7 @@
       "local proof floor commit 00e870e pinned for M106 direct fixture runner guard",
       "local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor",
       "local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard",
+      "local proof floor commit 6981667 pinned for M106 worker helper rule guard",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -856,6 +863,7 @@
       "local proof floor commit 00e870e",
       "local proof floor commit 81e1de8",
       "local proof floor commit 941c54d",
+      "local proof floor commit 6981667",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -1073,6 +1081,10 @@
         {
           "commit": "941c54d",
           "status": "present"
+        },
+        {
+          "commit": "6981667",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -1118,7 +1130,8 @@
         "6c376e0",
         "00e870e",
         "81e1de8",
-        "941c54d"
+        "941c54d",
+        "6981667"
       ],
       "status": "pass"
     },
@@ -1164,7 +1177,8 @@
       "6c376e0",
       "00e870e",
       "81e1de8",
-      "941c54d"
+      "941c54d",
+      "6981667"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -1324,13 +1338,13 @@
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-17T02:03:10Z",
+        "generated_at": "2026-04-17T02:35:50Z",
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-17T02:03:09Z",
+        "generated_at": "2026-04-17T02:35:50Z",
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
         "state": "present"
@@ -1458,11 +1472,11 @@
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-17T02:03:09Z",
+        "generated_at": "2026-04-17T02:35:49Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "39bc8d78f3f2a3633a26a2404b6075d24bbf8013a2bea435826608c52d4c273f",
+        "source_sha256": "076d3d5ace748d60fef9f8c608104a93d279b1051ef27aefd56c7e8571fb160f",
         "state": "present",
         "successor_package_verification_status": "fail"
       },
