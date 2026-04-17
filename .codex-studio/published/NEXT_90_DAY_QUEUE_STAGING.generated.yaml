@@ -876,6 +876,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit f6049a9d tightens M104 queue and registry uniqueness proof so duplicate completed-package rows cannot make future shards repeat this slice.
       - /docker/chummercomplete/chummer6-ui-finish commit 283f8ee3 pins M104 explain receipt uniqueness proof so future shards verify the current completed-package guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 853c807a tightens M104 encoded and escaped worker-context proof guards so future shards cannot close the package with disguised worker-unsafe citations.
+      - /docker/chummercomplete/chummer6-ui-finish commit 2f69ed4e tightens M104 explain receipt proof-line uniqueness so duplicate proof entries cannot keep the completed package green.
+      - /docker/chummercomplete/chummer6-ui-finish commit 48337e13 pins the M104 proof-line uniqueness guard in the verifier, compliance test, and generated receipt.
       - dotnet test Chummer.Tests/Presentation/Chummer.Presentation.Signoff.Tests.csproj --filter "BlazorShellComponentTests|AccessibilitySignoffSmokeTests" --no-restore
     allowed_paths:
       - Chummer.Avalonia
