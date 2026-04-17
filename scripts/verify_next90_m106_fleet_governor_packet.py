@@ -364,6 +364,29 @@ def verify(args: argparse.Namespace) -> List[str]:
             "support_packets successor_package_verification.status" in issue
             for issue in source_issues
         )
+        expected_blocked_dependency_package_ids = (
+            list(weekly.EXPECTED_SUPPORT_BLOCKED_DEPENDENCY_PACKAGE_IDS)
+            if support_dependency_blocked
+            else []
+        )
+        _require(
+            package_closeout.get("blocked_dependency_package_ids")
+            == expected_blocked_dependency_package_ids,
+            issues,
+            "package closeout blocked dependency package route list drifted",
+        )
+        _require(
+            repeat_prevention.get("blocked_dependency_package_ids")
+            == expected_blocked_dependency_package_ids,
+            issues,
+            "repeat prevention blocked dependency package route list drifted",
+        )
+        _require(
+            loop.get("blocked_dependency_package_ids")
+            == expected_blocked_dependency_package_ids,
+            issues,
+            "measured rollout loop blocked dependency package route list drifted",
+        )
         if support_dependency_blocked:
             _require(
                 weekly.SUPPORT_DEPENDENCY_PACKAGE_ID

@@ -188,6 +188,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "Production verifier rejects non-canonical source path overrides.",
                                 "Verifier rejects reused closed successor frontier rows outside the Fleet M106 package.",
+                                "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package.",
                                 "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier.",
                                 "successor frontier 2376135131 is pinned for next90-m106-fleet-governor-packet repeat prevention.",
                                 "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention.",
@@ -313,6 +314,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "production verifier rejects non-canonical source path overrides",
                         "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
+                        "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
                         "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
                         "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
                         "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -1175,6 +1177,50 @@ def test_verify_next90_m106_governor_packet_rejects_source_blocked_status_reason
     assert verifier.returncode == 1
     assert (
         "source-blocked packet status_reason no longer distinguishes closed package proof from rollout blockage"
+        in verifier.stderr
+    )
+
+
+def test_verify_next90_m106_governor_packet_rejects_ambiguous_blocked_dependency_routes(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    support = json.loads(paths["support"].read_text(encoding="utf-8"))
+    support["successor_package_verification"] = {
+        "status": "fail",
+        "issues": ["queue proof missing receipt-gated M102 marker"],
+    }
+    _write_json(paths["support"], support)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+
+    packet = json.loads(out.read_text(encoding="utf-8"))
+    for section in (
+        packet["package_closeout"],
+        packet["repeat_prevention"],
+        packet["measured_rollout_loop"],
+    ):
+        section["blocked_dependency_package_ids"] = [
+            "next90-m102-fleet-reporter-receipts",
+            "next90-m999-unowned-repeat",
+        ]
+    _write_json(out, packet)
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 1
+    assert "package closeout blocked dependency package route list drifted" in verifier.stderr
+    assert "repeat prevention blocked dependency package route list drifted" in verifier.stderr
+    assert (
+        "measured rollout loop blocked dependency package route list drifted"
         in verifier.stderr
     )
 

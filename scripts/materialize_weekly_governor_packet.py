@@ -160,6 +160,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "production verifier rejects non-canonical source path overrides",
     "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
+    "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131 pinned for next90-m106-fleet-governor-packet repeat prevention",
     "local proof floor commit 1ba508e pinned for M106 governor packet repeat prevention",
@@ -223,6 +224,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "proof paths outside package allowed path roots",
     "non-canonical source path overrides",
     "reused closed successor frontier rows",
+    "blocked support-packet proof routes exactly to the M102 reporter-receipts dependency package",
     "no-PYTHONPATH bootstrap guard includes the standalone M106 verifier",
     "successor frontier 2376135131",
     "local proof floor commit 1ba508e",
@@ -341,6 +343,7 @@ REQUIRED_LAUNCH_SIGNALS = (
 )
 COMPLETE_STATUSES = {"complete", "closed", "done"}
 SUPPORT_DEPENDENCY_PACKAGE_ID = "next90-m102-fleet-reporter-receipts"
+EXPECTED_SUPPORT_BLOCKED_DEPENDENCY_PACKAGE_IDS = (SUPPORT_DEPENDENCY_PACKAGE_ID,)
 
 
 def iso_now() -> str:
