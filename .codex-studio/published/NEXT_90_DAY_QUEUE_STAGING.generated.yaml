@@ -160,6 +160,8 @@ items:
     repo: chummer6-ui
     status: complete
     landed_commit: c9c0d84f
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M101 chummer6-ui is complete; future shards must verify this receipt, registry row, queue row, and design-queue row instead of reopening the Avalonia primary-route package.
     proof:
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M101_UI_RELEASE_TRAIN.generated.json
