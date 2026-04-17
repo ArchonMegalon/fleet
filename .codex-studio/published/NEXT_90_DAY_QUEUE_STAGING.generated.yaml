@@ -281,6 +281,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 9a0a00b6 pins M101 hex helper proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit c7b4a56f tightens M101 escaped helper proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 58bc9f1b pins M101 escaped helper proof guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit a7ff93b4 pins the M101 release train proof floor to the current closed-package guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -423,6 +424,8 @@ items:
     wave: W8
     repo: chummer6-hub
     status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M105 chummer6-hub workspace continuity is complete; future shards must verify the workspace restore receipt, registry row, queue row, and design-queue row instead of reopening the workspace restore and entitlement conflict receipt package.
     landed_commit: 4d4b3856
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/Community/CampaignSpineService.cs
