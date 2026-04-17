@@ -216,6 +216,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 6dd1064f tightens the M101 primary-route desktop executable proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit b99e13fd pins M101 Avalonia receipt identity proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 28533e61 pins M101 Avalonia receipt floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 82334376 pins M101 release train proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 466e0fc0 tightens M101 queue scope proof.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
