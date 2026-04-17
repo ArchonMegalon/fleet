@@ -111,6 +111,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "5193bce",
     "f662ad3",
     "5882234",
+    "6c376e0",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -190,6 +191,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor",
     "local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard",
     "local proof floor commit 5882234 pinned for M106 blocked dependency route guard",
+    "local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -256,6 +258,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "local proof floor commit 5193bce",
     "local proof floor commit f662ad3",
     "local proof floor commit 5882234",
+    "local proof floor commit 6c376e0",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (

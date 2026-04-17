@@ -218,6 +218,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 28533e61 pins M101 Avalonia receipt floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 82334376 pins M101 release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 466e0fc0 tightens M101 queue scope proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit b8dcab2d pins M101 queue scope proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -520,6 +521,7 @@ items:
       - local proof floor commit 5193bce pinned for M106 refreshed packet artifact floor
       - local proof floor commit f662ad3 pinned for M106 shorthand telemetry command guard
       - local proof floor commit 5882234 pinned for M106 blocked dependency route guard
+      - local proof floor commit 6c376e0 pinned for M106 execution-discipline proof guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
