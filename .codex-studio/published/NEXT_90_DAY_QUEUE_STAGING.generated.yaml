@@ -731,6 +731,8 @@ items:
     repo: chummer6-hub-registry
     status: complete
     landed_commit: a4e47da
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M101 chummer6-hub-registry promotion discipline is complete; future shards must verify the release-channel truth receipt, registry row, queue row, and design-queue row instead of reopening the desktop route rationale package.
     proof:
       - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json
       - /docker/chummercomplete/chummer-hub-registry/.codex-studio/published/releases.json
