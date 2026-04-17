@@ -219,6 +219,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 82334376 pins M101 release train proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit 466e0fc0 tightens M101 queue scope proof.
       - /docker/chummercomplete/chummer6-ui-finish commit b8dcab2d pins M101 queue scope proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 757783c4 pins M101 b8 queue scope proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
