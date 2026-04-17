@@ -126,6 +126,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 41d7ed57 pins the M102 current desktop trust floor.
       - /docker/chummercomplete/chummer.run-services commit bd60fc5a tightens M102 active-run evidence path guard.
       - /docker/chummercomplete/chummer.run-services commit 2791f798 tightens M102 support intake installed-build truth.
+      - /docker/chummercomplete/chummer.run-services commit 93e5075a tightens M102 current proof floor guard.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
@@ -557,6 +558,7 @@ items:
       - local proof floor commit 00e870e pinned for M106 direct fixture runner guard
       - local proof floor commit 81e1de8 pinned for M106 refreshed source-input packet floor
       - local proof floor commit 941c54d pinned for M106 handoff frontier metadata guard
+      - local proof floor commit 6981667 pinned for M106 worker helper rule guard
       - commit 26679c7 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md against current support, readiness, journey, and status-plane source inputs
       - commit 81e1de8 refreshes .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md after source input drift from refreshed support, readiness, and journey receipts
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
