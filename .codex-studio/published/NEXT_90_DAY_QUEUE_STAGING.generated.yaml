@@ -344,6 +344,7 @@ items:
       - /docker/chummercomplete/chummer-core-engine commit cc6cf25b pins the M104 current proof floor guard.
       - /docker/chummercomplete/chummer-core-engine commit bb9af238 pins the current cc6cf25b proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
       - /docker/chummercomplete/chummer-core-engine commit 44512fcf pins the current bb9af238 proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
+      - /docker/chummercomplete/chummer-core-engine commit 5e808a1b pins the current adc72a7e proof floor guard in the generator, unit tests, proof-pack documentation, and checked-in receipt.
     allowed_paths:
       - src
       - tests
