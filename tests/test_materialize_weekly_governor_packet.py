@@ -25,6 +25,8 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "focus_profiles",
     "focus_texts",
     "frontier_briefs",
+    "frontier ids:",
+    "open milestone ids:",
     "polling_disabled",
     "runtime_handoff_path",
     "status_query_supported",
@@ -198,6 +200,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "run-prompt authority labels are rejected as worker proof strings.",
                                 "execution-discipline prompt strings are rejected as worker proof strings.",
                                 "runtime handoff header and model metadata strings are rejected as worker proof strings.",
+                                "runtime handoff frontier metadata strings are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "control-plane polling prohibition guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
@@ -333,6 +336,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "run-prompt authority labels are rejected as worker proof strings",
                         "execution-discipline prompt strings are rejected as worker proof strings",
                         "runtime handoff header and model metadata strings are rejected as worker proof strings",
+                        "runtime handoff frontier metadata strings are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "control-plane polling prohibition guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
@@ -4088,6 +4092,9 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
     queue["items"][0]["proof"].append(
         "Successor frontier ids to prioritize first: 2376135131"
     )
+    queue["items"][0]["proof"].append(
+        "Frontier ids: 2376135131 from the active-run handoff prove this package is closed"
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -4095,6 +4102,9 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "Successor frontier detail: 2376135131 [W8] Publish weekly governor packets"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Open milestone ids: 2376135131 from the runtime handoff prove closure"
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -4163,6 +4173,17 @@ def test_weekly_governor_packet_rejects_successor_wave_telemetry_summary_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Successor frontier detail" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Frontier ids:" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Open milestone ids:" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
