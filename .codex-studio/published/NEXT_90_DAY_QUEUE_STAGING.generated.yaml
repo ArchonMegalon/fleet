@@ -124,6 +124,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit b27c5142 pins the M102 app-local proof floor guard.
       - /docker/chummercomplete/chummer.run-services commit cd392a72 pins the M102 current proof floor guard.
       - /docker/chummercomplete/chummer.run-services commit 41d7ed57 pins the M102 current desktop trust floor.
+      - /docker/chummercomplete/chummer.run-services commit bd60fc5a tightens M102 active-run evidence path guard.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
