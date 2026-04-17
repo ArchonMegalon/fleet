@@ -135,6 +135,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 18902a34 pins the M102 duplicate proof citation guard.
       - /docker/chummercomplete/chummer.run-services commit 72fa2471 tightens M102 proof anchor scope so canonical closure evidence cannot cite existing files outside the package allowed paths.
       - /docker/chummercomplete/chummer.run-services commit c791e657 tightens M102 install receipt matching so support continuation cannot attach a newer receipt from another desktop platform.
+      - /docker/chummercomplete/chummer.run-services commit 438861f0 pins the M102 receipt matching proof floor.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
