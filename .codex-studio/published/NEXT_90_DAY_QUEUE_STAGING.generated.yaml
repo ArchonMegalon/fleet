@@ -14,6 +14,8 @@ items:
     repo: chummer6-hub
     status: complete
     landed_commit: 160af58f
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M102 chummer6-hub desktop-native trust is complete; future shards must verify this receipt, registry row, queue row, and design-queue row instead of reopening the claim/install/update/rollback/support continuation package.
     proof:
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Controllers/InstallLinkingController.cs
       - /docker/chummercomplete/chummer.run-services/Chummer.Run.Api/Services/DesktopInstallRail.cs
@@ -142,6 +144,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit aceef790 pins the M102 installed-build receipt proof.
       - /docker/chummercomplete/chummer.run-services commit 5f9621c3 tightens M102 encoded proof marker guard.
       - /docker/chummercomplete/chummer.run-services commit 4e8eb4c1 pins the M102 encoded proof marker guard.
+      - /docker/chummercomplete/chummer.run-services commit 4bede125 tightens M102 closed queue proof guard.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
