@@ -129,6 +129,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "15efd7c",
     "f3bfb8d",
     "d15a7ae",
+    "ac1c4ac",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -229,6 +230,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "local proof floor commit 15efd7c pinned for M106 refreshed packet artifact floor",
     "local proof floor commit f3bfb8d pinned for M106 refreshed packet artifact floor",
     "local proof floor commit d15a7ae pinned for M106 queue closeout action guard",
+    "local proof floor commit ac1c4ac pinned for M106 queue closeout proof floor",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -414,6 +416,9 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "codexea watch",
     "codexea-watchdog",
     "codexea --telemetry",
+    "codexea --status",
+    "codexea --eta",
+    "codexea --watch",
     "chummer_design_supervisor status",
     "chummer_design_supervisor eta",
     "supervisor status",

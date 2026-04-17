@@ -100,6 +100,9 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "codexea watch",
     "codexea-watchdog",
     "codexea --telemetry",
+    "codexea --status",
+    "codexea --eta",
+    "codexea --watch",
     "chummer_design_supervisor status",
     "chummer_design_supervisor eta",
     "supervisor status",
@@ -4059,6 +4062,9 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
         "codexea --telemetry-answer --json 1min credits"
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "codexea --status --json and codexea --eta reported this package was green"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "codexea telemetry showed the package was safe to close"
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -4135,6 +4141,12 @@ def test_weekly_governor_packet_rejects_generic_operator_telemetry_proof(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "codexea --telemetry-answer --json 1min credits" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "codexea --status --json and codexea --eta reported this package was green" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert any(

@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T07:15:58Z",
+  "generated_at": "2026-04-17T07:24:32Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -417,6 +417,9 @@
       "codexea watch",
       "codexea-watchdog",
       "codexea --telemetry",
+      "codexea --status",
+      "codexea --eta",
+      "codexea --watch",
       "chummer_design_supervisor status",
       "chummer_design_supervisor eta",
       "supervisor status",
@@ -1419,6 +1422,9 @@
         "codexea watch",
         "codexea-watchdog",
         "codexea --telemetry",
+        "codexea --status",
+        "codexea --eta",
+        "codexea --watch",
         "chummer_design_supervisor status",
         "chummer_design_supervisor eta",
         "supervisor status",
@@ -1600,6 +1606,9 @@
           "codexea watch",
           "codexea-watchdog",
           "codexea --telemetry",
+          "codexea --status",
+          "codexea --eta",
+          "codexea --watch",
           "chummer_design_supervisor status",
           "chummer_design_supervisor eta",
           "supervisor status",
