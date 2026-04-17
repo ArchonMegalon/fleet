@@ -520,6 +520,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 87115e9c pins the M105 workspace proof package-shape guard so future shards verify the current closed-package floor.
       - /docker/chummercomplete/chummer.run-services commit 14f55d5a pins the M105 current workspace proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit f519b944 pins the M105 current workspace proof floor into the package verifier and commit-resolution test.
+      - /docker/chummercomplete/chummer.run-services commit 125aa82e recovers blank restore conflict summaries and pins the fallback in M105 workspace receipt proof.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
