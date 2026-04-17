@@ -42,9 +42,11 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "assigned successor queue package",
     "assigned slice authority",
     "execution rules inside this run",
+    "execution discipline",
     "first action rule",
     "writable scope roots",
     "operator telemetry",
+    "do not invoke operator telemetry",
     "supervisor status polling",
     "supervisor eta polling",
     "do not query supervisor status",
@@ -59,6 +61,7 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "operator/OODA loop",
     "operator ooda loop",
     "operator/OODA loop owns telemetry",
+    "operator/OODA loop owns telemetry; keep working the assigned slice",
     "operator ooda loop owns telemetry",
     "ooda loop owns telemetry",
     "operator-owned telemetry",
@@ -66,9 +69,12 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "operator-owned helper",
     "inside worker runs",
     "run failure",
+    "count as run failure",
     "hard-blocked",
+    "helpers are hard-blocked",
     "hard blocked",
     "non-zero during active runs",
+    "return non-zero during active runs",
     "nonzero during active runs",
     "--telemetry-answer",
     "codexea telemetry",
@@ -180,6 +186,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "literal successor-wave telemetry labels are rejected as worker proof strings.",
                                 "frontier-detail prompt strings are rejected as worker proof strings.",
                                 "run-prompt authority labels are rejected as worker proof strings.",
+                                "execution-discipline prompt strings are rejected as worker proof strings.",
                                 "handoff polling phrase guard is enforced case-insensitively.",
                                 "control-plane polling prohibition guard is enforced case-insensitively.",
                                 "worker-run OODA helper guard is enforced case-insensitively.",
@@ -307,6 +314,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "literal successor-wave telemetry labels are rejected as worker proof strings",
                         "frontier-detail prompt strings are rejected as worker proof strings",
                         "run-prompt authority labels are rejected as worker proof strings",
+                        "execution-discipline prompt strings are rejected as worker proof strings",
                         "handoff polling phrase guard is enforced case-insensitively",
                         "control-plane polling prohibition guard is enforced case-insensitively",
                         "worker-run OODA helper guard is enforced case-insensitively",
@@ -4198,6 +4206,9 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
     queue["items"][0]["proof"].append(
         "Hard-blocked helpers return non-zero during active runs but still prove the package"
     )
+    queue["items"][0]["proof"].append(
+        "Execution discipline: do not invoke operator telemetry or active-run helper commands from inside worker runs."
+    )
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -4205,6 +4216,9 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
     )
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
         "Operator/OODA loop owns telemetry, so worker proof can cite it"
+    )
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Helpers are hard-blocked, count as run failure, and return non-zero during active runs."
     )
     _write_yaml(paths["registry"], registry)
     out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
@@ -4266,9 +4280,22 @@ def test_weekly_governor_packet_rejects_worker_run_ooda_loop_proof(
         for issue in payload["package_verification"]["issues"]
     )
     assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "Execution discipline" in issue
+        and "do not invoke operator telemetry" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
         "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
         in issue
         and "Operator/OODA loop owns telemetry" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Helpers are hard-blocked" in issue
+        and "return non-zero during active runs" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
