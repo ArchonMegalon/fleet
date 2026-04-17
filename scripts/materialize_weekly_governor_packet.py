@@ -175,6 +175,7 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
     "worker-run supervisor launcher guard is enforced case-insensitively",
     "run-helper failure proof strings are rejected case-insensitively",
+    "repeat-prevention worker command guard records helper failure posture",
     "verifier rejects Fleet proof paths outside package allowed path roots",
     "production verifier rejects non-canonical source path overrides",
     "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
@@ -257,6 +258,7 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "telemetry-ownership handoff prompt strings",
     "worker-run supervisor launcher guard",
     "run-helper failure proof strings",
+    "repeat-prevention worker command guard records helper failure posture",
     "proof paths outside package allowed path roots",
     "non-canonical source path overrides",
     "reused closed successor frontier rows",
@@ -1616,7 +1618,11 @@ def build_payload(
         "worker_command_guard": {
             "status": "active_run_helpers_forbidden",
             "blocked_markers": list(DISALLOWED_WORKER_PROOF_COMMAND_MARKERS),
-            "rule": "Worker proof must come from repo-local files, generated packets, and tests, not operator telemetry or active-run helper commands.",
+            "rule": (
+                "Worker proof must come from repo-local files, generated packets, and tests, "
+                "not operator telemetry or active-run helper commands; active-run helpers are "
+                "hard-blocked, count as run failure, and return non-zero during active runs."
+            ),
         },
         "flagship_wave_guard": {
             "status": "closed_wave_not_reopened",

@@ -556,6 +556,7 @@ items:
       - telemetry-ownership handoff prompt strings are rejected as worker proof strings
       - worker-run supervisor launcher guard is enforced case-insensitively
       - run-helper failure proof strings are rejected case-insensitively
+      - repeat-prevention worker command guard records helper failure posture
       - verifier rejects Fleet proof paths outside package allowed path roots
       - production verifier rejects non-canonical source path overrides
       - verifier rejects reused closed successor frontier rows outside the Fleet M106 package

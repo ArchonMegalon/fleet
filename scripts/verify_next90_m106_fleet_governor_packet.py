@@ -639,6 +639,13 @@ def verify(args: argparse.Namespace) -> List[str]:
         "repeat prevention worker command guard rule no longer forbids operator telemetry and active-run helper commands",
     )
     _require(
+        "hard-blocked" in str(worker_command_guard.get("rule") or "")
+        and "run failure" in str(worker_command_guard.get("rule") or "")
+        and "non-zero during active runs" in str(worker_command_guard.get("rule") or ""),
+        issues,
+        "repeat prevention worker command guard rule no longer records hard-blocked run-failure helper posture",
+    )
+    _require(
         flagship_wave_guard.get("status") == "closed_wave_not_reopened",
         issues,
         "repeat prevention flagship wave guard is not closed_wave_not_reopened",

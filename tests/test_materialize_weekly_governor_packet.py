@@ -217,6 +217,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                                 "telemetry-ownership handoff prompt strings are rejected as worker proof strings.",
                                 "worker-run supervisor launcher guard is enforced case-insensitively.",
                                 "run-helper failure proof strings are rejected case-insensitively.",
+                                "repeat-prevention worker command guard records helper failure posture.",
                                 "Verifier rejects Fleet proof paths outside package allowed path roots.",
                                 "Production verifier rejects non-canonical source path overrides.",
                                 "Verifier rejects reused closed successor frontier rows outside the Fleet M106 package.",
@@ -361,6 +362,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                         "telemetry-ownership handoff prompt strings are rejected as worker proof strings",
                         "worker-run supervisor launcher guard is enforced case-insensitively",
                         "run-helper failure proof strings are rejected case-insensitively",
+                        "repeat-prevention worker command guard records helper failure posture",
                         "verifier rejects Fleet proof paths outside package allowed path roots",
                         "production verifier rejects non-canonical source path overrides",
                         "verifier rejects reused closed successor frontier rows outside the Fleet M106 package",
@@ -817,6 +819,18 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         == "active_run_helpers_forbidden"
     )
     assert payload["repeat_prevention"]["worker_command_guard"]["blocked_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+    assert (
+        "hard-blocked"
+        in payload["repeat_prevention"]["worker_command_guard"]["rule"]
+    )
+    assert (
+        "run failure"
+        in payload["repeat_prevention"]["worker_command_guard"]["rule"]
+    )
+    assert (
+        "non-zero during active runs"
+        in payload["repeat_prevention"]["worker_command_guard"]["rule"]
+    )
     assert (
         payload["repeat_prevention"]["flagship_wave_guard"]["status"]
         == "closed_wave_not_reopened"
@@ -1871,6 +1885,10 @@ def test_verify_next90_m106_governor_packet_rejects_worker_guard_drift(
     )
     assert (
         "repeat prevention worker command guard rule no longer forbids operator telemetry and active-run helper commands"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention worker command guard rule no longer records hard-blocked run-failure helper posture"
         in verifier.stderr
     )
 
