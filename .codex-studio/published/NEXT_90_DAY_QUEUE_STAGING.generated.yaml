@@ -282,6 +282,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit c7b4a56f tightens M101 escaped helper proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 58bc9f1b pins M101 escaped helper proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit a7ff93b4 pins the M101 release train proof floor to the current closed-package guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit fb8ad231 resolves the M101 release train proof citation to the current generated receipt and verifier guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
