@@ -267,6 +267,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 1c8aa33c tightens M101 closed queue proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit f7fcf1a9 tightens M101 queue title proof.
       - /docker/chummercomplete/chummer6-ui-finish commit f3779b5d pins M101 queue title proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 4779b4c9 tightens M101 encoded worker-context proof guard.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
