@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-17T20:16:59Z
+Generated: 2026-04-17T20:19:47Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: 10fcb4401ceb361388a80e334a8a86322f777ece5a622bb2595eab438318388b
+- Source input fingerprint: 74c0878d8b1f91d9147025c346e0b7161a89931794059526c57cc8461ec59f93
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: freeze_launch
@@ -29,7 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: ready
 - Governor packet cadence: weekly
-- Next packet due: 2026-04-24T20:16:59Z
+- Next packet due: 2026-04-24T20:19:47Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -45,10 +45,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Canary ready: False
 - Rollback watch: False
 - Registry work task 106.1 status: complete
-- Required registry evidence markers: 91
+- Required registry evidence markers: 93
 - Queue closeout status: complete
 - Queue mirror status: in_sync
-- Required queue proof markers: 91
+- Required queue proof markers: 93
 - Required resolving proof paths: scripts/materialize_weekly_governor_packet.py, scripts/verify_next90_m106_fleet_governor_packet.py, scripts/run_next90_m106_weekly_governor_packet_tests.py, scripts/verify_script_bootstrap_no_pythonpath.py, tests/test_materialize_weekly_governor_packet.py, tests/test_fleet_script_bootstrap_without_pythonpath.py
 - Successor dependency posture: open
 - Open successor dependencies: 101, 102, 103, 104, 105
@@ -88,7 +88,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Closed package: next90-m106-fleet-governor-packet
 - Closed work task: 106.1
 - Closed successor frontier ids: 2376135131
-- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a
+- Local proof floor commits: 065c653, fb47ce8, 5e6a468, f66dbaa, f490e53, e9ea391, aefd72c, 21e00dd, 3eec697, 6fd5bfe, 3418b3c, 3580ba8, eeafd9e, 1ba508e, 6d1663c, ade57ae, 55d8282, 144eae5, 543dfd5, f16f13b, 999231f, 25836f6, 3e7ee9b, 17189be, 9d2ea4c, bb49fc1, 26679c7, ef50370, a1be389, 83d2d21, e74a7ec, 8fb8d40, dd5fdb5, 52fe086, 6c429cb, 5193bce, f662ad3, 5882234, 6c376e0, 00e870e, 81e1de8, 941c54d, 6981667, 4a13b47, d597376, 233a52a, fba96cc, 15efd7c, f3bfb8d, d15a7ae, ac1c4ac, b909cc5, 787d27a, b467c27
 - Do not reopen owned surfaces: True
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio

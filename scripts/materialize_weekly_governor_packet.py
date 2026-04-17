@@ -132,6 +132,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "ac1c4ac",
     "b909cc5",
     "787d27a",
+    "b467c27",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -276,6 +277,8 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "commit b909cc5 tightens the M106 codexea helper proof guard",
     "local proof floor commit 787d27a pinned for M106 packet refresh floor",
     "commit 787d27a pins the M106 packet refresh floor",
+    "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
+    "commit b467c27 tightens the M106 design queue OODA prompt proof guard",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -369,6 +372,8 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "commit b909cc5 tightens the M106 codexea helper proof guard",
     "local proof floor commit 787d27a",
     "commit 787d27a pins the M106 packet refresh floor",
+    "local proof floor commit b467c27",
+    "commit b467c27 tightens the M106 design queue OODA prompt proof guard",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
