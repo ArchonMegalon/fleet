@@ -54,6 +54,9 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "do not query supervisor status",
     "do not query supervisor status or eta",
     "polling the supervisor again",
+    "current flagship closeout",
+    "do not reopen the closed flagship wave",
+    "reopen the closed flagship wave",
     "active-run telemetry",
     "active run",
     "run id:",
@@ -3827,6 +3830,7 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     queue["items"][0]["proof"].append("python3 scripts/run_ooda_design_supervisor_until_quiet.py --once")
     queue["items"][0]["proof"].append("python3 scripts/chummer_design_supervisor.py launch-health")
     queue["items"][0]["proof"].append("bash scripts/run_chummer_design_supervisor.sh")
+    queue["items"][0]["proof"].append("Current flagship closeout is green, so do not reopen the closed flagship wave.")
     _write_yaml(paths["queue"], queue)
     registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
     registry["milestones"][0]["work_tasks"][0]["evidence"].append(
@@ -3880,6 +3884,7 @@ def test_weekly_governor_packet_rejects_active_run_helper_proof_commands(tmp_pat
     assert any(
         "queue item proof includes active-run or operator-helper command evidence" in issue
         and "python3 scripts/chummer_design_supervisor.py launch-health" in issue
+        and "Current flagship closeout is green" in issue
         and "bash scripts/run_chummer_design_supervisor.sh" in issue
         for issue in payload["package_verification"]["issues"]
     )

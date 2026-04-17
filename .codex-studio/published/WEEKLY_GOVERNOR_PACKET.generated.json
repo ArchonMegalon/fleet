@@ -158,7 +158,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T03:45:22Z",
+  "generated_at": "2026-04-17T03:53:40Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -369,6 +369,9 @@
       "do not query supervisor status",
       "do not query supervisor status or eta",
       "polling the supervisor again",
+      "current flagship closeout",
+      "do not reopen the closed flagship wave",
+      "reopen the closed flagship wave",
       "active-run telemetry",
       "active run",
       "run id:",
@@ -1271,6 +1274,9 @@
         "do not query supervisor status",
         "do not query supervisor status or eta",
         "polling the supervisor again",
+        "current flagship closeout",
+        "do not reopen the closed flagship wave",
+        "reopen the closed flagship wave",
         "active-run telemetry",
         "active run",
         "run id:",
@@ -1443,6 +1449,9 @@
           "do not query supervisor status",
           "do not query supervisor status or eta",
           "polling the supervisor again",
+          "current flagship closeout",
+          "do not reopen the closed flagship wave",
+          "reopen the closed flagship wave",
           "active-run telemetry",
           "active run",
           "run id:",
