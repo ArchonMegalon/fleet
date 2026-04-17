@@ -790,6 +790,8 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit d767fba pins M101 route proof command floor so future shards verify the current completed-package proof floor instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 63a5583 tightens M101 desktop rollback route truth so primary rollback posture must match sibling fallback route truth before future shards trust the completed package row.
       - /docker/chummercomplete/chummer-hub-registry commit 0b52f5f tightens M101 sibling fallback rollback rationale so primary rollback reasons name the exact fallback route id before future shards trust the completed package row.
+      - /docker/chummercomplete/chummer-hub-registry commit 98f8b88 pins the M101 fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit 1cf64e1 pins M101 current fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
