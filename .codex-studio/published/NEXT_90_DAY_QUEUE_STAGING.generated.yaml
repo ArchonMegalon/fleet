@@ -154,6 +154,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit d9f59d4f pins M102 desktop trust current proof floor.
       - /docker/chummercomplete/chummer.run-services commit af6a480e proves the M102 native support route receipt.
       - /docker/chummercomplete/chummer.run-services commit a7d27da6 guards the M102 proof package repo.
+      - /docker/chummercomplete/chummer.run-services commit 0bc0c858 tightens the M102 native support proof guard.
       - python3 scripts/verify_desktop_native_trust_receipts.py
       - python3 -m unittest tests/test_desktop_native_trust_receipts.py
       - dotnet test Chummer.Tests/Chummer.Tests.csproj --filter "DesktopInstallRailTests|PublicLandingClaimRecoveryFlowTests|InstallLinkingContinuationVerification|InstallLinkingControllerBrowserCallbackTests" --no-restore
