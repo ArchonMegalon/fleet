@@ -941,6 +941,8 @@ items:
     wave: W8
     repo: chummer6-ui
     status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M105 chummer6-ui restore continuity is complete; future shards must verify this receipt, registry row, design queue row, Fleet queue row, and direct proof command instead of reopening the desktop restore-continuity and conflict-safe workspace package.
     landed_commit: 54c27661
     proof:
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M105_UI_RESTORE_CONTINUITY.generated.json
@@ -988,6 +990,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 741afbb9 tightens the M105 registry-cited proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit e797befd pins the M105 restore-continuity local proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit ca4b3485 pins the M105 restore-continuity verifier, compliance guard, and receipt to local proof floor e797befd.
+      - /docker/chummercomplete/chummer6-ui-finish commit fd0fbfd0 tightens the M105 completed queue action guard so Fleet and design queue rows must carry verify_closed_package_only plus the package-specific do-not-reopen reason.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
