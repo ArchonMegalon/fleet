@@ -947,6 +947,7 @@ build_chummer_legacy_windows_downloads() {
       DOTNET_CLI_HOME="$build_root/dotnet-home" \
       NUGET_PACKAGES="$build_root/nuget-packages" \
       dotnet restore "$project" \
+        -p:UseChummerEngineContractsLocalFeed=false \
         -p:RestorePackagesPath="$build_root/nuget-packages"
 
       echo "== publish $project ($rid) =="
@@ -959,6 +960,7 @@ build_chummer_legacy_windows_downloads() {
         -p:PublishSingleFile=true \
         -p:PublishTrimmed=false \
         -p:IncludeNativeLibrariesForSelfExtract=true \
+        -p:UseChummerEngineContractsLocalFeed=false \
         -p:RestorePackagesPath="$build_root/nuget-packages" \
         -o "$out_dir"
 
@@ -1123,6 +1125,7 @@ build_chummer_windows_downloads() {
       DOTNET_CLI_HOME="$build_root/dotnet-home" \
       NUGET_PACKAGES="$build_root/nuget-packages" \
       dotnet restore "$project" \
+        -p:UseChummerEngineContractsLocalFeed=false \
         -p:RestorePackagesPath="$build_root/nuget-packages"
 
       echo "== publish $project ($rid) =="
@@ -1135,6 +1138,7 @@ build_chummer_windows_downloads() {
         -p:PublishSingleFile=true \
         -p:PublishTrimmed=false \
         -p:IncludeNativeLibrariesForSelfExtract=true \
+        -p:UseChummerEngineContractsLocalFeed=false \
         -p:RestorePackagesPath="$build_root/nuget-packages" \
         -o "$out_dir"
 
