@@ -227,6 +227,7 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit b958e116 tightens M101 standard verify mutation coverage so Avalonia primary route-truth rows cannot cite Blazor fallback proof.
       - /docker/chummercomplete/chummer6-ui-finish commit 46a9f070 tightens M101 standard verify artifact-identity mutation coverage so Avalonia primary route-truth artifact IDs cannot cite Blazor fallback proof.
       - /docker/chummercomplete/chummer6-ui-finish commit ccc77950 pins M101 artifact mutation proof floor.
+      - /docker/chummercomplete/chummer6-ui-finish commit 4f103b72 pins M101 current release train proof floor.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -454,6 +455,7 @@ items:
       - /docker/chummercomplete/chummer.run-services commit 121f3571 pins the M105 workspace materializer proof floor so future shards verify the latest closed-package guard.
       - /docker/chummercomplete/chummer.run-services commit 3d77bb73 tightens the M105 active-run handoff transcript guard so copied prompt, model, and stderr-tail fields cannot close the completed workspace package.
       - /docker/chummercomplete/chummer.run-services commit bbfe3722 tightens the M105 package receipt metadata guard so wrong-frontier package receipts cannot sit beside the closed workspace continuity receipts.
+      - /docker/chummercomplete/chummer.run-services commit 9d1fe095 tightens the M105 release-proof package mirror guard so top-level and package-list closure metadata cannot drift.
       - /docker/chummercomplete/chummer.run-services/scripts/verify_workspace_restore_receipts.py
       - /docker/chummercomplete/chummer.run-services/scripts/materialize_hub_local_release_proof.py
       - /docker/chummercomplete/chummer.run-services/scripts/ai/verify.sh
