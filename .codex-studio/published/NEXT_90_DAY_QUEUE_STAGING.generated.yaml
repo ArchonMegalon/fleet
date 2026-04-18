@@ -288,6 +288,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit fb8ad231 resolves the M101 release train proof citation to the current generated receipt and verifier guard.
       - /docker/chummercomplete/chummer6-ui-finish commit 46eb74e2 tightens the M101 release train proof citation.
       - /docker/chummercomplete/chummer6-ui-finish commit 35433ce3 tightens M101 proof floor authority guard.
+      - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/verify.sh now fail-closes design-owned queue proof drift against the Fleet-completed M101 row, so future shards cannot treat one queue copy as authoritative closure proof.
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M101ReleaseTrainGuardTests.cs pins the inverse queue-mirror verify mutation so standard verify must reject design-owned queue drift too.
       - bash scripts/ai/milestones/next90-m101-ui-release-train-check.sh
       - source assertion check for M101 guard tokens and primaryProofIndependentFromFallback=true
     allowed_paths:
@@ -705,6 +707,8 @@ items:
     wave: W6
     repo: fleet
     status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.
     proof:
       - /docker/fleet/scripts/materialize_support_case_packets.py
       - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
@@ -748,6 +752,7 @@ items:
       - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
       - cached packet fallback provenance guard keeps ready followthrough closed when `source.refresh_mode=cached_packets_fallback`
       - seeded cached-packet mirror provenance guard keeps ready followthrough closed when `seeded_from_cached_packets_generated_at` is present
+      - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows
     allowed_paths:
       - scripts
       - tests
@@ -806,7 +811,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit 0b52f5f tightens M101 sibling fallback rollback rationale so primary rollback reasons name the exact fallback route id before future shards trust the completed package row.
       - /docker/chummercomplete/chummer-hub-registry commit 98f8b88 pins the M101 fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 1cf64e1 pins M101 current fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
-      - /docker/chummercomplete/chummer-hub-registry commit 88b058e pins M101 current desktop route truth rationale proof floor so future shards verify the current completed-package guard instead of repeating it.
+      - /docker/chummercomplete/chummer-hub-registry commit 49dd07a tightens the M101 route-truth row-shape guard so future shards reject non-object desktop route-truth rows instead of repeating the current completed-package guard.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
@@ -827,6 +832,7 @@ items:
     do_not_reopen_reason: M103 chummer6-ui veteran certification is complete; future shards must verify this receipt, registry row, design queue row, Fleet queue row, and direct proof command instead of recapturing promoted-head Chummer5a screenshot parity.
     proof:
       - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M103_UI_VETERAN_CERTIFICATION.generated.json
+      - /docker/chummercomplete/chummer6-ui-finish/.codex-studio/published/NEXT90_M103_UI_VETERAN_CERTIFICATION_REVIEW.generated.md
       - /docker/chummercomplete/chummer6-ui-finish/scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
       - /docker/chummercomplete/chummer6-ui-finish commit fb6eb62e
       - /docker/chummercomplete/chummer6-ui-finish commit 3bba8754 tightens the M103 verifier receipt and standard-verify proof alignment.
@@ -1013,6 +1019,8 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit e797befd pins the M105 restore-continuity local proof floor guard.
       - /docker/chummercomplete/chummer6-ui-finish commit ca4b3485 pins the M105 restore-continuity verifier, compliance guard, and receipt to local proof floor e797befd.
       - /docker/chummercomplete/chummer6-ui-finish commit fd0fbfd0 tightens the M105 completed queue action guard so Fleet and design queue rows must carry verify_closed_package_only plus the package-specific do-not-reopen reason.
+      - /docker/chummercomplete/chummer6-ui-finish commit 6a873199 tightens the M105 primary-route decision gate proof so canonical closure evidence cites the separate restore, stale-state, and conflict-choice visibility guard.
+      - /docker/chummercomplete/chummer6-ui-finish commit db9ec722 tightens the M105 workspace-support handoff proof so canonical closure evidence cites the primary-route support fallback guard.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopHomeWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Avalonia/DesktopCampaignWorkspaceWindow.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
