@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-19T13:24:31Z",
+  "generated_at": "2026-04-19T14:11:58Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -218,9 +218,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-19T13:24:31Z",
+    "generated_at": "2026-04-19T14:11:58Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-04-26T13:24:31Z",
+    "next_packet_due_at": "2026-04-26T14:11:58Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -1446,6 +1446,10 @@
         {
           "commit": "b467c27",
           "status": "present"
+        },
+        {
+          "commit": "fe4c621",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -1503,7 +1507,8 @@
         "ac1c4ac",
         "b909cc5",
         "787d27a",
-        "b467c27"
+        "b467c27",
+        "fe4c621"
       ],
       "status": "pass"
     },
@@ -1561,7 +1566,8 @@
       "ac1c4ac",
       "b909cc5",
       "787d27a",
-      "b467c27"
+      "b467c27",
+      "fe4c621"
     ],
     "milestone_id": 106,
     "owned_surfaces": [
@@ -1685,6 +1691,9 @@
       "commit 787d27a pins the M106 packet refresh floor",
       "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
       "commit b467c27 tightens the M106 design queue OODA prompt proof guard",
+      "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
+      "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
+      "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
       "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages"
     ],
     "required_registry_evidence_markers": [
@@ -1780,6 +1789,9 @@
       "commit 787d27a pins the M106 packet refresh floor",
       "local proof floor commit b467c27",
       "commit b467c27 tightens the M106 design queue OODA prompt proof guard",
+      "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
+      "local proof floor commit fe4c621",
+      "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
       "do-not-reopen handoff routes remaining M106 work"
     ],
     "required_resolving_proof_paths": [
@@ -2133,6 +2145,10 @@
         {
           "commit": "b467c27",
           "status": "present"
+        },
+        {
+          "commit": "fe4c621",
+          "status": "present"
         }
       ],
       "missing_commits": [],
@@ -2190,7 +2206,8 @@
         "ac1c4ac",
         "b909cc5",
         "787d27a",
-        "b467c27"
+        "b467c27",
+        "fe4c621"
       ],
       "status": "pass"
     },
@@ -2248,7 +2265,8 @@
       "ac1c4ac",
       "b909cc5",
       "787d27a",
-      "b467c27"
+      "b467c27",
+      "fe4c621"
     ],
     "owned_surfaces": [
       "weekly_governor_packet",
@@ -2425,13 +2443,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "09533f2fbe60661eeff5a7fb2e6dc1f0f6ac21a260c7013254a7e66eb2f0dd23",
+    "combined_source_sha256": "9bfaf49ec16d1ff9d20dd56d762d795ea3c5305ea6ebe3250683c6a592a59303",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "e6dcb6cd03fa8d46bf1e0c4ab7456174c3c387b97d5c813431ef33a5e6a1dac4"
+        "source_sha256": "4e43f4842ca1e9075562caf77f22b743abc5e4965ae6c9fd315eaf878c89e76d"
       },
       {
         "name": "closed_flagship_registry",
@@ -2441,12 +2459,12 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "57f9d518f9155240400e9a223b10ac3da70ed20abc6bda1bf138a0abb240ccbe"
+        "source_sha256": "6fefaae9d421abb660319250de8b5ff8238a0b758f8eebde8bc15d5ac550a452"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "4ed903aca9ed4f5bd61042c3cdd00847f42c8feaa236d4be8533193fe863ec5e"
+        "source_sha256": "d7ded4e2867712a2c8467a96fd55f484ca577726a4df559b121ffb0ac4b47779"
       },
       {
         "name": "weekly_pulse",
@@ -2456,17 +2474,17 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "3f2575e4ff128ba2c5a22570a0c6fc29cec92bea473a86b6cf8348918261efb2"
+        "source_sha256": "46e82ea01b9d210f80fe607609c75cadfdbc74dcfd59886461e2ef0415ecae31"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "7e31fb9798a2456c538307907ee5933c08bebe213d9b803a0facbcc5551be6a6"
+        "source_sha256": "8c21d380c93ba7edd7bacfed8ce1b059539f4a603e79f635abc986feb2353c61"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "c77886b651958a4bd0b293f70ce5117f2948fee49a4f969413f63090b201be3b"
+        "source_sha256": "5c2a6db10bf697325f1873f9347099b53249f1b56bf7ebf4e31a8fc0c4ca8337"
       },
       {
         "name": "status_plane",
@@ -2495,23 +2513,23 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "57f9d518f9155240400e9a223b10ac3da70ed20abc6bda1bf138a0abb240ccbe",
+        "source_sha256": "6fefaae9d421abb660319250de8b5ff8238a0b758f8eebde8bc15d5ac550a452",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-19T13:23:28Z",
+        "generated_at": "2026-04-19T13:47:06Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "3f2575e4ff128ba2c5a22570a0c6fc29cec92bea473a86b6cf8348918261efb2",
+        "source_sha256": "46e82ea01b9d210f80fe607609c75cadfdbc74dcfd59886461e2ef0415ecae31",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-19T13:23:39Z",
+        "generated_at": "2026-04-19T13:47:05Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "7e31fb9798a2456c538307907ee5933c08bebe213d9b803a0facbcc5551be6a6",
+        "source_sha256": "8c21d380c93ba7edd7bacfed8ce1b059539f4a603e79f635abc986feb2353c61",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2535,7 +2553,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "4ed903aca9ed4f5bd61042c3cdd00847f42c8feaa236d4be8533193fe863ec5e",
+        "source_sha256": "d7ded4e2867712a2c8467a96fd55f484ca577726a4df559b121ffb0ac4b47779",
         "state": "present"
       },
       "source_path_authority": {
@@ -2694,15 +2712,15 @@
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "e6dcb6cd03fa8d46bf1e0c4ab7456174c3c387b97d5c813431ef33a5e6a1dac4",
+        "source_sha256": "4e43f4842ca1e9075562caf77f22b743abc5e4965ae6c9fd315eaf878c89e76d",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-19T13:23:26Z",
+        "generated_at": "2026-04-19T13:47:05Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "c77886b651958a4bd0b293f70ce5117f2948fee49a4f969413f63090b201be3b",
+        "source_sha256": "5c2a6db10bf697325f1873f9347099b53249f1b56bf7ebf4e31a8fc0c4ca8337",
         "state": "present",
         "successor_package_verification_status": "pass"
       },

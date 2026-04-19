@@ -762,6 +762,9 @@ items:
       - commit b909cc5 tightens the M106 codexea helper proof guard.
       - commit 787d27a pins the M106 packet refresh floor.
       - commit b467c27 tightens the M106 design queue OODA prompt proof guard.
+      - stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth
+      - local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard
+      - commit fe4c621 tightens the M106 receipt-gate row-truth guard.
       - do-not-reopen handoff routes remaining M106 work to dependency or sibling packages
     allowed_paths:
       - admin

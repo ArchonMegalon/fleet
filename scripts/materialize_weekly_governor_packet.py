@@ -134,6 +134,7 @@ LOCAL_PROOF_FLOOR_COMMITS = (
     "b909cc5",
     "787d27a",
     "b467c27",
+    "fe4c621",
 )
 OWNED_SURFACES = ("weekly_governor_packet", "measured_rollout_loop")
 ALLOWED_PATHS = ("admin", "scripts", "tests", ".codex-studio")
@@ -280,6 +281,9 @@ REQUIRED_QUEUE_PROOF_MARKERS = (
     "commit 787d27a pins the M106 packet refresh floor",
     "local proof floor commit b467c27 pinned for M106 design queue OODA prompt proof guard",
     "commit b467c27 tightens the M106 design queue OODA prompt proof guard",
+    "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
+    "local proof floor commit fe4c621 pinned for M106 receipt-gate row-truth guard",
+    "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
     "do-not-reopen handoff routes remaining M106 work to dependency or sibling packages",
 )
 REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
@@ -375,6 +379,9 @@ REQUIRED_REGISTRY_EVIDENCE_MARKERS = (
     "commit 787d27a pins the M106 packet refresh floor",
     "local proof floor commit b467c27",
     "commit b467c27 tightens the M106 design queue OODA prompt proof guard",
+    "stale aggregate receipt-gate counts cannot overstate installed-build followthrough without detailed row truth",
+    "local proof floor commit fe4c621",
+    "commit fe4c621 tightens the M106 receipt-gate row-truth guard",
     "do-not-reopen handoff routes remaining M106 work",
 )
 REQUIRED_RESOLVING_PROOF_PATHS = (
