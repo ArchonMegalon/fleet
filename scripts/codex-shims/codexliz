@@ -1,0 +1,454 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_CODEX_SHIM="${CODEXLIZ_BASE_CODEX_SHIM:-${SCRIPT_DIR}/codex}"
+PROXY_SCRIPT="${CODEXLIZ_PROXY_SCRIPT:-${SCRIPT_DIR}/codexliz-http-proxy}"
+PROXY_PYTHON="${CODEXLIZ_PROXY_PYTHON:-/usr/bin/python3}"
+CODEXLIZ_PROVIDER_KEY="${CODEXLIZ_PROVIDER_KEY:-liz}"
+CODEXLIZ_PROVIDER_NAME="${CODEXLIZ_PROVIDER_NAME:-Liz Ollama}"
+CODEXLIZ_BASE_URL="${CODEXLIZ_BASE_URL:-https://code.girschele.com}"
+CODEXLIZ_MODEL="${CODEXLIZ_MODEL:-qwen3-coder-next:q8_0}"
+CODEXLIZ_API_KEY_ENV_VAR="${CODEXLIZ_API_KEY_ENV_VAR:-CODEXLIZ_API_KEY}"
+CODEXLIZ_PROXY_HOST="${CODEXLIZ_PROXY_HOST:-127.0.0.1}"
+CODEXLIZ_PROXY_PORT="${CODEXLIZ_PROXY_PORT:-}"
+CODEXLIZ_STATE_DIR="${CODEXLIZ_STATE_DIR:-${HOME}/.cache/codexliz}"
+CODEXLIZ_PROXY_PID_FILE="${CODEXLIZ_PROXY_PID_FILE:-${CODEXLIZ_STATE_DIR}/proxy.pid}"
+CODEXLIZ_PROXY_LOG_FILE="${CODEXLIZ_PROXY_LOG_FILE:-${CODEXLIZ_STATE_DIR}/proxy.log}"
+CODEXLIZ_PROXY_PORT_FILE="${CODEXLIZ_PROXY_PORT_FILE:-${CODEXLIZ_STATE_DIR}/proxy.port}"
+CODEXLIZ_PREFLIGHT_MODELS_PATH="${CODEXLIZ_PREFLIGHT_MODELS_PATH:-/v1/models}"
+CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS="${CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS:-10}"
+CODEXLIZ_CF_ACCESS_FILE="${CODEXLIZ_CF_ACCESS_FILE:-/docker/fleet/secrets/codexliz-cf-access.env}"
+CODEXLIZ_CF_ACCESS_CLIENT_ID="${CODEXLIZ_CF_ACCESS_CLIENT_ID:-}"
+CODEXLIZ_CF_ACCESS_CLIENT_SECRET="${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-}"
+
+if [ ! -x "${BASE_CODEX_SHIM}" ]; then
+  echo "Missing base codex shim at ${BASE_CODEX_SHIM}" >&2
+  exit 1
+fi
+
+if [ ! -f "${PROXY_SCRIPT}" ]; then
+  echo "Missing codexliz proxy script at ${PROXY_SCRIPT}" >&2
+  exit 1
+fi
+
+if [ ! -x "${PROXY_PYTHON}" ]; then
+  echo "Missing python runtime for codexliz proxy at ${PROXY_PYTHON}" >&2
+  exit 1
+fi
+
+normalize_remote_upstream_base_url() {
+  local url="${1:-}"
+  url="${url#"${url%%[![:space:]]*}"}"
+  url="${url%"${url##*[![:space:]]}"}"
+  if [ -z "${url}" ]; then
+    url="https://code.girschele.com"
+  fi
+  if [[ "${url}" != *"://"* ]]; then
+    url="https://${url}"
+  fi
+  url="${url%/}"
+  if [[ "${url}" == */v1 ]]; then
+    url="${url%/v1}"
+  fi
+  printf '%s' "${url}"
+}
+
+normalize_access_token_value() {
+  local value="${1:-}"
+  if [[ "${value}" == REPLACE_WITH_* ]]; then
+    printf ''
+    return
+  fi
+  printf '%s' "${value}"
+}
+
+load_cf_access_env() {
+  local env_file="${CODEXLIZ_CF_ACCESS_FILE:-}"
+  if [ -z "${CODEXLIZ_CF_ACCESS_CLIENT_ID:-}" ] && [ -z "${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-}" ] && [ -n "${env_file}" ] && [ -f "${env_file}" ]; then
+    set -a
+    . "${env_file}"
+    set +a
+  fi
+
+  CODEXLIZ_CF_ACCESS_CLIENT_ID="$(normalize_access_token_value "${CODEXLIZ_CF_ACCESS_CLIENT_ID:-${CF_ACCESS_CLIENT_ID:-}}")"
+  CODEXLIZ_CF_ACCESS_CLIENT_SECRET="$(normalize_access_token_value "${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-${CF_ACCESS_CLIENT_SECRET:-}}")"
+  export CODEXLIZ_CF_ACCESS_CLIENT_ID CODEXLIZ_CF_ACCESS_CLIENT_SECRET
+
+  if { [ -n "${CODEXLIZ_CF_ACCESS_CLIENT_ID}" ] && [ -z "${CODEXLIZ_CF_ACCESS_CLIENT_SECRET}" ]; } || { [ -z "${CODEXLIZ_CF_ACCESS_CLIENT_ID}" ] && [ -n "${CODEXLIZ_CF_ACCESS_CLIENT_SECRET}" ]; }; then
+    echo "codexliz Cloudflare Access config requires both client id and client secret" >&2
+    exit 1
+  fi
+}
+
+build_local_provider_base_url() {
+  local proxy_port="${1:-}"
+  printf 'http://%s:%s/v1' "${CODEXLIZ_PROXY_HOST}" "${proxy_port}"
+}
+
+build_preflight_url() {
+  local base_url="${1:-}"
+  local path="${2:-/v1/models}"
+  base_url="${base_url%/}"
+  if [[ "${base_url}" == */v1 ]] && [[ "${path}" == /v1/* ]]; then
+    printf '%s%s' "${base_url}" "${path#/v1}"
+    return
+  fi
+  printf '%s%s' "${base_url}" "${path}"
+}
+
+is_providerless_command() {
+  case "${1:-}" in
+    login|logout|mcp|mcp-server|app-server|completion|sandbox|debug|features|help|marketplace)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+detect_primary_command() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          printf '%s' "${args[$i]}"
+        fi
+        return
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        i=$((i + 2))
+        ;;
+      --oss|--full-auto|--dangerously-bypass-approvals-and-sandbox|--search|--no-alt-screen|-h|--help|-V|--version)
+        i=$((i + 1))
+        ;;
+      -*)
+        i=$((i + 1))
+        ;;
+      *)
+        printf '%s' "${args[$i]}"
+        return
+        ;;
+    esac
+  done
+}
+
+has_explicit_provider_override() {
+  local -a args=("$@")
+  local i=0
+  local value=""
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --oss|--local-provider)
+        return 0
+        ;;
+      -c|--config)
+        i=$((i + 1))
+        if [ "${i}" -ge "${#args[@]}" ]; then
+          break
+        fi
+        value="${args[$i]}"
+        case "${value}" in
+          *model_provider*|*model_providers.*|*chatgpt_base_url*|*openai_base_url*)
+            return 0
+            ;;
+        esac
+        ;;
+    esac
+    i=$((i + 1))
+  done
+
+  return 1
+}
+
+has_explicit_model_override() {
+  local -a args=("$@")
+  local i=0
+  local value=""
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -m|--model)
+        return 0
+        ;;
+      -c|--config)
+        i=$((i + 1))
+        if [ "${i}" -ge "${#args[@]}" ]; then
+          break
+        fi
+        value="${args[$i]}"
+        case "${value}" in
+          model=*|\"model\"=*|\'model\'=*)
+            return 0
+            ;;
+        esac
+        ;;
+    esac
+    i=$((i + 1))
+  done
+
+  return 1
+}
+
+process_is_running() {
+  local pid="${1:-}"
+  [ -n "${pid}" ] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+proxy_is_ready() {
+  local proxy_host="${1:-}"
+  local proxy_port="${2:-}"
+  "${PROXY_PYTHON}" - "${proxy_host}" "${proxy_port}" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+with socket.create_connection((host, port), timeout=0.5):
+    pass
+PY
+}
+
+select_free_proxy_port() {
+  "${PROXY_PYTHON}" - "${CODEXLIZ_PROXY_HOST}" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+    probe.bind((host, 0))
+    print(probe.getsockname()[1])
+PY
+}
+
+write_proxy_port_file() {
+  local proxy_port="${1:-}"
+  mkdir -p "${CODEXLIZ_STATE_DIR}"
+  printf '%s\n' "${proxy_port}" > "${CODEXLIZ_PROXY_PORT_FILE}"
+}
+
+resolve_proxy_port() {
+  local explicit_port="${CODEXLIZ_PROXY_PORT}"
+  local cached_port=""
+
+  mkdir -p "${CODEXLIZ_STATE_DIR}"
+
+  if [ -n "${explicit_port}" ]; then
+    printf '%s' "${explicit_port}"
+    return
+  fi
+
+  if [ -f "${CODEXLIZ_PROXY_PORT_FILE}" ]; then
+    cached_port="$(tr -d '[:space:]' < "${CODEXLIZ_PROXY_PORT_FILE}" 2>/dev/null || true)"
+  fi
+  if [[ "${cached_port}" =~ ^[0-9]+$ ]] && [ "${cached_port}" -ge 1024 ] && [ "${cached_port}" -le 65535 ]; then
+    printf '%s' "${cached_port}"
+    return
+  fi
+
+  cached_port="$(select_free_proxy_port)"
+  write_proxy_port_file "${cached_port}"
+  printf '%s' "${cached_port}"
+}
+
+run_models_preflight() {
+  local target_url="${1:-}"
+  local target_label="${2:-transport}"
+  local expected_model="${3:-}"
+  local api_key_value=""
+  local cf_access_client_id="${CODEXLIZ_CF_ACCESS_CLIENT_ID:-}"
+  local cf_access_client_secret="${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-}"
+
+  if [ -n "${CODEXLIZ_API_KEY_ENV_VAR}" ]; then
+    api_key_value="${!CODEXLIZ_API_KEY_ENV_VAR:-}"
+  fi
+
+  "${PROXY_PYTHON}" - "${target_url}" "${target_label}" "${expected_model}" "${CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS}" "${api_key_value}" "${cf_access_client_id}" "${cf_access_client_secret}" <<'PY'
+import json
+import ssl
+import sys
+import urllib.error
+import urllib.request
+
+target_url = sys.argv[1]
+target_label = sys.argv[2]
+expected_model = sys.argv[3].strip()
+timeout_seconds = float(sys.argv[4] or "10")
+api_key_value = sys.argv[5]
+cf_access_client_id = sys.argv[6].strip()
+cf_access_client_secret = sys.argv[7].strip()
+
+request = urllib.request.Request(target_url, headers={"Accept": "application/json"})
+if api_key_value:
+    request.add_header("Authorization", f"Bearer {api_key_value}")
+if cf_access_client_id and cf_access_client_secret:
+    request.add_header("CF-Access-Client-Id", cf_access_client_id)
+    request.add_header("CF-Access-Client-Secret", cf_access_client_secret)
+
+try:
+    with urllib.request.urlopen(request, timeout=timeout_seconds, context=ssl.create_default_context()) as response:
+        status = int(getattr(response, "status", 0) or response.getcode() or 0)
+        body = response.read().decode("utf-8", errors="replace")
+except urllib.error.HTTPError as exc:
+    detail = exc.read().decode("utf-8", errors="replace")
+    summary = detail.strip().replace("\n", " ")[:200] or exc.reason
+    raise SystemExit(f"codexliz transport preflight failed for {target_label}: {target_url} returned HTTP {exc.code} ({summary})")
+except (urllib.error.URLError, TimeoutError, OSError, ssl.SSLError, ValueError) as exc:
+    raise SystemExit(f"codexliz transport preflight failed for {target_label}: {target_url} ({exc})")
+
+if status != 200:
+    raise SystemExit(f"codexliz transport preflight failed for {target_label}: {target_url} returned HTTP {status}")
+
+try:
+    payload = json.loads(body)
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"codexliz transport preflight failed for {target_label}: {target_url} returned invalid JSON ({exc})")
+
+models = []
+if isinstance(payload, dict):
+    if isinstance(payload.get("data"), list):
+        models = payload["data"]
+    elif isinstance(payload.get("models"), list):
+        models = payload["models"]
+elif isinstance(payload, list):
+    models = payload
+
+if not models:
+    raise SystemExit(
+        f"codexliz transport preflight failed for {target_label}: {target_url} returned no models payload"
+    )
+
+if expected_model:
+    discovered = set()
+    for item in models:
+        if isinstance(item, str):
+            discovered.add(item.strip())
+            continue
+        if not isinstance(item, dict):
+            continue
+        for key in ("id", "model", "name"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                discovered.add(value)
+    if expected_model not in discovered:
+        sample = ", ".join(sorted(model for model in discovered if model)[:6]) or "none"
+        raise SystemExit(
+            "codexliz transport preflight failed for "
+            f"{target_label}: expected model {expected_model!r} not present in {target_url} ({sample})"
+        )
+PY
+}
+
+start_proxy_if_needed() {
+  local upstream_base_url="${1:-}"
+  local requested_port="${2:-}"
+  local existing_pid=""
+  local attempt=0
+  local selected_port="${requested_port}"
+  local started_pid=""
+  local port_is_explicit=0
+
+  mkdir -p "${CODEXLIZ_STATE_DIR}"
+  if [ -n "${CODEXLIZ_PROXY_PORT}" ]; then
+    port_is_explicit=1
+  fi
+
+  while :; do
+    if [ -z "${selected_port}" ]; then
+      selected_port="$(resolve_proxy_port)"
+    fi
+    export CODEXLIZ_PROXY_PORT="${selected_port}"
+    write_proxy_port_file "${selected_port}"
+
+    if [ -f "${CODEXLIZ_PROXY_PID_FILE}" ]; then
+      existing_pid="$(cat "${CODEXLIZ_PROXY_PID_FILE}" 2>/dev/null || true)"
+    else
+      existing_pid=""
+    fi
+
+    if [ -n "${existing_pid}" ] && process_is_running "${existing_pid}" && proxy_is_ready "${CODEXLIZ_PROXY_HOST}" "${selected_port}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    rm -f "${CODEXLIZ_PROXY_PID_FILE}"
+
+    nohup "${PROXY_PYTHON}" "${PROXY_SCRIPT}" \
+      --listen-host "${CODEXLIZ_PROXY_HOST}" \
+      --listen-port "${selected_port}" \
+      --upstream-base-url "${upstream_base_url}" \
+      >>"${CODEXLIZ_PROXY_LOG_FILE}" 2>&1 &
+    started_pid="$!"
+    printf '%s\n' "${started_pid}" > "${CODEXLIZ_PROXY_PID_FILE}"
+
+    attempt=0
+    while [ "${attempt}" -lt 40 ]; do
+      if proxy_is_ready "${CODEXLIZ_PROXY_HOST}" "${selected_port}" >/dev/null 2>&1; then
+        return 0
+      fi
+      attempt=$((attempt + 1))
+      sleep 0.25
+    done
+
+    if [ -n "${started_pid}" ] && process_is_running "${started_pid}"; then
+      kill "${started_pid}" >/dev/null 2>&1 || true
+    fi
+    rm -f "${CODEXLIZ_PROXY_PID_FILE}"
+    if [ "${port_is_explicit}" -eq 1 ]; then
+      break
+    fi
+    selected_port="$(select_free_proxy_port)"
+    write_proxy_port_file "${selected_port}"
+  done
+
+  echo "codexliz proxy failed to start on ${CODEXLIZ_PROXY_HOST}:${selected_port}" >&2
+  echo "Inspect ${CODEXLIZ_PROXY_LOG_FILE} for details." >&2
+  exit 1
+}
+
+PRIMARY_COMMAND="$(detect_primary_command "$@")"
+
+export CODEX_PREFER_EA_MCP="${CODEX_PREFER_EA_MCP:-0}"
+export CODEX_WRAPPER_DISABLE_BOOTSTRAP="${CODEX_WRAPPER_DISABLE_BOOTSTRAP:-1}"
+load_cf_access_env
+
+if is_providerless_command "${PRIMARY_COMMAND}" || has_explicit_provider_override "$@"; then
+  exec "${BASE_CODEX_SHIM}" "$@"
+fi
+
+REMOTE_UPSTREAM_BASE_URL="$(normalize_remote_upstream_base_url "${CODEXLIZ_BASE_URL}")"
+CODEXLIZ_PROXY_PORT="$(resolve_proxy_port)"
+LOCAL_PROVIDER_BASE_URL="$(build_local_provider_base_url "${CODEXLIZ_PROXY_PORT}")"
+REMOTE_MODELS_URL="$(build_preflight_url "${REMOTE_UPSTREAM_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+LOCAL_MODELS_URL="$(build_preflight_url "${LOCAL_PROVIDER_BASE_URL}" "${CODEXLIZ_PREFLIGHT_MODELS_PATH}")"
+
+run_models_preflight "${REMOTE_MODELS_URL}" "remote /v1/models" "${CODEXLIZ_MODEL}"
+
+start_proxy_if_needed "${REMOTE_UPSTREAM_BASE_URL}"
+run_models_preflight "${LOCAL_MODELS_URL}" "local proxy /v1/models" "${CODEXLIZ_MODEL}"
+
+declare -a provider_args=(
+  -c "model_provider=\"${CODEXLIZ_PROVIDER_KEY}\""
+  -c "model_providers.${CODEXLIZ_PROVIDER_KEY}.name=\"${CODEXLIZ_PROVIDER_NAME}\""
+  -c "model_providers.${CODEXLIZ_PROVIDER_KEY}.base_url=\"${LOCAL_PROVIDER_BASE_URL}\""
+  -c "model_providers.${CODEXLIZ_PROVIDER_KEY}.wire_api=\"responses\""
+)
+
+if [ -n "${CODEXLIZ_API_KEY_ENV_VAR}" ] && [ -n "${!CODEXLIZ_API_KEY_ENV_VAR:-}" ]; then
+  provider_args+=(
+    -c "model_providers.${CODEXLIZ_PROVIDER_KEY}.bearer_token_env_var=\"${CODEXLIZ_API_KEY_ENV_VAR}\""
+  )
+fi
+
+if [ -n "${CODEXLIZ_MODEL}" ] && ! has_explicit_model_override "$@"; then
+  provider_args+=(-c "model=\"${CODEXLIZ_MODEL}\"")
+fi
+
+exec "${BASE_CODEX_SHIM}" "${provider_args[@]}" "$@"

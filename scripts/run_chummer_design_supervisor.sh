@@ -579,6 +579,8 @@ build_loop_args() {
   fi
   if [[ -n "$shard_worker_lane" ]]; then
     dest+=(--worker-lane "$shard_worker_lane")
+  elif ! worker_bin_uses_codexea "$effective_worker_bin"; then
+    dest+=(--worker-lane "")
   fi
   if [[ -n "$shard_worker_model" ]]; then
     dest+=(--worker-model "$shard_worker_model")

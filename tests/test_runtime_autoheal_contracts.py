@@ -19,6 +19,12 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_PATH: /var/lib/codex-fleet/controller-heartbeat.json", compose)
         self.assertIn('FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS: "45"', compose)
 
+    def test_auditor_healthcheck_uses_dedicated_script_and_run_budget(self) -> None:
+        compose = DOCKER_COMPOSE.read_text(encoding="utf-8")
+        self.assertIn("python /opt/codex-fleet/scripts/healthcheck_auditor.py", compose)
+        self.assertIn('FLEET_AUDITOR_RUN_MAX_AGE_SECONDS: "900"', compose)
+        self.assertIn('FLEET_AUDITOR_STARTUP_GRACE_SECONDS: "180"', compose)
+
     def test_design_supervisor_healthcheck_uses_dedicated_script(self) -> None:
         compose = DOCKER_COMPOSE.read_text(encoding="utf-8")
         self.assertIn("python /opt/codex-fleet/scripts/healthcheck_design_supervisor.py", compose)
@@ -42,12 +48,22 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn('compose_project_name="${FLEET_COMPOSE_PROJECT_NAME:-fleet}"', script)
         self.assertIn('docker compose -p "$compose_project_name" -f "$compose_file"', script)
         self.assertIn('autoheal_enabled="$(printf', script)
-        self.assertIn('autoheal_services="${FLEET_AUTOHEAL_SERVICES:-fleet-controller fleet-dashboard}"', script)
+        self.assertIn(
+            'autoheal_services="${FLEET_AUTOHEAL_SERVICES:-fleet-controller fleet-dashboard fleet-auditor fleet-design-supervisor}"',
+            script,
+        )
         self.assertIn('loop_once="$(printf', script)
         self.assertIn('autoheal_escalate_after_restarts="${FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS:-3}"', script)
         self.assertIn('autoheal_event_log="$autoheal_state_dir/events.jsonl"', script)
         self.assertIn('compose_cmd restart "$service"', script)
         self.assertIn("monitor_autoheal", script)
+
+    def test_dashboard_waits_for_healthy_upstreams_and_probes_root(self) -> None:
+        compose = DOCKER_COMPOSE.read_text(encoding="utf-8")
+        self.assertIn("fleet-controller:\n        condition: service_healthy", compose)
+        self.assertIn("fleet-auditor:\n        condition: service_healthy", compose)
+        self.assertIn("http://127.0.0.1:8090/health", compose)
+        self.assertIn("http://127.0.0.1:8090/", compose)
 
     def test_ooda_launcher_keeps_root_state_following_current_alias(self) -> None:
         script = RUN_OODA_LOOP.read_text(encoding="utf-8")
@@ -61,18 +77,35 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         env_example = RUNTIME_ENV_EXAMPLE.read_text(encoding="utf-8")
         readme = README.read_text(encoding="utf-8")
         self.assertIn("FLEET_AUTOHEAL_ENABLED=true", env_example)
-        self.assertIn("FLEET_AUTOHEAL_SERVICES=", env_example)
+        self.assertIn(
+            'FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard fleet-auditor fleet-design-supervisor"',
+            env_example,
+        )
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", env_example)
+        self.assertIn("FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900", env_example)
+        self.assertIn("FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180", env_example)
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", env_example)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", env_example)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800", env_example)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_ACCOUNT_OWNER_IDS=", env_example)
         self.assertIn("CHUMMER_DESIGN_SUPERVISOR_FOCUS_OWNER=", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-13", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=900", env_example)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=900", env_example)
         self.assertIn("bounded auto-heal", readme)
         self.assertIn("FLEET_AUTOHEAL_ENABLED=true", readme)
+        self.assertIn(
+            'FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard fleet-auditor fleet-design-supervisor"',
+            readme,
+        )
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", readme)
+        self.assertIn("FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900", readme)
+        self.assertIn("FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180", readme)
         self.assertIn("FLEET_COMPOSE_PROJECT_NAME=fleet", readme)
         self.assertIn("FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-13", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=900", readme)
+        self.assertIn("CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=900", readme)
         self.assertIn("For EA / OneMinAI lanes, the supervisor now routes each shard dynamically", readme)
 
 

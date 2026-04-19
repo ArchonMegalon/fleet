@@ -103,6 +103,7 @@ bash scripts/run_chummer_design_supervisor.sh
 
 Fleet compose now includes `fleet-design-supervisor`, so a normal `docker compose up -d` boot owns restart-on-reboot for the loop instead of relying on a tmux shell.
 Restart-safe supervisor policy is centralized in `config/projects/fleet.yaml` under `supervisor_contract.restart_safe_runtime`, `supervisor_contract.resource_policy`, and the package queue: shard count, state root, resource budgets, queue posture, account routing, and worker defaults all hydrate from that contract on cold start. Environment variables remain local overrides for deliberate operator steering.
+The dedicated supervisor healthcheck can also watchdog one named shard. The current runtime defaults target `shard-13`, allow a 15-minute warmup window, and then mark the service unhealthy if that shard stays output-silent for more than 15 minutes while an active run is still in flight.
 
 The helper also exposes steering and account rotation inputs from env:
 
@@ -188,6 +189,8 @@ Important operational rule:
 - if multiple aliases share the same ChatGPT `auth.json`, treat them as one effective human account lane
 - with one real ChatGPT-authenticated account, the safe fleet-wide parallelism is `1`
 - raise the global parallel cap only when you actually add another distinct account or API-key pool
+- for `codexliz`, each parallel lane must keep its own lane-local `CODEX_HOME` and `CODEXLIZ_STATE_DIR`; do not point two active lanes at the same writable auth/cache tree by default
+- if you intentionally pin `CODEXLIZ_PROXY_PORT`, pin a different port per lane; otherwise the shim now auto-assigns and persists a lane-local proxy port under `${CODEXLIZ_STATE_DIR}/proxy.port`
 
 Project routing now supports:
 - preferred / burst / reserve account lanes
@@ -200,6 +203,27 @@ Project routing now supports:
 Participant burst lanes can now be sponsored by Hub user/group sessions instead of existing only as operator-local state. Fleet persists the Hub-side sponsor metadata on each dynamic participant lane, keeps the cheap groundwork loop as the default path, and emits signed contribution receipts back to Hub after lane activation, premium slice claim, landed slices, and lane stop/revoke.
 The controlled participant-first canary path currently lives on bounded product repos such as `core` and `hub`; the public status contract now publishes that canary posture explicitly. The Fleet self-project remains operator-only by default and keeps ChatGPT as emergency fallback rather than the normal execution lane.
 
+## Parallel codexliz policy
+
+Use separate token/env state for each concurrent `codexliz` lane.
+
+The full operator policy lives in [docs/codexliz_parallel_lane_policy.md](docs/codexliz_parallel_lane_policy.md).
+
+- one real ChatGPT auth source or API key pool equals one effective writable lane unless you deliberately provision another isolated token set
+- keep `CODEX_HOME`, `HOME`, and `CODEXLIZ_STATE_DIR` lane-local; Fleet's worker homes already do this for supervisor/direct lanes
+- do not reuse the same writable `auth.json` or `.cache/codexliz` tree across two active lanes by default
+- leave `CODEXLIZ_PROXY_PORT` unset unless you need a fixed firewall exception; the shim now writes a lane-local chosen port to `${CODEXLIZ_STATE_DIR}/proxy.port`
+- if you create manual operator lanes outside the supervisor, export a distinct `CODEX_HOME` before launching each shell so `auth.json`, proxy pid/logs, and proxy port files stay isolated per lane
+
+Example manual launch pattern:
+
+```bash
+export CODEX_HOME=/docker/fleet/state/manual-codexliz/lane-a
+export HOME="$CODEX_HOME"
+unset CODEXLIZ_PROXY_PORT
+codexliz --model qwen2.5-coder:32b
+```
+
 ## Codex refresh policy
 
 Fleet coding slices do not use the host `codex` install. `codex exec` runs inside the
@@ -211,7 +235,7 @@ It rebuilds `fleet-controller`, `fleet-studio`, and `fleet-dashboard` by default
 the new CLI becomes live, rotates a `CODEX_NPM_REFRESH_TOKEN` build arg so the Codex npm layer is
 not stuck behind Docker's build cache, and canary-rolls the first configured service before widening
 the refresh across the remaining bridge services. The same sidecar now also runs a bounded auto-heal
-loop for repeated unhealthy controller/dashboard states so runtime health drift is corrected by the
+loop for repeated unhealthy controller/dashboard/auditor/design-supervisor states so runtime health drift is corrected by the
 control plane instead of staying a purely manual operator chore.
 
 Configure the schedule in `runtime.env`:
@@ -225,11 +249,16 @@ FLEET_REBUILD_CANARY_ENABLED=true
 FLEET_REBUILD_CANARY_SERVICES="fleet-controller"
 FLEET_REBUILD_CANARY_TIMEOUT_SECONDS=180
 FLEET_AUTOHEAL_ENABLED=true
-FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard"
+FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard fleet-auditor fleet-design-supervisor"
 FLEET_AUTOHEAL_THRESHOLD=2
 FLEET_AUTOHEAL_COOLDOWN_SECONDS=300
 FLEET_AUTOHEAL_TIMEOUT_SECONDS=120
 FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45
+FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900
+FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_SHARD=shard-13
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_MAX_SILENT_SECONDS=900
+CHUMMER_DESIGN_SUPERVISOR_WATCHDOG_STARTUP_GRACE_SECONDS=900
 FLEET_COMPOSE_PROJECT_NAME=fleet
 FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS=3
 FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS=1800

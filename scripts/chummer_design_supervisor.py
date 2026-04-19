@@ -7610,6 +7610,10 @@ def _repair_missing_structured_closeout_receipt(
     return payload, True
 
 
+def _dict_copy_if_mapping(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
 def _heal_state_push_blockers(state_root: Path) -> None:
     state_path = _state_payload_path(state_root)
     history_path = _history_payload_path(state_root)
@@ -7617,7 +7621,7 @@ def _heal_state_push_blockers(state_root: Path) -> None:
     history = _read_history(history_path, limit=0)
     changed = False
     repaired_run_id = ""
-    last_run = dict(state.get("last_run") or {})
+    last_run = _dict_copy_if_mapping(state.get("last_run"))
     repaired_last_run, repaired = _repair_missing_structured_closeout_receipt(last_run, history)
     if not repaired:
         repaired_last_run, repaired = _repair_recorded_missing_github_push_blocker(last_run)
@@ -7751,8 +7755,8 @@ def _write_runtime_handoff(state_root: Path) -> None:
     try:
         resolved_state_root = Path(state_root).resolve()
         state = _read_state(_state_payload_path(resolved_state_root))
-        active_run = dict(state.get("active_run") or {})
-        last_run = dict(state.get("last_run") or {})
+        active_run = _dict_copy_if_mapping(state.get("active_run"))
+        last_run = _dict_copy_if_mapping(state.get("last_run"))
         focus_profiles = [str(item).strip() for item in (state.get("focus_profiles") or []) if str(item).strip()]
         focus_owners = [str(item).strip() for item in (state.get("focus_owners") or []) if str(item).strip()]
         focus_texts = [str(item).strip() for item in (state.get("focus_texts") or []) if str(item).strip()]
@@ -9120,8 +9124,8 @@ def _write_active_shard_manifest_snapshot(aggregate_root: Path) -> None:
 
 
 def _has_current_flagship_pass_proof(state: Dict[str, Any]) -> bool:
-    completion_audit = dict(state.get("completion_audit") or {})
-    full_product_audit = dict(state.get("full_product_audit") or {})
+    completion_audit = _dict_copy_if_mapping(state.get("completion_audit"))
+    full_product_audit = _dict_copy_if_mapping(state.get("full_product_audit"))
     if not completion_audit or not full_product_audit:
         return False
     if str(completion_audit.get("status") or "").strip().lower() != "pass":
@@ -9142,7 +9146,7 @@ def _has_current_flagship_pass_proof(state: Dict[str, Any]) -> bool:
 
 
 def _state_frontier_ids(state: Dict[str, Any]) -> List[Any]:
-    active_run = dict(state.get("active_run") or {})
+    active_run = _dict_copy_if_mapping(state.get("active_run"))
     active_frontier_ids = list(active_run.get("frontier_ids") or [])
     if active_frontier_ids:
         return active_frontier_ids
@@ -9150,7 +9154,7 @@ def _state_frontier_ids(state: Dict[str, Any]) -> List[Any]:
 
 
 def _state_open_milestone_ids(state: Dict[str, Any]) -> List[Any]:
-    active_run = dict(state.get("active_run") or {})
+    active_run = _dict_copy_if_mapping(state.get("active_run"))
     active_open_milestone_ids = list(active_run.get("open_milestone_ids") or [])
     if active_open_milestone_ids:
         return active_open_milestone_ids
@@ -13717,7 +13721,7 @@ def launch_worker(
     stderr_path = run_dir / "worker.stderr.log"
     last_message_path = run_dir / "last_message.txt"
     worker_lane_candidates = _worker_lane_candidates(args)
-    account_candidates = _load_worker_accounts(args)
+    account_candidates = _load_worker_accounts(args) if _worker_bin_uses_codexea(str(args.worker_bin or "")) else []
     account_runtime_path = _account_runtime_path(state_root)
     account_runtime = _read_account_runtime(account_runtime_path)
     workspace_root = Path(args.workspace_root).resolve()
@@ -14618,6 +14622,7 @@ def launch_worker(
                     and not fatal_worker_contract_violation
                     and not suppress_remaining_account_fallbacks
                     and not routed_account_required
+                    and _worker_bin_uses_codexea(str(args.worker_bin or ""))
                     and _should_attempt_account_direct_fallback(
                         completed,
                         stderr_text=(completed.stderr if completed is not None else ""),
@@ -15154,7 +15159,7 @@ def _render_status(state: Dict[str, Any]) -> str:
     idle_reason = str(state.get("idle_reason") or "").strip()
     if idle_reason:
         lines.append(f"idle_reason: {idle_reason}")
-    successor_wave_eta = dict(state.get("successor_wave_eta") or {})
+    successor_wave_eta = _dict_copy_if_mapping(state.get("successor_wave_eta"))
     if successor_wave_eta:
         lines.extend(
             [
@@ -15175,7 +15180,7 @@ def _render_status(state: Dict[str, Any]) -> str:
     full_product_frontier_mirror_path = str(state.get("full_product_frontier_mirror_path") or "").strip()
     if full_product_frontier_mirror_path:
         lines.append(f"full_product_frontier.mirror_path: {full_product_frontier_mirror_path}")
-    eta = _normalize_eta_scope_fields(dict(state.get("eta") or {}))
+    eta = _normalize_eta_scope_fields(_dict_copy_if_mapping(state.get("eta")))
     if isinstance(eta, dict) and eta:
         lines.extend(
             [
@@ -15632,13 +15637,13 @@ def _worker_status_task_local_payload(args: argparse.Namespace, blocked_reason: 
         "polling disabled inside active worker run; continue the assigned slice using the prompt, "
         "shard runtime handoff, and frontier artifacts instead of querying supervisor status again"
     )
-    state_eta = _normalize_eta_scope_fields(dict(state.get("eta") or {}))
+    state_eta = _normalize_eta_scope_fields(_dict_copy_if_mapping(state.get("eta")))
     aggregate_state: Dict[str, Any] = {}
     aggregate_eta: Dict[str, Any] = {}
     aggregate_root = _aggregate_state_root(state_root)
     if aggregate_root != state_root:
         aggregate_state = _read_state(_state_payload_path(aggregate_root))
-        aggregate_eta = _normalize_eta_scope_fields(dict(aggregate_state.get("eta") or {}))
+        aggregate_eta = _normalize_eta_scope_fields(_dict_copy_if_mapping(aggregate_state.get("eta")))
     frontier_ids = sorted({_coerce_int(value, 0) for value in _state_frontier_ids(state) if _coerce_int(value, 0) > 0})
     open_milestone_ids = sorted(
         {_coerce_int(value, 0) for value in _state_open_milestone_ids(state) if _coerce_int(value, 0) > 0}
