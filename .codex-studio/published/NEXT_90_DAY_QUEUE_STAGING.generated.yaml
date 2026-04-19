@@ -883,7 +883,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit 98f8b88 pins the M101 fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 1cf64e1 pins M101 current fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 49dd07a tightens the M101 route-truth row-shape guard so future shards reject non-object desktop route-truth rows instead of repeating the current completed-package guard.
-      - /docker/chummercomplete/chummer-hub-registry commit fc57464 tightens the M101 release projection identity guard so future shards reject generated release-channel versus compatibility-shelf drift on generatedAt, publishedAt, or version metadata instead of repeating the current completed-package guard.
+      - /docker/chummercomplete/chummer-hub-registry commit acb881d tightens the M101 projection alias proof guard so future shards reject release-channel versus compatibility-shelf alias drift on generatedAt/generated_at and keep the documented six-tuple successor matrix aligned with the completed-package guard.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
