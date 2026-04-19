@@ -129,7 +129,7 @@ def test_launcher_cold_restart_policy_is_reproducible_from_project_contract() ->
     assert lines["worker_bin"] == "/docker/fleet/scripts/codex-shims/codexea"
     assert lines["worker_lane"] == "core"
     assert lines["worker_model"] == "ea-coder-hard-batch"
-    assert lines["fallback_lanes"] == "core_rescue"
+    assert lines["fallback_lanes"] == "core_rescue,codexliz"
     assert "fleet,chummer6-design,chummer6-ui" in lines["shard_owner_groups"]
 
 

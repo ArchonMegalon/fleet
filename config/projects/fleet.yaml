@@ -3,7 +3,7 @@ lifecycle: live
 dispatch_priority: 260
 path: /docker/fleet
 design_doc: /docker/fleet/README.md
-verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json && python3 scripts/materialize_proof_orchestration.py --project-config config/projects/fleet.yaml --out .codex-studio/published/PROOF_ORCHESTRATION.generated.json && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py scripts/materialize_proof_orchestration.py && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_materialize_proof_orchestration.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_capacity_plane.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
+verify_cmd: python3 scripts/check_consistency.py && python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet && python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json && python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json && python3 scripts/verify_status_plane_semantics.py --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --status-json state/status-plane.verify.json && python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json && python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json && python3 scripts/materialize_campaign_os_continuity_monitor.py --out .codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json && python3 scripts/materialize_proof_orchestration.py --project-config config/projects/fleet.yaml --out .codex-studio/published/PROOF_ORCHESTRATION.generated.json && python3 -m py_compile controller/app.py admin/app.py studio/app.py auditor/app.py quartermaster/app.py scripts/fleet_codex_nonstop.py admin/studio_views.py scripts/materialize_support_case_packets.py scripts/materialize_fleet_queue_overlay.py scripts/materialize_package_compile_overlay.py scripts/materialize_journey_gates.py scripts/materialize_public_progress_report.py scripts/materialize_flagship_product_readiness.py scripts/materialize_campaign_os_continuity_monitor.py scripts/materialize_proof_orchestration.py && python3 -m pytest -q tests/test_studio_publish_contract.py tests/test_materialize_support_case_packets.py tests/test_materialize_fleet_queue_overlay.py tests/test_published_queue_overlay.py tests/test_published_work_package_contracts.py tests/test_materialize_compile_manifest.py::test_published_compile_manifest_matches_generated_payload tests/test_materialize_package_compile_overlay.py tests/test_materialize_proof_orchestration.py tests/test_materialize_campaign_os_continuity_monitor.py tests/test_public_progress_report.py tests/test_design_mirror_product_contracts.py tests/test_admin_studio.py tests/test_operator_surface.py tests/test_queue_reconciliation.py tests/test_capacity_plane.py tests/test_codexliz_shim.py tests/test_quartermaster_service.py tests/test_quartermaster_ooda_e2e.py tests/test_work_package_collision_regressions.py tests/test_materialize_status_plane.py tests/test_materialize_public_progress_report.py tests/test_readiness_taxonomy.py tests/test_controller_routing.py tests/test_runtime_autoheal_contracts.py tests/test_rebuild_loop_autoheal_e2e.py
 feedback_dir: feedback
 state_file: .agent-state.json
 enabled: true
@@ -544,6 +544,29 @@ supervisor_contract:
     outputs:
     - path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
       freshness_window_minutes: 90
+      required: true
+      acceptable_statuses:
+      - pass
+      - passed
+      - ready
+  - id: campaign_os_continuity_liveness
+    title: Materialize campaign OS 4-month continuity-liveness monitor
+    kind: governance_monitor
+    command: python3 scripts/materialize_campaign_os_continuity_monitor.py --out .codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json
+    freshness_window_minutes: 1440
+    retry:
+      max_attempts: 2
+      delay_seconds: 10
+      retry_on:
+      - transient_io
+    dependencies:
+    - public_progress
+    - support_packets
+    - journey_gates
+    - flagship_product_readiness
+    outputs:
+    - path: /docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json
+      freshness_window_minutes: 1440
       required: true
       acceptable_statuses:
       - pass

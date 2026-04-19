@@ -223,6 +223,9 @@ services:
       APP_PORT: 8093
       FLEET_CONFIG_PATH: /app/config/fleet.yaml
       FLEET_DB_PATH: /var/lib/codex-fleet/fleet.db
+      FLEET_AUDITOR_HEALTH_URL: http://127.0.0.1:8093/health
+      FLEET_AUDITOR_RUN_MAX_AGE_SECONDS: "900"
+      FLEET_AUDITOR_STARTUP_GRACE_SECONDS: "180"
       FLEET_STUDIO_SOURCE_PATH: /app/studio-src/app.py
       TZ: UTC
     volumes:
@@ -234,11 +237,11 @@ services:
     networks:
       - fleet_net
     healthcheck:
-      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:8093/health', timeout=5)\nPY"]
+      test: ["CMD-SHELL", "python /opt/codex-fleet/scripts/healthcheck_auditor.py"]
       interval: 30s
-      timeout: 5s
+      timeout: 15s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
   fleet-quartermaster:
     build:
@@ -277,11 +280,16 @@ services:
     container_name: fleet-dashboard
     restart: unless-stopped
     depends_on:
-      - fleet-controller
-      - fleet-studio
-      - fleet-admin
-      - fleet-auditor
-      - fleet-quartermaster
+      fleet-controller:
+        condition: service_healthy
+      fleet-studio:
+        condition: service_healthy
+      fleet-admin:
+        condition: service_healthy
+      fleet-auditor:
+        condition: service_healthy
+      fleet-quartermaster:
+        condition: service_healthy
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./gateway/static:/usr/share/nginx/html:ro
@@ -290,11 +298,11 @@ services:
     networks:
       - fleet_net
     healthcheck:
-      test: ["CMD-SHELL", "wget -T 10 -q -O - http://127.0.0.1:8090/health >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "wget -T 10 -q -O - http://127.0.0.1:8090/health >/dev/null 2>&1 && wget -T 10 -q -O - http://127.0.0.1:8090/ >/dev/null 2>&1"]
       interval: 30s
       timeout: 15s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 20s
 
   fleet-rebuilder:
     image: docker:28-cli

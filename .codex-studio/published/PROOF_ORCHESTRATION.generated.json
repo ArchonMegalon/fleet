@@ -1,0 +1,410 @@
+{
+  "contract_name": "fleet.proof_orchestration",
+  "generated_at": "2026-04-18T17:56:21Z",
+  "jobs": [
+    {
+      "command": "python3 scripts/materialize_fleet_queue_overlay.py --repo-root /docker/fleet --project-id fleet",
+      "dependencies": [],
+      "freshness_window_minutes": 90,
+      "id": "queue_overlay",
+      "kind": "materializer",
+      "order": 1,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 4966,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-15T07:10:06Z",
+          "path": "/docker/fleet/.codex-studio/published/QUEUE.generated.yaml",
+          "payload_status": "",
+          "required": true,
+          "state": "stale",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "stale",
+      "title": "Publish live queue overlay"
+    },
+    {
+      "command": "python3 scripts/materialize_package_compile_overlay.py --repo-root /docker/fleet --project-id fleet",
+      "dependencies": [
+        "queue_overlay"
+      ],
+      "freshness_window_minutes": 90,
+      "id": "package_compile_overlay",
+      "kind": "materializer",
+      "order": 2,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 4966,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-15T07:09:53Z",
+          "path": "/docker/fleet/.codex-studio/published/WORKPACKAGES.generated.yaml",
+          "payload_status": "",
+          "required": true,
+          "state": "stale",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "stale",
+      "title": "Publish package compile overlay"
+    },
+    {
+      "command": "python3 scripts/materialize_support_case_packets.py --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "dependencies": [],
+      "freshness_window_minutes": 90,
+      "id": "support_packets",
+      "kind": "materializer",
+      "order": 3,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 2,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-18T17:53:50Z",
+          "path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+          "payload_status": "",
+          "required": true,
+          "state": "fresh",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 15,
+        "max_attempts": 3,
+        "retry_on": [
+          "transient_http",
+          "transient_io"
+        ]
+      },
+      "state": "ready",
+      "title": "Materialize support and external proof packets"
+    },
+    {
+      "command": "python3 scripts/materialize_public_progress_report.py --out .codex-studio/published/PROGRESS_REPORT.generated.json --history-out .codex-studio/published/PROGRESS_HISTORY.generated.json",
+      "dependencies": [
+        "support_packets"
+      ],
+      "freshness_window_minutes": 90,
+      "id": "public_progress",
+      "kind": "materializer",
+      "order": 4,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 2814,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-16T19:01:44Z",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_REPORT.generated.json",
+          "payload_status": "",
+          "required": true,
+          "state": "stale",
+          "status_ok": true
+        },
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 2814,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-16T19:01:43Z",
+          "path": "/docker/fleet/.codex-studio/published/PROGRESS_HISTORY.generated.json",
+          "payload_status": "",
+          "required": true,
+          "state": "stale",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "stale",
+      "title": "Materialize public progress and history"
+    },
+    {
+      "command": "python3 scripts/materialize_status_plane.py --status-json-out state/status-plane.verify.json",
+      "dependencies": [
+        "package_compile_overlay",
+        "public_progress",
+        "support_packets"
+      ],
+      "freshness_window_minutes": 90,
+      "id": "status_plane",
+      "kind": "materializer",
+      "order": 5,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 31,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-18T17:24:27Z",
+          "path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
+          "payload_status": "",
+          "required": true,
+          "state": "fresh",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "ready",
+      "title": "Materialize fleet status plane"
+    },
+    {
+      "command": "python3 scripts/materialize_journey_gates.py --out .codex-studio/published/JOURNEY_GATES.generated.json --status-plane .codex-studio/published/STATUS_PLANE.generated.yaml --progress-report .codex-studio/published/PROGRESS_REPORT.generated.json --progress-history .codex-studio/published/PROGRESS_HISTORY.generated.json --support-packets .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
+      "dependencies": [
+        "status_plane",
+        "public_progress",
+        "support_packets"
+      ],
+      "freshness_window_minutes": 90,
+      "id": "journey_gates",
+      "kind": "gate",
+      "order": 6,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 2,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-18T17:53:51Z",
+          "path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
+          "payload_status": "",
+          "required": true,
+          "state": "fresh",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "ready",
+      "title": "Materialize golden journey gates"
+    },
+    {
+      "command": "python3 scripts/materialize_flagship_product_readiness.py --out .codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out state/chummer_design_supervisor/artifacts/FLAGSHIP_PRODUCT_READINESS.generated.json",
+      "dependencies": [
+        "journey_gates"
+      ],
+      "freshness_window_minutes": 90,
+      "id": "flagship_product_readiness",
+      "kind": "gate",
+      "order": 7,
+      "output_states": [
+        {
+          "acceptable_statuses": [
+            "pass",
+            "passed",
+            "ready"
+          ],
+          "age_minutes": 2,
+          "exists": true,
+          "freshness_window_minutes": 90,
+          "generated_at": "2026-04-18T17:53:51Z",
+          "path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
+          "payload_status": "fail",
+          "required": true,
+          "state": "failed_status",
+          "status_ok": false
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "ready",
+      "title": "Materialize flagship product readiness"
+    },
+    {
+      "command": "python3 scripts/materialize_campaign_os_continuity_monitor.py --out .codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
+      "dependencies": [
+        "public_progress",
+        "support_packets",
+        "journey_gates",
+        "flagship_product_readiness"
+      ],
+      "freshness_window_minutes": 1440,
+      "id": "campaign_os_continuity_liveness",
+      "kind": "governance_monitor",
+      "order": 8,
+      "output_states": [
+        {
+          "acceptable_statuses": [
+            "pass",
+            "passed",
+            "ready"
+          ],
+          "age_minutes": 0,
+          "exists": true,
+          "freshness_window_minutes": 1440,
+          "generated_at": "2026-04-18T17:55:48Z",
+          "path": "/docker/fleet/.codex-studio/published/CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
+          "payload_status": "fail",
+          "required": true,
+          "state": "failed_status",
+          "status_ok": false
+        }
+      ],
+      "retry": {
+        "delay_seconds": 10,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "ready",
+      "title": "Materialize campaign OS 4-month continuity-liveness monitor"
+    },
+    {
+      "command": "python3 scripts/materialize_external_proof_runbook.py --out .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md --external-proof-commands-dir .codex-studio/published/external-proof-commands",
+      "dependencies": [
+        "journey_gates",
+        "flagship_product_readiness"
+      ],
+      "freshness_window_minutes": 1440,
+      "id": "external_proof_runbook",
+      "kind": "parity_proof",
+      "order": 9,
+      "output_states": [
+        {
+          "acceptable_statuses": [],
+          "age_minutes": 2,
+          "exists": true,
+          "freshness_window_minutes": 1440,
+          "generated_at": "2026-04-18T17:53:51Z",
+          "path": "/docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md",
+          "payload_status": "",
+          "required": true,
+          "state": "fresh",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 15,
+        "max_attempts": 2,
+        "retry_on": [
+          "transient_io"
+        ]
+      },
+      "state": "ready",
+      "title": "Materialize external proof runbook"
+    },
+    {
+      "command": "",
+      "dependencies": [
+        "flagship_product_readiness"
+      ],
+      "freshness_window_minutes": 1440,
+      "id": "ui_linux_desktop_exit_gate",
+      "kind": "external_gate",
+      "order": 10,
+      "output_states": [
+        {
+          "acceptable_statuses": [
+            "pass",
+            "passed",
+            "ready"
+          ],
+          "age_minutes": 31,
+          "exists": true,
+          "freshness_window_minutes": 1440,
+          "generated_at": "2026-04-18T17:24:47Z",
+          "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/UI_LINUX_DESKTOP_EXIT_GATE.generated.json",
+          "payload_status": "passed",
+          "required": true,
+          "state": "fresh",
+          "status_ok": true
+        }
+      ],
+      "retry": {
+        "delay_seconds": 0,
+        "max_attempts": 1,
+        "retry_on": []
+      },
+      "state": "ready",
+      "title": "Verify Linux desktop exit gate freshness"
+    },
+    {
+      "command": "",
+      "dependencies": [
+        "flagship_product_readiness"
+      ],
+      "freshness_window_minutes": 1440,
+      "id": "ui_desktop_executable_exit_gate",
+      "kind": "external_gate",
+      "order": 11,
+      "output_states": [
+        {
+          "acceptable_statuses": [
+            "pass",
+            "passed",
+            "ready"
+          ],
+          "age_minutes": 26,
+          "exists": true,
+          "freshness_window_minutes": 1440,
+          "generated_at": "2026-04-18T17:30:01.461736Z",
+          "path": "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json",
+          "payload_status": "fail",
+          "required": true,
+          "state": "failed_status",
+          "status_ok": false
+        }
+      ],
+      "retry": {
+        "delay_seconds": 0,
+        "max_attempts": 1,
+        "retry_on": []
+      },
+      "state": "ready",
+      "title": "Verify promoted desktop executable exit gate freshness"
+    }
+  ],
+  "schema_version": 1,
+  "source": "/docker/fleet/config/projects/fleet.yaml",
+  "status": "fail",
+  "summary": {
+    "failed_status_output_count": 3,
+    "job_count": 11,
+    "missing_output_count": 0,
+    "required_output_count": 12,
+    "stale_output_count": 4,
+    "unknown_freshness_output_count": 0,
+    "unknown_status_output_count": 0
+  }
+}
