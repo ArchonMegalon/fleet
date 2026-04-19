@@ -22,6 +22,9 @@ The local queue mirror at `/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUE
 
 Future shards must verify the completed package instead of reopening native-host proof capture and ingest from worker-local telemetry, helper commands, or copied queue rows.
 
+The canonical completed-package frontier for this Fleet proof lane remains pinned in the queue and registry evidence above.
+Worker-assignment frontier ids from active successor runs are scheduler-local context only and must never replace the canonical package frontier in closure proof.
+
 ## Proof Lane Contract
 
 The closed package proof depends on these Fleet-owned artifacts:

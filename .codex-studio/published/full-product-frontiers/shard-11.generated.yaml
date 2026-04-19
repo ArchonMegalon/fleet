@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-19T01:05:30Z'
+generated_at: '2026-04-19T11:29:06Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -63,14 +63,15 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: 'active repo-local backlog remains outside the closed design registry: fleet'
+  status: pass
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
-  status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  status: pass
+  reason: flagship product readiness proof is current across desktop, rules, hub,
+    mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-19T01:05:29Z'
-  proof_status: fail
+  generated_at: '2026-04-19T11:29:05Z'
+  proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
@@ -79,21 +80,31 @@ frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: tracked
-  eta_human: tracked
+  status: blocked
+  eta_human: tracked after unblock
   eta_confidence: low
-  basis: aggregate_shard_parallel_scope
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 384 open milestones remain (0 in progress, 384 not started). Aggregate
-    shard status is parallelized across 1 active shards under Full Chummer5A parity
-    and flagship proof closeout.
+  basis: aggregate_shard_parallel_scope+external_blocker
+  scope_kind: next_90_day_successor_wave
+  scope_label: Next 90-day product advance wave
+  scope_warning: This successor-wave ETA is tracked separately from the current flagship
+    closeout frontier. It assumes spare-shard execution continues without stealing
+    active closeout shards.
+  blocking_reason: "shard-11: `dotnet test /docker/chummercomplete/chummer-presentation-clean/Chummer.Tests/Chummer.Tests.csproj\
+    \ --filter \"DesktopSupportDiagnosticsTextTests|AccessibilitySignoffSmokeTests\"\
+    \ --no-restore` fails before running the targeted tests because `/docker/chummercomplete/chummer-presentation-clean/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs(82,29)`\
+    \ references missing type `VeteranCertificationReviewStep` (`CS0246`), which is\
+    \ outside this package\u2019s edited scope."
+  summary: "13 open milestones remain (13 in progress, 0 not started). Aggregate shard\
+    \ status is parallelized across 12 active shards under Next 90-day product advance\
+    \ wave. Current external blocker: shard-11: `dotnet test /docker/chummercomplete/chummer-presentation-clean/Chummer.Tests/Chummer.Tests.csproj\
+    \ --filter \"DesktopSupportDiagnosticsTextTests|AccessibilitySignoffSmokeTests\"\
+    \ --no-restore` fails before running the targeted tests because `/docker/chummercomplete/chummer-presentation-clean/Chummer.Tests/Presentation/AvaloniaFlagshipUiGateTests.cs(82,29)`\
+    \ references missing type `VeteranCertificationReviewStep` (`CS0246`), which is\
+    \ outside this package\u2019s edited scope."
   predicted_completion_at: ''
-  range_low_hours: 6.52
-  range_high_hours: 16.82
-  remaining_open_milestones: 384
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 384
-  remaining_effort_units: 1.45
+  range_low_hours: 134.19
+  range_high_hours: 332.43
+  remaining_open_milestones: 13
+  remaining_in_progress_milestones: 13
+  remaining_not_started_milestones: 0
+  remaining_effort_units: null

@@ -330,7 +330,6 @@ def _closed_fixture(tmp_path: Path):
         text=True,
     )
     assert materialize.returncode == 0, materialize.stderr
-    _touch_lane_bundle(commands_dir)
     runbook_generated_at = _load_module()._extract_runbook_field(runbook.read_text(encoding="utf-8"), "generated_at")
     _write_json(
         readiness,
@@ -345,7 +344,30 @@ def _closed_fixture(tmp_path: Path):
     _write_yaml(registry, _registry_payload(module))
     _write_yaml(design_queue, _design_queue_payload(module, registry_path=registry))
     _write_yaml(queue, _queue_payload(module, registry_path=registry, design_queue_path=design_queue))
-    closeout.write_text("# closeout\n", encoding="utf-8")
+    closeout.write_text(
+        "\n".join(
+            [
+                "# Next90 M101 Fleet External Proof Lane Closeout",
+                "",
+                f"Package: `{module.PACKAGE_ID}`",
+                f"Milestone: `{module.MILESTONE_ID}`",
+                f"Frontier: `{module.FRONTIER_ID}`",
+                "Status: complete",
+                "",
+                "Future shards must verify the completed package instead of reopening native-host proof capture and ingest from worker-local telemetry, helper commands, or copied queue rows.",
+                "The canonical completed-package frontier for this Fleet proof lane remains pinned in the queue and registry evidence above.",
+                "Worker-assignment frontier ids from active successor runs are scheduler-local context only and must never replace the canonical package frontier in closure proof.",
+                "",
+                "- support-packet external-proof backlog stays zero",
+                "- journey gates keep external-only blockers at zero",
+                "- flagship readiness keeps `external_host_proof.status=pass`",
+                "- the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
+                "- the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     return {
         "module": module,
@@ -445,6 +467,90 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("external proof command artifact is missing", result.stderr)
             self.assertIn("run-macos-proof-lane.sh", result.stderr)
+
+    def test_verifier_fails_when_zero_backlog_runbook_drops_retained_host_lanes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            runbook_payload = fixture["runbook"].read_text(encoding="utf-8")
+            fixture["runbook"].write_text(
+                runbook_payload.replace("## Retained Host Lanes\n\n", "", 1).replace("### Host: linux\n\n", "", 1),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("retained host lanes section", result.stderr)
+
+    def test_verifier_fails_when_closeout_note_drops_canonical_frontier_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            closeout_payload = fixture["closeout"].read_text(encoding="utf-8")
+            fixture["closeout"].write_text(
+                closeout_payload.replace(
+                    "Worker-assignment frontier ids from active successor runs are scheduler-local context only and must never replace the canonical package frontier in closure proof.\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("closeout note missing marker", result.stderr)
 
     def test_verifier_fails_when_design_queue_assignment_drifts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

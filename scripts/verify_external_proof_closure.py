@@ -217,6 +217,17 @@ def _extract_runbook_field(markdown: str, key: str) -> str:
     return ""
 
 
+def _runbook_contains_resume_lane(markdown: str, *, host: str) -> bool:
+    host_token = _normalized_token(host).lower()
+    return (
+        f"### Resume Host Lane: {host_token}" in markdown
+        and f"./preflight-{host_token}-proof.sh" in markdown
+        and f"./capture-{host_token}-proof.sh" in markdown
+        and f"./validate-{host_token}-proof.sh" in markdown
+        and f"./bundle-{host_token}-proof.sh" in markdown
+    )
+
+
 def _command_bundle_fingerprint(commands_dir: Path) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
     aggregate = hashlib.sha256()
@@ -1970,6 +1981,22 @@ def main() -> int:
                     + runbook_command_bundle_file_count
                 )
                 parsed_runbook_command_bundle_file_count = -1
+        if not has_open_backlog_signal:
+            if "## Resume Commands" not in runbook_body:
+                failures.append("external proof runbook is missing zero-backlog resume commands section")
+            for host in sorted(ALLOWED_REQUIRED_HOSTS):
+                if not _runbook_contains_resume_lane(runbook_body, host=host):
+                    failures.append(
+                        "external proof runbook is missing zero-backlog resume lane commands for host: "
+                        + host
+                    )
+            if "## After Host Proof Capture" not in runbook_body:
+                failures.append("external proof runbook is missing zero-backlog finalize section")
+            if "finalize-external-host-proof.sh" not in runbook_body:
+                failures.append(
+                    "external proof runbook is missing zero-backlog finalize script reference: "
+                    "finalize-external-host-proof.sh"
+                )
     if external_proof_commands_dir is not None:
         if not external_proof_commands_dir.is_dir():
             failures.append(
@@ -2962,6 +2989,16 @@ def main() -> int:
                                         + wrapped_host_lane_command
                                     )
                         if bundle_script_loaded:
+                            if "BUNDLE_ARCHIVE=\"$SCRIPT_DIR/" not in bundle_script_payload:
+                                failures.append(
+                                    "external proof bundle script is missing bundle archive variable token "
+                                    f"for host {host}: BUNDLE_ARCHIVE=\"$SCRIPT_DIR/"
+                                )
+                            if "rm -f \"$BUNDLE_ARCHIVE\"" not in bundle_script_payload:
+                                failures.append(
+                                    "external proof bundle script is missing stale bundle archive cleanup token "
+                                    f"for host {host}: rm -f \"$BUNDLE_ARCHIVE\""
+                                )
                             if f"host-proof-bundles/{host_token}" not in bundle_script_payload:
                                 failures.append(
                                     "external proof bundle script is missing host bundle-root token "

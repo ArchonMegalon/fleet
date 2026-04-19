@@ -1,17 +1,17 @@
 contract_name: executive_assistant.veteran_compare_packs
 schema_version: 1
-generated_at: 2026-04-19T07:01:16Z
+generated_at: 2026-04-19T11:29:41Z
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
     - veteran_compare_packs
 sync_context:
-  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-3/runs/20260419T070036Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/runs/20260419T112432Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Next 90-day product advance wave
-    slice_summary: "20 next-wave milestones remain across 41 queue slices (20 in progress, 0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 -> 105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120."
+    slice_summary: "20 next-wave milestones remain across 42 queue slices (20 in progress, 0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 -> 105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120."
     status_query_supported: false
     polling_disabled: true
     package_id: next90-m103-ea-parity-lab
@@ -26,11 +26,11 @@ sync_context:
       - feedback
       - docs
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: 2026-04-19T07:01:16Z
+  readiness_generated_at: 2026-04-19T11:29:41Z
   desktop_executable_exit_gate_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
   desktop_executable_exit_gate_generated_at: 2026-04-18T18:19:11.035798Z
-  runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-3/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: 2026-04-19T07:25:41Z
+  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: 2026-04-19T11:30:58Z
 required_landmarks:
   - File menu
   - Tools menu
@@ -290,9 +290,9 @@ task_local_frontier_context:
     - whole_project_frontier
     - next_90_day_successor_wave
   focus_owners:
-    - chummer6-hub
-    - chummer6-hub-registry
-    - fleet
+    - chummer6-ui
+    - chummer6-core
+    - chummer6-design
     - executive-assistant
   focus_texts:
     - top flagship grade
@@ -305,17 +305,17 @@ task_local_frontier_context:
     - localization
     - restore confidence
     - fit and finish
-    - install
-    - update
-    - recovery
-    - claim
-    - release truth
+    - sourcebook
+    - settings
+    - custom-data
+    - xml
+    - translator
     - next90-m103-ea-parity-lab
     - Extract Chummer5a oracle baselines and veteran workflow packs
   frontier_briefs:
     - "4287684466 [W7] Extract Chummer5a oracle baselines and veteran workflow packs (status: complete; owners: executive-assistant; deps: 101, 102; exit: Capture screenshot baselines, first-minute veteran tasks, and compare artifacts from the Chummer5a oracle repo.; Own and prove the surface slice(s): parity_lab:capture, veteran_compare_packs; Keep implementation scoped to the allowed paths: skills, tests, feedback, docs; Refresh flagship proof and close out the queue slice honestly when this package is landed for `executive-assistant` (next90-m103-ea-parity-lab).; Advance successor milestone 103: Chummer5a parity lab and veteran migration certification.)"
   notes:
-    - Task-local telemetry is the current shard-3 successor-wave assignment context for package next90-m103-ea-parity-lab, not a release-readiness completion certificate.
+    - Task-local telemetry is the current shard-4 successor-wave assignment context for package next90-m103-ea-parity-lab, not a release-readiness completion certificate.
     - The worker-run guard for this retry is implementation-only; historical operator status snippets and supervisor helper outputs are not package evidence.
     - The task-local telemetry does not carry per-lane release-readiness status, so the live whole-product coverage block below stays sourced from the latest published readiness receipt.
     - The current published flagship readiness receipt is green across every flagship coverage lane, so this pack preserves successor-wave assignment context separately from live release truth.

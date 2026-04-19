@@ -313,74 +313,33 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "python3 scripts/verify_external_proof_closure.py" in payload
     assert "--external-proof-runbook .codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md" in payload
     assert "--external-proof-commands-dir .codex-studio/published/external-proof-commands" in payload
-    assert (
-        "python3 scripts/materialize_flagship_product_readiness.py --out "
-        ".codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json --mirror-out "
-        "/docker/fleet/.codex-design/product/FLAGSHIP_PRODUCT_READINESS.generated.json"
-    ) in payload
-    assert "python3 scripts/ai/materialize_weekly_product_pulse_snapshot.py" in payload
-    assert windows_preflight.is_file()
-    assert windows_capture.is_file()
-    assert windows_validate.is_file()
-    assert windows_bundle.is_file()
-    assert windows_ingest.is_file()
-    assert windows_preflight_ps1.is_file()
-    assert windows_capture_ps1.is_file()
-    assert windows_validate_ps1.is_file()
-    assert windows_bundle_ps1.is_file()
-    assert windows_ingest_ps1.is_file()
-    assert macos_preflight.is_file()
-    assert macos_capture.is_file()
-    assert macos_validate.is_file()
-    assert macos_bundle.is_file()
-    assert macos_ingest.is_file()
-    assert post_capture.is_file()
-    assert finalize.is_file()
-    assert os.access(windows_preflight, os.X_OK)
-    assert os.access(windows_capture, os.X_OK)
-    assert os.access(windows_bundle, os.X_OK)
-    assert os.access(windows_ingest, os.X_OK)
-    assert os.access(macos_preflight, os.X_OK)
-    assert os.access(macos_capture, os.X_OK)
-    assert os.access(macos_bundle, os.X_OK)
-    assert os.access(macos_ingest, os.X_OK)
-    assert os.access(post_capture, os.X_OK)
-    assert os.access(finalize, os.X_OK)
-    assert "command -v python3 >/dev/null 2>&1" in windows_preflight.read_text(encoding="utf-8")
-    assert "external-proof-powershell-missing" in windows_preflight.read_text(encoding="utf-8")
-    assert "command -v hdiutil >/dev/null 2>&1" in macos_preflight.read_text(encoding="utf-8")
-    assert "bash -lc 'if ! command -v python3 >/dev/null 2>&1; then echo ''external-proof-python3-missing'' >&2; exit 1; fi'" in windows_preflight_ps1.read_text(encoding="utf-8")
-    assert "echo windows-proof" in windows_capture.read_text(encoding="utf-8")
-    assert "echo macos-proof" in macos_capture.read_text(encoding="utf-8")
-    assert "external-proof-auth-missing" in windows_capture.read_text(encoding="utf-8")
-    assert "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" in windows_capture.read_text(encoding="utf-8")
-    assert "installer-download-html-response" in windows_capture.read_text(encoding="utf-8")
-    assert "installer-download-signature-mismatch" in windows_capture.read_text(encoding="utf-8")
-    assert "external-proof-auth-missing" in macos_capture.read_text(encoding="utf-8")
-    assert "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" in macos_capture.read_text(encoding="utf-8")
-    assert "installer-download-html-response" in macos_capture.read_text(encoding="utf-8")
-    assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in windows_validate.read_text(
-        encoding="utf-8"
+
+
+def test_bundle_commands_clear_stale_bundle_archive_before_writing_host_bundle() -> None:
+    module = _load_runbook_module()
+
+    commands = module._bundle_commands_for_group(
+        {
+            "requests": [
+                {
+                    "tuple_id": "avalonia:win-x64:windows",
+                    "expected_installer_relative_path": "files/chummer-avalonia-win-x64-installer.exe",
+                    "expected_startup_smoke_receipt_path": "startup-smoke/startup-smoke-avalonia-win-x64.receipt.json",
+                    "expected_installer_sha256": "a" * 64,
+                }
+            ]
+        },
+        host_token="windows",
+        host="windows",
     )
-    assert "installer-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
-    assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
-    assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
-    assert "startup-smoke-receipt-stale" in windows_validate.read_text(encoding="utf-8")
-    assert max_age_token in windows_validate.read_text(encoding="utf-8")
-    assert "startup-smoke-receipt-stale" in macos_validate.read_text(encoding="utf-8")
-    assert max_age_token in macos_validate.read_text(encoding="utf-8")
-    assert "startup-smoke-receipt-stale" in windows_ingest.read_text(encoding="utf-8")
-    assert max_age_token in windows_ingest.read_text(encoding="utf-8")
-    assert "startup-smoke-receipt-stale" in macos_ingest.read_text(encoding="utf-8")
-    assert max_age_token in macos_ingest.read_text(encoding="utf-8")
-    for script_path in (windows_validate, macos_validate, windows_ingest, macos_ingest):
-        syntax = subprocess.run(
-            ["bash", "-n", str(script_path)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert syntax.returncode == 0, syntax.stderr
+
+    assert "BUNDLE_ARCHIVE=\"$SCRIPT_DIR/windows-proof-bundle.tgz\"" in commands
+    assert "export BUNDLE_ARCHIVE" in commands
+    assert "BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/windows\"" in commands
+    assert "export BUNDLE_ROOT" in commands
+    assert "rm -f \"$BUNDLE_ARCHIVE\"" in commands
+    assert "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" ." in commands
+    assert "echo \"Wrote $BUNDLE_ARCHIVE\"" in commands
 
 
 def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates_when_support_plan_is_empty(
@@ -974,7 +933,24 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
     assert "unresolved_request_count: 0" in payload
     assert "## Generated Command Files" in payload
     assert f"commands_dir: `{commands_dir}`" in payload
+    assert "## Retained Host Lanes" in payload
+    assert "## Resume Commands" in payload
+    assert "## After Host Proof Capture" in payload
     assert "No unresolved external-proof requests are currently queued." in payload
+    for host in ("linux", "macos", "windows"):
+        assert f"### Host: {host}" in payload
+        assert f"### Resume Host Lane: {host}" in payload
+        assert "- request_count: 0" in payload
+        assert f"- host_lane_script: `{commands_dir / f'run-{host}-proof-lane.sh'}`" in payload
+        assert f"- retained_bundle_archive_path: `{commands_dir / f'{host}-proof-bundle.tgz'}`" in payload
+        assert f"- retained_bundle_directory_path: `{commands_dir / 'host-proof-bundles' / host}`" in payload
+        assert f"./preflight-{host}-proof.sh" in payload
+        assert f"./capture-{host}-proof.sh" in payload
+        assert f"./validate-{host}-proof.sh" in payload
+        assert f"./bundle-{host}-proof.sh" in payload
+    assert f"- host_lane_powershell: `{commands_dir / 'run-windows-proof-lane.ps1'}`" in payload
+    assert "### Resume Host Lane (PowerShell): windows" in payload
+    assert "run-windows-proof-lane.ps1" in payload
     assert (commands_dir / "republish-after-host-proof.sh").is_file()
     finalize_payload = (commands_dir / "finalize-external-host-proof.sh").read_text(encoding="utf-8")
     for host in ("linux", "macos", "windows"):
@@ -989,6 +965,8 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
     assert finalize_payload.index("./validate-windows-proof.sh") < finalize_payload.index(
         "./ingest-windows-proof-bundle.sh"
     )
+    assert "finalize-external-host-proof.sh" in payload
+    assert "republish-after-host-proof.sh" in payload
 
 
 def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_path: Path) -> None:

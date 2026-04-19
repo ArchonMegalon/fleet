@@ -1195,9 +1195,12 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     commands = [
         "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
         f"BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
+        f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
         "export BUNDLE_ROOT",
+        "export BUNDLE_ARCHIVE",
         "rm -rf \"$BUNDLE_ROOT\"",
         "mkdir -p \"$BUNDLE_ROOT\"",
+        "rm -f \"$BUNDLE_ARCHIVE\"",
         "python3 -c "
         + shlex.quote(
             "import json, os, pathlib; "
@@ -1218,8 +1221,8 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
         commands.append(f"cp -f {shlex.quote(str(src))} \"{dst}\"")
     commands.extend(
         [
-            f"tar -czf \"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\" -C \"$BUNDLE_ROOT\" .",
-            f"echo \"Wrote $SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
+            "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" .",
+            "echo \"Wrote $BUNDLE_ARCHIVE\"",
         ]
     )
     return commands
@@ -1785,16 +1788,20 @@ def _write_file(path: Path, content: str, *, executable: bool) -> None:
 def _materialize_command_files(
     plan: dict[str, Any], *, commands_dir: Path, journey_gates_path: Path | None = None, release_channel_path: Path | None = None
 ) -> dict[str, Any]:
-    hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
+    requested_hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
+    hosts = requested_hosts or sorted(ALLOWED_REQUIRED_HOSTS)
     host_groups = plan.get("host_groups") or {}
     host_files: list[dict[str, str]] = []
     commands_dir.mkdir(parents=True, exist_ok=True)
+    host_bundles_root = commands_dir / "host-proof-bundles"
+    host_bundles_root.mkdir(parents=True, exist_ok=True)
 
     for host in hosts:
         group = host_groups.get(host)
         if not isinstance(group, dict):
-            continue
+            group = {"request_count": 0, "tuples": [], "requests": []}
         host_token = _normalize_host_token(host)
+        (host_bundles_root / host_token).mkdir(parents=True, exist_ok=True)
         preflight_commands = _preflight_commands_for_group(group, host=host)
         capture_commands = _commands_for_group(group)
         validation_commands = _validation_commands_for_group(group)
@@ -1976,8 +1983,15 @@ def materialize_markdown(
     hosts = [str(item) for item in (plan.get("hosts") or []) if str(item)]
     host_groups = plan.get("host_groups") or {}
     rendered_commands_dir = Path(".")
+    command_host_rows: dict[str, dict[str, Any]] = {}
     if isinstance(command_files, dict) and _normalize_text(command_files.get("commands_dir")):
         rendered_commands_dir = Path(_normalize_text(command_files.get("commands_dir")))
+        for host_row in command_files.get("hosts") or []:
+            if not isinstance(host_row, dict):
+                continue
+            host = _normalize_text(host_row.get("host")).lower()
+            if host and host not in command_host_rows:
+                command_host_rows[host] = dict(host_row)
 
     lines.append("# External Proof Runbook")
     lines.append("")
@@ -2067,6 +2081,89 @@ def materialize_markdown(
         lines.append("")
 
     if request_count <= 0 or not host_groups:
+        retained_hosts = sorted(command_host_rows.keys()) or sorted(ALLOWED_REQUIRED_HOSTS)
+        lines.append("## Retained Host Lanes")
+        lines.append("")
+        lines.append(
+            "These command bundles stay materialized even with zero backlog so native-host proof capture can resume without rebuilding the lane."
+        )
+        lines.append("")
+        for host in retained_hosts:
+            host_token = _normalize_host_token(host)
+            host_row = command_host_rows.get(host, {})
+            bundle_archive_path = rendered_commands_dir / f"{host_token}-proof-bundle.tgz"
+            bundle_directory_path = rendered_commands_dir / "host-proof-bundles" / host_token
+            lines.append(f"### Host: {host}")
+            lines.append("")
+            lines.append(f"- shell_hint: {_shell_hint_for_host(host)}")
+            if _normalize_text(host).lower() == "macos":
+                lines.append("- platform_hint: macOS proofs require `hdiutil` on the proof host.")
+            if _normalize_text(host).lower() == "windows":
+                lines.append("- platform_hint: Windows proofs require `powershell.exe` or `pwsh` on the proof host.")
+            lines.append("- request_count: 0")
+            lines.append("- tuples: (none)")
+            host_lane_script = _normalize_text(host_row.get("host_lane_script"))
+            if host_lane_script:
+                lines.append(f"- host_lane_script: `{host_lane_script}`")
+            host_lane_powershell = _normalize_text(host_row.get("host_lane_powershell"))
+            if host_lane_powershell:
+                lines.append(f"- host_lane_powershell: `{host_lane_powershell}`")
+            lines.append(f"- retained_bundle_archive_path: `{bundle_archive_path}`")
+            lines.append(f"- retained_bundle_archive_present: `{str(bundle_archive_path.exists()).lower()}`")
+            lines.append(f"- retained_bundle_directory_path: `{bundle_directory_path}`")
+            lines.append(f"- retained_bundle_directory_present: `{str(bundle_directory_path.is_dir()).lower()}`")
+            lines.append("")
+        lines.append("## Resume Commands")
+        lines.append("")
+        lines.append(
+            "Use these exact retained entrypoints to reopen native-host capture without rebuilding the command bundle."
+        )
+        lines.append("")
+        for host in retained_hosts:
+            lines.append(f"### Resume Host Lane: {host}")
+            lines.append("")
+            host_lane_commands = _host_proof_lane_commands(
+                host=host,
+                commands_dir=rendered_commands_dir,
+            )
+            if not host_lane_commands:
+                lines.append("No host lane commands were generated for this host.")
+            else:
+                lines.append("```bash")
+                for command in host_lane_commands:
+                    lines.append(command)
+                lines.append("```")
+            if _normalize_text(host).lower() == "windows":
+                lines.append("")
+                lines.append("### Resume Host Lane (PowerShell): windows")
+                lines.append("")
+                host_lane_wrappers = _powershell_wrappers(host_lane_commands)
+                if not host_lane_wrappers:
+                    lines.append("No PowerShell host lane wrappers were generated for this host.")
+                else:
+                    lines.append("```powershell")
+                    for command in host_lane_wrappers:
+                        lines.append(command)
+                    lines.append("```")
+            lines.append("")
+        lines.append("## After Host Proof Capture")
+        lines.append("")
+        lines.append(
+            "Run these retained commands after a host lane succeeds to validate receipts, ingest bundles, and republish release truth."
+        )
+        lines.append("")
+        if isinstance(command_files, dict):
+            finalize_script = _normalize_text(command_files.get("finalize_script"))
+            if finalize_script:
+                lines.append("```bash")
+                lines.append(finalize_script)
+                lines.append("```")
+                lines.append("")
+        lines.append("```bash")
+        for command in _post_capture_republish_commands():
+            lines.append(command)
+        lines.append("```")
+        lines.append("")
         lines.append("No unresolved external-proof requests are currently queued.")
         lines.append("")
         return "\n".join(lines)

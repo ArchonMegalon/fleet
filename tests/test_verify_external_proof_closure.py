@@ -64,6 +64,42 @@ def test_normalized_script_commands_preserve_quoted_python_shell_commands() -> N
     }
 
 
+def test_closure_verifier_rejects_bundle_script_without_stale_archive_cleanup(tmp_path: Path) -> None:
+    support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
+        tmp_path
+    )
+    bundle_script = commands_dir / "bundle-windows-proof.sh"
+    bundle_payload = bundle_script.read_text(encoding="utf-8")
+    bundle_payload = bundle_payload.replace("rm -f \"$BUNDLE_ARCHIVE\"\n", "")
+    bundle_script.write_text(bundle_payload, encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_env_without_pythonpath(),
+    )
+
+    assert result.returncode != 0
+    assert "external proof bundle script is missing stale bundle archive cleanup token" in (
+        result.stderr or result.stdout
+    )
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -7176,6 +7212,127 @@ def test_verify_external_proof_closure_fails_when_finalize_script_is_missing_req
     assert result.returncode == 1
     assert "external proof finalize script is missing required host token" in result.stderr
     assert "./validate-windows-proof.sh" in result.stderr
+
+
+def test_verify_external_proof_closure_fails_when_zero_backlog_runbook_omits_resume_commands(
+    tmp_path: Path,
+) -> None:
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    now = datetime.now(timezone.utc)
+    release_ts = _iso_z(now - timedelta(minutes=2))
+    support_ts = _iso_z(now - timedelta(minutes=1))
+
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_ts,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_specs": {},
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "tuple_counts": {},
+                "hosts": [],
+                "tuples": [],
+                "specs": {},
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_ts,
+                "release_channel_generated_at": release_ts,
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(now + timedelta(hours=24)),
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "summary": {
+                "overall_state": "ready",
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_host_counts": {},
+                "blocked_external_only_tuples": [],
+            },
+            "journeys": [],
+        },
+    )
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_ts,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+
+    materialize_result = subprocess.run(
+        [
+            sys.executable,
+            str(MATERIALIZE_EXTERNAL_PROOF_RUNBOOK_SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(runbook),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_env_without_pythonpath(),
+    )
+    assert materialize_result.returncode == 0, materialize_result.stderr
+
+    runbook.write_text(
+        runbook.read_text(encoding="utf-8").replace("## Resume Commands", "## Resume Steps"),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--external-proof-runbook",
+            str(runbook),
+            "--external-proof-commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_env_without_pythonpath(),
+    )
+
+    assert result.returncode == 1
+    assert "external proof runbook is missing zero-backlog resume commands section" in (
+        result.stderr or result.stdout
+    )
 
 
 def test_verify_external_proof_closure_fails_when_ingest_script_omits_expected_file_existence_check(

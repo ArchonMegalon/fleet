@@ -130,6 +130,20 @@ REQUIRED_QUEUE_PROOF_MARKERS = [
     "design-owned queue source row matches the Fleet completed queue proof assignment",
     "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason",
 ]
+REQUIRED_CLOSEOUT_NOTE_MARKERS = [
+    f"Package: `{PACKAGE_ID}`",
+    f"Frontier: `{FRONTIER_ID}`",
+    "Future shards must verify the completed package instead of reopening native-host proof capture and ingest",
+    "worker-local telemetry",
+    "helper commands",
+    "The canonical completed-package frontier for this Fleet proof lane remains pinned in the queue and registry evidence above.",
+    "Worker-assignment frontier ids from active successor runs are scheduler-local context only and must never replace the canonical package frontier in closure proof.",
+    "support-packet external-proof backlog stays zero",
+    "journey gates keep external-only blockers at zero",
+    "flagship readiness keeps `external_host_proof.status=pass`",
+    "the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
+    "the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
+]
 REQUIRED_ANCHOR_PATHS = [
     ROOT / "scripts" / "materialize_external_proof_runbook.py",
     ROOT / "scripts" / "verify_external_proof_closure.py",
@@ -383,7 +397,7 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
     queue = _load_yaml(queue_staging_path, issues, label="queue staging")
     design_queue = _load_yaml(design_queue_staging_path, issues, label="design queue staging")
     runbook_body = _load_text(runbook_path, issues, label="external proof runbook")
-    _load_text(closeout_note_path, issues, label="closeout note")
+    closeout_note_body = _load_text(closeout_note_path, issues, label="closeout note")
 
     issues.extend(
         _run_external_proof_closure(
@@ -532,6 +546,41 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         "No unresolved external-proof requests are currently queued." in runbook_body,
         issues,
         "external proof runbook is missing the zero-backlog note",
+    )
+    _require(
+        "## Retained Host Lanes" in runbook_body,
+        issues,
+        "external proof runbook is missing the retained host lanes section",
+    )
+    _require(
+        runbook_body.count("- request_count: 0") >= 3,
+        issues,
+        "external proof runbook is missing retained zero-backlog request counts",
+    )
+    for host in ("linux", "macos", "windows"):
+        host_lane_script = commands_dir_path / f"run-{host}-proof-lane.sh"
+        retained_bundle_archive_path = commands_dir_path / f"{host}-proof-bundle.tgz"
+        retained_bundle_directory_path = commands_dir_path / "host-proof-bundles" / host
+        _require(f"### Host: {host}" in runbook_body, issues, f"external proof runbook is missing retained host lane for {host}")
+        _require(
+            f"- host_lane_script: `{host_lane_script}`" in runbook_body,
+            issues,
+            f"external proof runbook is missing retained host lane script for {host}",
+        )
+        _require(
+            f"- retained_bundle_archive_path: `{retained_bundle_archive_path}`" in runbook_body,
+            issues,
+            f"external proof runbook retained bundle archive path drifted for {host}",
+        )
+        _require(
+            f"- retained_bundle_directory_path: `{retained_bundle_directory_path}`" in runbook_body,
+            issues,
+            f"external proof runbook retained bundle directory path drifted for {host}",
+        )
+    _require(
+        f"- host_lane_powershell: `{commands_dir_path / 'run-windows-proof-lane.ps1'}`" in runbook_body,
+        issues,
+        "external proof runbook is missing retained Windows PowerShell lane script",
     )
 
     _require(
@@ -797,6 +846,10 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         issues.append(f"queue proof cites active-run telemetry/helper proof: {entry}")
     for entry in _disallowed_entries(design_proof):
         issues.append(f"design queue proof cites active-run telemetry/helper proof: {entry}")
+    for marker in _missing_markers([closeout_note_body], REQUIRED_CLOSEOUT_NOTE_MARKERS):
+        issues.append(f"closeout note missing marker: {marker}")
+    for entry in _disallowed_entries([closeout_note_body]):
+        issues.append(f"closeout note cites active-run telemetry/helper proof: {entry}")
 
     if work_task:
         _require(_normalize_text(work_task.get("owner")) == "fleet", issues, "registry work task owner is not fleet")
