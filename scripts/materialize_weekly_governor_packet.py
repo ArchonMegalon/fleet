@@ -1652,6 +1652,87 @@ def _followthrough_group_rows(followthrough: Dict[str, Any], name: str) -> List[
     return [dict(row) for row in rows if isinstance(row, dict)]
 
 
+def _row_ready_for_group(row: Dict[str, Any], group_name: str) -> bool:
+    if group_name == "feedback":
+        return bool(row.get("feedback_loop_ready"))
+    if group_name == "fix_available":
+        return bool(row.get("fix_available_ready")) and not bool(row.get("please_test_ready"))
+    if group_name == "please_test":
+        return bool(row.get("please_test_ready"))
+    if group_name == "recovery":
+        return bool(row.get("recovery_loop_ready"))
+    return False
+
+
+def _recomputed_followthrough_row_truth(row: Dict[str, Any]) -> Dict[str, bool]:
+    install_truth_ready = bool(
+        str(row.get("installation_id") or "").strip()
+        and bool(row.get("install_receipt_ready"))
+        and str(row.get("install_truth_state") or "").strip().lower() == "promoted_tuple_match"
+    )
+    release_receipt_ready = bool(
+        str(row.get("release_receipt_state") or "").strip().lower() == "release_receipt_ready"
+        and str(row.get("release_receipt_id") or "").strip()
+        and str(row.get("release_receipt_source") or "").strip() == "release_channel"
+        and str(row.get("release_receipt_channel") or "").strip()
+        and str(row.get("release_receipt_version") or "").strip()
+    )
+    installed_build_receipt_ready = bool(
+        install_truth_ready
+        and release_receipt_ready
+        and bool(row.get("installed_build_receipted"))
+        and str(row.get("installed_build_receipt_id") or "").strip()
+        and str(row.get("installed_build_receipt_installation_id") or "").strip()
+        and str(row.get("installed_build_receipt_version") or "").strip()
+        and str(row.get("installed_build_receipt_channel") or "").strip()
+        and str(row.get("installed_build_receipt_source") or "").strip() == "install_receipts"
+        and str(row.get("installed_build_receipt_installation_source") or "").strip() == "install_receipts"
+        and str(row.get("installed_build_receipt_version_source") or "").strip() == "install_receipts"
+        and str(row.get("installed_build_receipt_channel_source") or "").strip() == "install_receipts"
+        and bool(row.get("installed_build_receipt_installation_matches"))
+        and bool(row.get("installed_build_receipt_version_matches"))
+        and bool(row.get("installed_build_receipt_channel_matches"))
+        and bool(row.get("installed_build_receipt_identity_matches"))
+    )
+    has_fix_truth = bool(
+        str(row.get("fixed_version") or "").strip()
+        or str(row.get("fixed_channel") or "").strip()
+        or bool(row.get("fixed_version_receipted"))
+        or bool(row.get("fixed_channel_receipted"))
+    )
+    fix_receipts_ready = bool(
+        not has_fix_truth
+        or (
+            str(row.get("fixed_version") or "").strip()
+            and str(row.get("fixed_channel") or "").strip()
+            and bool(row.get("fixed_version_receipted"))
+            and bool(row.get("fixed_channel_receipted"))
+            and str(row.get("fixed_version_receipt_id") or "").strip()
+            and str(row.get("fixed_channel_receipt_id") or "").strip()
+            and str(row.get("fixed_receipt_installation_id") or "").strip()
+            and str(row.get("fixed_version_receipt_source") or "").strip() == "fix_receipts"
+            and str(row.get("fixed_channel_receipt_source") or "").strip() == "fix_receipts"
+            and str(row.get("fixed_receipt_installation_source") or "").strip() == "fix_receipts"
+            and bool(row.get("fixed_receipt_installation_matches"))
+        )
+    )
+    feedback_loop_ready = bool(
+        install_truth_ready and release_receipt_ready and installed_build_receipt_ready and fix_receipts_ready
+    )
+    fix_available_ready = bool(has_fix_truth and feedback_loop_ready)
+    please_test_ready = bool(fix_available_ready and bool(row.get("current_install_on_fixed_build")))
+    recovery_loop_ready = bool(
+        fix_available_ready and str((row.get("recovery_path") or {}).get("action_id") or "").strip().lower()
+        in {"open_downloads", "open_support_timeline", "open_account_access"}
+    )
+    return {
+        "feedback_loop_ready": feedback_loop_ready,
+        "fix_available_ready": fix_available_ready,
+        "please_test_ready": please_test_ready,
+        "recovery_loop_ready": recovery_loop_ready,
+    }
+
+
 def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str, int]:
     ready_group_names = ("feedback", "fix_available", "please_test", "recovery")
     blocked_group_names = (
@@ -1663,10 +1744,14 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
         name: _followthrough_group_rows(followthrough, name)
         for name in (*ready_group_names, *blocked_group_names)
     }
+    action_group_rows_present = any(action_groups[name] for name in (*ready_group_names, *blocked_group_names))
     ready_group_rows_present = any(action_groups[name] for name in ready_group_names)
+    blocked_group_rows_present = any(action_groups[name] for name in blocked_group_names)
     rows_by_key: Dict[str, Dict[str, Any]] = {}
     ready_keys: set[str] = set()
+    membership_ready_keys: set[str] = set()
     ready_group_counts = {name: 0 for name in ready_group_names}
+    membership_group_counts = {name: 0 for name in ready_group_names}
     for group_name, rows in action_groups.items():
         for index, row in enumerate(rows):
             packet_id = str(row.get("packet_id") or "").strip()
@@ -1674,14 +1759,40 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
             merged_row = dict(rows_by_key.get(row_key) or {})
             merged_row.update(row)
             rows_by_key[row_key] = merged_row
-            receipt_ready = bool(row.get("installed_build_receipted")) and bool(
-                row.get("installed_build_receipt_installation_matches")
-            )
-            if group_name in ready_group_names and receipt_ready:
+            if group_name in ready_group_names:
+                membership_ready_keys.add(row_key)
+                membership_group_counts[group_name] += 1
+            row_truth = _recomputed_followthrough_row_truth(merged_row)
+            if group_name in ready_group_names and _row_ready_for_group(row_truth, group_name):
                 ready_keys.add(row_key)
                 ready_group_counts[group_name] += 1
 
     merged_rows = list(rows_by_key.values())
+    detailed_ready_truth_present = any(
+        any(
+            key in row
+            for key in (
+                "installation_id",
+                "install_receipt_ready",
+                "install_truth_state",
+                "release_receipt_state",
+                "release_receipt_id",
+                "release_receipt_source",
+                "release_receipt_channel",
+                "release_receipt_version",
+                "fixed_version",
+                "fixed_channel",
+                "fixed_version_receipted",
+                "fixed_channel_receipted",
+                "fixed_version_receipt_id",
+                "fixed_channel_receipt_id",
+                "fixed_receipt_installation_id",
+                "current_install_on_fixed_build",
+                "recovery_path",
+            )
+        )
+        for row in merged_rows
+    )
     installed_build_receipted_present = any(
         "installed_build_receipted" in row for row in merged_rows
     )
@@ -1699,6 +1810,11 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
         ),
         "blocked_receipt_mismatch_count": len(action_groups["blocked_receipt_mismatch"]),
         "hold_until_fix_receipt_count": len(action_groups["hold_until_fix_receipt"]),
+        "membership_ready_count": len(membership_ready_keys),
+        "membership_feedback_ready_count": membership_group_counts["feedback"],
+        "membership_fix_available_ready_count": membership_group_counts["fix_available"],
+        "membership_please_test_ready_count": membership_group_counts["please_test"],
+        "membership_recovery_loop_ready_count": membership_group_counts["recovery"],
         "installed_build_receipted_count": (
             sum(1 for row in merged_rows if bool(row.get("installed_build_receipted")))
             if installed_build_receipted_present
@@ -1713,10 +1829,13 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
             if installation_bound_present
             else -1
         ),
+        "action_group_rows_present": int(action_group_rows_present),
         "ready_group_rows_present": int(ready_group_rows_present),
+        "blocked_group_rows_present": int(blocked_group_rows_present),
         "ready_group_receipt_fields_present": int(
             installed_build_receipted_present or installation_bound_present
         ),
+        "detailed_ready_truth_present": int(detailed_ready_truth_present),
     }
 
 
@@ -1726,103 +1845,125 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     receipt_gates = dict(support_packets.get("followthrough_receipt_gates") or {})
     gate_counts = dict(receipt_gates.get("gate_counts") or {})
     recomputed_counts = _recomputed_followthrough_counts(followthrough)
+    action_groups_present = isinstance(followthrough.get("action_groups"), dict)
     ready_group_rows_present = bool(recomputed_counts.get("ready_group_rows_present"))
-    ready_group_receipt_fields_present = bool(
-        recomputed_counts.get("ready_group_receipt_fields_present")
-    )
-    use_recomputed_ready_counts = (
-        ready_group_rows_present and ready_group_receipt_fields_present
-    )
+    use_recomputed_ready_counts = action_groups_present
+    use_recomputed_blocked_counts = action_groups_present
+    if ready_group_rows_present:
+        fallback_ready_count = max(
+            recomputed_counts["membership_ready_count"],
+            _coerce_int(receipt_gates.get("ready_count"), 0),
+        )
+        fallback_feedback_ready_count = max(
+            recomputed_counts["membership_feedback_ready_count"],
+            _coerce_int(receipt_gates.get("feedback_ready_count"), 0),
+        )
+        fallback_fix_available_ready_count = max(
+            recomputed_counts["membership_fix_available_ready_count"],
+            _coerce_int(receipt_gates.get("fix_available_ready_count"), 0),
+        )
+        fallback_please_test_ready_count = max(
+            recomputed_counts["membership_please_test_ready_count"],
+            _coerce_int(receipt_gates.get("please_test_ready_count"), 0),
+        )
+        fallback_recovery_ready_count = max(
+            recomputed_counts["membership_recovery_loop_ready_count"],
+            _coerce_int(receipt_gates.get("recovery_loop_ready_count"), 0),
+        )
+    else:
+        fallback_ready_count = _coerce_int(receipt_gates.get("ready_count"), 0)
+        fallback_feedback_ready_count = _coerce_int(
+            receipt_gates.get("feedback_ready_count"), 0
+        )
+        fallback_fix_available_ready_count = _coerce_int(
+            receipt_gates.get("fix_available_ready_count"), 0
+        )
+        fallback_please_test_ready_count = _coerce_int(
+            receipt_gates.get("please_test_ready_count"), 0
+        )
+        fallback_recovery_ready_count = _coerce_int(
+            receipt_gates.get("recovery_loop_ready_count"), 0
+        )
     receipt_ready_count = (
         recomputed_counts["ready_count"]
         if use_recomputed_ready_counts
-        else max(
-            recomputed_counts["ready_count"],
-            _coerce_int(receipt_gates.get("ready_count"), 0),
-        )
+        else fallback_ready_count
     )
     plan_ready_count = (
         recomputed_counts["ready_count"]
         if use_recomputed_ready_counts
+        else fallback_ready_count
+    )
+    plan_blocked_missing_count = (
+        recomputed_counts["blocked_missing_install_receipts_count"]
+        if use_recomputed_blocked_counts
         else max(
-            recomputed_counts["ready_count"],
-            _coerce_int(followthrough.get("ready_count"), 0),
+            recomputed_counts["blocked_missing_install_receipts_count"],
+            _coerce_int(followthrough.get("blocked_missing_install_receipts_count"), 0),
         )
     )
-    summary_blocked_missing_count = _coerce_int(
-        summary.get("reporter_followthrough_blocked_missing_install_receipts_count"),
-        0,
+    plan_blocked_mismatch_count = (
+        recomputed_counts["blocked_receipt_mismatch_count"]
+        if use_recomputed_blocked_counts
+        else max(
+            recomputed_counts["blocked_receipt_mismatch_count"],
+            _coerce_int(followthrough.get("blocked_receipt_mismatch_count"), 0),
+        )
     )
-    summary_blocked_mismatch_count = _coerce_int(
-        summary.get("reporter_followthrough_blocked_receipt_mismatch_count"),
-        0,
-    )
-    plan_blocked_missing_count = max(
-        recomputed_counts["blocked_missing_install_receipts_count"],
-        _coerce_int(followthrough.get("blocked_missing_install_receipts_count"), 0),
-    )
-    plan_blocked_mismatch_count = max(
-        recomputed_counts["blocked_receipt_mismatch_count"],
-        _coerce_int(followthrough.get("blocked_receipt_mismatch_count"), 0),
-    )
-    plan_hold_until_fix_count = max(
-        recomputed_counts["hold_until_fix_receipt_count"],
-        _coerce_int(followthrough.get("hold_until_fix_receipt_count"), 0),
+    plan_hold_until_fix_count = (
+        recomputed_counts["hold_until_fix_receipt_count"]
+        if use_recomputed_blocked_counts
+        else max(
+            recomputed_counts["hold_until_fix_receipt_count"],
+            _coerce_int(followthrough.get("hold_until_fix_receipt_count"), 0),
+        )
     )
     feedback_ready_count = (
         recomputed_counts["feedback_ready_count"]
         if use_recomputed_ready_counts
-        else max(
-            recomputed_counts["feedback_ready_count"],
-            _coerce_int(receipt_gates.get("feedback_ready_count"), 0),
-        )
+        else fallback_feedback_ready_count
     )
     fix_available_ready_count = (
         recomputed_counts["fix_available_ready_count"]
         if use_recomputed_ready_counts
-        else max(
-            recomputed_counts["fix_available_ready_count"],
-            _coerce_int(receipt_gates.get("fix_available_ready_count"), 0),
-        )
+        else fallback_fix_available_ready_count
     )
     please_test_ready_count = (
         recomputed_counts["please_test_ready_count"]
         if use_recomputed_ready_counts
-        else max(
-            recomputed_counts["please_test_ready_count"],
-            _coerce_int(receipt_gates.get("please_test_ready_count"), 0),
-        )
+        else fallback_please_test_ready_count
     )
     recovery_ready_count = (
         recomputed_counts["recovery_loop_ready_count"]
         if use_recomputed_ready_counts
+        else fallback_recovery_ready_count
+    )
+    gate_blocked_missing_count = (
+        recomputed_counts["blocked_missing_install_receipts_count"]
+        if use_recomputed_blocked_counts
         else max(
-            recomputed_counts["recovery_loop_ready_count"],
-            _coerce_int(receipt_gates.get("recovery_loop_ready_count"), 0),
+            recomputed_counts["blocked_missing_install_receipts_count"],
+            _coerce_int(receipt_gates.get("blocked_missing_install_receipts_count"), 0),
         )
     )
-    gate_blocked_missing_count = max(
-        recomputed_counts["blocked_missing_install_receipts_count"],
-        _coerce_int(receipt_gates.get("blocked_missing_install_receipts_count"), 0),
+    gate_blocked_mismatch_count = (
+        recomputed_counts["blocked_receipt_mismatch_count"]
+        if use_recomputed_blocked_counts
+        else max(
+            recomputed_counts["blocked_receipt_mismatch_count"],
+            _coerce_int(receipt_gates.get("blocked_receipt_mismatch_count"), 0),
+        )
     )
-    gate_blocked_mismatch_count = max(
-        recomputed_counts["blocked_receipt_mismatch_count"],
-        _coerce_int(receipt_gates.get("blocked_receipt_mismatch_count"), 0),
+    gate_hold_until_fix_count = (
+        recomputed_counts["hold_until_fix_receipt_count"]
+        if use_recomputed_blocked_counts
+        else max(
+            recomputed_counts["hold_until_fix_receipt_count"],
+            _coerce_int(receipt_gates.get("hold_until_fix_receipt_count"), 0),
+        )
     )
-    gate_hold_until_fix_count = max(
-        recomputed_counts["hold_until_fix_receipt_count"],
-        _coerce_int(receipt_gates.get("hold_until_fix_receipt_count"), 0),
-    )
-    blocked_missing_count = max(
-        summary_blocked_missing_count,
-        plan_blocked_missing_count,
-        gate_blocked_missing_count,
-    )
-    blocked_mismatch_count = max(
-        summary_blocked_mismatch_count,
-        plan_blocked_mismatch_count,
-        gate_blocked_mismatch_count,
-    )
+    blocked_missing_count = max(plan_blocked_missing_count, gate_blocked_missing_count)
+    blocked_mismatch_count = max(plan_blocked_mismatch_count, gate_blocked_mismatch_count)
     return {
         "open_packet_count": _coerce_int(summary.get("open_packet_count"), 0),
         "open_non_external_packet_count": _coerce_int(summary.get("open_non_external_packet_count"), 0),
@@ -1836,7 +1977,6 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         "reporter_followthrough_blocked_missing_install_receipts_count": blocked_missing_count,
         "reporter_followthrough_blocked_receipt_mismatch_count": blocked_mismatch_count,
         "reporter_followthrough_hold_until_fix_receipt_count": max(
-            _coerce_int(summary.get("reporter_followthrough_hold_until_fix_receipt_count"), 0),
             plan_hold_until_fix_count,
             gate_hold_until_fix_count,
         ),
@@ -1847,7 +1987,7 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         "followthrough_receipt_gates_ready_count": (
             recomputed_counts["ready_count"]
             if use_recomputed_ready_counts
-            else _coerce_int(receipt_gates.get("ready_count"), 0)
+            else fallback_ready_count
         ),
         "followthrough_receipt_gates_blocked_missing_install_receipts_count": gate_blocked_missing_count,
         "followthrough_receipt_gates_blocked_receipt_mismatch_count": gate_blocked_mismatch_count,

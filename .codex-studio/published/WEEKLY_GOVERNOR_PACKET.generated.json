@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-18T20:47:47Z",
+  "generated_at": "2026-04-19T13:24:31Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -218,9 +218,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-18T20:47:47Z",
+    "generated_at": "2026-04-19T13:24:31Z",
     "max_age_seconds": 604800,
-    "next_packet_due_at": "2026-04-25T20:47:47Z",
+    "next_packet_due_at": "2026-04-26T13:24:31Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -2425,13 +2425,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "0871e2a9620272bad9d210bad7c290df4e276e64e0b6dd09bd2a9547d9e0b527",
+    "combined_source_sha256": "09533f2fbe60661eeff5a7fb2e6dc1f0f6ac21a260c7013254a7e66eb2f0dd23",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "8a77e5cfbd7ad34395fbbcfd2d09b5fa9433f64c5d19b5cea9ae0678e59330a4"
+        "source_sha256": "e6dcb6cd03fa8d46bf1e0c4ab7456174c3c387b97d5c813431ef33a5e6a1dac4"
       },
       {
         "name": "closed_flagship_registry",
@@ -2441,12 +2441,12 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "30f81d6b9a839c62b8fdde13f8a175bfa387f827a4623148d8ea5af05ee11a9b"
+        "source_sha256": "57f9d518f9155240400e9a223b10ac3da70ed20abc6bda1bf138a0abb240ccbe"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "b29c41076ceb7f81c14721156174594339bc7366028b1aeb5345efb54d55d191"
+        "source_sha256": "4ed903aca9ed4f5bd61042c3cdd00847f42c8feaa236d4be8533193fe863ec5e"
       },
       {
         "name": "weekly_pulse",
@@ -2456,17 +2456,17 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "50f7b14fa56c5c0891e95440f77298193ac79c463446937270e41e033214c7c2"
+        "source_sha256": "3f2575e4ff128ba2c5a22570a0c6fc29cec92bea473a86b6cf8348918261efb2"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "92dd25e89968ba17ad6fc4f74bf46f4663502be2061091238c2ce6b761f00eeb"
+        "source_sha256": "7e31fb9798a2456c538307907ee5933c08bebe213d9b803a0facbcc5551be6a6"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "499fa9fc099a6c25ddee7231ec34b5f76c8b1bb807ab1ae745eacf4b3540b68c"
+        "source_sha256": "c77886b651958a4bd0b293f70ce5117f2948fee49a4f969413f63090b201be3b"
       },
       {
         "name": "status_plane",
@@ -2495,23 +2495,23 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "30f81d6b9a839c62b8fdde13f8a175bfa387f827a4623148d8ea5af05ee11a9b",
+        "source_sha256": "57f9d518f9155240400e9a223b10ac3da70ed20abc6bda1bf138a0abb240ccbe",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-18T20:28:23Z",
+        "generated_at": "2026-04-19T13:23:28Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "50f7b14fa56c5c0891e95440f77298193ac79c463446937270e41e033214c7c2",
+        "source_sha256": "3f2575e4ff128ba2c5a22570a0c6fc29cec92bea473a86b6cf8348918261efb2",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-18T20:28:23Z",
+        "generated_at": "2026-04-19T13:23:39Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "92dd25e89968ba17ad6fc4f74bf46f4663502be2061091238c2ce6b761f00eeb",
+        "source_sha256": "7e31fb9798a2456c538307907ee5933c08bebe213d9b803a0facbcc5551be6a6",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2535,7 +2535,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "b29c41076ceb7f81c14721156174594339bc7366028b1aeb5345efb54d55d191",
+        "source_sha256": "4ed903aca9ed4f5bd61042c3cdd00847f42c8feaa236d4be8533193fe863ec5e",
         "state": "present"
       },
       "source_path_authority": {
@@ -2694,15 +2694,15 @@
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "8a77e5cfbd7ad34395fbbcfd2d09b5fa9433f64c5d19b5cea9ae0678e59330a4",
+        "source_sha256": "e6dcb6cd03fa8d46bf1e0c4ab7456174c3c387b97d5c813431ef33a5e6a1dac4",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-18T20:37:22Z",
+        "generated_at": "2026-04-19T13:23:26Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "499fa9fc099a6c25ddee7231ec34b5f76c8b1bb807ab1ae745eacf4b3540b68c",
+        "source_sha256": "c77886b651958a4bd0b293f70ce5117f2948fee49a4f969413f63090b201be3b",
         "state": "present",
         "successor_package_verification_status": "pass"
       },

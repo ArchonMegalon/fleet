@@ -170,6 +170,10 @@ The 2026-04-18 implementation-only cached-provenance guard closes the last mirro
 
 The 2026-04-18 proof-floor follow-up now pins that cached-fallback rule into the canonical M102 closure evidence as well. The successor registry and both queue rows must cite the cached packet fallback provenance guard and the seeded cached-packet mirror provenance guard, so future shards cannot keep this package closed unless the anti-reopen proof explicitly covers both cached fallback paths.
 
+The 2026-04-19 implementation-only weekly truth pass tightened the Fleet-side followthrough projection itself. `materialize_weekly_governor_packet.py` now recomputes feedback, fix-available, please-test, recovery, blocked-missing, blocked-mismatch, and hold counts from receipt-backed action rows, ignoring stale summary counters and stale aggregate receipt-gate counts when the row-level install, release, installed-build, or fixed-release facts do not support them. This closes the last queued-support-state shortcut on the `product_governor:followthrough` surface.
+
+The same 2026-04-19 pass also tightened fix-available routing posture on the generated row truth. `materialize_support_case_packets.py` now carries `update_required` into followthrough plan rows so `send_fix_available` and `send_fix_available_with_update` stay aligned with the receipt-backed install state, and `verify_next90_m102_fleet_reporter_receipts.py` rejects any fix-available action row whose next action drifts from that receipt-backed update posture.
+
 ## Receipt-Gated Behavior
 
 `scripts/materialize_support_case_packets.py` now blocks reporter followthrough unless the support packet has matching install truth, installation-bound installed-build receipt facts, fixed-version receipt truth, fixed-channel receipt truth, and release-channel truth.
@@ -190,6 +194,8 @@ The receipt gate covers:
 - future-dated install/fix receipts trying to hydrate followthrough before receipt time is real
 
 `scripts/materialize_weekly_governor_packet.py` projects the same followthrough counts into the weekly governor packet, including ready, missing-install-receipt, and receipt-mismatch counts.
+
+It now does that by recomputing row truth from the same install-aware release receipts carried in the support packet, so stale queued summary counters or partially populated ready rows cannot keep `WEEKLY_GOVERNOR_PACKET.generated.json` green.
 
 ## Verification Run
 
@@ -218,6 +224,11 @@ python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_mat
 python3 scripts/materialize_support_case_packets.py --source .codex-studio/published/SUPPORT_CASE_SOURCE_MIRROR.generated.json --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
 python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
 direct fixture invocation passed: 49 support packet and weekly governor tests after structured queue frontier_id guard coverage
+python3 tests/test_materialize_support_case_packets.py
+direct support packet tests passed: 72
+python3 tests/test_materialize_weekly_governor_packet.py
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+direct verifier tests passed: 65
 python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
 direct fixture invocation passed: 32 support packet tests after proof-anchor guard coverage
 direct fixture invocation passed: 19 weekly governor tests after proof-anchor guard coverage

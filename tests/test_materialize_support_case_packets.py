@@ -2347,6 +2347,34 @@ def test_followthrough_plan_recomputes_ready_groups_from_receipt_truth() -> None
     assert plan["action_groups"]["recovery"] == []
 
 
+def test_derived_followthrough_grouping_preserves_fix_available_update_posture() -> None:
+    module = _load_module()
+
+    no_update = module._derived_followthrough_grouping(
+        {"fixed_version": "1.2.3", "fixed_channel": "preview", "update_required": False, "blockers": []},
+        {
+            "feedback_loop_ready": True,
+            "fix_available_ready": True,
+            "please_test_ready": False,
+            "recovery_loop_ready": False,
+        },
+    )
+    with_update = module._derived_followthrough_grouping(
+        {"fixed_version": "1.2.3", "fixed_channel": "preview", "update_required": True, "blockers": []},
+        {
+            "feedback_loop_ready": True,
+            "fix_available_ready": True,
+            "please_test_ready": False,
+            "recovery_loop_ready": False,
+        },
+    )
+
+    assert no_update["fix_available_ready"] is True
+    assert no_update["fix_available_next_action"] == "send_fix_available"
+    assert with_update["fix_available_ready"] is True
+    assert with_update["fix_available_next_action"] == "send_fix_available_with_update"
+
+
 def test_followthrough_receipt_gates_recompute_counts_from_receipt_truth() -> None:
     module = _load_module()
 
@@ -6435,12 +6463,14 @@ def test_materialize_support_case_packets_marks_update_required_when_fixed_versi
     assert len(plan["action_groups"]["fix_available"]) == 1
     assert len(plan["action_groups"]["recovery"]) == 1
     fix_row = plan["action_groups"]["fix_available"][0]
+    assert fix_row["next_action"] == "send_fix_available_with_update"
     assert fix_row["install_receipt_ready"] is True
     assert fix_row["release_receipt_version"] == "1.2.3"
     assert fix_row["release_receipt_channel"] == "preview"
     assert fix_row["installed_build_receipted"] is True
     assert fix_row["fixed_version_receipted"] is True
     assert fix_row["fixed_channel_receipted"] is True
+    assert fix_row["update_required"] is True
     assert fix_row["current_install_on_fixed_build"] is False
     assert plan["action_groups"]["recovery"][0]["packet_id"] == packet["packet_id"]
     assert plan["action_groups"]["recovery"][0]["recovery_loop_ready"] is True

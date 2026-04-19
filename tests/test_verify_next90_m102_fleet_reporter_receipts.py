@@ -151,6 +151,8 @@ items:
       - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
       - cached packet fallback provenance guard keeps ready followthrough closed when `source.refresh_mode=cached_packets_fallback`
       - seeded cached-packet mirror provenance guard keeps ready followthrough closed when `seeded_from_cached_packets_generated_at` is present
+      - weekly governor recomputes followthrough readiness from row-level install, release, installed-build, and fix receipt truth instead of stale summary counters or partial ready rows
+      - fix-available action rows keep `send_fix_available` versus `send_fix_available_with_update` aligned with receipt-backed `update_required`, and the standalone verifier rejects drift
       - design-owned queue source row matches the Fleet completed queue proof assignment
       - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows
 {proof_tail}
@@ -221,6 +223,8 @@ items:
       - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
       - cached packet fallback provenance guard keeps ready followthrough closed when `source.refresh_mode=cached_packets_fallback`
       - seeded cached-packet mirror provenance guard keeps ready followthrough closed when `seeded_from_cached_packets_generated_at` is present
+      - weekly governor recomputes followthrough readiness from row-level install, release, installed-build, and fix receipt truth instead of stale summary counters or partial ready rows
+      - fix-available action rows keep `send_fix_available` versus `send_fix_available_with_update` aligned with receipt-backed `update_required`, and the standalone verifier rejects drift
       - design-owned queue source row matches the Fleet completed queue proof assignment
       - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows
     allowed_paths:
@@ -673,11 +677,19 @@ def test_verify_next90_m102_fleet_reporter_receipts_accepts_receipt_backed_pleas
             "installed_build_receipt_installation_id": "install-open-receipt-1",
             "installed_build_receipt_version": "1.2.3",
             "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_head_id": "avalonia",
+            "installed_build_receipt_platform": "linux",
+            "installed_build_receipt_rid": "linux-x64",
+            "installed_build_receipt_tuple_id": "avalonia:linux-x64:linux",
             "installed_build_receipt_source": "install_receipts",
             "installed_build_receipt_installation_source": "install_receipts",
             "installed_build_receipt_version_source": "install_receipts",
             "installed_build_receipt_channel_source": "install_receipts",
             "installed_build_receipted": True,
+            "installed_build_receipt_installation_matches": True,
+            "installed_build_receipt_version_matches": True,
+            "installed_build_receipt_channel_matches": True,
+            "installed_build_receipt_identity_matches": True,
             "fixed_version": "1.2.3",
             "fixed_channel": "preview",
             "fixed_version_receipted": True,
@@ -1260,6 +1272,70 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_recovery_row_with_fix_
     assert result["action_group_receipt_issues"] == [
         "recovery row support_packet_recovery_action_drift routes to send_fix_available_with_update "
         "instead of receipt-backed send_recovery"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_fix_available_row_with_update_action_drift(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    payload = _support_packets_payload()
+    payload["reporter_followthrough_plan"]["action_groups"]["fix_available"].append(
+        {
+            "packet_id": "support_packet_fix_available_action_drift",
+            "state": "fix_available_ready",
+            "next_action": "send_fix_available_with_update",
+            "update_required": False,
+            "feedback_loop_ready": True,
+            "install_receipt_ready": True,
+            "install_truth_state": "promoted_tuple_match",
+            "release_receipt_state": "release_receipt_ready",
+            **_release_receipt_fields(),
+            "installation_id": "install-fix-available-action-1",
+            "release_channel": "preview",
+            "installed_version": "1.2.3",
+            "installed_build_receipt_id": "install-receipt-fix-available-action-1",
+            "installed_build_receipt_installation_id": "install-fix-available-action-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipted": True,
+            "installed_build_receipt_installation_matches": True,
+            "installed_build_receipt_version_matches": True,
+            "installed_build_receipt_channel_matches": True,
+            "fixed_version": "1.2.3",
+            "fixed_channel": "preview",
+            "fixed_version_receipted": True,
+            "fixed_channel_receipted": True,
+            "fixed_version_receipt_id": "fix-version-receipt-fix-available-action-1",
+            "fixed_channel_receipt_id": "fix-channel-receipt-fix-available-action-1",
+            "fixed_receipt_installation_id": "install-fix-available-action-1",
+            "fixed_receipt_installation_source": "fix_receipts",
+            "fixed_receipt_installation_matches": True,
+            "fixed_version_receipt_source": "fix_receipts",
+            "fixed_channel_receipt_source": "fix_receipts",
+            "current_install_on_fixed_build": False,
+        }
+    )
+    _write_json(support, payload)
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "reporter followthrough action groups contain rows without receipt gates" in result["issues"]
+    assert result["action_group_receipt_issues"] == [
+        "fix_available row support_packet_fix_available_action_drift routes to send_fix_available_with_update "
+        "instead of receipt-backed send_fix_available"
     ]
 
 
@@ -2296,6 +2372,62 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_when_queue_mirror_omit
     assert "successor authority reports missing_queue_design_source_proof_markers" not in result["issues"]
     assert result["missing_queue_negative_proof_markers"] == [
         "weekly support-packet source sha256 drift fails the standalone verifier"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_when_queue_omits_weekly_row_truth_marker(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - weekly governor recomputes followthrough readiness from row-level install, release, installed-build, and fix receipt truth instead of stale summary counters or partial ready rows\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "successor queue proof collapses required command or negative-proof entries" in result["issues"]
+    assert result["missing_distinct_queue_proof_entries"] == [
+        "weekly governor recomputes followthrough readiness from row-level install, release, installed-build, and fix receipt truth instead of stale summary counters or partial ready rows"
+    ]
+
+
+def test_verify_next90_m102_fleet_reporter_receipts_fails_when_queue_omits_fix_available_update_required_marker(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    support, weekly, weekly_markdown, registry, queue, _ = _fixture_paths(tmp_path)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - fix-available action rows keep `send_fix_available` versus `send_fix_available_with_update` aligned with receipt-backed `update_required`, and the standalone verifier rejects drift\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    result = module.verify(
+        support_packets_path=support,
+        weekly_governor_packet_path=weekly,
+        weekly_governor_markdown_path=weekly_markdown,
+        successor_registry_path=registry,
+        queue_staging_path=queue,
+    )
+
+    assert result["status"] == "fail"
+    assert "successor queue proof collapses required command or negative-proof entries" in result["issues"]
+    assert result["missing_distinct_queue_proof_entries"] == [
+        "fix-available action rows keep `send_fix_available` versus `send_fix_available_with_update` aligned with receipt-backed `update_required`, and the standalone verifier rejects drift"
     ]
 
 
@@ -3436,7 +3568,6 @@ def test_verify_next90_m102_fleet_reporter_receipts_fails_weekly_markdown_count_
     assert result["status"] == "fail"
     assert "weekly governor markdown disagrees with support-packet receipt gates" in result["issues"]
     assert result["weekly_markdown_count_mismatches"] == {
-        "Fix-available ready": {"support_packets": 1, "weekly_governor_markdown": 0},
         "Followthrough receipt mismatches": {
             "support_packets": 1,
             "weekly_governor_markdown": 0,

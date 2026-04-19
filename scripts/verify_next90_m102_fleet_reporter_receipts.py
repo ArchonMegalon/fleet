@@ -246,6 +246,8 @@ REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES = {
     "future-dated support and weekly generated_at receipts fail the standalone verifier",
     "standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates",
     "standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready",
+    "weekly governor recomputes followthrough readiness from row-level install, release, installed-build, and fix receipt truth instead of stale summary counters or partial ready rows",
+    "fix-available action rows keep `send_fix_available` versus `send_fix_available_with_update` aligned with receipt-backed `update_required`, and the standalone verifier rejects drift",
     "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows",
 }
 GENERATED_AT_MAX_FUTURE_SKEW_SECONDS = 300
@@ -415,6 +417,12 @@ def _action_group_receipt_issues(action_groups: Dict[str, Any]) -> List[str]:
             row_label = _normalize_text(row.get("packet_id")) or f"{group_name}[{index}]"
             next_action = _normalize_text(row.get("next_action")).lower()
             expected_next_actions = REQUIRED_ACTION_NEXT_ACTIONS.get(group_name, set())
+            if group_name == "fix_available" and "update_required" in row:
+                expected_next_actions = {
+                    "send_fix_available_with_update"
+                    if bool(row.get("update_required"))
+                    else "send_fix_available"
+                }
             if expected_next_actions and next_action not in expected_next_actions:
                 issues.append(
                     f"{group_name} row {row_label} routes to {next_action or 'missing_next_action'} "
@@ -696,19 +704,111 @@ def _distinct_packet_count(rows: Iterable[Dict[str, Any]]) -> int:
     )
 
 
+def _recomputed_row_truth(row: Dict[str, Any]) -> Dict[str, bool]:
+    installation_id = _normalize_text(row.get("installation_id"))
+    install_truth_ready = bool(
+        installation_id
+        and bool(row.get("install_receipt_ready"))
+        and _normalize_text(row.get("install_truth_state")).lower() == "promoted_tuple_match"
+    )
+    release_receipt_ready = bool(
+        _normalize_text(row.get("release_receipt_state")).lower() == "release_receipt_ready"
+        and _normalize_text(row.get("release_receipt_id"))
+        and _normalize_text(row.get("release_receipt_source")) == "release_channel"
+        and _normalize_text(row.get("release_receipt_channel"))
+        and _normalize_text(row.get("release_receipt_version"))
+    )
+    installed_build_receipt_ready = bool(
+        install_truth_ready
+        and release_receipt_ready
+        and bool(row.get("installed_build_receipted"))
+        and _normalize_text(row.get("installed_build_receipt_id"))
+        and _normalize_text(row.get("installed_build_receipt_installation_id"))
+        and _normalize_text(row.get("installed_build_receipt_version"))
+        and _normalize_text(row.get("installed_build_receipt_channel"))
+        and _normalize_text(row.get("installed_build_receipt_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_installation_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_version_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_channel_source")) == "install_receipts"
+        and bool(row.get("installed_build_receipt_installation_matches"))
+        and bool(row.get("installed_build_receipt_version_matches"))
+        and bool(row.get("installed_build_receipt_channel_matches"))
+        and bool(row.get("installed_build_receipt_identity_matches"))
+    )
+    has_fix_truth = bool(
+        _normalize_text(row.get("fixed_version"))
+        or _normalize_text(row.get("fixed_channel"))
+        or bool(row.get("fixed_version_receipted"))
+        or bool(row.get("fixed_channel_receipted"))
+    )
+    fix_receipts_ready = bool(
+        not has_fix_truth
+        or (
+            _normalize_text(row.get("fixed_version"))
+            and _normalize_text(row.get("fixed_channel"))
+            and bool(row.get("fixed_version_receipted"))
+            and bool(row.get("fixed_channel_receipted"))
+            and _normalize_text(row.get("fixed_version_receipt_id"))
+            and _normalize_text(row.get("fixed_channel_receipt_id"))
+            and _normalize_text(row.get("fixed_receipt_installation_id"))
+            and _normalize_text(row.get("fixed_version_receipt_source")) == "fix_receipts"
+            and _normalize_text(row.get("fixed_channel_receipt_source")) == "fix_receipts"
+            and _normalize_text(row.get("fixed_receipt_installation_source")) == "fix_receipts"
+            and bool(row.get("fixed_receipt_installation_matches"))
+        )
+    )
+    feedback_loop_ready = bool(
+        install_truth_ready and release_receipt_ready and installed_build_receipt_ready and fix_receipts_ready
+    )
+    fix_available_ready = bool(has_fix_truth and feedback_loop_ready)
+    please_test_ready = bool(fix_available_ready and bool(row.get("current_install_on_fixed_build")))
+    recovery_loop_ready = bool(
+        fix_available_ready
+        and _normalize_text(((row.get("recovery_path") or {}).get("action_id"))).lower()
+        in {"open_downloads", "open_support_timeline", "open_account_access"}
+    )
+    return {
+        "feedback_loop_ready": feedback_loop_ready,
+        "fix_available_ready": fix_available_ready,
+        "please_test_ready": please_test_ready,
+        "recovery_loop_ready": recovery_loop_ready,
+    }
+
+
+def _row_ready_for_group(row_truth: Dict[str, Any], group_name: str) -> bool:
+    if group_name == "feedback":
+        return bool(row_truth.get("feedback_loop_ready"))
+    if group_name == "fix_available":
+        return bool(row_truth.get("fix_available_ready")) and not bool(row_truth.get("please_test_ready"))
+    if group_name == "please_test":
+        return bool(row_truth.get("please_test_ready"))
+    if group_name == "recovery":
+        return bool(row_truth.get("recovery_loop_ready"))
+    return False
+
+
 def _computed_plan_counts(action_groups: Dict[str, Any]) -> Dict[str, int]:
     ready_group_names = ("feedback", "fix_available", "please_test", "recovery")
-    ready_rows = [
-        row
-        for group_name in ready_group_names
-        for row in _action_group_rows(action_groups, group_name)
-    ]
+    rows_by_key: Dict[str, Dict[str, Any]] = {}
+    ready_keys: set[str] = set()
+    ready_group_counts = {name: 0 for name in ready_group_names}
+    for group_name in ready_group_names:
+        for index, row in enumerate(_action_group_rows(action_groups, group_name)):
+            packet_id = _normalize_text(row.get("packet_id"))
+            row_key = packet_id or f"{group_name}:{index}"
+            merged_row = dict(rows_by_key.get(row_key) or {})
+            merged_row.update(row)
+            rows_by_key[row_key] = merged_row
+            row_truth = _recomputed_row_truth(merged_row)
+            if _row_ready_for_group(row_truth, group_name):
+                ready_keys.add(row_key)
+                ready_group_counts[group_name] += 1
     return {
-        "ready_count": _distinct_packet_count(ready_rows),
-        "feedback_ready_count": len(_action_group_rows(action_groups, "feedback")),
-        "fix_available_ready_count": len(_action_group_rows(action_groups, "fix_available")),
-        "please_test_ready_count": len(_action_group_rows(action_groups, "please_test")),
-        "recovery_loop_ready_count": len(_action_group_rows(action_groups, "recovery")),
+        "ready_count": len(ready_keys),
+        "feedback_ready_count": ready_group_counts["feedback"],
+        "fix_available_ready_count": ready_group_counts["fix_available"],
+        "please_test_ready_count": ready_group_counts["please_test"],
+        "recovery_loop_ready_count": ready_group_counts["recovery"],
         "blocked_missing_install_receipts_count": len(
             _action_group_rows(action_groups, "blocked_missing_install_receipts")
         ),

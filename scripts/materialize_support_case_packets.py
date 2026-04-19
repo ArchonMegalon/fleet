@@ -3548,6 +3548,10 @@ def _followthrough_packet_row(packet: Dict[str, Any], followthrough: Dict[str, A
         ),
         "fixed_version": _normalize_text(packet.get("fixed_version")),
         "fixed_channel": _normalize_text(packet.get("fixed_channel")),
+        "update_required": bool(
+            (packet.get("fix_confirmation") or {}).get("update_required")
+            or packet.get("update_required")
+        ),
         "fixed_version_receipt_id": _normalize_text(followthrough.get("fixed_version_receipt_id")),
         "fixed_channel_receipt_id": _normalize_text(followthrough.get("fixed_channel_receipt_id")),
         "fixed_receipt_installation_id": _normalize_text(followthrough.get("fixed_receipt_installation_id")),
@@ -3772,6 +3776,7 @@ def _derived_followthrough_grouping(
             "recovery_loop_ready",
         )
     )
+    update_required = bool(row.get("update_required"))
     return {
         "feedback_ready": bool(derived_truth.get("feedback_loop_ready")),
         "fix_available_ready": bool(derived_truth.get("fix_available_ready"))
@@ -3782,7 +3787,9 @@ def _derived_followthrough_grouping(
         "blocked_receipt_mismatch": bool(has_fix and not ready_any and has_receipt_mismatch),
         "hold_until_fix_receipt": bool(not has_fix),
         "feedback_next_action": "send_feedback_progress",
-        "fix_available_next_action": "send_fix_available_with_update",
+        "fix_available_next_action": (
+            "send_fix_available_with_update" if update_required else "send_fix_available"
+        ),
         "please_test_next_action": "send_please_test",
         "recovery_next_action": "send_recovery",
         "blocked_next_action": "hold_reporter_followthrough",

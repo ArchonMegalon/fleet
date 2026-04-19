@@ -1250,13 +1250,13 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "focus_shift",
     ]
     assert payload["public_status_copy"]["headline"] == "Launch expansion remains frozen."
-    assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] == 2
-    assert payload["truth_inputs"]["support_summary"]["feedback_followthrough_ready_count"] == 2
-    assert payload["truth_inputs"]["support_summary"]["fix_available_ready_count"] == 1
-    assert payload["truth_inputs"]["support_summary"]["please_test_ready_count"] == 1
+    assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_ready_count"] == 0
+    assert payload["truth_inputs"]["support_summary"]["feedback_followthrough_ready_count"] == 0
+    assert payload["truth_inputs"]["support_summary"]["fix_available_ready_count"] == 0
+    assert payload["truth_inputs"]["support_summary"]["please_test_ready_count"] == 0
     assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_hold_until_fix_receipt_count"] == 0
     assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_plan_hold_until_fix_receipt_count"] == 0
-    assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_ready_count"] == 2
+    assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_ready_count"] == 0
     assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_hold_until_fix_receipt_count"] == 0
     assert (
         payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installed_build_receipted_count"]
@@ -1560,6 +1560,79 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     )
 
 
+def test_weekly_support_summary_ignores_stale_aggregate_gate_counts_without_row_truth(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_ready_count"] = 8
+    support["summary"]["feedback_followthrough_ready_count"] = 8
+    support["summary"]["fix_available_ready_count"] = 8
+    support["summary"]["please_test_ready_count"] = 8
+    support["summary"]["recovery_loop_ready_count"] = 8
+    support["summary"]["reporter_followthrough_blocked_missing_install_receipts_count"] = 5
+    support["summary"]["reporter_followthrough_blocked_receipt_mismatch_count"] = 4
+    support["summary"]["reporter_followthrough_hold_until_fix_receipt_count"] = 3
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 8,
+        "feedback_ready_count": 8,
+        "fix_available_ready_count": 8,
+        "please_test_ready_count": 8,
+        "recovery_loop_ready_count": 8,
+        "blocked_missing_install_receipts_count": 5,
+        "blocked_receipt_mismatch_count": 4,
+        "hold_until_fix_receipt_count": 3,
+        "action_groups": {
+            "feedback": [],
+            "fix_available": [],
+            "please_test": [],
+            "recovery": [],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    support["followthrough_receipt_gates"]["ready_count"] = 8
+    support["followthrough_receipt_gates"]["feedback_ready_count"] = 8
+    support["followthrough_receipt_gates"]["fix_available_ready_count"] = 8
+    support["followthrough_receipt_gates"]["please_test_ready_count"] = 8
+    support["followthrough_receipt_gates"]["recovery_loop_ready_count"] = 8
+    support["followthrough_receipt_gates"]["blocked_missing_install_receipts_count"] = 5
+    support["followthrough_receipt_gates"]["blocked_receipt_mismatch_count"] = 4
+    support["followthrough_receipt_gates"]["hold_until_fix_receipt_count"] = 3
+    support["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipted"] = 8
+    support["followthrough_receipt_gates"]["gate_counts"][
+        "installed_build_receipt_installation_bound"
+    ] = 8
+    _write_json(support_path, support)
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    assert support_summary["reporter_followthrough_ready_count"] == 0
+    assert support_summary["feedback_followthrough_ready_count"] == 0
+    assert support_summary["fix_available_ready_count"] == 0
+    assert support_summary["please_test_ready_count"] == 0
+    assert support_summary["recovery_loop_ready_count"] == 0
+    assert support_summary["reporter_followthrough_blocked_missing_install_receipts_count"] == 0
+    assert support_summary["reporter_followthrough_blocked_receipt_mismatch_count"] == 0
+    assert support_summary["reporter_followthrough_hold_until_fix_receipt_count"] == 0
+    assert support_summary["reporter_followthrough_plan_ready_count"] == 0
+    assert support_summary["reporter_followthrough_plan_blocked_missing_install_receipts_count"] == 0
+    assert support_summary["reporter_followthrough_plan_blocked_receipt_mismatch_count"] == 0
+    assert support_summary["reporter_followthrough_plan_hold_until_fix_receipt_count"] == 0
+    assert support_summary["followthrough_receipt_gates_ready_count"] == 0
+    assert support_summary["followthrough_receipt_gates_blocked_missing_install_receipts_count"] == 0
+    assert support_summary["followthrough_receipt_gates_blocked_receipt_mismatch_count"] == 0
+    assert support_summary["followthrough_receipt_gates_hold_until_fix_receipt_count"] == 0
+    assert support_summary["followthrough_receipt_gates_installed_build_receipted_count"] == 0
+    assert support_summary["followthrough_receipt_gates_installation_bound_count"] == 0
+
+
 def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_receipt_gates(
     tmp_path: Path,
 ) -> None:
@@ -1733,6 +1806,109 @@ def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_
         "none | True |"
     ) in markdown
     assert "## Decision Action Routes" in markdown
+
+
+def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gate_counts_are_stale(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_ready_count"] = 4
+    support["summary"]["feedback_followthrough_ready_count"] = 1
+    support["summary"]["fix_available_ready_count"] = 1
+    support["summary"]["please_test_ready_count"] = 1
+    support["summary"]["recovery_loop_ready_count"] = 1
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 4,
+        "feedback_ready_count": 1,
+        "fix_available_ready_count": 1,
+        "please_test_ready_count": 1,
+        "recovery_loop_ready_count": 1,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "hold_until_fix_receipt_count": 0,
+        "action_groups": {
+            "feedback": [
+                {
+                    "packet_id": "support-packet-stale-feedback",
+                    "installed_build_receipted": True,
+                }
+            ],
+            "fix_available": [
+                {
+                    "packet_id": "support-packet-stale-fix",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_installation_matches": True,
+                }
+            ],
+            "please_test": [
+                {
+                    "packet_id": "support-packet-stale-test",
+                    "installed_build_receipted": True,
+                }
+            ],
+            "recovery": [
+                {
+                    "packet_id": "support-packet-stale-recovery",
+                    "installed_build_receipted": True,
+                }
+            ],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    support["followthrough_receipt_gates"]["ready_count"] = 4
+    support["followthrough_receipt_gates"]["feedback_ready_count"] = 1
+    support["followthrough_receipt_gates"]["fix_available_ready_count"] = 1
+    support["followthrough_receipt_gates"]["please_test_ready_count"] = 1
+    support["followthrough_receipt_gates"]["recovery_loop_ready_count"] = 1
+    _write_json(support_path, support)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(support_path),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    assert support_summary["reporter_followthrough_ready_count"] == 0
+    assert support_summary["feedback_followthrough_ready_count"] == 0
+    assert support_summary["fix_available_ready_count"] == 0
+    assert support_summary["please_test_ready_count"] == 0
+    assert support_summary["recovery_loop_ready_count"] == 0
+    assert support_summary["followthrough_receipt_gates_ready_count"] == 0
     assert (
         "| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | "
         "launch_gate_summary.all_green | True | do_not_expand_launch | "
@@ -1801,34 +1977,164 @@ def test_weekly_support_summary_recomputes_receipt_gated_counts_from_followthrou
             "feedback": [
                 {
                     "packet_id": "support-packet-1",
+                    "installation_id": "install-1",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
                     "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-1",
+                    "installed_build_receipt_installation_id": "install-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
                     "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
                 },
                 {
                     "packet_id": "support-packet-2",
+                    "installation_id": "install-2",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
                     "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-2",
+                    "installed_build_receipt_installation_id": "install-2",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
                     "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
                 },
             ],
             "fix_available": [
                 {
                     "packet_id": "support-packet-1",
+                    "installation_id": "install-1",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "fixed_version": "1.2.3",
+                    "fixed_channel": "preview",
+                    "fixed_version_receipted": True,
+                    "fixed_channel_receipted": True,
+                    "fixed_version_receipt_id": "fix-version-receipt-1",
+                    "fixed_channel_receipt_id": "fix-channel-receipt-1",
+                    "fixed_receipt_installation_id": "install-1",
+                    "fixed_receipt_installation_source": "fix_receipts",
+                    "fixed_receipt_installation_matches": True,
+                    "fixed_version_receipt_source": "fix_receipts",
+                    "fixed_channel_receipt_source": "fix_receipts",
                     "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-1",
+                    "installed_build_receipt_installation_id": "install-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
                     "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
                 }
             ],
             "please_test": [
                 {
                     "packet_id": "support-packet-2",
+                    "installation_id": "install-2",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "fixed_version": "1.2.3",
+                    "fixed_channel": "preview",
+                    "fixed_version_receipted": True,
+                    "fixed_channel_receipted": True,
+                    "fixed_version_receipt_id": "fix-version-receipt-2",
+                    "fixed_channel_receipt_id": "fix-channel-receipt-2",
+                    "fixed_receipt_installation_id": "install-2",
+                    "fixed_receipt_installation_source": "fix_receipts",
+                    "fixed_receipt_installation_matches": True,
+                    "fixed_version_receipt_source": "fix_receipts",
+                    "fixed_channel_receipt_source": "fix_receipts",
                     "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-2",
+                    "installed_build_receipt_installation_id": "install-2",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
                     "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                    "current_install_on_fixed_build": True,
                 }
             ],
             "recovery": [
                 {
                     "packet_id": "support-packet-2",
+                    "installation_id": "install-2",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "fixed_version": "1.2.3",
+                    "fixed_channel": "preview",
+                    "fixed_version_receipted": True,
+                    "fixed_channel_receipted": True,
+                    "fixed_version_receipt_id": "fix-version-receipt-2",
+                    "fixed_channel_receipt_id": "fix-channel-receipt-2",
+                    "fixed_receipt_installation_id": "install-2",
+                    "fixed_receipt_installation_source": "fix_receipts",
+                    "fixed_receipt_installation_matches": True,
+                    "fixed_version_receipt_source": "fix_receipts",
+                    "fixed_channel_receipt_source": "fix_receipts",
                     "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-2",
+                    "installed_build_receipt_installation_id": "install-2",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
                     "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                    "recovery_path": {"action_id": "open_downloads"},
                 }
             ],
             "blocked_missing_install_receipts": [],
@@ -1882,6 +2188,101 @@ def test_weekly_support_summary_recomputes_receipt_gated_counts_from_followthrou
     assert support_summary["followthrough_receipt_gates_ready_count"] == 2
     assert support_summary["followthrough_receipt_gates_installed_build_receipted_count"] == 2
     assert support_summary["followthrough_receipt_gates_installation_bound_count"] == 2
+
+
+def test_weekly_support_summary_ignores_ready_group_rows_missing_release_or_fix_receipt_truth(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_ready_count"] = 9
+    support["summary"]["feedback_followthrough_ready_count"] = 9
+    support["summary"]["fix_available_ready_count"] = 9
+    support["summary"]["please_test_ready_count"] = 9
+    support["summary"]["recovery_loop_ready_count"] = 9
+    support["followthrough_receipt_gates"]["ready_count"] = 9
+    support["followthrough_receipt_gates"]["feedback_ready_count"] = 9
+    support["followthrough_receipt_gates"]["fix_available_ready_count"] = 9
+    support["followthrough_receipt_gates"]["please_test_ready_count"] = 9
+    support["followthrough_receipt_gates"]["recovery_loop_ready_count"] = 9
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 9,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "hold_until_fix_receipt_count": 0,
+        "action_groups": {
+            "feedback": [
+                {
+                    "packet_id": "support-packet-1",
+                    "installation_id": "install-1",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-1",
+                    "installed_build_receipt_installation_id": "install-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
+                    "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                }
+            ],
+            "fix_available": [
+                {
+                    "packet_id": "support-packet-2",
+                    "installation_id": "install-2",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-receipt-2",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-2",
+                    "installed_build_receipt_installation_id": "install-2",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
+                    "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                    "fixed_version": "1.2.3",
+                    "fixed_channel": "preview",
+                }
+            ],
+            "please_test": [],
+            "recovery": [],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    _write_json(support_path, support)
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    assert support_summary["reporter_followthrough_ready_count"] == 0
+    assert support_summary["feedback_followthrough_ready_count"] == 0
+    assert support_summary["fix_available_ready_count"] == 0
+    assert support_summary["please_test_ready_count"] == 0
+    assert support_summary["recovery_loop_ready_count"] == 0
+    assert support_summary["reporter_followthrough_plan_ready_count"] == 0
+    assert support_summary["followthrough_receipt_gates_ready_count"] == 0
 
 
 def test_weekly_support_summary_recomputes_blocked_receipt_rows_from_followthrough_plan(
@@ -1953,6 +2354,72 @@ def test_weekly_support_summary_recomputes_blocked_receipt_rows_from_followthrou
     assert support_summary["reporter_followthrough_plan_blocked_missing_install_receipts_count"] == 1
     assert support_summary["followthrough_receipt_gates_blocked_missing_install_receipts_count"] == 1
     assert launch_gates["support_followthrough_receipts"]["state"] == "blocked"
+
+
+def test_weekly_support_summary_ignores_stale_blocked_and_hold_counts_when_rows_clear(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_blocked_missing_install_receipts_count"] = 7
+    support["summary"]["reporter_followthrough_blocked_receipt_mismatch_count"] = 5
+    support["summary"]["reporter_followthrough_hold_until_fix_receipt_count"] = 4
+    support["followthrough_receipt_gates"]["blocked_missing_install_receipts_count"] = 0
+    support["followthrough_receipt_gates"]["blocked_receipt_mismatch_count"] = 0
+    support["followthrough_receipt_gates"]["hold_until_fix_receipt_count"] = 0
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 1,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "hold_until_fix_receipt_count": 0,
+        "action_groups": {
+            "feedback": [
+                {
+                    "packet_id": "support-packet-ready",
+                    "installation_id": "install-1",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "promoted_tuple_match",
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-1",
+                    "installed_build_receipt_installation_id": "install-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
+                    "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                }
+            ],
+            "fix_available": [],
+            "please_test": [],
+            "recovery": [],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    _write_json(support_path, support)
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    assert support_summary["reporter_followthrough_blocked_missing_install_receipts_count"] == 0
+    assert support_summary["reporter_followthrough_blocked_receipt_mismatch_count"] == 0
+    assert support_summary["reporter_followthrough_hold_until_fix_receipt_count"] == 0
+    assert support_summary["reporter_followthrough_ready_count"] == 1
 
 
 def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies_are_open(
