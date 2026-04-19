@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 runtime_env_candidates() {
   local path
   local -a explicit_paths=()
@@ -91,10 +93,28 @@ runtime_env_prefers_managed_auth() {
 
 sync_runtime_auth_tokens() {
   local runtime_token=""
+  local current_mcp="${EA_MCP_API_TOKEN:-}"
+  local current_api="${EA_API_TOKEN:-}"
+  local chosen_token=""
   runtime_env_prefers_managed_auth || return 0
   runtime_token="$(runtime_env_value EA_MCP_API_TOKEN || true)"
   if [ -z "${runtime_token}" ]; then
     runtime_token="$(runtime_env_value EA_API_TOKEN || true)"
+  fi
+  if [ -n "${current_mcp}" ] || [ -n "${current_api}" ]; then
+    if [ -n "${runtime_token}" ]; then
+      if [ -n "${current_mcp}" ] && [ "${current_mcp}" != "${runtime_token}" ] && { [ -z "${current_api}" ] || [ "${current_api}" = "${runtime_token}" ]; }; then
+        chosen_token="${current_mcp}"
+      elif [ -n "${current_api}" ] && [ "${current_api}" != "${runtime_token}" ] && { [ -z "${current_mcp}" ] || [ "${current_mcp}" = "${runtime_token}" ]; }; then
+        chosen_token="${current_api}"
+      fi
+    fi
+    if [ -z "${chosen_token}" ]; then
+      chosen_token="${current_mcp:-${current_api}}"
+    fi
+    export EA_MCP_API_TOKEN="${chosen_token}"
+    export EA_API_TOKEN="${chosen_token}"
+    return 0
   fi
   [ -n "${runtime_token}" ] || return 0
   export EA_MCP_API_TOKEN="${runtime_token}"
@@ -120,13 +140,13 @@ REAL_CODEX="${CODEXEA_REAL_CODEX:-${CODEX_REAL_BIN:-/usr/bin/codex}}"
 WATCHDOG_BIN="${CODEXEA_WATCHDOG_BIN:-${HOME}/.local/bin/codexea-watchdog}"
 BOOTSTRAP_PROMPT_FILE="${CODEXEA_BOOTSTRAP_PROMPT_FILE:-${HOME}/.codex/prompts/ea_interactive_bootstrap.md}"
 JURY_BOOTSTRAP_PROMPT_FILE="${CODEXEA_JURY_BOOTSTRAP_PROMPT_FILE:-${BOOTSTRAP_PROMPT_FILE}}"
-CODEXEA_EXEC_TRACE_PROMPT_FILE="${CODEXEA_EXEC_TRACE_PROMPT_FILE:-${HOME}/.codex/prompts/ea_exec_trace_prompt.md}"
+CODEXEA_EXEC_TRACE_PROMPT_FILE="${CODEXEA_EXEC_TRACE_PROMPT_FILE:-${SCRIPT_DIR}/ea_exec_trace_prompt.md}"
 CODEXEA_EXEC_JSON_RENDERER="${CODEXEA_EXEC_JSON_RENDERER:-/docker/fleet/scripts/codexea_exec_json_render.py}"
 CODEXEA_BASE_PROFILE="${CODEXEA_BASE_PROFILE:-}"
 CODEXEA_DEFAULT_LANE="${CODEXEA_LANE:-easy}"
 CODEXEA_MODE_OVERRIDE="${CODEXEA_MODE:-}"
 CODEXEA_ALLOW_EASY_MODE_OVERRIDE="${CODEXEA_ALLOW_EASY_MODE_OVERRIDE:-0}"
-CODEXEA_BOOTSTRAP="${CODEXEA_BOOTSTRAP:-0}"
+CODEXEA_BOOTSTRAP="${CODEXEA_BOOTSTRAP:-1}"
 CODEXEA_TRACE_STARTUP="${CODEXEA_TRACE_STARTUP:-1}"
 CODEXEA_ENABLE_WATCHDOG="${CODEXEA_ENABLE_WATCHDOG:-0}"
 CODEXEA_NO_ALT_SCREEN="${CODEXEA_NO_ALT_SCREEN:-1}"
@@ -505,10 +525,24 @@ build_exec_trace_prompt() {
   if [ -r "${CODEXEA_EXEC_TRACE_PROMPT_FILE}" ]; then
     prefix="$(cat "${CODEXEA_EXEC_TRACE_PROMPT_FILE}")"
   else
-    prefix=$'Immediately print one short `Trace:` line with the current lane and the work you are starting.\nKeep emitting short one-line `Trace:` updates before each meaningful work unit and again if you have been quiet for roughly 20-45 seconds.\nWork the user request immediately after the first trace line. Do not wait for another instruction.'
+    prefix=$'You are Codex running through the Fleet codexea worker shim.\nOperating contract:\n- Behave like a pragmatic senior coding agent and work the assigned slice through to completion or a concrete blocker.\n- Do the work instead of announcing that you will do it.\n- Do not surface filler such as \"wait for me while i execute that command\" or other non-progress status chatter.\n- When a command is needed, run it, absorb the result, and continue the task instead of stopping at the command boundary.\n- Do not stop after a trivial probe or directory listing; use it and move the task forward.\n- Do not query supervisor status, eta, or other self-poll helpers from inside the worker run when task-local telemetry or shard handoff context is already available.\n- Use the task-local telemetry file and shard runtime handoff as the first source of context before any broader exploration.\n- If you emit progress at all, keep it short, factual, and only after a meaningful work unit or after roughly 30-45 seconds of real work.\n- Before each meaningful work unit, emit one short `Trace:` line naming the action.\n- After transient transport failures or timeouts, continue the task once the transport is back instead of abandoning it.\n- Prefer concise final answers.'
   fi
 
   printf '%s' "${prefix}"
+}
+
+prepend_exec_trace_stdin_prompt() {
+  local prompt_prefix=""
+
+  [ -n "${CODEXEA_STDIN_PROMPT-}" ] || return 0
+  prompt_prefix="$(build_exec_trace_prompt)"
+  [ -n "${prompt_prefix}" ] || return 0
+  case "${CODEXEA_STDIN_PROMPT}" in
+    "${prompt_prefix}"*)
+      return 0
+      ;;
+  esac
+  CODEXEA_STDIN_PROMPT="${prompt_prefix}"$'\n\n'"${CODEXEA_STDIN_PROMPT}"
 }
 
 live_profile_model_for_lane() {
@@ -1604,6 +1638,7 @@ fi
 
 if [ -z "${CODEXEA_STDIN_PROMPT}" ] && [ ! -t 0 ] && [ "$#" -gt 0 ] && [ "${1}" = "exec" ] && [ "${*: -1}" = "-" ]; then
   CODEXEA_STDIN_PROMPT="$(cat || true)"
+  prepend_exec_trace_stdin_prompt
 fi
 
 RAW_INTERACTIVE_SESSION_REQUEST=0
@@ -1868,9 +1903,6 @@ case "${MODE}" in
       EA_CODEX_PROFILE="audit"
     fi
     EA_HEADERS="{\"X-EA-Principal-ID\"=\"${EA_PRINCIPAL_ID}\",\"X-EA-Codex-Profile\"=\"${EA_CODEX_PROFILE}\""
-    if [ -n "${EA_AUTH_TOKEN:-}" ]; then
-      EA_HEADERS="${EA_HEADERS},\"Authorization\"=\"Bearer ${EA_AUTH_TOKEN}\""
-    fi
     if [ -n "${EA_ONEMIN_ACCOUNT_ALIAS:-}" ]; then
       EA_HEADERS="${EA_HEADERS},\"X-EA-Onemin-Account-Alias\"=\"${EA_ONEMIN_ACCOUNT_ALIAS}\""
     fi

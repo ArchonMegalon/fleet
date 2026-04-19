@@ -3,9 +3,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import unittest
 from pathlib import Path
-
-import pytest
 
 SCRIPTS = (
     Path("/docker/fleet/scripts/verify_external_proof_closure.py"),
@@ -30,15 +29,17 @@ def _env_without_pythonpath() -> dict[str, str]:
     return env
 
 
-@pytest.mark.parametrize("script_path", SCRIPTS)
-def test_fleet_scripts_launch_help_without_pythonpath(script_path: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, str(script_path), "--help"],
-        check=False,
-        capture_output=True,
-        text=True,
-        env=_env_without_pythonpath(),
-    )
+class FleetScriptBootstrapWithoutPythonPathTests(unittest.TestCase):
+    def test_fleet_scripts_launch_help_without_pythonpath(self) -> None:
+        for script_path in SCRIPTS:
+            with self.subTest(script_path=str(script_path)):
+                result = subprocess.run(
+                    [sys.executable, str(script_path), "--help"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=_env_without_pythonpath(),
+                )
 
-    assert result.returncode == 0
-    assert "No module named" not in (result.stderr + result.stdout)
+                self.assertEqual(result.returncode, 0)
+                self.assertNotIn("No module named", result.stderr + result.stdout)

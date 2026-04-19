@@ -1,0 +1,334 @@
+contract_name: executive_assistant.parity_lab_capture_pack
+schema_version: 1
+generated_at: 2026-04-19T07:01:16Z
+milestone:
+  id: 103
+  package_id: next90-m103-ea-parity-lab
+  owned_surfaces:
+    - parity_lab:capture
+sync_context:
+  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-3/runs/20260419T070036Z-shard-3/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_snapshot:
+    mode: implementation_only
+    scope_label: Next 90-day product advance wave
+    slice_summary: "20 next-wave milestones remain across 41 queue slices (20 in progress, 0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 -> 105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120."
+    status_query_supported: false
+    polling_disabled: true
+    package_id: next90-m103-ea-parity-lab
+    frontier_id: 4287684466
+    milestone_id: 103
+    owned_surfaces:
+      - parity_lab:capture
+      - veteran_compare_packs
+    allowed_paths:
+      - skills
+      - tests
+      - feedback
+      - docs
+  readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+  readiness_generated_at: 2026-04-19T07:01:16Z
+  runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-3/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: 2026-04-19T07:25:41Z
+worker_run_guard:
+  implementation_only: true
+  polling_disabled: true
+  blocked_helper_evidence:
+    - supervisor status helpers
+    - supervisor eta helpers
+    - active-run operator status snippets
+  allowed_evidence_sources:
+    - task-local telemetry file
+    - shard runtime handoff
+    - Chummer5a oracle source files
+    - published readiness receipt
+    - UI desktop executable exit-gate receipt
+source_of_truth:
+  legacy_oracle_repo: /docker/chummer5a
+  legacy_oracle_files:
+    - /docker/chummer5a/docs/PARITY_ORACLE.json
+    - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    - /docker/chummer5a/Chummer/Forms/Utility Forms/MasterIndex.Designer.cs
+    - /docker/chummer5a/Chummer/Forms/Utility Forms/CharacterRoster.Designer.cs
+oracle_inventory:
+  tabs_count: 17
+  workspace_actions_count: 47
+  desktop_controls_count: 29
+  required_top_menus:
+    - File
+    - Tools
+    - Windows
+    - Help
+screenshot_baselines:
+  - id: first_launch_workbench_or_restore
+    lane: veteran_first_minute_orientation
+    legacy_anchor: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    required_landmarks:
+      - File menu
+      - Immediate toolstrip
+      - Bottom status strip
+    compare_focus:
+      - startup_opens_workbench_not_landing
+      - no_dashboard_or_mainframe_shell
+      - claim_restore_in_app_or_installer
+      - no_browser_only_claim_code_ritual
+      - guided_product_installer_happy_path
+  - id: menu_file_open_save_import
+    lane: desktop_familiarity_and_install_continuity
+    legacy_anchor: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    required_landmarks:
+      - File menu
+      - Save or open route
+      - Import route
+    compare_focus:
+      - file_menu_live
+      - open_route_visible
+      - import_route_visible
+  - id: menu_tools_settings_masterindex_roster
+    lane: desktop_familiarity_and_install_continuity
+    legacy_anchor: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    required_landmarks:
+      - Tools menu
+      - Settings route
+      - Master index route
+      - Character roster route
+    compare_focus:
+      - tools_menu_live
+      - settings_route_visible
+      - master_index_first_class
+      - character_roster_first_class
+  - id: menu_windows_help_liveness
+    lane: desktop_familiarity_and_install_continuity
+    legacy_anchor: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+    required_landmarks:
+      - Windows menu
+      - Help menu
+    compare_focus:
+      - windows_menu_live
+      - help_menu_live
+  - id: master_index_dense_reference_flow
+    lane: sourcebooks_reference_and_master_index
+    legacy_anchor: /docker/chummer5a/Chummer/Forms/Utility Forms/MasterIndex.Designer.cs
+    required_landmarks:
+      - Master index route
+    compare_focus:
+      - source_lookup_visible
+      - rules_snippet_context_visible
+      - source_click_through_available
+  - id: character_roster_multi_character_flow
+    lane: roster_dashboards_and_multi_character_ops
+    legacy_anchor: /docker/chummer5a/Chummer/Forms/Utility Forms/CharacterRoster.Designer.cs
+    required_landmarks:
+      - Character roster route
+    compare_focus:
+      - roster_tree_visible
+      - character_tabs_visible
+      - profile_and_notes_visible
+screenshot_artifact_baselines:
+  visual_receipt_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json
+  screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
+  required_receipt_key: visual_familiarity.required_screenshots_normalized
+  baseline_to_screenshot:
+    - baseline_id: first_launch_workbench_or_restore
+      screenshot: 01-initial-shell-light.png
+      required_receipt: true
+    - baseline_id: menu_file_open_save_import
+      screenshot: 02-menu-open-light.png
+      required_receipt: true
+    - baseline_id: menu_tools_settings_masterindex_roster
+      screenshot: 03-settings-open-light.png
+      required_receipt: true
+    - baseline_id: menu_windows_help_liveness
+      screenshot: 02-menu-open-light.png
+      required_receipt: true
+    - baseline_id: master_index_dense_reference_flow
+      screenshot: 16-master-index-dialog-light.png
+      required_receipt: true
+    - baseline_id: character_roster_multi_character_flow
+      screenshot: 17-character-roster-dialog-light.png
+      required_receipt: true
+    - baseline_id: menu_file_open_save_import
+      screenshot: 18-import-dialog-light.png
+      required_receipt: true
+desktop_non_negotiable_baseline_map:
+  coverage_key: desktop_client
+  asserted_non_negotiables:
+    - non_negotiable_id: no_generic_shell_or_dashboard_first
+      required_baselines:
+        - first_launch_workbench_or_restore
+      required_compare_focus:
+        - no_dashboard_or_mainframe_shell
+    - non_negotiable_id: startup_is_workbench_or_restore
+      required_baselines:
+        - first_launch_workbench_or_restore
+      required_compare_focus:
+        - startup_opens_workbench_not_landing
+    - non_negotiable_id: file_menu_live
+      required_baselines:
+        - menu_file_open_save_import
+      required_compare_focus:
+        - file_menu_live
+    - non_negotiable_id: master_index_first_class
+      required_baselines:
+        - menu_tools_settings_masterindex_roster
+        - master_index_dense_reference_flow
+      required_compare_focus:
+        - master_index_first_class
+        - source_lookup_visible
+    - non_negotiable_id: character_roster_first_class
+      required_baselines:
+        - menu_tools_settings_masterindex_roster
+        - character_roster_multi_character_flow
+      required_compare_focus:
+        - character_roster_first_class
+        - roster_tree_visible
+    - non_negotiable_id: claim_restore_in_installer_or_in_app
+      required_baselines:
+        - first_launch_workbench_or_restore
+      required_compare_focus:
+        - claim_restore_in_app_or_installer
+    - non_negotiable_id: no_browser_only_claim_code_ritual
+      required_baselines:
+        - first_launch_workbench_or_restore
+      required_compare_focus:
+        - no_browser_only_claim_code_ritual
+    - non_negotiable_id: guided_product_installer_happy_path
+      required_baselines:
+        - first_launch_workbench_or_restore
+      required_compare_focus:
+        - guided_product_installer_happy_path
+oracle_surface_extract:
+  source_line_proofs:
+    top_menu_landmarks:
+      - id: file_menu
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 182
+        expected_substring: this.fileMenu.Text = "&File";
+      - id: tools_menu
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 707
+        expected_substring: this.toolsMenu.Text = "&Tools";
+      - id: windows_menu
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 915
+        expected_substring: this.windowsMenu.Text = "&Windows";
+      - id: help_menu
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 974
+        expected_substring: this.helpMenu.Text = "&Help";
+    file_and_settings_routes:
+      - id: open_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 231
+        expected_substring: this.openToolStripMenuItem.Text = "&Open";
+      - id: open_for_export_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 261
+        expected_substring: this.mnuOpenForExport.Text = "Open for E&xport";
+      - id: global_settings_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 742
+        expected_substring: this.mnuGlobalSettings.Text = "&Global Settings";
+      - id: translator_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 808
+        expected_substring: this.mnuToolsTranslator.Text = "&Translator";
+      - id: xml_amendment_editor_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 823
+        expected_substring: this.mnuXmlEditor.Text = "&XML Amendment Editor";
+      - id: hero_lab_importer_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 838
+        expected_substring: this.mnuHeroLabImporter.Text = "&Hero Lab Importer";
+    first_class_master_index_and_roster:
+      - id: master_index_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 853
+        expected_substring: this.mnuMasterIndex.Text = "&Master Index";
+      - id: character_roster_route
+        file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+        line: 868
+        expected_substring: this.mnuCharacterRoster.Text = "Ch&aracter Roster";
+      - id: master_index_form_title
+        file: /docker/chummer5a/Chummer/Forms/Utility Forms/MasterIndex.Designer.cs
+        line: 338
+        expected_substring: this.Text = "Master Index";
+      - id: master_index_source_click_reminder
+        file: /docker/chummer5a/Chummer/Forms/Utility Forms/MasterIndex.Designer.cs
+        line: 198
+        expected_substring: this.lblSourceClickReminder.Text = "<- Click to Open Linked PDF";
+      - id: character_roster_form_title
+        file: /docker/chummer5a/Chummer/Forms/Utility Forms/CharacterRoster.Designer.cs
+        line: 534
+        expected_substring: this.Text = "Character Roster";
+      - id: character_roster_tree
+        file: /docker/chummer5a/Chummer/Forms/Utility Forms/CharacterRoster.Designer.cs
+        line: 511
+        expected_substring: this.treCharacterList.Name = "treCharacterList";
+desktop_proof_tuple_baseline_map:
+  coverage_key: desktop_client
+  current_unresolved_external_host_proof_tuples: []
+  promoted_tuple_compare_packs:
+    - tuple: avalonia:linux-x64:linux
+      required_baselines:
+        - first_launch_workbench_or_restore
+        - menu_file_open_save_import
+        - menu_tools_settings_masterindex_roster
+        - master_index_dense_reference_flow
+        - character_roster_multi_character_flow
+    - tuple: avalonia:osx-arm64:macos
+      required_baselines:
+        - first_launch_workbench_or_restore
+        - menu_file_open_save_import
+        - menu_tools_settings_masterindex_roster
+        - master_index_dense_reference_flow
+        - character_roster_multi_character_flow
+    - tuple: avalonia:win-x64:windows
+      required_baselines:
+        - first_launch_workbench_or_restore
+        - menu_file_open_save_import
+        - menu_tools_settings_masterindex_roster
+        - master_index_dense_reference_flow
+        - character_roster_multi_character_flow
+capture_policy:
+  notes:
+    - Screenshot capture is oracle-anchored and must map to executable desktop receipts.
+    - Shell-only screenshots do not close workflow parity lanes.
+    - Every baseline must keep direct provenance back to Chummer5a source anchors.
+import_export_fixtures:
+  - id: open_for_printing_menu_route
+    fixture_kind: import_export_round_trip
+    source_anchor:
+      file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+      line: 246
+      expected_substring: this.mnuOpenForPrinting.Text = "Open for P&rinting";
+    compare_focus:
+      - menu_open_for_printing_visible
+      - print_route_is_not_buried
+  - id: open_for_export_menu_route
+    fixture_kind: import_export_round_trip
+    source_anchor:
+      file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+      line: 261
+      expected_substring: this.mnuOpenForExport.Text = "Open for E&xport";
+    compare_focus:
+      - menu_open_for_export_visible
+      - export_route_is_not_buried
+  - id: print_multiple_menu_route
+    fixture_kind: import_export_round_trip
+    source_anchor:
+      file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+      line: 306
+      expected_substring: this.mnuFilePrintMultiple.Text = "Print &Multiple";
+    compare_focus:
+      - menu_file_print_multiple_visible
+      - print_batch_route_is_not_buried
+  - id: hero_lab_importer_menu_route
+    fixture_kind: legacy_import_oracle
+    source_anchor:
+      file: /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+      line: 838
+      expected_substring: this.mnuHeroLabImporter.Text = "&Hero Lab Importer";
+    compare_focus:
+      - hero_lab_importer_visible
+      - legacy_import_route_not_hidden
