@@ -812,6 +812,11 @@ def verify(args: argparse.Namespace) -> Dict[str, Any]:
         "design queue staging program_wave is not next_90_day_product_advance",
     )
     _require(
+        _normalize_text(design_queue.get("source_registry_path")) == str(successor_registry_path),
+        issues,
+        "design queue staging source_registry_path drifted from successor registry",
+    )
+    _require(
         _normalize_text(design_queue.get("status")) == "live_parallel_successor",
         issues,
         "design queue staging status is not live_parallel_successor",

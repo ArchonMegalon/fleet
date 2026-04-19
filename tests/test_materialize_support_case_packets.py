@@ -412,6 +412,42 @@ def test_source_mirror_preserves_install_and_fix_receipt_feeds_for_fallback() ->
     assert packet["reporter_followthrough"]["fixed_version_receipt_source"] == "fix_receipts"
 
 
+def test_followthrough_row_gate_evidence_requires_install_and_release_truth_for_installed_build_counts() -> None:
+    module = _load_module()
+
+    gate_evidence = module._followthrough_row_gate_evidence(
+        {
+            "installation_id": "install-gate-1",
+            "install_receipt_ready": True,
+            "install_truth_state": "channel_mismatch",
+            "release_receipt_state": "release_receipt_missing",
+            "release_receipt_id": "",
+            "release_receipt_source": "",
+            "release_receipt_channel": "",
+            "release_receipt_version": "",
+            "installed_build_receipted": True,
+            "installed_build_receipt_id": "install-receipt-gate-1",
+            "installed_build_receipt_installation_id": "install-gate-1",
+            "installed_build_receipt_version": "1.2.3",
+            "installed_build_receipt_channel": "preview",
+            "installed_build_receipt_source": "install_receipts",
+            "installed_build_receipt_installation_source": "install_receipts",
+            "installed_build_receipt_version_source": "install_receipts",
+            "installed_build_receipt_channel_source": "install_receipts",
+            "installed_build_receipt_installation_matches": True,
+            "installed_build_receipt_version_matches": True,
+            "installed_build_receipt_channel_matches": True,
+            "installed_build_receipt_identity_matches": True,
+        }
+    )
+
+    assert gate_evidence["install_truth_ready"] is False
+    assert gate_evidence["release_receipt_ready"] is False
+    assert gate_evidence["installed_build_receipt_id_present"] is False
+    assert gate_evidence["installed_build_receipted"] is False
+    assert gate_evidence["installed_build_receipt_installation_bound"] is False
+
+
 def test_materialize_support_case_packets_proves_successor_package_authority(tmp_path: Path) -> None:
     source = tmp_path / "support_cases.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
@@ -2818,9 +2854,10 @@ def test_materialize_support_case_packets_blocks_inactive_fix_receipt_rows(tmp_p
     assert payload["source"]["fix_receipt_missing_case_count"] == 1
     assert payload["summary"]["fix_available_ready_count"] == 0
     assert payload["summary"]["please_test_ready_count"] == 0
+    assert payload["summary"]["feedback_followthrough_ready_count"] == 1
     packet = payload["packets"][0]
     assert packet["reporter_followthrough"]["state"] == "no_fix_recorded"
-    assert packet["reporter_followthrough"]["next_action"] == "hold_until_fix_receipt"
+    assert packet["reporter_followthrough"]["next_action"] == "send_feedback_progress"
     assert packet["reporter_followthrough"]["fixed_version_receipted"] is False
     assert packet["reporter_followthrough"]["fixed_channel_receipted"] is False
 
@@ -3008,9 +3045,10 @@ def test_materialize_support_case_packets_blocks_future_dated_fix_receipt_rows(t
     assert payload["source"]["fix_receipt_missing_case_count"] == 1
     assert payload["summary"]["fix_available_ready_count"] == 0
     assert payload["summary"]["please_test_ready_count"] == 0
+    assert payload["summary"]["feedback_followthrough_ready_count"] == 1
     packet = payload["packets"][0]
     assert packet["reporter_followthrough"]["state"] == "no_fix_recorded"
-    assert packet["reporter_followthrough"]["next_action"] == "hold_until_fix_receipt"
+    assert packet["reporter_followthrough"]["next_action"] == "send_feedback_progress"
     assert packet["reporter_followthrough"]["fixed_version_receipted"] is False
     assert packet["reporter_followthrough"]["fixed_channel_receipted"] is False
 
@@ -4080,7 +4118,7 @@ def test_materialize_support_case_packets_rejects_cross_case_fix_receipt_on_same
     assert packet["fixed_version"] == ""
     assert packet["fixed_channel"] == ""
     assert packet["reporter_followthrough"]["state"] == "no_fix_recorded"
-    assert packet["reporter_followthrough"]["next_action"] == "hold_until_fix_receipt"
+    assert packet["reporter_followthrough"]["next_action"] == "send_feedback_progress"
     plan = payload["reporter_followthrough_plan"]
     assert plan["action_groups"]["fix_available"] == []
     assert plan["action_groups"]["please_test"] == []
@@ -5658,7 +5696,7 @@ def test_materialize_support_case_packets_blocks_recovery_until_fix_receipt_even
     packet = payload["packets"][0]
     assert packet["recovery_path"]["action_id"] == "open_support_timeline"
     assert packet["reporter_followthrough"]["state"] == "no_fix_recorded"
-    assert packet["reporter_followthrough"]["next_action"] == "hold_until_fix_receipt"
+    assert packet["reporter_followthrough"]["next_action"] == "send_feedback_progress"
     assert packet["reporter_followthrough"]["feedback_loop_ready"] is True
     assert packet["reporter_followthrough"]["installed_build_receipted"] is True
     assert packet["reporter_followthrough"]["blockers"] == []

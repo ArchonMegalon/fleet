@@ -30,6 +30,7 @@ DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE_PATH = Path(
 )
 M103_CLOSEOUT_NOTE_PATH = Path("/docker/fleet/feedback/2026-04-18-next90-m103-ea-parity-lab-closeout.md")
 READINESS_SYNC_MAX_AGE_SECONDS = 24 * 60 * 60
+ACTIVE_RUN_SYNC_MAX_AGE_SECONDS = 15 * 60
 
 
 def _yaml(path: Path) -> dict:
@@ -112,6 +113,14 @@ def _handoff_first_output_at(handoff_path: Path) -> str:
     handoff_text = handoff_path.read_text(encoding="utf-8")
     return next(
         (line.split(": ", 1)[1].strip() for line in handoff_text.splitlines() if line.startswith("- First output at: ")),
+        "",
+    )
+
+
+def _active_run_id_from_handoff(handoff_path: Path) -> str:
+    handoff_text = handoff_path.read_text(encoding="utf-8")
+    return next(
+        (line.split(": ", 1)[1].strip() for line in handoff_text.splitlines() if line.startswith("- Run id: ")),
         "",
     )
 
@@ -651,13 +660,8 @@ def test_ea_pack_targets_the_current_active_worker_run() -> None:
     )
     handoff_path = _handoff_path_for_task_local_telemetry(task_local_telemetry_path)
     assert handoff_path.exists(), str(handoff_path)
-    handoff_text = handoff_path.read_text(encoding="utf-8")
-    run_line = next(
-        (line for line in handoff_text.splitlines() if line.startswith("- Run id: ")),
-        "",
-    )
-    assert run_line, handoff_path
-    active_run_id = run_line.split(": ", 1)[1].strip()
+    active_run_id = _active_run_id_from_handoff(handoff_path)
+    assert active_run_id, handoff_path
     shard_id = task_local_telemetry_path.parent.parent.parent.name
     assert shard_id.startswith("shard-")
     assert active_run_id.endswith(f"-{shard_id}")
@@ -670,7 +674,19 @@ def test_ea_pack_targets_the_current_active_worker_run() -> None:
     active_run_ts = _run_id_timestamp(active_run_id)
     assert recorded_run_ts is not None
     assert active_run_ts is not None
-    assert recorded_run_ts <= active_run_ts
+    if recorded_run_id == active_run_id:
+        assert recorded_run_ts == active_run_ts
+        return
+
+    active_task_local_telemetry_path = task_local_telemetry_path.parent.parent / active_run_id / task_local_telemetry_path.name
+    assert active_task_local_telemetry_path.exists(), str(active_task_local_telemetry_path)
+    recorded_task_local_telemetry = _json(task_local_telemetry_path)
+    active_task_local_telemetry = _json(active_task_local_telemetry_path)
+    assert _expected_task_local_snapshot(active_task_local_telemetry) == _expected_task_local_snapshot(
+        recorded_task_local_telemetry
+    )
+    delta_seconds = (active_run_ts - recorded_run_ts).total_seconds()
+    assert 0 <= delta_seconds <= ACTIVE_RUN_SYNC_MAX_AGE_SECONDS
 
 
 def test_ea_veteran_workflow_pack_records_successor_wave_context_and_live_ready_frontier_coverage() -> None:

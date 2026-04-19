@@ -635,6 +635,44 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("design-owned queue source row does not match Fleet queue field: task", result.stderr)
 
+    def test_verifier_fails_when_design_queue_source_registry_path_drifts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            design_queue["source_registry_path"] = "/tmp/drifted-registry.yaml"
+            _write_yaml(fixture["design_queue"], design_queue)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("design queue staging source_registry_path drifted from successor registry", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

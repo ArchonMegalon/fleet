@@ -2452,6 +2452,9 @@ def _reporter_followthrough(
     elif has_fix:
         state = "blocked_missing_install_receipts"
         next_action = "hold_reporter_followthrough"
+    elif feedback_loop_ready:
+        state = "no_fix_recorded"
+        next_action = "send_feedback_progress"
     else:
         state = "no_fix_recorded"
         next_action = "hold_until_fix_receipt"
@@ -3681,7 +3684,8 @@ def _followthrough_row_gate_evidence(row: Dict[str, Any]) -> Dict[str, bool]:
     fixed_version = _normalize_text(row.get("fixed_version"))
     fixed_channel = _normalize_text(row.get("fixed_channel"))
     fixed_version_receipted = bool(
-        fixed_version
+        bool(derived_truth.get("release_receipt_ready"))
+        and fixed_version
         and bool(row.get("fixed_version_receipted"))
         and bool(_normalize_text(row.get("fixed_version_receipt_id")))
         and _normalize_text(row.get("fixed_version_receipt_source")) == "fix_receipts"
@@ -3689,7 +3693,8 @@ def _followthrough_row_gate_evidence(row: Dict[str, Any]) -> Dict[str, bool]:
         and _version_matches(fixed_version, release_receipt_version)
     )
     fixed_channel_receipted = bool(
-        fixed_channel
+        bool(derived_truth.get("release_receipt_ready"))
+        and fixed_channel
         and bool(row.get("fixed_channel_receipted"))
         and bool(_normalize_text(row.get("fixed_channel_receipt_id")))
         and _normalize_text(row.get("fixed_channel_receipt_source")) == "fix_receipts"
@@ -3704,7 +3709,9 @@ def _followthrough_row_gate_evidence(row: Dict[str, Any]) -> Dict[str, bool]:
         and bool(row.get("fixed_receipt_installation_matches"))
     )
     installed_build_receipt_id_present = bool(
-        bool(_normalize_text(row.get("installed_build_receipt_id")))
+        bool(derived_truth.get("install_truth_ready"))
+        and bool(derived_truth.get("release_receipt_ready"))
+        and bool(_normalize_text(row.get("installed_build_receipt_id")))
         and _normalize_text(row.get("installed_build_receipt_source")) == "install_receipts"
     )
     installed_build_receipted = bool(

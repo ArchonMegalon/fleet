@@ -7835,9 +7835,51 @@ def queue_overlay_item_identity(item: Any) -> str:
     normalized = normalize_queue_overlay_item(item)
     if normalized is None:
         return ""
-    if isinstance(normalized, (dict, list)):
+    if isinstance(normalized, dict):
+        package_id = str(normalized.get("package_id") or "").strip()
+        if package_id:
+            return f"package:{package_id}"
+        source_ref = str(normalized.get("source_ref") or "").strip()
+        if source_ref:
+            return f"source_ref:{source_ref}"
+        audit_scope_id = str(normalized.get("audit_scope_id") or "").strip()
+        audit_finding_key = str(normalized.get("audit_finding_key") or "").strip()
+        title = str(normalized.get("title") or normalized.get("task") or "").strip()
+        if audit_scope_id and audit_finding_key and title:
+            return json.dumps(
+                {
+                    "audit_scope_id": audit_scope_id,
+                    "audit_finding_key": audit_finding_key,
+                    "title": title,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            )
+        return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    if isinstance(normalized, list):
         return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
     return f"text:{normalized}"
+
+
+def dedupe_queue_overlay_items(items: List[Any]) -> List[Any]:
+    deduped: List[Any] = []
+    positions: Dict[str, int] = {}
+    for item in items:
+        normalized = normalize_queue_overlay_item(item)
+        if normalized is None:
+            continue
+        identity = queue_overlay_item_identity(normalized)
+        if not identity:
+            deduped.append(normalized)
+            continue
+        existing_index = positions.get(identity)
+        if existing_index is None:
+            positions[identity] = len(deduped)
+            deduped.append(normalized)
+            continue
+        deduped[existing_index] = normalized
+    return deduped
 
 
 def merge_queue_overlay_item(project_cfg: Dict[str, Any], item: Any, *, mode: str = "append") -> pathlib.Path:
@@ -7847,7 +7889,7 @@ def merge_queue_overlay_item(project_cfg: Dict[str, Any], item: Any, *, mode: st
     existing_mode = "append"
     if isinstance(data, dict):
         existing_mode = str(data.get("mode", "append") or "append").strip().lower() or "append"
-    items = queue_overlay_payload_items(data)
+    items = dedupe_queue_overlay_items(queue_overlay_payload_items(data))
     normalized_item = normalize_queue_overlay_item(item)
     queue_mode = str(mode or existing_mode or "append").strip().lower() or "append"
     if normalized_item is not None:
@@ -7859,6 +7901,7 @@ def merge_queue_overlay_item(project_cfg: Dict[str, Any], item: Any, *, mode: st
             items = [normalized_item] + items
         else:
             items.append(normalized_item)
+    items = dedupe_queue_overlay_items(items)
     save_yaml(
         path,
         {
@@ -16807,6 +16850,7 @@ def apply_queue_overlay(project_cfg: Dict[str, Any], queue: List[Any]) -> List[A
         ]
     else:
         return queue
+    items = dedupe_queue_overlay_items(items)
     if not items:
         return queue
     if mode == "replace":

@@ -258,6 +258,7 @@ direct fixture invocation passed: 4 standalone verifier tests and 1 successor au
 python3 scripts/materialize_support_case_packets.py --source .codex-studio/published/SUPPORT_CASE_SOURCE_MIRROR.generated.json --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
 python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
 python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
+
 direct fixture invocation passed: 5 standalone verifier tests after weekly support-input successor status became required
 python3 scripts/verify_next90_m102_fleet_reporter_receipts.py
 python3 -m py_compile scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_verify_next90_m102_fleet_reporter_receipts.py
@@ -456,3 +457,38 @@ The 2026-04-17 cached-fallback guard keeps the anti-reopen rule intact when live
 The later 2026-04-17 install-bound fix receipt selector pass tightened duplicate fix receipt handling across lookup keys. Case-id and installation-id fix receipt candidates are now ranked together by current/latest flags, timestamps, sequence fields, and source order before hydrating support cases, so a stale case-specific row cannot beat a newer install-bound fixed-release receipt for the same install. Direct support packet tests now cover this cross-key duplicate case, and the standalone M102 verifier still passes against regenerated support and weekly governor packets.
 
 The 2026-04-17 implementation-only retry tightened that selector against wrong-install case receipts. When a case-keyed fix receipt names a different installation and a valid install-bound fix receipt exists for the linked install, Fleet now hydrates from the install-bound receipt instead of the newer wrong-install case receipt. When no valid install-bound receipt exists, the existing fixed-receipt installation mismatch blocker remains visible instead of turning into queued support state.
+
+## 2026-04-19 Proof Refresh
+
+The package remains materially complete on the current shard-local repo state, so this pass did not reopen the implementation. Instead it re-verified the closed package against the canonical successor registry, the Fleet queue mirror, the design-owned queue source, and the current generated receipts.
+
+Current generated artifacts:
+
+- `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` now has `generated_at=2026-04-19T15:16:51Z`, `successor_package_verification.status=pass`, and zero ready followthrough rows with zero receipt-gate mismatches.
+- `/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json` now has `generated_at=2026-04-19T15:17:02Z`, and its support summary again agrees with the refreshed receipt-backed support packet.
+- `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml` still marks work task `102.4` complete for Fleet with the same install-aware receipt-gating contract.
+- `/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml` and `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml` still carry the same `frontier_id: 2454416974`, `completion_action: verify_closed_package_only`, and package-specific do-not-reopen reason.
+
+Commands run on 2026-04-19 from `/docker/fleet`:
+
+```text
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 tests/test_materialize_support_case_packets.py
+python3 tests/test_materialize_weekly_governor_packet.py
+python3 scripts/materialize_support_case_packets.py --source .codex-studio/published/SUPPORT_CASE_SOURCE_MIRROR.generated.json --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+```
+
+Results:
+
+- The first `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json` run surfaced one live drift: `weekly governor support-packets input sha256 disagrees with verified support packet`.
+- `python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py` exited `0` with `direct verifier tests passed: 67`.
+- `python3 tests/test_materialize_support_case_packets.py` exited `0` with `direct support packet tests passed: 73`.
+- `python3 tests/test_materialize_weekly_governor_packet.py` exited `0`.
+- `python3 scripts/materialize_support_case_packets.py --source .codex-studio/published/SUPPORT_CASE_SOURCE_MIRROR.generated.json --out .codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` refreshed `SUPPORT_CASE_PACKETS.generated.json` to `generated_at=2026-04-19T15:16:51Z`.
+- `python3 scripts/materialize_weekly_governor_packet.py --markdown-out .codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md` refreshed the weekly packet and markdown to `generated_at=2026-04-19T15:17:02Z`.
+- The final `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json` run exited `0` with `status=pass`, `issues=[]`, `successor_authority_status=pass`, and the refreshed weekly support-packet SHA pinned to the regenerated support packet.
+
+This refresh was receipt-only. The executable M102 implementation did not need another logic change, but the published support and weekly packets did need to be regenerated together so the weekly support input fingerprint matched the current install-aware support receipt bytes again.

@@ -475,6 +475,50 @@ class AdminForecastTests(unittest.TestCase):
             self.assertEqual(payload["mode"], "append")
             self.assertEqual(payload["items"], [structured_item])
 
+    def test_merge_queue_overlay_item_replaces_existing_structured_item_with_same_package_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            published = root / ".codex-studio" / "published"
+            published.mkdir(parents=True, exist_ok=True)
+            published.joinpath("QUEUE.generated.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "mode": "append",
+                        "items": [
+                            {
+                                "package_id": "audit-task-17",
+                                "title": "Older queue slice",
+                                "task": "Older queue slice",
+                            },
+                            {
+                                "package_id": "audit-task-17",
+                                "title": "Newest queue slice",
+                                "task": "Newest queue slice",
+                                "source_items": ["a", "b"],
+                            },
+                        ],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            project = {
+                "path": str(root),
+                "queue": ["Existing queue slice"],
+            }
+            replacement_item = {
+                "package_id": "audit-task-17",
+                "title": "Replacement queue slice",
+                "task": "Replacement queue slice",
+                "source_items": ["bundle"],
+            }
+
+            overlay_path = self.admin.merge_queue_overlay_item(project, replacement_item, mode="append")
+            payload = self.admin.load_yaml(overlay_path)
+
+            self.assertEqual(payload["mode"], "append")
+            self.assertEqual(payload["items"], [replacement_item])
+
     def test_audit_candidate_queue_overlay_item_preserves_structured_metadata(self) -> None:
         candidate = {
             "id": 17,

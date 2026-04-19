@@ -1,227 +1,236 @@
 contract_name: executive_assistant.veteran_compare_packs
 schema_version: 1
-generated_at: 2026-04-19T11:57:17Z
+generated_at: 2026-04-19 11:57:17+00:00
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
-    - veteran_compare_packs
+  - veteran_compare_packs
 sync_context:
-  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/runs/20260419T121945Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /docker/fleet/state/chummer_design_supervisor/shard-4/runs/20260419T153713Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Next 90-day product advance wave
-    slice_summary: "20 next-wave milestones remain across 43 queue slices (20 in progress, 0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 -> 105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120."
+    slice_summary: '20 next-wave milestones remain across 43 queue slices (20 in progress,
+      0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 ->
+      105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120.'
     status_query_supported: false
     polling_disabled: true
     package_id: next90-m103-ea-parity-lab
     frontier_id: 4287684466
     milestone_id: 103
     owned_surfaces:
-      - parity_lab:capture
-      - veteran_compare_packs
+    - parity_lab:capture
+    - veteran_compare_packs
     allowed_paths:
-      - skills
-      - tests
-      - feedback
-      - docs
+    - skills
+    - tests
+    - feedback
+    - docs
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: 2026-04-19T11:57:17Z
+  readiness_generated_at: '2026-04-19T15:37:38Z'
   desktop_executable_exit_gate_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  desktop_executable_exit_gate_generated_at: 2026-04-18T18:19:11.035798Z
-  runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: 2026-04-19T12:19:54Z
+  desktop_executable_exit_gate_generated_at: '2026-04-18T18:19:11.035798Z'
+  runtime_handoff_path: /docker/fleet/state/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
+  runtime_handoff_first_output_at: '2026-04-19T15:37:16Z'
 required_landmarks:
+- File menu
+- Tools menu
+- Windows menu
+- Help menu
+- Immediate toolstrip
+- Save or open route
+- Import route
+- Settings route
+- Master index route
+- Character roster route
+- Bottom status strip
+required_first_minute_tasks:
+- id: reach_real_workbench
+  description: The first launch reaches a workbench or restore continuation, not a
+    decorative landing surface.
+  time_budget_seconds: 10
+- id: locate_save_import_settings
+  description: Save, import/open, and settings are visible without hunting.
+  time_budget_seconds: 15
+- id: locate_master_index_and_roster
+  description: Veteran users can reach master index and roster from the promoted desktop
+    route.
+  time_budget_seconds: 20
+- id: recover_section_rhythm
+  description: The user can tell where sections live and return to the current section
+    after a distraction.
+  time_budget_seconds: 20
+veteran_task_compare_packs:
+- task_id: reach_real_workbench
+  summary: The first screenshot must prove a real workbench-first startup posture
+    with live shell landmarks.
+  required_baselines:
+  - first_launch_workbench_or_restore
+  required_landmarks:
   - File menu
-  - Tools menu
-  - Windows menu
-  - Help menu
   - Immediate toolstrip
+  - Bottom status strip
+  compare_artifacts:
+  - screenshot:01-initial-shell-light.png
+  - non_negotiable:startup_is_workbench_or_restore
+  - non_negotiable:no_generic_shell_or_dashboard_first
+- task_id: locate_save_import_settings
+  summary: Save/open, import, and settings routes must be visible from the veteran
+    shell without hunting.
+  required_baselines:
+  - menu_file_open_save_import
+  - menu_tools_settings_masterindex_roster
+  required_landmarks:
   - Save or open route
   - Import route
   - Settings route
+  compare_artifacts:
+  - screenshot:02-menu-open-light.png
+  - screenshot:03-settings-open-light.png
+  - fixture:open_for_printing_menu_route
+  - fixture:open_for_export_menu_route
+- task_id: locate_master_index_and_roster
+  summary: The promoted desktop route must keep master index and roster first-class
+    within the first minute.
+  required_baselines:
+  - menu_tools_settings_masterindex_roster
+  - master_index_dense_reference_flow
+  - character_roster_multi_character_flow
+  required_landmarks:
   - Master index route
   - Character roster route
+  compare_artifacts:
+  - screenshot:16-master-index-dialog-light.png
+  - screenshot:17-character-roster-dialog-light.png
+  - non_negotiable:master_index_first_class
+  - non_negotiable:character_roster_first_class
+- task_id: recover_section_rhythm
+  summary: Veteran users must recover section rhythm through visible workbench structure
+    and route continuity.
+  required_baselines:
+  - first_launch_workbench_or_restore
+  - character_roster_multi_character_flow
+  required_landmarks:
+  - Immediate toolstrip
   - Bottom status strip
-required_first_minute_tasks:
-  - id: reach_real_workbench
-    description: The first launch reaches a workbench or restore continuation, not a decorative landing surface.
-    time_budget_seconds: 10
-  - id: locate_save_import_settings
-    description: Save, import/open, and settings are visible without hunting.
-    time_budget_seconds: 15
-  - id: locate_master_index_and_roster
-    description: Veteran users can reach master index and roster from the promoted desktop route.
-    time_budget_seconds: 20
-  - id: recover_section_rhythm
-    description: The user can tell where sections live and return to the current section after a distraction.
-    time_budget_seconds: 20
-veteran_task_compare_packs:
-  - task_id: reach_real_workbench
-    summary: The first screenshot must prove a real workbench-first startup posture with live shell landmarks.
-    required_baselines:
-      - first_launch_workbench_or_restore
-    required_landmarks:
-      - File menu
-      - Immediate toolstrip
-      - Bottom status strip
-    compare_artifacts:
-      - screenshot:01-initial-shell-light.png
-      - non_negotiable:startup_is_workbench_or_restore
-      - non_negotiable:no_generic_shell_or_dashboard_first
-  - task_id: locate_save_import_settings
-    summary: Save/open, import, and settings routes must be visible from the veteran shell without hunting.
-    required_baselines:
-      - menu_file_open_save_import
-      - menu_tools_settings_masterindex_roster
-    required_landmarks:
-      - Save or open route
-      - Import route
-      - Settings route
-    compare_artifacts:
-      - screenshot:02-menu-open-light.png
-      - screenshot:03-settings-open-light.png
-      - fixture:open_for_printing_menu_route
-      - fixture:open_for_export_menu_route
-  - task_id: locate_master_index_and_roster
-    summary: The promoted desktop route must keep master index and roster first-class within the first minute.
-    required_baselines:
-      - menu_tools_settings_masterindex_roster
-      - master_index_dense_reference_flow
-      - character_roster_multi_character_flow
-    required_landmarks:
-      - Master index route
-      - Character roster route
-    compare_artifacts:
-      - screenshot:16-master-index-dialog-light.png
-      - screenshot:17-character-roster-dialog-light.png
-      - non_negotiable:master_index_first_class
-      - non_negotiable:character_roster_first_class
-  - task_id: recover_section_rhythm
-    summary: Veteran users must recover section rhythm through visible workbench structure and route continuity.
-    required_baselines:
-      - first_launch_workbench_or_restore
-      - character_roster_multi_character_flow
-    required_landmarks:
-      - Immediate toolstrip
-      - Bottom status strip
-      - Character roster route
-    compare_artifacts:
-      - workflow:build_explain_publish
-      - workflow:multi_character
-      - screenshot:01-initial-shell-light.png
+  - Character roster route
+  compare_artifacts:
+  - workflow:build_explain_publish
+  - workflow:multi_character
+  - screenshot:01-initial-shell-light.png
 workflow_maps:
-  - id: build_explain_publish
-    map_kind: workflow_map
-    oracle_actions:
-      - build
-      - validate
-      - sources
-      - summary
-    compare_artifacts:
-      - workflow:build_explain_publish
-      - baseline:first_launch_workbench_or_restore
-      - baseline:menu_tools_settings_masterindex_roster
-  - id: import_export_round_trip
-    map_kind: workflow_map
-    oracle_actions:
-      - metadata
-      - sources
-      - validate
-    compare_artifacts:
-      - fixture:open_for_printing_menu_route
-      - fixture:open_for_export_menu_route
-      - fixture:print_multiple_menu_route
-      - fixture:hero_lab_importer_menu_route
-      - menu:open_for_printing
-      - menu:open_for_export
-      - menu:file_print_multiple
-      - menu:hero_lab_importer
-    fixture_manifest: /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
+- id: build_explain_publish
+  map_kind: workflow_map
+  oracle_actions:
+  - build
+  - validate
+  - sources
+  - summary
+  compare_artifacts:
+  - workflow:build_explain_publish
+  - baseline:first_launch_workbench_or_restore
+  - baseline:menu_tools_settings_masterindex_roster
+- id: import_export_round_trip
+  map_kind: workflow_map
+  oracle_actions:
+  - metadata
+  - sources
+  - validate
+  compare_artifacts:
+  - fixture:open_for_printing_menu_route
+  - fixture:open_for_export_menu_route
+  - fixture:print_multiple_menu_route
+  - fixture:hero_lab_importer_menu_route
+  - menu:open_for_printing
+  - menu:open_for_export
+  - menu:file_print_multiple
+  - menu:hero_lab_importer
+  fixture_manifest: /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
 families:
-  - id: shell_workbench_orientation
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
-    compare_artifacts:
-      - baseline:first_launch_workbench_or_restore
-      - baseline:menu_windows_help_liveness
-    readiness_target: veteran_approved
-  - id: dense_builder_and_career_workflows
-    legacy_oracle_sources:
-      - /docker/chummer5a/docs/PARITY_ORACLE.json
-    compare_artifacts:
-      - oracle:tabs
-      - oracle:workspace_actions
-      - workflow:build_explain_publish
-    readiness_target: veteran_approved
-  - id: identity_contacts_lifestyles_history
-    legacy_oracle_sources:
-      - /docker/chummer5a/docs/PARITY_ORACLE.json
-    compare_artifacts:
-      - workflow:contacts
-      - workflow:lifestyles
-      - workflow:notes
-    readiness_target: task_proven
-  - id: sourcebooks_reference_and_master_index
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/Utility Forms/MasterIndex.Designer.cs
-    compare_artifacts:
-      - baseline:master_index_dense_reference_flow
-      - workflow:sources
-    readiness_target: veteran_approved
-  - id: settings_and_rules_environment_authoring
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
-      - /docker/chummer5a/docs/PARITY_ORACLE.json
-    compare_artifacts:
-      - workflow:rules
-      - workflow:sources
-      - baseline:menu_tools_settings_masterindex_roster
-    readiness_target: task_proven
-  - id: custom_data_xml_and_translator_bridge
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
-    compare_artifacts:
-      - menu:translator
-      - menu:xml_editor
-    readiness_target: implemented
-  - id: dice_initiative_and_table_utilities
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
-    compare_artifacts:
-      - menu:dice_roller
-      - workflow:initiative
-    readiness_target: veteran_approved
-  - id: roster_dashboards_and_multi_character_ops
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/Utility Forms/CharacterRoster.Designer.cs
-    compare_artifacts:
-      - baseline:character_roster_multi_character_flow
-      - workflow:multi_character
-    readiness_target: veteran_approved
-  - id: sheet_export_print_viewer_and_exchange
-    legacy_oracle_sources:
-      - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
-    compare_artifacts:
-      - menu:open_for_printing
-      - menu:open_for_export
-      - menu:file_print_multiple
-    readiness_target: task_proven
-  - id: legacy_and_adjacent_import_oracles
-    legacy_oracle_sources:
-      - /docker/chummer5a/docs/PARITY_ORACLE.json
-      - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
-    compare_artifacts:
-      - menu:hero_lab_importer
-      - workflow:import_oracle
-    readiness_target: task_proven
-  - id: sr6_supplements_designers_and_house_rules
-    legacy_oracle_sources:
-      - /docker/chummer5a/docs/PARITY_ORACLE.json
-    compare_artifacts:
-      - workflow:sr6_supplements
-      - workflow:house_rules
-    readiness_target: implemented
+- id: shell_workbench_orientation
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+  compare_artifacts:
+  - baseline:first_launch_workbench_or_restore
+  - baseline:menu_windows_help_liveness
+  readiness_target: veteran_approved
+- id: dense_builder_and_career_workflows
+  legacy_oracle_sources:
+  - /docker/chummer5a/docs/PARITY_ORACLE.json
+  compare_artifacts:
+  - oracle:tabs
+  - oracle:workspace_actions
+  - workflow:build_explain_publish
+  readiness_target: veteran_approved
+- id: identity_contacts_lifestyles_history
+  legacy_oracle_sources:
+  - /docker/chummer5a/docs/PARITY_ORACLE.json
+  compare_artifacts:
+  - workflow:contacts
+  - workflow:lifestyles
+  - workflow:notes
+  readiness_target: task_proven
+- id: sourcebooks_reference_and_master_index
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/Utility Forms/MasterIndex.Designer.cs
+  compare_artifacts:
+  - baseline:master_index_dense_reference_flow
+  - workflow:sources
+  readiness_target: veteran_approved
+- id: settings_and_rules_environment_authoring
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+  - /docker/chummer5a/docs/PARITY_ORACLE.json
+  compare_artifacts:
+  - workflow:rules
+  - workflow:sources
+  - baseline:menu_tools_settings_masterindex_roster
+  readiness_target: task_proven
+- id: custom_data_xml_and_translator_bridge
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+  compare_artifacts:
+  - menu:translator
+  - menu:xml_editor
+  readiness_target: implemented
+- id: dice_initiative_and_table_utilities
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+  compare_artifacts:
+  - menu:dice_roller
+  - workflow:initiative
+  readiness_target: veteran_approved
+- id: roster_dashboards_and_multi_character_ops
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/Utility Forms/CharacterRoster.Designer.cs
+  compare_artifacts:
+  - baseline:character_roster_multi_character_flow
+  - workflow:multi_character
+  readiness_target: veteran_approved
+- id: sheet_export_print_viewer_and_exchange
+  legacy_oracle_sources:
+  - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+  compare_artifacts:
+  - menu:open_for_printing
+  - menu:open_for_export
+  - menu:file_print_multiple
+  readiness_target: task_proven
+- id: legacy_and_adjacent_import_oracles
+  legacy_oracle_sources:
+  - /docker/chummer5a/docs/PARITY_ORACLE.json
+  - /docker/chummer5a/Chummer/Forms/ChummerMainForm.Designer.cs
+  compare_artifacts:
+  - menu:hero_lab_importer
+  - workflow:import_oracle
+  readiness_target: task_proven
+- id: sr6_supplements_designers_and_house_rules
+  legacy_oracle_sources:
+  - /docker/chummer5a/docs/PARITY_ORACLE.json
+  compare_artifacts:
+  - workflow:sr6_supplements
+  - workflow:house_rules
+  readiness_target: implemented
 desktop_non_negotiables_asserted:
   no_generic_shell_or_dashboard_first: true
   startup_is_workbench_or_restore: true
@@ -236,106 +245,123 @@ desktop_non_negotiables_capture_crosswalk:
   map_path: desktop_non_negotiable_baseline_map.asserted_non_negotiables
   screenshot_artifact_map_path: screenshot_artifact_baselines.baseline_to_screenshot
   required_non_negotiable_ids:
-    - no_generic_shell_or_dashboard_first
-    - startup_is_workbench_or_restore
-    - file_menu_live
-    - master_index_first_class
-    - character_roster_first_class
-    - claim_restore_in_installer_or_in_app
-    - no_browser_only_claim_code_ritual
-    - guided_product_installer_happy_path
+  - no_generic_shell_or_dashboard_first
+  - startup_is_workbench_or_restore
+  - file_menu_live
+  - master_index_first_class
+  - character_roster_first_class
+  - claim_restore_in_installer_or_in_app
+  - no_browser_only_claim_code_ritual
+  - guided_product_installer_happy_path
 desktop_client_coverage:
   coverage_key: desktop_client
   baseline_manifest: /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
   current_unresolved_external_host_proof_tuples: []
   tuple_compare_packs:
-    - tuple: avalonia:linux-x64:linux
-      first_minute_tasks:
-        - reach_real_workbench
-        - locate_save_import_settings
-        - locate_master_index_and_roster
-      required_baselines:
-        - first_launch_workbench_or_restore
-        - menu_file_open_save_import
-        - menu_tools_settings_masterindex_roster
-        - master_index_dense_reference_flow
-        - character_roster_multi_character_flow
-    - tuple: avalonia:osx-arm64:macos
-      first_minute_tasks:
-        - reach_real_workbench
-        - locate_save_import_settings
-        - locate_master_index_and_roster
-      required_baselines:
-        - first_launch_workbench_or_restore
-        - menu_file_open_save_import
-        - menu_tools_settings_masterindex_roster
-        - master_index_dense_reference_flow
-        - character_roster_multi_character_flow
-    - tuple: avalonia:win-x64:windows
-      first_minute_tasks:
-        - reach_real_workbench
-        - locate_save_import_settings
-        - locate_master_index_and_roster
-      required_baselines:
-        - first_launch_workbench_or_restore
-        - menu_file_open_save_import
-        - menu_tools_settings_masterindex_roster
-        - master_index_dense_reference_flow
-        - character_roster_multi_character_flow
+  - tuple: avalonia:linux-x64:linux
+    first_minute_tasks:
+    - reach_real_workbench
+    - locate_save_import_settings
+    - locate_master_index_and_roster
+    required_baselines:
+    - first_launch_workbench_or_restore
+    - menu_file_open_save_import
+    - menu_tools_settings_masterindex_roster
+    - master_index_dense_reference_flow
+    - character_roster_multi_character_flow
+  - tuple: avalonia:osx-arm64:macos
+    first_minute_tasks:
+    - reach_real_workbench
+    - locate_save_import_settings
+    - locate_master_index_and_roster
+    required_baselines:
+    - first_launch_workbench_or_restore
+    - menu_file_open_save_import
+    - menu_tools_settings_masterindex_roster
+    - master_index_dense_reference_flow
+    - character_roster_multi_character_flow
+  - tuple: avalonia:win-x64:windows
+    first_minute_tasks:
+    - reach_real_workbench
+    - locate_save_import_settings
+    - locate_master_index_and_roster
+    required_baselines:
+    - first_launch_workbench_or_restore
+    - menu_file_open_save_import
+    - menu_tools_settings_masterindex_roster
+    - master_index_dense_reference_flow
+    - character_roster_multi_character_flow
 task_local_frontier_context:
   assignment_kind: successor_wave_package
   frontier_id: 4287684466
   focus_profiles:
-    - top_flagship_grade
-    - whole_project_frontier
-    - next_90_day_successor_wave
+  - top_flagship_grade
+  - whole_project_frontier
+  - next_90_day_successor_wave
   focus_owners:
-    - chummer6-ui
-    - chummer6-core
-    - chummer6-design
-    - executive-assistant
+  - chummer6-ui
+  - chummer6-core
+  - chummer6-design
+  - executive-assistant
   focus_texts:
-    - top flagship grade
-    - whole project frontier
-    - feedback
-    - automatic bugfixing
-    - crash
-    - support
-    - accessibility
-    - localization
-    - restore confidence
-    - fit and finish
-    - sourcebook
-    - settings
-    - custom-data
-    - xml
-    - translator
-    - next90-m103-ea-parity-lab
-    - Extract Chummer5a oracle baselines and veteran workflow packs
+  - top flagship grade
+  - whole project frontier
+  - feedback
+  - automatic bugfixing
+  - crash
+  - support
+  - accessibility
+  - localization
+  - restore confidence
+  - fit and finish
+  - sourcebook
+  - settings
+  - custom-data
+  - xml
+  - translator
+  - next90-m103-ea-parity-lab
+  - Extract Chummer5a oracle baselines and veteran workflow packs
   frontier_briefs:
-    - "4287684466 [W7] Extract Chummer5a oracle baselines and veteran workflow packs (status: complete; owners: executive-assistant; deps: 101, 102; exit: Capture screenshot baselines, first-minute veteran tasks, and compare artifacts from the Chummer5a oracle repo.; Own and prove the surface slice(s): parity_lab:capture, veteran_compare_packs; Keep implementation scoped to the allowed paths: skills, tests, feedback, docs; Refresh flagship proof and close out the queue slice honestly when this package is landed for `executive-assistant` (next90-m103-ea-parity-lab).; Advance successor milestone 103: Chummer5a parity lab and veteran migration certification.)"
+  - '4287684466 [W7] Extract Chummer5a oracle baselines and veteran workflow packs
+    (status: complete; owners: executive-assistant; deps: 101, 102; exit: Capture
+    screenshot baselines, first-minute veteran tasks, and compare artifacts from the
+    Chummer5a oracle repo.; Own and prove the surface slice(s): parity_lab:capture,
+    veteran_compare_packs; Keep implementation scoped to the allowed paths: skills,
+    tests, feedback, docs; Refresh flagship proof and close out the queue slice honestly
+    when this package is landed for `executive-assistant` (next90-m103-ea-parity-lab).;
+    Advance successor milestone 103: Chummer5a parity lab and veteran migration certification.)'
   notes:
-    - Task-local telemetry is the current shard-4 successor-wave assignment context for package next90-m103-ea-parity-lab, not a release-readiness completion certificate.
-    - The worker-run guard for this retry is implementation-only; historical operator status snippets and supervisor helper outputs are not package evidence.
-    - The task-local telemetry does not carry per-lane release-readiness status, so the live whole-product coverage block below stays sourced from the latest published readiness receipt.
-    - The current published flagship readiness receipt is green across every flagship coverage lane, so this pack preserves successor-wave assignment context separately from live release truth.
+  - Task-local telemetry is the current shard-4 successor-wave assignment context
+    for package next90-m103-ea-parity-lab, not a release-readiness completion certificate.
+  - The worker-run guard for this retry is implementation-only; historical operator
+    status snippets and supervisor helper outputs are not package evidence.
+  - The task-local telemetry does not carry per-lane release-readiness status, so
+    the live whole-product coverage block below stays sourced from the latest published
+    readiness receipt.
+  - The current published flagship readiness receipt is green across every flagship
+    coverage lane, so this pack preserves successor-wave assignment context separately
+    from live release truth.
 whole_product_frontier_coverage:
   source_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
   package_relevant_coverage_keys:
-    - fleet_and_operator_loop
-    - desktop_client
+  - fleet_and_operator_loop
+  - desktop_client
   lanes:
-    - coverage_key: fleet_and_operator_loop
-      package_relevance: The compare pack supports operator review when Fleet routes veteran-parity drift or support fallout back to owner repos.
-      live_readiness_status: ready
-      live_readiness_summary: Fleet control-loop proof is current and steering a ready product surface set.
-    - coverage_key: desktop_client
-      package_relevance: The capture baselines anchor the promoted desktop tuple screenshots, first-minute tasks, and veteran-familiar shell landmarks.
-      live_readiness_status: ready
-      live_readiness_summary: Desktop install, release-channel, and flagship workbench proof are current.
+  - coverage_key: fleet_and_operator_loop
+    package_relevance: The compare pack supports operator review when Fleet routes
+      veteran-parity drift or support fallout back to owner repos.
+    live_readiness_status: ready
+    live_readiness_summary: Fleet control-loop proof is current and steering a ready
+      product surface set.
+  - coverage_key: desktop_client
+    package_relevance: The capture baselines anchor the promoted desktop tuple screenshots,
+      first-minute tasks, and veteran-familiar shell landmarks.
+    live_readiness_status: ready
+    live_readiness_summary: Desktop install, release-channel, and flagship workbench
+      proof are current.
 live_desktop_executable_gate_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
-  generated_at: 2026-04-18T18:19:11.035798Z
+  generated_at: 2026-04-18 18:19:11.035798+00:00
   status: pass
   blocked_by_external_constraints_only: false
   blocking_findings_count: 0
@@ -347,34 +373,38 @@ live_desktop_executable_gate_snapshot:
 visual_familiarity_screenshot_snapshot:
   source_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
   screenshot_dir: /docker/chummercomplete/chummer-presentation/.codex-studio/published/ui-flagship-release-gate-screenshots
-  reference_generated_at: 2026-04-18T18:16:17.739675Z
+  reference_generated_at: 2026-04-18 18:16:17.739675+00:00
   required_screenshots:
-    - 01-initial-shell-light.png
-    - 02-menu-open-light.png
-    - 03-settings-open-light.png
-    - 04-loaded-runner-light.png
-    - 05-dense-section-light.png
-    - 06-dense-section-dark.png
-    - 07-loaded-runner-tabs-light.png
-    - 08-cyberware-dialog-light.png
-    - 09-vehicles-section-light.png
-    - 10-contacts-section-light.png
-    - 11-diary-dialog-light.png
-    - 12-magic-dialog-light.png
-    - 13-matrix-dialog-light.png
-    - 14-advancement-dialog-light.png
-    - 15-creation-section-light.png
-    - 16-master-index-dialog-light.png
-    - 17-character-roster-dialog-light.png
-    - 18-import-dialog-light.png
+  - 01-initial-shell-light.png
+  - 02-menu-open-light.png
+  - 03-settings-open-light.png
+  - 04-loaded-runner-light.png
+  - 05-dense-section-light.png
+  - 06-dense-section-dark.png
+  - 07-loaded-runner-tabs-light.png
+  - 08-cyberware-dialog-light.png
+  - 09-vehicles-section-light.png
+  - 10-contacts-section-light.png
+  - 11-diary-dialog-light.png
+  - 12-magic-dialog-light.png
+  - 13-matrix-dialog-light.png
+  - 14-advancement-dialog-light.png
+  - 15-creation-section-light.png
+  - 16-master-index-dialog-light.png
+  - 17-character-roster-dialog-light.png
+  - 18-import-dialog-light.png
   missing_screenshots: []
 exit_readiness:
   blocker:
     local_executable_gate_findings: []
     unresolved_external_host_proof_tuples: []
   notes:
-    - Veteran compare packs are now extracted and source-backed.
-    - Live readiness and desktop executable-gate posture can move during the worker run; the pack records the latest observed state at sync time.
-    - The current published UI executable gate passes with zero local or external blocking findings.
-    - The current published flagship readiness receipt is green with no remaining coverage-gap lanes.
-    - The current task-local telemetry is successor-wave assignment context only; it does not override release-truth receipts.
+  - Veteran compare packs are now extracted and source-backed.
+  - Live readiness and desktop executable-gate posture can move during the worker
+    run; the pack records the latest observed state at sync time.
+  - The current published UI executable gate passes with zero local or external blocking
+    findings.
+  - The current published flagship readiness receipt is green with no remaining coverage-gap
+    lanes.
+  - The current task-local telemetry is successor-wave assignment context only; it
+    does not override release-truth receipts.

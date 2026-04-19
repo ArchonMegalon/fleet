@@ -3641,6 +3641,51 @@ class ControllerRoutingTests(unittest.TestCase):
 
         self.assertEqual(payload.get("items"), [structured_item])
 
+    def test_merge_queue_overlay_item_replaces_existing_structured_item_with_same_package_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            published_root = repo_root / ".codex-studio" / "published"
+            published_root.mkdir(parents=True, exist_ok=True)
+            (published_root / "QUEUE.generated.yaml").write_text(
+                self.controller.yaml.safe_dump(
+                    {
+                        "mode": "append",
+                        "items": [
+                            {
+                                "package_id": "audit-task-17",
+                                "title": "Older queue slice",
+                                "task": "Older queue slice",
+                            },
+                            {
+                                "package_id": "audit-task-17",
+                                "title": "Newest queue slice",
+                                "task": "Newest queue slice",
+                                "source_items": ["a", "b"],
+                            },
+                        ],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            project_cfg = {
+                "id": "core",
+                "path": str(repo_root),
+                "queue": ["Base Queue Slice"],
+                "feedback_dir": "feedback",
+            }
+            replacement_item = {
+                "package_id": "audit-task-17",
+                "title": "Replacement queue slice",
+                "task": "Replacement queue slice",
+                "source_items": ["bundle"],
+            }
+
+            overlay_path = self.controller.merge_queue_overlay_item(project_cfg, replacement_item, mode="append")
+            payload = self.controller.load_yaml(overlay_path)
+
+        self.assertEqual(payload.get("items"), [replacement_item])
+
     def test_audit_candidate_queue_overlay_item_preserves_structured_metadata(self) -> None:
         candidate = {
             "id": 17,
@@ -3703,6 +3748,55 @@ class ControllerRoutingTests(unittest.TestCase):
         self.assertEqual(queue[0]["title"], "Structured Queue Slice")
         self.assertEqual(queue[0]["allowed_lanes"], ["core_booster"])
         self.assertEqual(queue[1], "Base Queue Slice")
+
+    def test_apply_queue_overlay_dedupes_structured_items_by_package_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            published_root = repo_root / ".codex-studio" / "published"
+            published_root.mkdir(parents=True, exist_ok=True)
+            (published_root / "QUEUE.generated.yaml").write_text(
+                self.controller.yaml.safe_dump(
+                    {
+                        "mode": "append",
+                        "items": [
+                            {
+                                "package_id": "audit-task-17",
+                                "title": "Older queue slice",
+                                "task": "Older queue slice",
+                            },
+                            {
+                                "package_id": "audit-task-17",
+                                "title": "Newest queue slice",
+                                "task": "Newest queue slice",
+                                "source_items": ["bundle"],
+                            },
+                        ],
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            project_cfg = {
+                "id": "fleet",
+                "path": str(repo_root),
+                "queue": ["Base Queue Slice"],
+                "feedback_dir": "feedback",
+            }
+
+            queue = self.controller.resolve_project_queue(project_cfg)
+
+        self.assertEqual(
+            queue,
+            [
+                "Base Queue Slice",
+                {
+                    "package_id": "audit-task-17",
+                    "title": "Newest queue slice",
+                    "task": "Newest queue slice",
+                    "source_items": ["bundle"],
+                },
+            ],
+        )
 
     def test_init_db_repairs_work_package_pull_request_foreign_key_after_pull_request_migration(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -786,6 +786,23 @@ def test_run_next90_m106_weekly_governor_packet_tests_rejects_unknown_named_test
     assert result == 1
 
 
+def test_run_next90_m106_weekly_governor_packet_tests_skips_runner_meta_tests_in_real_module() -> None:
+    runner = _load_module_from_path(
+        Path("/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py")
+    )
+    module = _load_module_from_path(
+        Path("/docker/fleet/tests/test_materialize_weekly_governor_packet.py")
+    )
+
+    collected_names = [name for name, _ in runner._iter_test_functions(module)]
+
+    assert collected_names
+    assert all(
+        not name.startswith("test_run_next90_m106_weekly_governor_packet_tests_")
+        for name in collected_names
+    )
+
+
 def _add_closed_dependency_queue_rows(paths: dict[str, Path]) -> None:
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
     for milestone_id in [101, 102, 103, 104, 105]:
