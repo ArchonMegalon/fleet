@@ -219,6 +219,8 @@ The full operator policy lives in [docs/codexliz_parallel_lane_policy.md](docs/c
 - keep `CODEX_HOME`, `HOME`, and `CODEXLIZ_STATE_DIR` lane-local; Fleet's worker homes already do this for supervisor/direct lanes
 - do not reuse the same writable `auth.json` or `.cache/codexliz` tree across two active lanes by default
 - leave `CODEXLIZ_PROXY_PORT` unset unless you need a fixed firewall exception; the shim now writes a lane-local chosen port to `${CODEXLIZ_STATE_DIR}/proxy.port`
+- retryable upstream `/v1/responses` failures now stay inside the `codexliz` wrapper with bounded backoff, so a long Cloudflare/Ollama outage does not require manual relaunch after recovery
+- the wrapper records lane-local outage state at `${CODEXLIZ_STATE_DIR}/outage.json`, and Fleet surfaces active outages as `transport_outage_waiting` instead of mislabeling them as productive streaming work
 - if you create manual operator lanes outside the supervisor, export a distinct `CODEX_HOME` before launching each shell so `auth.json`, proxy pid/logs, and proxy port files stay isolated per lane
 
 Example manual launch pattern:
@@ -228,6 +230,16 @@ export CODEX_HOME=/docker/fleet/state/manual-codexliz/lane-a
 export HOME="$CODEX_HOME"
 unset CODEXLIZ_PROXY_PORT
 codexliz --model qwen2.5-coder:32b
+```
+
+Optional retry tuning for prolonged upstream outages:
+
+```bash
+export CODEXLIZ_TRANSPORT_RETRY_ENABLED=1
+export CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS=30
+export CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS=300
+export CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS=28800
+export CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS=30
 ```
 
 ## Codex refresh policy

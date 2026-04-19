@@ -9825,6 +9825,72 @@ def operator_surface_payload(
         "rows": proof_rows,
     }
 
+    worker_transport_rows: List[Dict[str, Any]] = []
+    worker_transport_state_counts: Dict[str, int] = {}
+    worker_transport_outage_count = 0
+    worker_transport_retrying_count = 0
+    for item in shard_rows:
+        transport_state = str(item.get("worker_transport_state") or "").strip().lower()
+        current_outage = bool(item.get("worker_transport_current_outage"))
+        retry_count = int(item.get("worker_transport_retry_count") or 0)
+        if current_outage:
+            operator_state = "blocked"
+        elif transport_state in {"healthy"}:
+            operator_state = "nominal"
+        elif transport_state in {"failure", "outage_timeout"}:
+            operator_state = "attention"
+        elif transport_state:
+            operator_state = "attention"
+        else:
+            operator_state = "nominal"
+        worker_transport_state_counts[operator_state] = worker_transport_state_counts.get(operator_state, 0) + 1
+        if current_outage:
+            worker_transport_outage_count += 1
+        if retry_count > 0:
+            worker_transport_retrying_count += 1
+        if current_outage or transport_state or retry_count > 0:
+            worker_transport_rows.append(
+                {
+                    "name": str(item.get("name") or "").strip(),
+                    "operator_state": operator_state,
+                    "transport_state": transport_state or ("outage_waiting" if current_outage else "unknown"),
+                    "current_outage": current_outage,
+                    "selected_account_alias": str(item.get("selected_account_alias") or "").strip(),
+                    "selected_model": str(item.get("selected_model") or "").strip(),
+                    "last_http_status": int(item.get("worker_transport_last_http_status") or 0),
+                    "last_cf_ray": str(item.get("worker_transport_last_cf_ray") or "").strip(),
+                    "last_reason": str(item.get("worker_transport_last_reason") or "").strip(),
+                    "last_error": str(item.get("worker_transport_last_error") or "").strip(),
+                    "retry_count": retry_count,
+                    "next_retry_at": str(item.get("worker_transport_next_retry_at") or "").strip(),
+                    "outage_started_at": str(item.get("worker_transport_outage_started_at") or "").strip(),
+                    "outage_seconds": int(item.get("worker_transport_outage_seconds") or 0),
+                    "updated_at": str(item.get("worker_transport_updated_at") or "").strip(),
+                    "state_path": str(item.get("worker_transport_state_path") or "").strip(),
+                }
+            )
+    worker_transport_rows.sort(
+        key=lambda row: (
+            0 if row.get("current_outage") else 1,
+            0 if str(row.get("operator_state") or "") == "blocked" else 1,
+            -int(row.get("retry_count") or 0),
+            str(row.get("name") or ""),
+        )
+    )
+    worker_transport_health = {
+        "state": (
+            "blocked"
+            if worker_transport_outage_count
+            else ("attention" if any(str(row.get("operator_state")) == "attention" for row in worker_transport_rows) else "nominal")
+        ),
+        "counts": worker_transport_state_counts,
+        "shard_count": len(worker_transport_rows),
+        "outage_shard_count": worker_transport_outage_count,
+        "retrying_shard_count": worker_transport_retrying_count,
+        "rows": worker_transport_rows,
+        "attention_rows": [row for row in worker_transport_rows if str(row.get("operator_state") or "") != "nominal"][:8],
+    }
+
     account_rows: List[Dict[str, Any]] = []
     account_state_counts: Dict[str, int] = {}
     for pool in account_pools:
@@ -9902,6 +9968,8 @@ def operator_surface_payload(
         alerts.append(f"{recent_auto_requeues['stalled_worker_alert_count']} recent stalled-worker auto-requeue alert(s)")
     if proof_freshness["stale_or_missing_count"]:
         alerts.append(f"{proof_freshness['stale_or_missing_count']} proof artifact(s) are stale or missing")
+    if worker_transport_health["outage_shard_count"]:
+        alerts.append(f"{worker_transport_health['outage_shard_count']} shard(s) are waiting on local external-worker transport")
     if account_health["state"] == "blocked":
         alerts.append("one or more account pools are red")
     if not alerts and blocked_milestones:
@@ -9914,6 +9982,7 @@ def operator_surface_payload(
         "shard_debt_aging": shard_debt_aging["state"],
         "queue_health": queue_health["state"],
         "proof_freshness": proof_freshness["state"],
+        "worker_transport_health": worker_transport_health["state"],
         "account_health": account_health["state"],
         "resource_pressure": "attention" if str(resource_pressure["runtime_healing_alert_state"]).lower() in {"degraded", "action_needed"} else "nominal",
         "blocked_milestones": "blocked" if blocked_milestones else "nominal",
@@ -9930,6 +9999,7 @@ def operator_surface_payload(
         "shard_debt_aging": shard_debt_aging,
         "queue_health": queue_health,
         "proof_freshness": proof_freshness,
+        "worker_transport_health": worker_transport_health,
         "account_health": account_health,
         "resource_pressure": resource_pressure,
         "blocked_milestones": blocked_milestones[:12],
@@ -13417,6 +13487,7 @@ def render_operator_surface() -> str:
     shard_debt = payload.get("shard_debt_aging") or {}
     queue = payload.get("queue_health") or {}
     proof = payload.get("proof_freshness") or {}
+    worker_transport = payload.get("worker_transport_health") or {}
     accounts = payload.get("account_health") or {}
     resources = payload.get("resource_pressure") or {}
     blocked = payload.get("blocked_milestones") or []
@@ -13433,6 +13504,10 @@ def render_operator_surface() -> str:
     account_rows = "".join(
         f"<tr><td>{td(row.get('alias'))}</td><td>{chip(row.get('pressure_state'), tone=state_tone(row.get('pressure_state')))}</td><td>{td(row.get('token_status'))}</td><td>{td(row.get('left'))}</td><td>{td(row.get('last_error'))}</td></tr>"
         for row in (accounts.get("attention_accounts") or [])[:8]
+    )
+    worker_transport_rows = "".join(
+        f"<tr><td>{td(row.get('name'))}</td><td>{chip(row.get('transport_state'), tone=state_tone(row.get('operator_state')))}</td><td>{td(row.get('last_http_status') or '')}</td><td>{td(row.get('retry_count'))}</td><td>{td(row.get('next_retry_at') or row.get('updated_at'))}</td><td>{td(row.get('last_cf_ray') or row.get('last_reason') or row.get('last_error'))}</td></tr>"
+        for row in (worker_transport.get("attention_rows") or [])[:8]
     )
     blocked_rows = "".join(
         f"<tr><td>{td(row.get('scope'))}</td><td>{td(row.get('status'))}</td><td>{td(row.get('remaining_count'))}</td><td>{td('; '.join(row.get('remaining') or []))}</td><td>{td('; '.join(row.get('blockers') or []))}</td></tr>"
@@ -13514,7 +13589,7 @@ def render_operator_surface() -> str:
         <div>
           <div class="muted">Operator Surface</div>
           <h1>{chip(payload.get('overall_state'), tone=state_tone(payload.get('overall_state')))} {td(payload.get('next_page'))}</h1>
-          <p class="muted">Generated {td(payload.get('generated_at'))}. Compact view for shard mix, queue health, proof freshness, accounts, resources, and blocked milestones.</p>
+          <p class="muted">Generated {td(payload.get('generated_at'))}. Compact view for shard mix, queue health, external transport, proof freshness, accounts, resources, and blocked milestones.</p>
         </div>
         <nav class="links">
           <a href="/admin">Command Deck</a>
@@ -13529,6 +13604,7 @@ def render_operator_surface() -> str:
         {metric('Shard Mix', f"{shard_mix.get('running_shard_count', 0)} / {shard_mix.get('configured_shard_count', 0)}", f"open milestones {shard_mix.get('open_milestone_count', 0)}")}
         {metric('Shard Debt', shard_debt.get('state', 'unknown'), f"{(shard_debt.get('counts') or {}).get('attention', 0) + (shard_debt.get('counts') or {}).get('blocked', 0)} aging")}
         {metric('Queue Health', queue.get('state', 'unknown'), f"{queue.get('open_queue_project_count', 0)} open, {queue.get('stalled_worker_alert_count', 0)} stalled-worker alerts")}
+        {metric('External Transport', worker_transport.get('state', 'unknown'), f"{worker_transport.get('outage_shard_count', 0)} outage, {worker_transport.get('retrying_shard_count', 0)} retrying")}
         {metric('Proof Freshness', proof.get('state', 'unknown'), f"{proof.get('stale_or_missing_count', 0)} stale or missing")}
         {metric('Account Health', accounts.get('state', 'unknown'), f"{accounts.get('account_count', 0)} pools")}
         {metric('Resource Pressure', resources.get('critical_path_lane') or 'unknown', resources.get('mission_runway') or resources.get('state') or 'unknown')}
@@ -13568,6 +13644,10 @@ def render_operator_surface() -> str:
           <section class="panel">
             <h2>Proof Freshness</h2>
             <table><thead><tr><th>Artifact</th><th>State</th><th>Age</th><th>Reason</th></tr></thead><tbody>{proof_rows or '<tr><td colspan="4" class="muted">No proof artifacts found.</td></tr>'}</tbody></table>
+          </section>
+          <section class="panel">
+            <h2>External Worker Transport</h2>
+            <table><thead><tr><th>Shard</th><th>State</th><th>HTTP</th><th>Retries</th><th>Next Probe</th><th>Detail</th></tr></thead><tbody>{worker_transport_rows or '<tr><td colspan="6" class="muted">No active external transport issues.</td></tr>'}</tbody></table>
           </section>
           <section class="panel">
             <h2>Account Pressure</h2>

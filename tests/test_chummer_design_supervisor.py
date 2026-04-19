@@ -17017,6 +17017,68 @@ def test_statefile_shard_summaries_treats_foreign_container_pid_as_container_sco
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_statefile_shard_summaries_surfaces_codexliz_transport_outage_waiting(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-13"
+        run_dir = shard_root / "runs" / "20260419T074835Z-shard-13"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stderr_path.write_text("Trace: provider=liz transport=outage status=502 retry_in=30s elapsed=0s\n", encoding="utf-8")
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-19T07:49:00Z",
+                "mode": "completion_review",
+                "frontier_ids": [1184],
+                "open_milestone_ids": [1184],
+                "active_run_id": "20260419T074835Z-shard-13",
+                "active_run_started_at": "2026-04-19T07:48:35Z",
+                "active_run_worker_pid": 43210,
+                "worker_stderr_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-13/runs/20260419T074835Z-shard-13/worker.stderr.log",
+                "selected_account_alias": "direct-default",
+                "selected_model": "qwen3-coder-next:q8_0",
+            },
+        )
+        module._write_json(
+            shard_root / "codex-homes" / "direct-default" / ".cache" / "codexliz" / "outage.json",
+            {
+                "updated_at": "2026-04-19T07:49:00Z",
+                "state": "outage_waiting",
+                "current_outage": True,
+                "outage_started_at": "2026-04-19T06:28:00Z",
+                "outage_seconds": 4860,
+                "last_http_status": 502,
+                "last_cf_ray": "9eea4e0d8a1d9730-FRA",
+                "last_reason": "http_502",
+                "last_error": "HTTP 502",
+                "retry_count": 11,
+                "next_retry_at": "2026-04-19T07:49:30Z",
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: False)
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert len(summaries) == 1
+        shard = summaries[0]
+        assert shard["active_run_progress_state"] == "transport_outage_waiting"
+        assert shard["worker_transport_state"] == "outage_waiting"
+        assert shard["worker_transport_current_outage"] is True
+        assert shard["worker_transport_last_http_status"] == 502
+        assert shard["worker_transport_retry_count"] == 11
+        assert shard["worker_transport_last_cf_ray"] == "9eea4e0d8a1d9730-FRA"
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
 def test_live_state_with_current_completion_audit_overlays_fresh_completion_truth() -> None:
     module = _load_module()
     with tempfile.TemporaryDirectory() as tmp:

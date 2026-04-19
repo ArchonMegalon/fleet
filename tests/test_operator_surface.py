@@ -140,6 +140,17 @@ class OperatorSurfaceTests(unittest.TestCase):
                         "active_run_progress_state": "running",
                         "open_milestone_ids": [3893651879],
                         "focus_owners": ["fleet", "executive-assistant"],
+                        "selected_account_alias": "direct-default",
+                        "selected_model": "qwen3-coder-next:q8_0",
+                        "worker_transport_state": "outage_waiting",
+                        "worker_transport_current_outage": True,
+                        "worker_transport_last_http_status": 502,
+                        "worker_transport_last_cf_ray": "9eea4e0d8a1d9730-FRA",
+                        "worker_transport_last_reason": "http_502",
+                        "worker_transport_retry_count": 4,
+                        "worker_transport_next_retry_at": "2026-04-18T06:50:30Z",
+                        "worker_transport_outage_started_at": "2026-04-18T05:30:00Z",
+                        "worker_transport_updated_at": "2026-04-18T06:50:00Z",
                     }
                 ],
                 "updated_at": "2026-04-15T06:49:00Z",
@@ -171,6 +182,9 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertTrue(payload["queue_health"]["policy"]["signed_receipts_required"])
         self.assertEqual(payload["queue_health"]["recent_auto_requeues"][0]["receipt_path"], "/tmp/queue-recovery-demo.generated.json")
         self.assertEqual(payload["shard_debt_aging"]["rows"][0]["debt_state"], "blocked")
+        self.assertEqual(payload["worker_transport_health"]["state"], "blocked")
+        self.assertEqual(payload["worker_transport_health"]["outage_shard_count"], 1)
+        self.assertEqual(payload["worker_transport_health"]["attention_rows"][0]["last_http_status"], 502)
         self.assertEqual(payload["proof_freshness"]["stale_or_missing_count"], 1)
         self.assertEqual(payload["account_health"]["state"], "attention")
         self.assertEqual(payload["resource_pressure"]["critical_path_lane"], "core")
@@ -219,7 +233,24 @@ class OperatorSurfaceTests(unittest.TestCase):
             "runtime_healing": {"summary": {"alert_state": "nominal"}},
         }
         self.admin.queue_reconciliation_payload = lambda *args, **kwargs: {"overall_state": "nominal", "summary": {}, "history_windows": [], "readiness_drift": {"reasons": []}, "shell_surface_deltas": []}
-        self.admin.load_design_supervisor_active_shards_payload = lambda: {"configured_shard_count": 0, "active_shards": []}
+        self.admin.load_design_supervisor_active_shards_payload = lambda: {
+            "configured_shard_count": 13,
+            "active_shards": [
+                {
+                    "name": "shard-13",
+                    "active_run_id": "run-13",
+                    "active_run_process_alive": True,
+                    "active_run_progress_state": "transport_outage_waiting",
+                    "worker_transport_state": "outage_waiting",
+                    "worker_transport_current_outage": True,
+                    "worker_transport_last_http_status": 502,
+                    "worker_transport_last_cf_ray": "9eea4e0d8a1d9730-FRA",
+                    "worker_transport_retry_count": 3,
+                    "worker_transport_next_retry_at": "2026-04-18T06:56:00Z",
+                    "worker_transport_updated_at": "2026-04-18T06:55:00Z",
+                }
+            ],
+        }
         self.admin.published_artifact_freshness_payload = lambda: {}
         self.admin.load_completion_review_frontier_payload = lambda: {}
 
@@ -227,6 +258,8 @@ class OperatorSurfaceTests(unittest.TestCase):
 
         self.assertIn("15m", html)
         self.assertIn("Signed receipts are required", html)
+        self.assertIn("External Worker Transport", html)
+        self.assertIn("9eea4e0d8a1d9730-FRA", html)
         self.assertIn("file:///tmp/queue-recovery-demo.generated.json", html)
 
 

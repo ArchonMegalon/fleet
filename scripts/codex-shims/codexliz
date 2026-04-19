@@ -21,6 +21,13 @@ CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS="${CODEXLIZ_PREFLIGHT_TIMEOUT_SECONDS:-10}"
 CODEXLIZ_CF_ACCESS_FILE="${CODEXLIZ_CF_ACCESS_FILE:-/docker/fleet/secrets/codexliz-cf-access.env}"
 CODEXLIZ_CF_ACCESS_CLIENT_ID="${CODEXLIZ_CF_ACCESS_CLIENT_ID:-}"
 CODEXLIZ_CF_ACCESS_CLIENT_SECRET="${CODEXLIZ_CF_ACCESS_CLIENT_SECRET:-}"
+CODEXLIZ_TRANSPORT_RETRY_ENABLED="${CODEXLIZ_TRANSPORT_RETRY_ENABLED:-1}"
+CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS:-30}"
+CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS:-300}"
+CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS="${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS:-28800}"
+CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS="${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS:-30}"
+CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY="${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY:-1}"
+CODEXLIZ_OUTAGE_STATE_FILE="${CODEXLIZ_OUTAGE_STATE_FILE:-${CODEXLIZ_STATE_DIR}/outage.json}"
 
 if [ ! -x "${BASE_CODEX_SHIM}" ]; then
   echo "Missing base codex shim at ${BASE_CODEX_SHIM}" >&2
@@ -36,6 +43,27 @@ if [ ! -x "${PROXY_PYTHON}" ]; then
   echo "Missing python runtime for codexliz proxy at ${PROXY_PYTHON}" >&2
   exit 1
 fi
+
+env_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+positive_integer_or_default() {
+  local value="${1:-}"
+  local fallback="${2:-0}"
+  if [[ "${value}" =~ ^[0-9]+$ ]]; then
+    printf '%s' "${value}"
+    return
+  fi
+  printf '%s' "${fallback}"
+}
 
 normalize_remote_upstream_base_url() {
   local url="${1:-}"
@@ -259,6 +287,326 @@ resolve_proxy_port() {
   printf '%s' "${cached_port}"
 }
 
+detect_output_last_message_path() {
+  local -a args=("$@")
+  local i=0
+
+  while [ "${i}" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      -o|--output-last-message)
+        i=$((i + 1))
+        if [ "${i}" -lt "${#args[@]}" ]; then
+          printf '%s' "${args[$i]}"
+        fi
+        return
+        ;;
+      -c|--config|--enable|--disable|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-a|--ask-for-approval|-C|--cd|--add-dir|--remote|--remote-auth-token-env)
+        i=$((i + 2))
+        ;;
+      *)
+        i=$((i + 1))
+        ;;
+    esac
+  done
+}
+
+iso_in_seconds() {
+  local seconds="${1:-0}"
+  "${PROXY_PYTHON}" - "${seconds}" <<'PY'
+import datetime as dt
+import sys
+
+try:
+    seconds = max(0, int(float(sys.argv[1] or "0")))
+except ValueError:
+    seconds = 0
+now = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=seconds)
+print(now.replace(microsecond=0).isoformat().replace("+00:00", "Z"))
+PY
+}
+
+emit_transport_trace() {
+  local detail="${1:-}"
+  printf 'Trace: provider=%s transport=%s\n' "${CODEXLIZ_PROVIDER_KEY}" "${detail}" >&2
+}
+
+classify_transport_failure() {
+  local stderr_path="${1:-}"
+  local output_path="${2:-}"
+  local require_empty="${3:-1}"
+  local local_provider_base_url="${4:-}"
+  local upstream_base_url="${5:-}"
+
+  "${PROXY_PYTHON}" - "${stderr_path}" "${output_path}" "${require_empty}" "${local_provider_base_url}" "${upstream_base_url}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+stderr_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2]) if sys.argv[2] else None
+require_empty = str(sys.argv[3] or "1").strip().lower() in {"1", "true", "yes", "on"}
+local_provider_base_url = str(sys.argv[4] or "").strip()
+upstream_base_url = str(sys.argv[5] or "").strip()
+stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+output_empty = True
+if output_path and output_path.exists():
+    try:
+        output_empty = not output_path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        output_empty = True
+
+status_matches = re.findall(r"unexpected status (\d{3})", stderr_text)
+http_status = int(status_matches[-1]) if status_matches else None
+cf_matches = re.findall(r"cf-ray:\s*([A-Za-z0-9-]+)", stderr_text, flags=re.I)
+cf_ray = cf_matches[-1] if cf_matches else ""
+retryable_codes = {500, 502, 503, 504, 520, 522, 523, 524}
+reason = ""
+detail = ""
+retryable = False
+lowered = stderr_text.lower()
+transport_hint = any(hint and hint in stderr_text for hint in (local_provider_base_url, upstream_base_url))
+if "proxy_upstream_failure" in lowered:
+    retryable = True
+    reason = "proxy_upstream_failure"
+elif http_status in retryable_codes and (transport_hint or "cf-ray:" in lowered or "bad gateway" in lowered):
+    retryable = True
+    reason = f"http_{http_status}"
+elif "read operation timed out" in lowered or "timed out" in lowered:
+    retryable = True
+    reason = "transport_timeout"
+elif "reconnecting... 5/5" in lowered and (transport_hint or "cf-ray:" in lowered):
+    retryable = True
+    reason = "retries_exhausted"
+
+if require_empty and not output_empty:
+    retryable = False
+    reason = "output_already_present"
+
+if http_status is not None:
+    detail = f"HTTP {http_status}"
+elif reason == "transport_timeout":
+    detail = "timed out"
+elif reason == "proxy_upstream_failure":
+    detail = "proxy upstream failure"
+elif reason == "retries_exhausted":
+    detail = "retries exhausted"
+
+print(f"retryable={'1' if retryable else '0'}")
+print(f"http_status={http_status or ''}")
+print(f"cf_ray={cf_ray}")
+print(f"reason={reason}")
+print(f"detail={detail}")
+print(f"output_empty={'1' if output_empty else '0'}")
+PY
+}
+
+write_transport_state() {
+  local state="${1:-unknown}"
+  local current_outage="${2:-0}"
+  local http_status="${3:-}"
+  local cf_ray="${4:-}"
+  local reason="${5:-}"
+  local detail="${6:-}"
+  local retry_count="${7:-0}"
+  local outage_seconds="${8:-0}"
+  local next_retry_at="${9:-}"
+
+  mkdir -p "${CODEXLIZ_STATE_DIR}"
+  "${PROXY_PYTHON}" - "${CODEXLIZ_OUTAGE_STATE_FILE}" "${state}" "${current_outage}" "${http_status}" "${cf_ray}" "${reason}" "${detail}" "${retry_count}" "${outage_seconds}" "${next_retry_at}" "${CODEXLIZ_PROXY_PORT}" "${LOCAL_PROVIDER_BASE_URL:-}" "${REMOTE_UPSTREAM_BASE_URL:-}" "${CODEXLIZ_MODEL}" <<'PY'
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+(
+    path_text,
+    state,
+    current_outage_flag,
+    http_status,
+    cf_ray,
+    reason,
+    detail,
+    retry_count,
+    outage_seconds,
+    next_retry_at,
+    proxy_port,
+    local_provider_base_url,
+    upstream_base_url,
+    model,
+) = sys.argv[1:15]
+
+path = Path(path_text)
+try:
+    existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+except Exception:
+    existing = {}
+payload = existing if isinstance(existing, dict) else {}
+now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+current_outage = str(current_outage_flag or "0") == "1"
+if current_outage and not bool(payload.get("current_outage")):
+    payload["outage_started_at"] = now
+if not current_outage and bool(payload.get("current_outage")):
+    payload["recovered_at"] = now
+payload.update(
+    {
+        "updated_at": now,
+        "state": state or "unknown",
+        "current_outage": current_outage,
+        "last_http_status": int(http_status) if str(http_status).strip().isdigit() else None,
+        "last_cf_ray": cf_ray or "",
+        "last_reason": reason or "",
+        "last_error": detail or "",
+        "retry_count": max(0, int(retry_count or 0)),
+        "outage_seconds": max(0, int(outage_seconds or 0)),
+        "next_retry_at": next_retry_at or "",
+        "proxy_port": proxy_port or "",
+        "local_provider_base_url": local_provider_base_url or "",
+        "upstream_base_url": upstream_base_url or "",
+        "model": model or "",
+    }
+)
+if current_outage:
+    payload["last_failure_at"] = now
+else:
+    payload["last_success_at"] = now
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
+sleep_with_transport_trace() {
+  local sleep_seconds="${1:-0}"
+  local already_waited_seconds="${2:-0}"
+  local http_status="${3:-}"
+  local trace_interval
+  local remaining
+  local step
+
+  trace_interval="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_TRACE_INTERVAL_SECONDS}" "30")"
+  remaining="$(positive_integer_or_default "${sleep_seconds}" "0")"
+  already_waited_seconds="$(positive_integer_or_default "${already_waited_seconds}" "0")"
+  if [ "${remaining}" -le 0 ]; then
+    return 0
+  fi
+
+  emit_transport_trace "outage status=${http_status:-unknown} retry_in=${remaining}s elapsed=${already_waited_seconds}s"
+  while [ "${remaining}" -gt 0 ]; do
+    step="${remaining}"
+    if [ "${step}" -gt "${trace_interval}" ]; then
+      step="${trace_interval}"
+    fi
+    sleep "${step}"
+    remaining=$((remaining - step))
+    if [ "${remaining}" -gt 0 ]; then
+      emit_transport_trace "outage status=${http_status:-unknown} retry_in=${remaining}s elapsed=$((already_waited_seconds + sleep_seconds - remaining))s"
+    fi
+  done
+}
+
+run_codex_with_transport_retry() {
+  local output_path="${1:-}"
+  shift
+  local -a cmd=("$@")
+  local retry_enabled=0
+  local require_empty_output=0
+  local base_sleep_seconds
+  local max_backoff_seconds
+  local max_wait_seconds
+  local sleep_seconds=0
+  local retry_count=0
+  local waited_seconds=0
+  local stderr_file=""
+  local exit_code=0
+  local retryable="0"
+  local http_status=""
+  local cf_ray=""
+  local reason=""
+  local detail=""
+  local output_empty="1"
+  local next_retry_at=""
+  local classification=""
+  local key=""
+  local value=""
+
+  retry_enabled=0
+  if env_truthy "${CODEXLIZ_TRANSPORT_RETRY_ENABLED}"; then
+    case "${PRIMARY_COMMAND:-}" in
+      ""|exec)
+        retry_enabled=1
+        ;;
+    esac
+  fi
+  require_empty_output=0
+  if env_truthy "${CODEXLIZ_TRANSPORT_REQUIRE_EMPTY_OUTPUT_FOR_RETRY}"; then
+    require_empty_output=1
+  fi
+  base_sleep_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_INTERVAL_SECONDS}" "30")"
+  max_backoff_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_BACKOFF_MAX_SECONDS}" "300")"
+  max_wait_seconds="$(positive_integer_or_default "${CODEXLIZ_TRANSPORT_RETRY_MAX_WAIT_SECONDS}" "28800")"
+  sleep_seconds="${base_sleep_seconds}"
+
+  while :; do
+    stderr_file="$(mktemp "${TMPDIR:-/tmp}/codexliz-stderr.XXXXXX")"
+    set +e
+    "${cmd[@]}" 2> >(tee "${stderr_file}" >&2)
+    exit_code=$?
+    set -e
+
+    if [ "${exit_code}" -eq 0 ]; then
+      write_transport_state "healthy" 0 "" "" "success" "" "${retry_count}" "${waited_seconds}" ""
+      rm -f "${stderr_file}"
+      return 0
+    fi
+
+    classification="$(classify_transport_failure "${stderr_file}" "${output_path}" "${require_empty_output}" "${LOCAL_PROVIDER_BASE_URL}" "${REMOTE_UPSTREAM_BASE_URL}")"
+    retryable="0"
+    http_status=""
+    cf_ray=""
+    reason=""
+    detail=""
+    output_empty="1"
+    while IFS='=' read -r key value; do
+      case "${key}" in
+        retryable) retryable="${value}" ;;
+        http_status) http_status="${value}" ;;
+        cf_ray) cf_ray="${value}" ;;
+        reason) reason="${value}" ;;
+        detail) detail="${value}" ;;
+        output_empty) output_empty="${value}" ;;
+      esac
+    done <<< "${classification}"
+
+    if [ "${retry_enabled}" -ne 1 ] || [ "${retryable}" != "1" ]; then
+      write_transport_state "failure" 0 "${http_status}" "${cf_ray}" "${reason}" "${detail}" "${retry_count}" "${waited_seconds}" ""
+      rm -f "${stderr_file}"
+      return "${exit_code}"
+    fi
+
+    if [ "${waited_seconds}" -ge "${max_wait_seconds}" ]; then
+      emit_transport_trace "outage status=${http_status:-unknown} giving_up_after=${waited_seconds}s"
+      write_transport_state "outage_timeout" 1 "${http_status}" "${cf_ray}" "${reason}" "${detail}" "${retry_count}" "${waited_seconds}" ""
+      rm -f "${stderr_file}"
+      return "${exit_code}"
+    fi
+
+    retry_count=$((retry_count + 1))
+    if [ $((waited_seconds + sleep_seconds)) -gt "${max_wait_seconds}" ]; then
+      sleep_seconds=$((max_wait_seconds - waited_seconds))
+    fi
+    next_retry_at="$(iso_in_seconds "${sleep_seconds}")"
+    write_transport_state "outage_waiting" 1 "${http_status}" "${cf_ray}" "${reason}" "${detail}" "${retry_count}" "${waited_seconds}" "${next_retry_at}"
+    sleep_with_transport_trace "${sleep_seconds}" "${waited_seconds}" "${http_status}"
+    waited_seconds=$((waited_seconds + sleep_seconds))
+    start_proxy_if_needed "${REMOTE_UPSTREAM_BASE_URL}" "${CODEXLIZ_PROXY_PORT}"
+    if [ "${sleep_seconds}" -lt "${max_backoff_seconds}" ]; then
+      sleep_seconds=$((sleep_seconds * 2))
+      if [ "${sleep_seconds}" -gt "${max_backoff_seconds}" ]; then
+        sleep_seconds="${max_backoff_seconds}"
+      fi
+    fi
+    rm -f "${stderr_file}"
+  done
+}
+
 run_models_preflight() {
   local target_url="${1:-}"
   local target_label="${2:-transport}"
@@ -451,4 +799,9 @@ if [ -n "${CODEXLIZ_MODEL}" ] && ! has_explicit_model_override "$@"; then
   provider_args+=(-c "model=\"${CODEXLIZ_MODEL}\"")
 fi
 
-exec "${BASE_CODEX_SHIM}" "${provider_args[@]}" "$@"
+OUTPUT_LAST_MESSAGE_PATH="$(detect_output_last_message_path "$@")"
+if [ "${CODEXLIZ_TRANSPORT_RETRY_ENABLED}" = "0" ]; then
+  exec "${BASE_CODEX_SHIM}" "${provider_args[@]}" "$@"
+fi
+run_codex_with_transport_retry "${OUTPUT_LAST_MESSAGE_PATH}" "${BASE_CODEX_SHIM}" "${provider_args[@]}" "$@"
+exit $?

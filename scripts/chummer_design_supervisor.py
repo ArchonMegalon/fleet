@@ -12536,6 +12536,12 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
         selected_model = str(shard_state.get("selected_model") or active_run.get("selected_model") or "").strip()
         if not selected_model:
             selected_model = str(configured_entry.get("worker_model") or "").strip()
+        worker_transport = _load_codexliz_transport_state_for_shard(
+            shard_root,
+            selected_account_alias=selected_account_alias,
+        )
+        worker_transport_state = str(worker_transport.get("state") or "").strip()
+        worker_transport_current_outage = bool(worker_transport.get("current_outage"))
         active_run_worker_first_output_at = str(
             shard_state.get("active_run_worker_first_output_at") or active_run.get("worker_first_output_at") or ""
         ).strip()
@@ -12546,26 +12552,30 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             shard_state.get("active_run_progress_state") or active_run.get("progress_state") or ""
         ).strip()
         computed_progress_state = (
-            "closing"
-            if (
-                worker_pid > 0
-                and process_probe_scope == "local"
-                and process_alive is False
-                and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
-            )
+            "transport_outage_waiting"
+            if worker_transport_current_outage and worker_pid > 0
             else (
-                "streaming"
-                if str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+                "closing"
+                if (
+                    worker_pid > 0
+                    and process_probe_scope == "local"
+                    and process_alive is False
+                    and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+                )
                 else (
-                    "running_silent"
-                    if process_alive is True
+                    "streaming"
+                    if str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
                     else (
-                        "container_scoped"
-                        if worker_pid > 0 and process_probe_scope == "container_local"
+                        "running_silent"
+                        if process_alive is True
                         else (
-                            "missing_process"
-                            if worker_pid > 0 and process_alive is False
-                            else (f"idle_{idle_reason}" if idle_reason else "unknown")
+                            "container_scoped"
+                            if worker_pid > 0 and process_probe_scope == "container_local"
+                            else (
+                                "missing_process"
+                                if worker_pid > 0 and process_alive is False
+                                else (f"idle_{idle_reason}" if idle_reason else "unknown")
+                            )
                         )
                     )
                 )
@@ -12620,6 +12630,18 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                 "worker_last_message_path": resolved_paths.get("last_message", ""),
                 "active_run_output_updated_at": _iso(active_run_output_updated_at) if active_run_output_updated_at else "",
                 "active_run_output_sizes": active_run_output_sizes,
+                "worker_transport_state": worker_transport_state,
+                "worker_transport_current_outage": worker_transport_current_outage,
+                "worker_transport_updated_at": str(worker_transport.get("updated_at") or "").strip(),
+                "worker_transport_outage_started_at": str(worker_transport.get("outage_started_at") or "").strip(),
+                "worker_transport_outage_seconds": _coerce_int(worker_transport.get("outage_seconds"), 0),
+                "worker_transport_last_http_status": _coerce_int(worker_transport.get("last_http_status"), 0),
+                "worker_transport_last_cf_ray": str(worker_transport.get("last_cf_ray") or "").strip(),
+                "worker_transport_last_reason": str(worker_transport.get("last_reason") or "").strip(),
+                "worker_transport_last_error": str(worker_transport.get("last_error") or "").strip(),
+                "worker_transport_retry_count": _coerce_int(worker_transport.get("retry_count"), 0),
+                "worker_transport_next_retry_at": str(worker_transport.get("next_retry_at") or "").strip(),
+                "worker_transport_state_path": str(worker_transport.get("state_path") or "").strip(),
             }
         )
     return summaries
@@ -12627,6 +12649,36 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
 
 def _task_local_telemetry_path(run_dir: Path) -> Path:
     return run_dir / TASK_LOCAL_TELEMETRY_FILENAME
+
+
+def _load_codexliz_transport_state_for_shard(shard_root: Path, *, selected_account_alias: str = "") -> Dict[str, Any]:
+    codex_homes_root = shard_root / "codex-homes"
+    if not codex_homes_root.is_dir():
+        return {}
+    candidate_paths: List[Path] = []
+    alias = str(selected_account_alias or "").strip()
+    candidate_names = [alias, f"direct-{alias}" if alias else "", "direct-default"]
+    for name in candidate_names:
+        clean = str(name or "").strip()
+        if not clean:
+            continue
+        candidate = codex_homes_root / clean / ".cache" / "codexliz" / "outage.json"
+        if candidate.is_file():
+            candidate_paths.append(candidate)
+    if not candidate_paths:
+        candidate_paths = sorted(
+            codex_homes_root.glob("*/.cache/codexliz/outage.json"),
+            key=lambda path: path.stat().st_mtime if path.exists() else 0.0,
+            reverse=True,
+        )
+    for path in candidate_paths:
+        payload = _read_state(path)
+        if not isinstance(payload, dict) or not payload:
+            continue
+        updated = dict(payload)
+        updated["state_path"] = str(path)
+        return updated
+    return {}
 
 
 def _worker_bash_env_path(run_dir: Path) -> Path:
