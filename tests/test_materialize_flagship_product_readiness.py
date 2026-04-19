@@ -59,6 +59,224 @@ def _base_acceptance() -> dict:
     }
 
 
+def _flagship_parity_registry_payload(*, release_status: str) -> dict:
+    return {
+        "families": [
+            {
+                "id": "shell_workbench_orientation",
+                "legacy_parity_status": "covered",
+                "release_status": release_status,
+            }
+        ]
+    }
+
+
+def _parity_lab_capture_pack_payload(module, *, coverage_key: str = "desktop_client", missing_non_negotiable_ids=()) -> dict:
+    required_ids = sorted(set(module.PARITY_LAB_REQUIRED_NON_NEGOTIABLE_IDS) - {str(item).strip() for item in missing_non_negotiable_ids})
+    return {
+        "desktop_non_negotiable_baseline_map": {
+            "coverage_key": coverage_key,
+            "asserted_non_negotiables": [{"non_negotiable_id": item} for item in required_ids],
+        }
+    }
+
+
+def _veteran_compare_pack_payload(
+    module,
+    *,
+    readiness_target: str = "veteran_approved",
+    missing_non_negotiable_ids=(),
+    whole_product_coverage_keys=None,
+) -> dict:
+    required_ids = sorted(set(module.PARITY_LAB_REQUIRED_NON_NEGOTIABLE_IDS) - {str(item).strip() for item in missing_non_negotiable_ids})
+    coverage_keys = list(whole_product_coverage_keys or sorted(module.PARITY_LAB_REQUIRED_WHOLE_PRODUCT_COVERAGE_KEYS))
+    return {
+        "families": [
+            {
+                "id": "shell_workbench_orientation",
+                "readiness_target": readiness_target,
+            }
+        ],
+        "desktop_non_negotiables_asserted": {item: True for item in required_ids},
+        "whole_product_frontier_coverage": {"package_relevant_coverage_keys": coverage_keys},
+    }
+
+
+def _materialize_flagship_readiness_with_parity_lab(
+    tmp_path: Path,
+    module,
+    *,
+    release_status: str = "gold_ready",
+    readiness_target: str = "veteran_approved",
+    capture_coverage_key: str = "desktop_client",
+    missing_capture_non_negotiable_ids=(),
+    missing_workflow_non_negotiable_ids=(),
+    whole_product_coverage_keys=None,
+) -> dict:
+    out_path = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    flagship_parity_registry_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PARITY_REGISTRY.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    compile_manifest_path = tmp_path / ".codex-studio" / "published" / "compile.manifest.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_windows_exit_gate_path = tmp_path / "ui" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+    parity_lab_capture_pack_path = tmp_path / "docs" / "chummer5a-oracle" / "parity_lab_capture_pack.yaml"
+    veteran_compare_pack_path = tmp_path / "docs" / "chummer5a-oracle" / "veteran_workflow_packs.yaml"
+    current_iso = _now_iso()
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(flagship_parity_registry_path, _flagship_parity_registry_payload(release_status=release_status))
+    _write_yaml(
+        parity_lab_capture_pack_path,
+        _parity_lab_capture_pack_payload(
+            module,
+            coverage_key=capture_coverage_key,
+            missing_non_negotiable_ids=missing_capture_non_negotiable_ids,
+        ),
+    )
+    _write_yaml(
+        veteran_compare_pack_path,
+        _veteran_compare_pack_payload(
+            module,
+            readiness_target=readiness_target,
+            missing_non_negotiable_ids=missing_workflow_non_negotiable_ids,
+            whole_product_coverage_keys=whole_product_coverage_keys,
+        ),
+    )
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(journey_gates_path, _base_journey_gates())
+    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    supervisor_state = _base_supervisor_state()
+    supervisor_state["updated_at"] = current_iso
+    supervisor_state["focus_profiles"] = ["top_flagship_grade", "whole_project_frontier"]
+    _write_json(supervisor_state_path, supervisor_state)
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_windows_exit_gate_path,
+        {
+            "contract_name": "chummer6-ui.windows_desktop_exit_gate",
+            "status": "passed",
+            "checks": {
+                "embedded_payload_marker_present": True,
+                "embedded_sample_marker_present": True,
+            },
+        },
+    )
+    _write_json(
+        ui_executable_exit_gate_path,
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            generated_at=current_iso,
+        ),
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass", "evidence": {}},
+    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+    _write_json(
+        release_channel_path,
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            journeys_passed=("install_claim_restore_continue",),
+            generated_at=current_iso,
+        ),
+    )
+    _write_json(releases_json_path, {"status": "published"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-windows-exit-gate",
+            str(ui_windows_exit_gate_path),
+            "--ui-workflow-parity-proof",
+            str(ui_workflow_parity_path),
+            "--ui-executable-exit-gate",
+            str(ui_executable_exit_gate_path),
+            "--ui-workflow-execution-gate",
+            str(ui_workflow_execution_gate_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_visual_familiarity_exit_gate_path),
+            "--sr4-workflow-parity-proof",
+            str(sr4_workflow_parity_path),
+            "--sr6-workflow-parity-proof",
+            str(sr6_workflow_parity_path),
+            "--sr4-sr6-frontier-receipt",
+            str(sr4_sr6_frontier_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    return json.loads(out_path.read_text(encoding="utf-8"))
+
+
 def _base_feedback_loop_gate() -> dict:
     return {
         "version": 1,
@@ -11006,3 +11224,51 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
     assert fleet_evidence["journey_effective_overall_state"] == "ready"
     assert fleet_evidence["supervisor_completion_status"] == "fail"
     assert fleet_evidence["supervisor_completion_status_recovered_from_current_readiness"] is True
+
+
+def test_flagship_product_readiness_binds_parity_lab_evidence_into_veteran_ready_truth(tmp_path: Path) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(tmp_path, module)
+
+    veteran_plane = payload["readiness_planes"]["veteran_ready"]
+    veteran_evidence = veteran_plane["evidence"]
+    flagship_plane = payload["readiness_planes"]["flagship_ready"]
+    flagship_registry = payload["flagship_parity_registry"]
+
+    assert veteran_plane["status"] == "ready"
+    assert veteran_evidence["parity_lab_ready"] is True
+    assert veteran_evidence["parity_lab_capture_pack_present"] is True
+    assert veteran_evidence["parity_lab_veteran_compare_pack_present"] is True
+    assert veteran_evidence["parity_lab_capture_coverage_key"] == "desktop_client"
+    assert veteran_evidence["parity_lab_capture_coverage_key_matches"] is True
+    assert veteran_evidence["parity_lab_missing_flagship_family_ids"] == []
+    assert veteran_evidence["parity_lab_families_below_target"] == []
+    assert veteran_evidence["parity_lab_capture_missing_non_negotiable_ids"] == []
+    assert veteran_evidence["parity_lab_workflow_missing_non_negotiable_ids"] == []
+    assert veteran_evidence["parity_lab_missing_whole_product_coverage_keys"] == []
+    assert flagship_plane["evidence"]["parity_lab_ready"] is True
+    assert flagship_registry["parity_lab_ready"] is True
+
+
+def test_flagship_product_readiness_does_not_treat_unbound_parity_lab_docs_as_veteran_ready(tmp_path: Path) -> None:
+    module = _load_module()
+    payload = _materialize_flagship_readiness_with_parity_lab(
+        tmp_path,
+        module,
+        capture_coverage_key="fleet_and_operator_loop",
+        missing_capture_non_negotiable_ids=("master_index_first_class",),
+    )
+
+    veteran_plane = payload["readiness_planes"]["veteran_ready"]
+    veteran_evidence = veteran_plane["evidence"]
+    flagship_plane = payload["readiness_planes"]["flagship_ready"]
+
+    assert veteran_plane["status"] == "warning"
+    assert veteran_evidence["parity_lab_ready"] is False
+    assert veteran_evidence["parity_lab_capture_coverage_key"] == "fleet_and_operator_loop"
+    assert veteran_evidence["parity_lab_capture_coverage_key_matches"] is False
+    assert veteran_evidence["parity_lab_capture_missing_non_negotiable_ids"] == ["master_index_first_class"]
+    assert "Parity-lab capture pack is missing required desktop non-negotiables" in " ".join(veteran_plane["reasons"])
+    assert "Parity-lab capture pack no longer binds its non-negotiable map to desktop_client coverage." in veteran_plane["reasons"]
+    assert flagship_plane["status"] == "warning"
+    assert flagship_plane["evidence"]["parity_lab_ready"] is False

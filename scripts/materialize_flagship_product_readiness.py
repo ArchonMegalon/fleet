@@ -77,6 +77,9 @@ DEFAULT_JOURNEY_GATES = ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.ge
 DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
 DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
+DEFAULT_PARITY_LAB_DOCS_ROOT = ROOT / "docs" / "chummer5a-oracle"
+DEFAULT_PARITY_LAB_CAPTURE_PACK = DEFAULT_PARITY_LAB_DOCS_ROOT / "parity_lab_capture_pack.yaml"
+DEFAULT_VETERAN_WORKFLOW_PACK = DEFAULT_PARITY_LAB_DOCS_ROOT / "veteran_workflow_packs.yaml"
 DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state.json"
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
 EXTERNAL_PROOF_COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
@@ -351,6 +354,19 @@ PARITY_RULES_AND_IMPORT_FAMILY_IDS = {
     "legacy_and_adjacent_import_oracles",
     "sr6_supplements_designers_and_house_rules",
 }
+PARITY_LAB_REQUIRED_NON_NEGOTIABLE_IDS = frozenset(
+    {
+        "no_generic_shell_or_dashboard_first",
+        "startup_is_workbench_or_restore",
+        "file_menu_live",
+        "master_index_first_class",
+        "character_roster_first_class",
+        "claim_restore_in_installer_or_in_app",
+        "no_browser_only_claim_code_ritual",
+        "guided_product_installer_happy_path",
+    }
+)
+PARITY_LAB_REQUIRED_WHOLE_PRODUCT_COVERAGE_KEYS = frozenset({"desktop_client", "fleet_and_operator_loop"})
 REPO_PROOF_REASON_RE = re.compile(r"repo proof (?P<repo>[^:\s]+):(?P<path>[^\s]+)")
 
 
@@ -1214,6 +1230,128 @@ def _summarize_ids(ids: Sequence[str], *, limit: int = 4) -> str:
     if len(values) <= limit:
         return ", ".join(values)
     return ", ".join(values[:limit]) + f", +{len(values) - limit} more"
+
+
+def _summarize_status_gaps(rows: Sequence[Dict[str, Any]], *, limit: int = 4) -> str:
+    parts = [
+        f"{str(row.get('id') or '').strip()} ({str(row.get('release_status') or '').strip()} < {str(row.get('required_status') or '').strip()})"
+        for row in rows
+        if str(row.get("id") or "").strip()
+    ]
+    return _summarize_ids(parts, limit=limit)
+
+
+def _flagship_parity_status_by_family(families: Sequence[Dict[str, Any]]) -> Dict[str, str]:
+    rows: Dict[str, str] = {}
+    for family in families:
+        family_id = str(family.get("id") or "").strip()
+        if not family_id:
+            continue
+        rows[family_id] = _normalize_flagship_parity_release_status(family.get("release_status"))
+    return rows
+
+
+def _parity_lab_readiness_evidence(
+    *,
+    flagship_families: Sequence[Dict[str, Any]],
+    parity_lab_capture_pack: Dict[str, Any],
+    veteran_workflow_pack: Dict[str, Any],
+) -> Dict[str, Any]:
+    status_by_family = _flagship_parity_status_by_family(flagship_families)
+    family_target_rows: List[Dict[str, Any]] = []
+    family_targets: Dict[str, str] = {}
+    invalid_target_family_ids: List[str] = []
+    for row in _dict_rows(veteran_workflow_pack.get("families")):
+        family_id = str(row.get("id") or "").strip()
+        if not family_id:
+            continue
+        target = _normalize_flagship_parity_release_status(row.get("readiness_target"))
+        family_target_rows.append({"id": family_id, "readiness_target": target})
+        family_targets[family_id] = target
+        if target not in FLAGSHIP_PARITY_RELEASE_STATUS_ORDER:
+            invalid_target_family_ids.append(family_id)
+
+    missing_flagship_family_ids = sorted(set(status_by_family) - set(family_targets))
+    families_below_target: List[Dict[str, Any]] = []
+    for family_id, required_status in sorted(family_targets.items()):
+        release_status = status_by_family.get(family_id, "")
+        if FLAGSHIP_PARITY_RELEASE_STATUS_ORDER.get(release_status, -1) < FLAGSHIP_PARITY_RELEASE_STATUS_ORDER.get(
+            required_status,
+            -1,
+        ):
+            families_below_target.append(
+                {
+                    "id": family_id,
+                    "release_status": release_status or "unknown",
+                    "required_status": required_status or "unknown",
+                }
+            )
+
+    capture_map = (
+        parity_lab_capture_pack.get("desktop_non_negotiable_baseline_map")
+        if isinstance(parity_lab_capture_pack.get("desktop_non_negotiable_baseline_map"), dict)
+        else {}
+    )
+    capture_coverage_key = str(capture_map.get("coverage_key") or "").strip()
+    capture_non_negotiable_ids = sorted(
+        {
+            str(dict(row).get("non_negotiable_id") or "").strip()
+            for row in (capture_map.get("asserted_non_negotiables") or [])
+            if str(dict(row).get("non_negotiable_id") or "").strip()
+        }
+    )
+    workflow_non_negotiable_ids = sorted(
+        {
+            key.strip()
+            for key, enabled in dict(veteran_workflow_pack.get("desktop_non_negotiables_asserted") or {}).items()
+            if key.strip() and enabled is True
+        }
+    )
+    whole_product_coverage = (
+        veteran_workflow_pack.get("whole_product_frontier_coverage")
+        if isinstance(veteran_workflow_pack.get("whole_product_frontier_coverage"), dict)
+        else {}
+    )
+    whole_product_coverage_keys = sorted(
+        set(_as_string_list(whole_product_coverage.get("package_relevant_coverage_keys")))
+    )
+    missing_capture_non_negotiable_ids = sorted(
+        PARITY_LAB_REQUIRED_NON_NEGOTIABLE_IDS - set(capture_non_negotiable_ids)
+    )
+    missing_workflow_non_negotiable_ids = sorted(
+        PARITY_LAB_REQUIRED_NON_NEGOTIABLE_IDS - set(workflow_non_negotiable_ids)
+    )
+    missing_whole_product_coverage_keys = sorted(
+        PARITY_LAB_REQUIRED_WHOLE_PRODUCT_COVERAGE_KEYS - set(whole_product_coverage_keys)
+    )
+    ready = bool(parity_lab_capture_pack) and bool(veteran_workflow_pack) and not any(
+        (
+            not family_target_rows,
+            invalid_target_family_ids,
+            missing_flagship_family_ids,
+            families_below_target,
+            missing_capture_non_negotiable_ids,
+            missing_workflow_non_negotiable_ids,
+            capture_coverage_key != "desktop_client",
+            missing_whole_product_coverage_keys,
+        )
+    )
+    return {
+        "ready": ready,
+        "family_target_count": len(family_target_rows),
+        "family_targets": family_target_rows,
+        "invalid_target_family_ids": invalid_target_family_ids,
+        "missing_flagship_family_ids": missing_flagship_family_ids,
+        "families_below_target": families_below_target,
+        "capture_coverage_key": capture_coverage_key,
+        "capture_coverage_key_matches": capture_coverage_key == "desktop_client",
+        "capture_non_negotiable_ids": capture_non_negotiable_ids,
+        "workflow_non_negotiable_ids": workflow_non_negotiable_ids,
+        "missing_capture_non_negotiable_ids": missing_capture_non_negotiable_ids,
+        "missing_workflow_non_negotiable_ids": missing_workflow_non_negotiable_ids,
+        "whole_product_coverage_keys": whole_product_coverage_keys,
+        "missing_whole_product_coverage_keys": missing_whole_product_coverage_keys,
+    }
 
 
 def _route_job_missing_primary(job: Dict[str, Any]) -> bool:
@@ -2734,6 +2872,15 @@ def build_flagship_product_readiness_payload(
     runbook_command_bundle_file_count = _nonnegative_int(
         extract_runbook_field(external_proof_runbook, "command_bundle_file_count"),
         0,
+    )
+    parity_lab_docs_root = (repo_root or ROOT) / "docs" / "chummer5a-oracle"
+    effective_parity_lab_capture_pack_path, parity_lab_capture_pack = load_optional_yaml_with_fallback(
+        parity_lab_docs_root / DEFAULT_PARITY_LAB_CAPTURE_PACK.name,
+        DEFAULT_PARITY_LAB_CAPTURE_PACK,
+    )
+    effective_veteran_workflow_pack_path, veteran_workflow_pack = load_optional_yaml_with_fallback(
+        parity_lab_docs_root / DEFAULT_VETERAN_WORKFLOW_PACK.name,
+        DEFAULT_VETERAN_WORKFLOW_PACK,
     )
     effective_external_proof_commands_dir = (
         DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR
@@ -5532,6 +5679,12 @@ def build_flagship_product_readiness_payload(
     families_below_task_proven = _flagship_parity_family_ids_below(flagship_parity_families, "task_proven")
     families_below_veteran_approved = _flagship_parity_family_ids_below(flagship_parity_families, "veteran_approved")
     families_below_gold_ready = _flagship_parity_family_ids_below(flagship_parity_families, "gold_ready")
+    parity_lab_evidence = _parity_lab_readiness_evidence(
+        flagship_families=flagship_parity_families,
+        parity_lab_capture_pack=parity_lab_capture_pack,
+        veteran_workflow_pack=veteran_workflow_pack,
+    )
+    parity_lab_ready = bool(parity_lab_evidence.get("ready"))
 
     route_jobs = _dict_rows(primary_route_registry.get("jobs"))
     route_jobs_missing_primary = [
@@ -5653,6 +5806,51 @@ def build_flagship_product_readiness_payload(
         veteran_reasons.append("Veteran first-minute gate does not define required tasks.")
     if not visual_gate_ready:
         veteran_reasons.append("Desktop visual familiarity gate is not ready.")
+    if not parity_lab_capture_pack:
+        veteran_reasons.append("Parity-lab capture pack is missing.")
+    if not veteran_workflow_pack:
+        veteran_reasons.append("Parity-lab veteran compare pack is missing.")
+    if int(parity_lab_evidence.get("family_target_count") or 0) <= 0:
+        veteran_reasons.append("Parity-lab veteran compare pack does not declare flagship family readiness targets.")
+    if _as_string_list(parity_lab_evidence.get("invalid_target_family_ids")):
+        veteran_reasons.append(
+            "Parity-lab veteran compare pack has invalid family readiness targets: "
+            + _summarize_ids(_as_string_list(parity_lab_evidence.get("invalid_target_family_ids")))
+            + "."
+        )
+    if _as_string_list(parity_lab_evidence.get("missing_flagship_family_ids")):
+        veteran_reasons.append(
+            "Parity-lab veteran compare pack is missing flagship family targets: "
+            + _summarize_ids(_as_string_list(parity_lab_evidence.get("missing_flagship_family_ids")))
+            + "."
+        )
+    if _as_string_list(parity_lab_evidence.get("missing_capture_non_negotiable_ids")):
+        veteran_reasons.append(
+            "Parity-lab capture pack is missing required desktop non-negotiables: "
+            + _summarize_ids(_as_string_list(parity_lab_evidence.get("missing_capture_non_negotiable_ids")))
+            + "."
+        )
+    if _as_string_list(parity_lab_evidence.get("missing_workflow_non_negotiable_ids")):
+        veteran_reasons.append(
+            "Parity-lab veteran compare pack is missing required desktop non-negotiables: "
+            + _summarize_ids(_as_string_list(parity_lab_evidence.get("missing_workflow_non_negotiable_ids")))
+            + "."
+        )
+    if not bool(parity_lab_evidence.get("capture_coverage_key_matches")):
+        veteran_reasons.append("Parity-lab capture pack no longer binds its non-negotiable map to desktop_client coverage.")
+    if _as_string_list(parity_lab_evidence.get("missing_whole_product_coverage_keys")):
+        veteran_reasons.append(
+            "Parity-lab veteran compare pack is missing required whole-product coverage keys: "
+            + _summarize_ids(_as_string_list(parity_lab_evidence.get("missing_whole_product_coverage_keys")))
+            + "."
+        )
+    parity_lab_families_below_target = parity_lab_evidence.get("families_below_target")
+    if isinstance(parity_lab_families_below_target, list) and parity_lab_families_below_target:
+        veteran_reasons.append(
+            "Flagship parity registry is still below parity-lab readiness targets: "
+            + _summarize_status_gaps(parity_lab_families_below_target)
+            + "."
+        )
     if families_below_veteran_approved:
         veteran_reasons.append(
             "Flagship parity families are still below veteran-approved: " + _summarize_ids(families_below_veteran_approved) + "."
@@ -5662,6 +5860,7 @@ def build_flagship_product_readiness_payload(
         + int(bool(veteran_required_landmarks))
         + int(bool(veteran_tasks))
         + int(visual_gate_ready)
+        + int(parity_lab_ready)
         + int(len(families_below_task_proven) == 0),
         reasons=veteran_reasons,
         summary_ready="Veteran-orientation proof is current for the promoted desktop route.",
@@ -5672,10 +5871,33 @@ def build_flagship_product_readiness_payload(
             "required_landmark_count": len(veteran_required_landmarks),
             "task_count": len(veteran_tasks),
             "visual_gate_ready": visual_gate_ready,
+            "parity_lab_ready": parity_lab_ready,
+            "parity_lab_capture_pack_path": str(effective_parity_lab_capture_pack_path),
+            "parity_lab_capture_pack_present": bool(parity_lab_capture_pack),
+            "parity_lab_veteran_compare_pack_path": str(effective_veteran_workflow_pack_path),
+            "parity_lab_veteran_compare_pack_present": bool(veteran_workflow_pack),
+            "parity_lab_family_target_count": int(parity_lab_evidence.get("family_target_count") or 0),
+            "parity_lab_invalid_target_family_ids": _as_string_list(parity_lab_evidence.get("invalid_target_family_ids")),
+            "parity_lab_missing_flagship_family_ids": _as_string_list(parity_lab_evidence.get("missing_flagship_family_ids")),
+            "parity_lab_families_below_target": parity_lab_families_below_target if isinstance(parity_lab_families_below_target, list) else [],
+            "parity_lab_capture_coverage_key": str(parity_lab_evidence.get("capture_coverage_key") or "").strip(),
+            "parity_lab_capture_coverage_key_matches": bool(parity_lab_evidence.get("capture_coverage_key_matches")),
+            "parity_lab_capture_non_negotiable_ids": _as_string_list(parity_lab_evidence.get("capture_non_negotiable_ids")),
+            "parity_lab_workflow_non_negotiable_ids": _as_string_list(parity_lab_evidence.get("workflow_non_negotiable_ids")),
+            "parity_lab_capture_missing_non_negotiable_ids": _as_string_list(
+                parity_lab_evidence.get("missing_capture_non_negotiable_ids")
+            ),
+            "parity_lab_workflow_missing_non_negotiable_ids": _as_string_list(
+                parity_lab_evidence.get("missing_workflow_non_negotiable_ids")
+            ),
+            "parity_lab_whole_product_coverage_keys": _as_string_list(parity_lab_evidence.get("whole_product_coverage_keys")),
+            "parity_lab_missing_whole_product_coverage_keys": _as_string_list(
+                parity_lab_evidence.get("missing_whole_product_coverage_keys")
+            ),
             "families_below_task_proven": families_below_task_proven,
             "families_below_veteran_approved": families_below_veteran_approved,
         },
-        hard_fail=not bool(veteran_first_minute_gate),
+        hard_fail=not bool(veteran_first_minute_gate) or not bool(parity_lab_capture_pack) or not bool(veteran_workflow_pack),
     )
 
     primary_route_reasons: List[str] = []
@@ -5732,6 +5954,8 @@ def build_flagship_product_readiness_payload(
         flagship_plane_reasons.append(
             "Flagship parity families are still below gold-ready: " + _summarize_ids(families_below_gold_ready) + "."
         )
+    if not parity_lab_ready:
+        flagship_plane_reasons.append("Parity-lab evidence is not fully bound into veteran-ready release truth.")
     if structural_status != "ready":
         flagship_plane_reasons.append("Structural readiness plane is not ready.")
     if veteran_status != "ready":
@@ -5747,6 +5971,7 @@ def build_flagship_product_readiness_payload(
             int(len(coverage_gap_keys) == 0)
             + int(bool(flagship_parity_registry))
             + int(len(families_below_gold_ready) == 0)
+            + int(parity_lab_ready)
             + int(structural_status == "ready")
             + int(veteran_status == "ready")
             + int(primary_route_status == "ready")
@@ -5763,6 +5988,20 @@ def build_flagship_product_readiness_payload(
             "families_below_task_proven": families_below_task_proven,
             "families_below_veteran_approved": families_below_veteran_approved,
             "families_below_gold_ready": families_below_gold_ready,
+            "parity_lab_ready": parity_lab_ready,
+            "parity_lab_capture_pack_path": str(effective_parity_lab_capture_pack_path),
+            "parity_lab_veteran_compare_pack_path": str(effective_veteran_workflow_pack_path),
+            "parity_lab_missing_flagship_family_ids": _as_string_list(parity_lab_evidence.get("missing_flagship_family_ids")),
+            "parity_lab_families_below_target": parity_lab_families_below_target if isinstance(parity_lab_families_below_target, list) else [],
+            "parity_lab_capture_missing_non_negotiable_ids": _as_string_list(
+                parity_lab_evidence.get("missing_capture_non_negotiable_ids")
+            ),
+            "parity_lab_workflow_missing_non_negotiable_ids": _as_string_list(
+                parity_lab_evidence.get("missing_workflow_non_negotiable_ids")
+            ),
+            "parity_lab_missing_whole_product_coverage_keys": _as_string_list(
+                parity_lab_evidence.get("missing_whole_product_coverage_keys")
+            ),
             "coverage_gap_keys": coverage_gap_keys,
             "structural_ready": structural_status == "ready",
             "veteran_ready": veteran_status == "ready",
@@ -5934,6 +6173,24 @@ def build_flagship_product_readiness_payload(
             "families_below_task_proven": families_below_task_proven,
             "families_below_veteran_approved": families_below_veteran_approved,
             "families_below_gold_ready": families_below_gold_ready,
+            "parity_lab_ready": parity_lab_ready,
+            "parity_lab_capture_pack_path": str(effective_parity_lab_capture_pack_path),
+            "parity_lab_veteran_compare_pack_path": str(effective_veteran_workflow_pack_path),
+            "parity_lab_family_target_count": int(parity_lab_evidence.get("family_target_count") or 0),
+            "parity_lab_invalid_target_family_ids": _as_string_list(parity_lab_evidence.get("invalid_target_family_ids")),
+            "parity_lab_missing_flagship_family_ids": _as_string_list(parity_lab_evidence.get("missing_flagship_family_ids")),
+            "parity_lab_families_below_target": parity_lab_families_below_target if isinstance(parity_lab_families_below_target, list) else [],
+            "parity_lab_capture_coverage_key": str(parity_lab_evidence.get("capture_coverage_key") or "").strip(),
+            "parity_lab_capture_coverage_key_matches": bool(parity_lab_evidence.get("capture_coverage_key_matches")),
+            "parity_lab_capture_missing_non_negotiable_ids": _as_string_list(
+                parity_lab_evidence.get("missing_capture_non_negotiable_ids")
+            ),
+            "parity_lab_workflow_missing_non_negotiable_ids": _as_string_list(
+                parity_lab_evidence.get("missing_workflow_non_negotiable_ids")
+            ),
+            "parity_lab_missing_whole_product_coverage_keys": _as_string_list(
+                parity_lab_evidence.get("missing_whole_product_coverage_keys")
+            ),
         },
         "evidence_sources": {
             "acceptance": str(effective_acceptance_path),

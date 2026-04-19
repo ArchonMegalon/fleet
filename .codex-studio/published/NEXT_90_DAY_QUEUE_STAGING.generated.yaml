@@ -369,6 +369,37 @@ items:
     owned_surfaces:
       - parity_lab:capture
       - veteran_compare_packs
+  - title: Bind parity-lab evidence into veteran readiness truth
+    task: Fail-close flagship readiness unless the parity-lab capture and veteran compare packs ground the release-status ladder and desktop non-negotiables.
+    package_id: next90-m103-fleet-parity-lab-readiness
+    frontier_id: 2461034001
+    milestone_id: 103
+    wave: W7
+    repo: fleet
+    status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M103 Fleet parity-lab readiness binding is complete; future shards must verify the readiness materializer, parity-lab docs, registry row, queue row, design queue row, closeout note, and flagship readiness receipt instead of reopening veteran-ready truth hardening.
+    proof:
+      - /docker/fleet/scripts/materialize_flagship_product_readiness.py
+      - /docker/fleet/tests/test_materialize_flagship_product_readiness.py
+      - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
+      - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+      - /docker/fleet/feedback/2026-04-19-next90-m103-fleet-parity-lab-readiness-closeout.md
+      - python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k 'parity_lab or current_readiness'
+      - flagship readiness veteran/flagship planes now bind parity-lab capture/workflow evidence and fail closed on drift
+      - covered no longer masquerades as veteran-ready without parity-lab grounding
+      - design-owned queue source row matches the Fleet completed queue proof assignment
+      - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-design
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - flagship_readiness:veteran_truth
+      - flagship_parity:parity_lab_evidence
   - title: Build golden oracle suites and release-bound engine proof packs
     task: Land golden oracle coverage and publish engine proof packs with explain and performance budgets for promoted desktop releases.
     package_id: next90-m104-core-proof-pack

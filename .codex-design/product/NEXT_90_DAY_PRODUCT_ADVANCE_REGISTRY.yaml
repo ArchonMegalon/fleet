@@ -562,6 +562,13 @@ milestones:
       - id: 103.4
         owner: fleet
         title: Consume parity-lab evidence in the readiness plane so covered can no longer masquerade as veteran-ready.
+        status: complete
+        evidence:
+          - /docker/fleet/scripts/materialize_flagship_product_readiness.py now fail-closes veteran-ready and flagship-ready truth when the parity-lab capture/workflow packs drift off desktop_client coverage, lose required non-negotiables, lose required whole-product coverage keys, drop flagship family targets, or fall below the release-status ladder.
+          - /docker/fleet/tests/test_materialize_flagship_product_readiness.py proves readiness stays green when the parity-lab packs are grounded and drops the veteran/flagship planes to warning when the capture pack drifts away from desktop_client or loses required non-negotiables.
+          - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json now records parity_lab_ready=true with the Fleet-owned capture/workflow pack paths, zero missing flagship family ids, zero missing required non-negotiables, zero missing whole-product coverage keys, and zero families below target under readiness_planes.veteran_ready, readiness_planes.flagship_ready, and flagship_parity_registry.
+          - /docker/fleet/feedback/2026-04-19-next90-m103-fleet-parity-lab-readiness-closeout.md records the closeout scope and repeat-proof anchors.
+          - python3 -m pytest -q tests/test_materialize_flagship_product_readiness.py -k 'parity_lab or current_readiness' exits 0 in /docker/fleet.
 
   - id: 104
     title: Engine proof pack, explain budgets, and import-oracle discipline
