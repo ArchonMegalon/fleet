@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -67,6 +68,10 @@ BLOCKED_WORKER_PROOF_MARKERS = [
     "execution rules inside this run",
     "execution discipline",
     "first action rule",
+    "if you stop, report only",
+    "what shipped:",
+    "what remains:",
+    "exact blocker:",
     "writable scope roots",
     "operator telemetry",
     "do not invoke operator telemetry",
@@ -358,6 +363,7 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
                     "wave": "W8",
                     "repo": "fleet",
                     "status": "complete",
+                    "landed_commit": "b467c27",
                     "completion_action": "verify_closed_package_only",
                     "do_not_reopen_reason": (
                         "M106 Fleet weekly governor packet is complete; future shards must verify the "
@@ -593,6 +599,10 @@ def _fixture_tree(tmp_path: Path) -> dict[str, Path]:
             },
             "followthrough_receipt_gates": {
                 "ready_count": 2,
+                "feedback_ready_count": 2,
+                "fix_available_ready_count": 1,
+                "please_test_ready_count": 1,
+                "recovery_loop_ready_count": 0,
                 "blocked_missing_install_receipts_count": 0,
                 "blocked_receipt_mismatch_count": 0,
                 "gate_counts": {
@@ -700,6 +710,45 @@ def _run_materializer(paths: dict[str, Path], out: Path) -> subprocess.Completed
         capture_output=True,
         text=True,
     )
+
+
+def _load_module_from_path(path: Path):
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load module from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_run_next90_m106_weekly_governor_packet_tests_only_collects_module_defined_functions(
+    tmp_path: Path,
+) -> None:
+    helper = tmp_path / "helper_module.py"
+    helper.write_text(
+        "def test_imported_helper():\n"
+        "    raise AssertionError('imported helper should not be collected')\n",
+        encoding="utf-8",
+    )
+    test_module_path = tmp_path / "sample_test_module.py"
+    test_module_path.write_text(
+        "from helper_module import test_imported_helper\n\n"
+        "def test_defined_here():\n"
+        "    return 'ok'\n",
+        encoding="utf-8",
+    )
+    runner = _load_module_from_path(
+        Path("/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py")
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        module = _load_module_from_path(test_module_path)
+    finally:
+        sys.path.pop(0)
+
+    collected = runner._iter_test_functions(module)
+
+    assert [name for name, _ in collected] == ["test_defined_here"]
 
 
 def _add_closed_dependency_queue_rows(paths: dict[str, Path]) -> None:
@@ -867,6 +916,9 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["package_verification"]["queue_status"] == "complete"
     assert payload["package_verification"]["queue_completion_action"] == "verify_closed_package_only"
     assert payload["package_verification"]["design_queue_completion_action"] == "verify_closed_package_only"
+    assert payload["package_verification"]["queue_landed_commit"] == "b467c27"
+    assert payload["package_verification"]["design_queue_landed_commit"] == "b467c27"
+    assert payload["package_verification"]["expected_landed_commit"] == "b467c27"
     assert (
         payload["package_verification"]["queue_do_not_reopen_reason"]
         == payload["package_verification"]["expected_do_not_reopen_reason"]
@@ -1202,7 +1254,10 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
     assert payload["truth_inputs"]["support_summary"]["feedback_followthrough_ready_count"] == 2
     assert payload["truth_inputs"]["support_summary"]["fix_available_ready_count"] == 1
     assert payload["truth_inputs"]["support_summary"]["please_test_ready_count"] == 1
+    assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_hold_until_fix_receipt_count"] == 0
+    assert payload["truth_inputs"]["support_summary"]["reporter_followthrough_plan_hold_until_fix_receipt_count"] == 0
     assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_ready_count"] == 2
+    assert payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_hold_until_fix_receipt_count"] == 0
     assert (
         payload["truth_inputs"]["support_summary"]["followthrough_receipt_gates_installed_build_receipted_count"]
         == 2
@@ -1219,6 +1274,7 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
             generated_at + dt.timedelta(days=7)
         ).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "cadence_seconds": 604800,
+        "max_age_seconds": 604800,
         "status": "scheduled",
     }
     assert payload["measured_rollout_loop"]["launch_gate_summary"] == {
@@ -1431,6 +1487,11 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
             "hold_until_fix_receipt": [],
         },
     }
+    support["followthrough_receipt_gates"]["ready_count"] = 0
+    support["followthrough_receipt_gates"]["feedback_ready_count"] = 0
+    support["followthrough_receipt_gates"]["fix_available_ready_count"] = 0
+    support["followthrough_receipt_gates"]["please_test_ready_count"] = 0
+    support["followthrough_receipt_gates"]["recovery_loop_ready_count"] = 0
     _write_json(support_path, support)
 
     result = subprocess.run(
@@ -1469,6 +1530,10 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     support_summary = payload["truth_inputs"]["support_summary"]
+    action_matrix = {
+        row["action"]: row
+        for row in payload["measured_rollout_loop"]["decision_action_matrix"]
+    }
     assert support_summary["reporter_followthrough_ready_count"] == 0
     assert support_summary["feedback_followthrough_ready_count"] == 0
     assert support_summary["fix_available_ready_count"] == 0
@@ -1493,6 +1558,86 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     assert action_matrix["launch_expand"]["ledger_gate_count"] == len(
         payload["decision_gate_ledger"]["launch_expand"]
     )
+
+
+def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_receipt_gates(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_ready_count"] = 9
+    support["summary"]["feedback_followthrough_ready_count"] = 9
+    support["summary"]["fix_available_ready_count"] = 9
+    support["summary"]["please_test_ready_count"] = 9
+    support["summary"]["recovery_loop_ready_count"] = 9
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 2,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "action_groups": {
+            "feedback": [{"packet_id": "support-packet-stale-feedback"}],
+            "fix_available": [{"packet_id": "support-packet-stale-fix"}],
+            "please_test": [{"packet_id": "support-packet-stale-test"}],
+            "recovery": [{"packet_id": "support-packet-stale-recovery"}],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    support["followthrough_receipt_gates"]["ready_count"] = 0
+    support["followthrough_receipt_gates"]["feedback_ready_count"] = 0
+    support["followthrough_receipt_gates"]["fix_available_ready_count"] = 0
+    support["followthrough_receipt_gates"]["please_test_ready_count"] = 0
+    support["followthrough_receipt_gates"]["recovery_loop_ready_count"] = 0
+    _write_json(support_path, support)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(support_path),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    action_matrix = {
+        row["action"]: row
+        for row in payload["measured_rollout_loop"]["decision_action_matrix"]
+    }
+    assert support_summary["reporter_followthrough_ready_count"] == 0
+    assert support_summary["feedback_followthrough_ready_count"] == 0
+    assert support_summary["fix_available_ready_count"] == 0
+    assert support_summary["please_test_ready_count"] == 0
+    assert support_summary["recovery_loop_ready_count"] == 0
     assert action_matrix["launch_expand"]["governor_state"] == "blocked"
     assert action_matrix["launch_expand"]["governor_gate_count"] == len(
         payload["decision_gate_ledger"]["launch_expand"]
@@ -1530,12 +1675,12 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     assert "- Weekly operator handoff: pass" in markdown
     assert "- Weekly operator handoff actions: 5 / 5" in markdown
     assert "- Launch gates green: False" in markdown
-    assert "- Launch gate pass count: 12" in markdown
-    assert "- Launch gate blocked count: 4" in markdown
+    assert "- Launch gate pass count: 13" in markdown
+    assert "- Launch gate blocked count: 3" in markdown
     assert "- Launch gate fail count: 0" in markdown
     assert (
         "- Launch gate blocking names: successor_dependencies, local_release_proof, "
-        "provider_canary, support_followthrough_receipts"
+        "provider_canary"
     ) in markdown
     assert "- Successor dependency posture: open" in markdown
     assert "- Package closeout: fleet_package_complete" in markdown
@@ -1572,7 +1717,8 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     assert "- Feedback followthrough ready: 0" in markdown
     assert "- Fix-available ready: 0" in markdown
     assert "- Please-test ready: 0" in markdown
-    assert "- Receipt-gated followthrough ready: 2" in markdown
+    assert "- Followthrough waiting on fix receipt: 0" in markdown
+    assert "- Receipt-gated followthrough ready: 0" in markdown
     assert "- Receipt-gated installed-build receipts: 2" in markdown
     assert "- design-owned queue staging and Fleet queue mirror both carry the completed package proof" in markdown
     assert "- status-plane final claim remains pass before launch expansion or measured rollout readiness" in markdown
@@ -1592,14 +1738,14 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
         "launch_gate_summary.all_green | True | do_not_expand_launch | "
         "do_not_expand_launch | promote_measured_launch_expansion | "
         "successor_dependencies, local_release_proof, "
-        "provider_canary, support_followthrough_receipts | Hold expansion until successor dependencies, "
+        "provider_canary | Hold expansion until successor dependencies, "
         "readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, "
         "canary, closure, and support gates are all green. | True |"
     ) in markdown
     assert (
         "| rollback | fleet | measured_rollout_loop.rollback | weekly | release_health | "
-        "True | prepare_rollback_or_revoke | prepare_rollback_or_revoke | "
-        "keep_rollback_armed | support_followthrough_receipt_blockers | "
+        "False | keep_rollback_armed | prepare_rollback_or_revoke | "
+        "keep_rollback_armed | none | "
         "Rollback stays armed from release/support truth; watch is active when support closure "
         "or release health is not clear. | True |"
     ) in markdown
@@ -1610,19 +1756,203 @@ def test_weekly_support_summary_ignores_stale_queued_followthrough_counts(tmp_pa
     assert "- Schedule ref: governor_packet_schedule.next_packet_due_at" in markdown
     assert (
         "- Launch gate blocking names: successor_dependencies, local_release_proof, "
-        "provider_canary, support_followthrough_receipts"
+        "provider_canary"
     ) in markdown
     assert (
         "| launch_expand | blocked | weekly_governor_packet.launch_expand | "
         "do_not_expand_launch | m106-launch_expand-"
     ) in markdown
     assert (
-        "| rollback | watch | measured_rollout_loop.rollback | prepare_rollback_or_revoke | "
+        "| rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | "
         "m106-rollback-"
     ) in markdown
     manifest = json.loads((paths["published"] / "compile.manifest.json").read_text(encoding="utf-8"))
     assert "WEEKLY_GOVERNOR_PACKET.generated.json" in manifest["artifacts"]
     assert "WEEKLY_GOVERNOR_PACKET.generated.md" in manifest["artifacts"]
+
+
+def test_weekly_support_summary_recomputes_receipt_gated_counts_from_followthrough_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_ready_count"] = 9
+    support["summary"]["feedback_followthrough_ready_count"] = 9
+    support["summary"]["fix_available_ready_count"] = 9
+    support["summary"]["please_test_ready_count"] = 9
+    support["summary"]["recovery_loop_ready_count"] = 9
+    support["followthrough_receipt_gates"]["ready_count"] = 9
+    support["followthrough_receipt_gates"]["feedback_ready_count"] = 9
+    support["followthrough_receipt_gates"]["fix_available_ready_count"] = 9
+    support["followthrough_receipt_gates"]["please_test_ready_count"] = 9
+    support["followthrough_receipt_gates"]["recovery_loop_ready_count"] = 9
+    support["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipted"] = 9
+    support["followthrough_receipt_gates"]["gate_counts"][
+        "installed_build_receipt_installation_bound"
+    ] = 9
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 9,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "hold_until_fix_receipt_count": 0,
+        "action_groups": {
+            "feedback": [
+                {
+                    "packet_id": "support-packet-1",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_installation_matches": True,
+                },
+                {
+                    "packet_id": "support-packet-2",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_installation_matches": True,
+                },
+            ],
+            "fix_available": [
+                {
+                    "packet_id": "support-packet-1",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_installation_matches": True,
+                }
+            ],
+            "please_test": [
+                {
+                    "packet_id": "support-packet-2",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_installation_matches": True,
+                }
+            ],
+            "recovery": [
+                {
+                    "packet_id": "support-packet-2",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_installation_matches": True,
+                }
+            ],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    _write_json(support_path, support)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(support_path),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    assert support_summary["reporter_followthrough_ready_count"] == 2
+    assert support_summary["feedback_followthrough_ready_count"] == 2
+    assert support_summary["fix_available_ready_count"] == 1
+    assert support_summary["please_test_ready_count"] == 1
+    assert support_summary["recovery_loop_ready_count"] == 1
+    assert support_summary["followthrough_receipt_gates_ready_count"] == 2
+    assert support_summary["followthrough_receipt_gates_installed_build_receipted_count"] == 2
+    assert support_summary["followthrough_receipt_gates_installation_bound_count"] == 2
+
+
+def test_weekly_support_summary_recomputes_blocked_receipt_rows_from_followthrough_plan(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_blocked_missing_install_receipts_count"] = 0
+    support["followthrough_receipt_gates"]["blocked_missing_install_receipts_count"] = 0
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 0,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "hold_until_fix_receipt_count": 0,
+        "action_groups": {
+            "feedback": [],
+            "fix_available": [],
+            "please_test": [],
+            "recovery": [],
+            "blocked_missing_install_receipts": [{"packet_id": "support-packet-blocked"}],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    _write_json(support_path, support)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(paths["root"]),
+            "--out",
+            str(out),
+            "--successor-registry",
+            str(paths["registry"]),
+            "--closed-flagship-registry",
+            str(paths["closed_flagship_registry"]),
+            "--design-queue-staging",
+            str(paths["design_queue"]),
+            "--queue-staging",
+            str(paths["queue"]),
+            "--weekly-pulse",
+            str(paths["weekly"]),
+            "--flagship-readiness",
+            str(paths["readiness"]),
+            "--journey-gates",
+            str(paths["journeys"]),
+            "--support-packets",
+            str(support_path),
+            "--status-plane",
+            str(paths["status"]),
+        ],
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    launch_gates = {
+        row["name"]: row for row in payload["decision_gate_ledger"]["launch_expand"]
+    }
+    assert support_summary["reporter_followthrough_blocked_missing_install_receipts_count"] == 1
+    assert support_summary["reporter_followthrough_plan_blocked_missing_install_receipts_count"] == 1
+    assert support_summary["followthrough_receipt_gates_blocked_missing_install_receipts_count"] == 1
+    assert launch_gates["support_followthrough_receipts"]["state"] == "blocked"
 
 
 def test_weekly_governor_packet_blocks_launch_expand_when_successor_dependencies_are_open(
@@ -1964,6 +2294,41 @@ def test_verify_next90_m106_governor_packet_accepts_source_blocked_freeze_packet
     assert payload["repeat_prevention"]["blocked_dependency_package_ids"] == [
         "next90-m102-fleet-reporter-receipts"
     ]
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 0, verifier.stderr
+    assert "verified next90-m106-fleet-governor-packet" in verifier.stdout
+
+
+def test_verify_next90_m106_governor_packet_accepts_gate_blocked_freeze_packet(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    status = yaml.safe_load(paths["status"].read_text(encoding="utf-8"))
+    status["whole_product_final_claim_status"] = "warning"
+    _write_yaml(paths["status"], status)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = _run_materializer(paths, out)
+    assert materialize.returncode == 0, materialize.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "pass"
+    assert payload["source_input_health"]["status"] == "pass"
+    assert payload["status"] == "blocked"
+    assert (
+        payload["status_reason"]
+        == "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates."
+    )
+    assert payload["decision_board"]["current_launch_action"] == "freeze_launch"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert payload["measured_rollout_loop"]["blocked_dependency_package_ids"] == []
 
     verifier = subprocess.run(
         _verifier_args(paths, out),
@@ -3839,6 +4204,7 @@ def test_verify_next90_m106_governor_packet_rejects_weekly_schedule_drift(
     packet = json.loads(out.read_text(encoding="utf-8"))
     packet["governor_packet_schedule"]["next_packet_due_at"] = packet["generated_at"]
     packet["governor_packet_schedule"]["cadence_seconds"] = 0
+    packet["governor_packet_schedule"]["max_age_seconds"] = 0
     _write_json(out, packet)
 
     verifier = subprocess.run(
@@ -3855,6 +4221,7 @@ def test_verify_next90_m106_governor_packet_rejects_weekly_schedule_drift(
         in verifier.stderr
     )
     assert "packet governor_packet_schedule cadence_seconds drifted" in verifier.stderr
+    assert "packet governor_packet_schedule max_age_seconds drifted" in verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_overdue_weekly_packet(
@@ -3874,6 +4241,7 @@ def test_verify_next90_m106_governor_packet_rejects_overdue_weekly_packet(
         "generated_at": stale_generated_at,
         "next_packet_due_at": stale_due_at,
         "cadence_seconds": 604800,
+        "max_age_seconds": 604800,
         "status": "scheduled",
     }
     _write_json(out, packet)
@@ -4375,6 +4743,80 @@ def test_weekly_governor_packet_fails_package_verification_on_queue_authority_dr
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
+def test_weekly_governor_packet_fails_package_verification_on_queue_completion_action_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["completion_action"] = "reopen_package"
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked"
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is False
+    assert (
+        "queue item completion_action is not verify_closed_package_only"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_queue_landed_commit_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["landed_commit"] = "deadbeef"
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked"
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert (
+        "queue item landed_commit does not pin Fleet M106 closeout authority"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_design_queue_closeout_reason_drift(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    design_queue = yaml.safe_load(paths["design_queue"].read_text(encoding="utf-8"))
+    design_queue["items"][0]["do_not_reopen_reason"] = "Reopen this package if the packet changes."
+    _write_yaml(paths["design_queue"], design_queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "blocked"
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["do_not_reopen_owned_surfaces"] is False
+    assert (
+        "design queue item do_not_reopen_reason no longer matches package closeout authority"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
 def test_weekly_governor_packet_rejects_reused_closed_frontier_rows(
     tmp_path: Path,
 ) -> None:
@@ -4574,6 +5016,30 @@ def test_weekly_governor_packet_fails_package_verification_on_duplicate_design_q
     assert payload["package_verification"]["status"] == "fail"
     assert (
         "design queue staging has duplicate package rows for next90-m106-fleet-governor-packet"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_duplicate_queue_proof_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(queue["items"][0]["proof"][0])
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "queue item proof contains duplicate weekly governor receipt(s): "
+        "/docker/fleet/scripts/materialize_weekly_governor_packet.py"
         in payload["package_verification"]["issues"]
     )
     assert payload["package_closeout"]["status"] == "blocked"
@@ -4979,6 +5445,32 @@ def test_weekly_governor_packet_fails_package_verification_when_registry_evidenc
         "WEEKLY_GOVERNOR_PACKET.generated.json"
         in payload["package_verification"]["issues"]
     )
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+
+
+def test_weekly_governor_packet_fails_package_verification_on_duplicate_registry_evidence(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        registry["milestones"][0]["work_tasks"][0]["evidence"][0]
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert (
+        "registry work task 106.1 evidence contains duplicate weekly governor marker(s): "
+        "/docker/fleet/scripts/materialize_weekly_governor_packet.py compiles readiness inputs"
+        in payload["package_verification"]["issues"]
+    )
+    assert payload["package_closeout"]["status"] == "blocked"
+    assert payload["repeat_prevention"]["status"] == "blocked"
     assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
 
 
@@ -5939,6 +6431,52 @@ def test_weekly_governor_packet_rejects_run_prompt_authority_proof(
         in issue
         and "Assigned slice authority" in issue
         and "writable scope roots" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS
+
+
+def test_weekly_governor_packet_rejects_stop_report_prompt_proof(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"][0]["proof"].append(
+        "If you stop, report only: What shipped: packet verifier passed."
+    )
+    queue["items"][0]["proof"].append(
+        "What remains: nothing beyond this copied worker handoff prompt."
+    )
+    _write_yaml(paths["queue"], queue)
+    registry = yaml.safe_load(paths["registry"].read_text(encoding="utf-8"))
+    registry["milestones"][0]["work_tasks"][0]["evidence"].append(
+        "Exact blocker: none, because this copied stop-report prompt proves closure."
+    )
+    _write_yaml(paths["registry"], registry)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["package_verification"]["status"] == "fail"
+    assert payload["repeat_prevention"]["status"] == "blocked"
+    assert payload["measured_rollout_loop"]["loop_status"] == "blocked"
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "If you stop, report only" in issue
+        and "What shipped:" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "queue item proof includes active-run or operator-helper command evidence" in issue
+        and "What remains:" in issue
+        for issue in payload["package_verification"]["issues"]
+    )
+    assert any(
+        "registry work task 106.1 evidence includes active-run or operator-helper command evidence"
+        in issue
+        and "Exact blocker:" in issue
         for issue in payload["package_verification"]["issues"]
     )
     assert payload["package_verification"]["disallowed_worker_proof_command_markers"] == BLOCKED_WORKER_PROOF_MARKERS

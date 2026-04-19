@@ -72,6 +72,7 @@ EXPECTED_DO_NOT_REOPEN_REASON = (
     "weekly packet receipt, registry row, queue row, and design-queue row instead "
     "of reopening the measured rollout packet package."
 )
+EXPECTED_LANDED_COMMIT = "b467c27"
 EXPECTED_MILESTONE_TITLE = "Product-governor weekly adoption and measured rollout loop"
 MILESTONE_ID = 106
 PROGRAM_WAVE = "next_90_day_product_advance"
@@ -439,6 +440,10 @@ DISALLOWED_WORKER_PROOF_COMMAND_MARKERS = (
     "execution rules inside this run",
     "execution discipline",
     "first action rule",
+    "if you stop, report only",
+    "what shipped:",
+    "what remains:",
+    "exact blocker:",
     "writable scope roots",
     "operator telemetry",
     "do not invoke operator telemetry",
@@ -587,6 +592,20 @@ def _disallowed_worker_proof_entries(entries: List[str]) -> List[str]:
     return blocked
 
 
+def _duplicate_proof_entries(entries: List[str]) -> List[str]:
+    duplicates: List[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        normalized = str(entry or "").strip().rstrip(".")
+        if not normalized:
+            continue
+        if normalized in seen and normalized not in duplicates:
+            duplicates.append(normalized)
+            continue
+        seen.add(normalized)
+    return duplicates
+
+
 def _resolve_fleet_proof_path(repo_root: Path, marker: str) -> Path:
     text = str(marker or "").strip()
     prefix = "/docker/fleet/"
@@ -696,6 +715,7 @@ def _packet_schedule(generated_at: str) -> Dict[str, Any]:
             "generated_at": generated_at,
             "next_packet_due_at": "",
             "cadence_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+            "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
             "status": "invalid_generated_at",
         }
     return {
@@ -705,6 +725,7 @@ def _packet_schedule(generated_at: str) -> Dict[str, Any]:
             generated + dt.timedelta(seconds=WEEKLY_PACKET_CADENCE_SECONDS)
         ),
         "cadence_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
+        "max_age_seconds": WEEKLY_PACKET_CADENCE_SECONDS,
         "status": "scheduled",
     }
 
@@ -966,6 +987,8 @@ def _queue_authority_issues(item: Dict[str, Any], prefix: str) -> List[str]:
         issues.append(f"{prefix} item completion_action is not {EXPECTED_COMPLETION_ACTION}")
     if str(item.get("do_not_reopen_reason") or "").strip() != EXPECTED_DO_NOT_REOPEN_REASON:
         issues.append(f"{prefix} item do_not_reopen_reason no longer matches package closeout authority")
+    if str(item.get("landed_commit") or "").strip() != EXPECTED_LANDED_COMMIT:
+        issues.append(f"{prefix} item landed_commit does not pin Fleet M106 closeout authority")
     return issues
 
 
@@ -973,11 +996,17 @@ def _queue_proof_issues(item: Dict[str, Any], prefix: str, repo_root: Path) -> L
     issues: List[str] = []
     proof_entries = _norm_list(item.get("proof"))
     normalized_proof_entries = {entry.rstrip(".") for entry in proof_entries}
+    duplicate_proof = _duplicate_proof_entries(proof_entries)
     missing_proof = [
         marker
         for marker in REQUIRED_QUEUE_PROOF_MARKERS
         if marker not in proof_entries and marker.rstrip(".") not in normalized_proof_entries
     ]
+    if duplicate_proof:
+        issues.append(
+            f"{prefix} item proof contains duplicate weekly governor receipt(s): "
+            + ", ".join(duplicate_proof)
+        )
     if missing_proof:
         issues.append(
             f"{prefix} item proof is missing required weekly governor receipt(s): "
@@ -1024,6 +1053,7 @@ def _queue_mirror_drift(design_item: Dict[str, Any], item: Dict[str, Any]) -> Li
         "status",
         "completion_action",
         "do_not_reopen_reason",
+        "landed_commit",
         "proof",
         "allowed_paths",
         "owned_surfaces",
@@ -1150,11 +1180,17 @@ def verify_package(
                 issues.append("registry work task 106.1 is not marked complete")
             evidence_text = "\n".join(_norm_list(registry_work_task.get("evidence")))
             evidence_entries = _norm_list(registry_work_task.get("evidence"))
+            duplicate_registry_evidence = _duplicate_proof_entries(evidence_entries)
             missing_registry_evidence = [
                 marker
                 for marker in REQUIRED_REGISTRY_EVIDENCE_MARKERS
                 if marker not in evidence_text
             ]
+            if duplicate_registry_evidence:
+                issues.append(
+                    "registry work task 106.1 evidence contains duplicate weekly governor marker(s): "
+                    + ", ".join(duplicate_registry_evidence)
+                )
             if missing_registry_evidence:
                 issues.append(
                     "registry work task 106.1 evidence is missing required weekly governor marker(s): "
@@ -1215,8 +1251,11 @@ def verify_package(
         "design_queue_completion_action": str(design_item.get("completion_action") or "").strip(),
         "queue_do_not_reopen_reason": str(item.get("do_not_reopen_reason") or "").strip(),
         "design_queue_do_not_reopen_reason": str(design_item.get("do_not_reopen_reason") or "").strip(),
+        "queue_landed_commit": str(item.get("landed_commit") or "").strip(),
+        "design_queue_landed_commit": str(design_item.get("landed_commit") or "").strip(),
         "expected_completion_action": EXPECTED_COMPLETION_ACTION,
         "expected_do_not_reopen_reason": EXPECTED_DO_NOT_REOPEN_REASON,
+        "expected_landed_commit": EXPECTED_LANDED_COMMIT,
         "queue_frontier_id": str(item.get("frontier_id") or "").strip(),
         "design_queue_frontier_id": str(design_item.get("frontier_id") or "").strip(),
         "design_queue_source_registry_path": str(design_queue.get("source_registry_path") or "").strip(),
@@ -1605,13 +1644,111 @@ def _source_input_fingerprint(source_input_health: Dict[str, Any]) -> Dict[str, 
     }
 
 
+def _followthrough_group_rows(followthrough: Dict[str, Any], name: str) -> List[Dict[str, Any]]:
+    groups = dict(followthrough.get("action_groups") or {})
+    rows = groups.get(name)
+    if not isinstance(rows, list):
+        return []
+    return [dict(row) for row in rows if isinstance(row, dict)]
+
+
+def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str, int]:
+    ready_group_names = ("feedback", "fix_available", "please_test", "recovery")
+    blocked_group_names = (
+        "blocked_missing_install_receipts",
+        "blocked_receipt_mismatch",
+        "hold_until_fix_receipt",
+    )
+    action_groups = {
+        name: _followthrough_group_rows(followthrough, name)
+        for name in (*ready_group_names, *blocked_group_names)
+    }
+    ready_group_rows_present = any(action_groups[name] for name in ready_group_names)
+    rows_by_key: Dict[str, Dict[str, Any]] = {}
+    ready_keys: set[str] = set()
+    ready_group_counts = {name: 0 for name in ready_group_names}
+    for group_name, rows in action_groups.items():
+        for index, row in enumerate(rows):
+            packet_id = str(row.get("packet_id") or "").strip()
+            row_key = packet_id or f"{group_name}:{index}"
+            merged_row = dict(rows_by_key.get(row_key) or {})
+            merged_row.update(row)
+            rows_by_key[row_key] = merged_row
+            receipt_ready = bool(row.get("installed_build_receipted")) and bool(
+                row.get("installed_build_receipt_installation_matches")
+            )
+            if group_name in ready_group_names and receipt_ready:
+                ready_keys.add(row_key)
+                ready_group_counts[group_name] += 1
+
+    merged_rows = list(rows_by_key.values())
+    installed_build_receipted_present = any(
+        "installed_build_receipted" in row for row in merged_rows
+    )
+    installation_bound_present = any(
+        "installed_build_receipt_installation_matches" in row for row in merged_rows
+    )
+    return {
+        "ready_count": len(ready_keys),
+        "feedback_ready_count": ready_group_counts["feedback"],
+        "fix_available_ready_count": ready_group_counts["fix_available"],
+        "please_test_ready_count": ready_group_counts["please_test"],
+        "recovery_loop_ready_count": ready_group_counts["recovery"],
+        "blocked_missing_install_receipts_count": len(
+            action_groups["blocked_missing_install_receipts"]
+        ),
+        "blocked_receipt_mismatch_count": len(action_groups["blocked_receipt_mismatch"]),
+        "hold_until_fix_receipt_count": len(action_groups["hold_until_fix_receipt"]),
+        "installed_build_receipted_count": (
+            sum(1 for row in merged_rows if bool(row.get("installed_build_receipted")))
+            if installed_build_receipted_present
+            else -1
+        ),
+        "installation_bound_count": (
+            sum(
+                1
+                for row in merged_rows
+                if bool(row.get("installed_build_receipt_installation_matches"))
+            )
+            if installation_bound_present
+            else -1
+        ),
+        "ready_group_rows_present": int(ready_group_rows_present),
+        "ready_group_receipt_fields_present": int(
+            installed_build_receipted_present or installation_bound_present
+        ),
+    }
+
+
 def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     summary = dict(support_packets.get("summary") or {})
     followthrough = dict(support_packets.get("reporter_followthrough_plan") or {})
-    action_groups = dict(followthrough.get("action_groups") or {})
     receipt_gates = dict(support_packets.get("followthrough_receipt_gates") or {})
     gate_counts = dict(receipt_gates.get("gate_counts") or {})
-    plan_ready_count = _coerce_int(followthrough.get("ready_count"), 0)
+    recomputed_counts = _recomputed_followthrough_counts(followthrough)
+    ready_group_rows_present = bool(recomputed_counts.get("ready_group_rows_present"))
+    ready_group_receipt_fields_present = bool(
+        recomputed_counts.get("ready_group_receipt_fields_present")
+    )
+    use_recomputed_ready_counts = (
+        ready_group_rows_present and ready_group_receipt_fields_present
+    )
+    receipt_ready_count = (
+        recomputed_counts["ready_count"]
+        if use_recomputed_ready_counts
+        else max(
+            recomputed_counts["ready_count"],
+            _coerce_int(receipt_gates.get("ready_count"), 0),
+        )
+    )
+    plan_ready_count = (
+        recomputed_counts["ready_count"]
+        if use_recomputed_ready_counts
+        else max(
+            recomputed_counts["ready_count"],
+            _coerce_int(followthrough.get("ready_count"), 0),
+        )
+    )
     summary_blocked_missing_count = _coerce_int(
         summary.get("reporter_followthrough_blocked_missing_install_receipts_count"),
         0,
@@ -1620,25 +1757,61 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         summary.get("reporter_followthrough_blocked_receipt_mismatch_count"),
         0,
     )
-    plan_blocked_missing_count = _coerce_int(
-        followthrough.get("blocked_missing_install_receipts_count"),
-        0,
+    plan_blocked_missing_count = max(
+        recomputed_counts["blocked_missing_install_receipts_count"],
+        _coerce_int(followthrough.get("blocked_missing_install_receipts_count"), 0),
     )
-    plan_blocked_mismatch_count = _coerce_int(
-        followthrough.get("blocked_receipt_mismatch_count"),
-        0,
+    plan_blocked_mismatch_count = max(
+        recomputed_counts["blocked_receipt_mismatch_count"],
+        _coerce_int(followthrough.get("blocked_receipt_mismatch_count"), 0),
     )
-    feedback_ready_count = len(action_groups.get("feedback") or [])
-    fix_available_ready_count = len(action_groups.get("fix_available") or [])
-    please_test_ready_count = len(action_groups.get("please_test") or [])
-    recovery_ready_count = len(action_groups.get("recovery") or [])
-    gate_blocked_missing_count = _coerce_int(
-        receipt_gates.get("blocked_missing_install_receipts_count"),
-        0,
+    plan_hold_until_fix_count = max(
+        recomputed_counts["hold_until_fix_receipt_count"],
+        _coerce_int(followthrough.get("hold_until_fix_receipt_count"), 0),
     )
-    gate_blocked_mismatch_count = _coerce_int(
-        receipt_gates.get("blocked_receipt_mismatch_count"),
-        0,
+    feedback_ready_count = (
+        recomputed_counts["feedback_ready_count"]
+        if use_recomputed_ready_counts
+        else max(
+            recomputed_counts["feedback_ready_count"],
+            _coerce_int(receipt_gates.get("feedback_ready_count"), 0),
+        )
+    )
+    fix_available_ready_count = (
+        recomputed_counts["fix_available_ready_count"]
+        if use_recomputed_ready_counts
+        else max(
+            recomputed_counts["fix_available_ready_count"],
+            _coerce_int(receipt_gates.get("fix_available_ready_count"), 0),
+        )
+    )
+    please_test_ready_count = (
+        recomputed_counts["please_test_ready_count"]
+        if use_recomputed_ready_counts
+        else max(
+            recomputed_counts["please_test_ready_count"],
+            _coerce_int(receipt_gates.get("please_test_ready_count"), 0),
+        )
+    )
+    recovery_ready_count = (
+        recomputed_counts["recovery_loop_ready_count"]
+        if use_recomputed_ready_counts
+        else max(
+            recomputed_counts["recovery_loop_ready_count"],
+            _coerce_int(receipt_gates.get("recovery_loop_ready_count"), 0),
+        )
+    )
+    gate_blocked_missing_count = max(
+        recomputed_counts["blocked_missing_install_receipts_count"],
+        _coerce_int(receipt_gates.get("blocked_missing_install_receipts_count"), 0),
+    )
+    gate_blocked_mismatch_count = max(
+        recomputed_counts["blocked_receipt_mismatch_count"],
+        _coerce_int(receipt_gates.get("blocked_receipt_mismatch_count"), 0),
+    )
+    gate_hold_until_fix_count = max(
+        recomputed_counts["hold_until_fix_receipt_count"],
+        _coerce_int(receipt_gates.get("hold_until_fix_receipt_count"), 0),
     )
     blocked_missing_count = max(
         summary_blocked_missing_count,
@@ -1655,26 +1828,39 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         "open_non_external_packet_count": _coerce_int(summary.get("open_non_external_packet_count"), 0),
         "closure_waiting_on_release_truth": _coerce_int(summary.get("closure_waiting_on_release_truth"), 0),
         "update_required_misrouted_case_count": _coerce_int(summary.get("update_required_misrouted_case_count"), 0),
-        "reporter_followthrough_ready_count": plan_ready_count,
+        "reporter_followthrough_ready_count": receipt_ready_count,
         "feedback_followthrough_ready_count": feedback_ready_count,
         "fix_available_ready_count": fix_available_ready_count,
         "please_test_ready_count": please_test_ready_count,
         "recovery_loop_ready_count": recovery_ready_count,
         "reporter_followthrough_blocked_missing_install_receipts_count": blocked_missing_count,
         "reporter_followthrough_blocked_receipt_mismatch_count": blocked_mismatch_count,
+        "reporter_followthrough_hold_until_fix_receipt_count": max(
+            _coerce_int(summary.get("reporter_followthrough_hold_until_fix_receipt_count"), 0),
+            plan_hold_until_fix_count,
+            gate_hold_until_fix_count,
+        ),
         "reporter_followthrough_plan_ready_count": plan_ready_count,
         "reporter_followthrough_plan_blocked_missing_install_receipts_count": plan_blocked_missing_count,
         "reporter_followthrough_plan_blocked_receipt_mismatch_count": plan_blocked_mismatch_count,
-        "followthrough_receipt_gates_ready_count": _coerce_int(receipt_gates.get("ready_count"), 0),
+        "reporter_followthrough_plan_hold_until_fix_receipt_count": plan_hold_until_fix_count,
+        "followthrough_receipt_gates_ready_count": (
+            recomputed_counts["ready_count"]
+            if use_recomputed_ready_counts
+            else _coerce_int(receipt_gates.get("ready_count"), 0)
+        ),
         "followthrough_receipt_gates_blocked_missing_install_receipts_count": gate_blocked_missing_count,
         "followthrough_receipt_gates_blocked_receipt_mismatch_count": gate_blocked_mismatch_count,
-        "followthrough_receipt_gates_installed_build_receipted_count": _coerce_int(
-            gate_counts.get("installed_build_receipted"),
-            0,
+        "followthrough_receipt_gates_hold_until_fix_receipt_count": gate_hold_until_fix_count,
+        "followthrough_receipt_gates_installed_build_receipted_count": (
+            recomputed_counts["installed_build_receipted_count"]
+            if recomputed_counts["installed_build_receipted_count"] >= 0
+            else _coerce_int(gate_counts.get("installed_build_receipted"), 0)
         ),
-        "followthrough_receipt_gates_installation_bound_count": _coerce_int(
-            gate_counts.get("installed_build_receipt_installation_bound"),
-            0,
+        "followthrough_receipt_gates_installation_bound_count": (
+            recomputed_counts["installation_bound_count"]
+            if recomputed_counts["installation_bound_count"] >= 0
+            else _coerce_int(gate_counts.get("installed_build_receipt_installation_bound"), 0)
         ),
     }
 
@@ -3014,6 +3200,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Recovery-loop ready: {support.get('recovery_loop_ready_count', 0)}",
             f"- Followthrough blocked on install receipts: {support.get('reporter_followthrough_blocked_missing_install_receipts_count', 0)}",
             f"- Followthrough receipt mismatches: {support.get('reporter_followthrough_blocked_receipt_mismatch_count', 0)}",
+            f"- Followthrough waiting on fix receipt: {support.get('reporter_followthrough_hold_until_fix_receipt_count', 0)}",
             f"- Receipt-gated followthrough ready: {support.get('followthrough_receipt_gates_ready_count', 0)}",
             f"- Receipt-gated installed-build receipts: {support.get('followthrough_receipt_gates_installed_build_receipted_count', 0)}",
             f"- Closeout reason: {_markdown_status(closeout.get('closeout_reason'))}",

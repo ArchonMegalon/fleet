@@ -11,10 +11,12 @@ import subprocess
 import sys
 import tempfile
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 
 SCRIPT = Path("/docker/fleet/scripts/materialize_support_case_packets.py")
+DESIGN_QUEUE_ENV = "FLEET_DESIGN_NEXT_90_QUEUE_STAGING_PATH"
 
 
 class _DirectMonkeyPatch:
@@ -43,6 +45,134 @@ def _load_module():
         return module
     finally:
         sys.path[:] = previous_sys_path
+
+
+@contextmanager
+def _override_design_queue_path(path: Path):
+    previous = os.environ.get(DESIGN_QUEUE_ENV)
+    os.environ[DESIGN_QUEUE_ENV] = str(path)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(DESIGN_QUEUE_ENV, None)
+        else:
+            os.environ[DESIGN_QUEUE_ENV] = previous
+
+
+def _write_registry(path: Path) -> None:
+    path.write_text(
+        """
+product: chummer
+program_wave: next_90_day_product_advance
+milestones:
+  - id: 102
+    title: Desktop-native claim, update, rollback, and support followthrough
+    wave: W6
+    owners:
+      - fleet
+    status: in_progress
+    dependencies:
+      - 101
+    work_tasks:
+      - id: 102.4
+        owner: fleet
+        title: Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.
+        status: complete
+        evidence:
+          - /docker/fleet/scripts/materialize_support_case_packets.py verifies next90-m102-fleet-reporter-receipts against the canonical successor registry and staging queue, then compiles reporter followthrough from support packets only after install truth, installation-bound installed-build receipts, fixed-version receipts, fixed-channel receipts, and release-channel receipts agree.
+          - /docker/fleet/tests/test_materialize_support_case_packets.py covers receipt gating.
+          - python3 tests/test_materialize_support_case_packets.py exits 0.
+          - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json reports successor_package_verification.status=pass and projects reporter_followthrough_plan from install-aware receipt gates.
+          - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json and .md project fix-available, please-test, recovery, missing-install-receipt, and receipt-mismatch counts from the support packet receipt gates.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly/support generated_at freshness drift so WEEKLY_GOVERNOR_PACKET.generated.json cannot predate the SUPPORT_CASE_PACKETS.generated.json receipt gates it summarizes.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly support-packet source sha256 drift so WEEKLY_GOVERNOR_PACKET.generated.json must name the exact SUPPORT_CASE_PACKETS.generated.json bytes it summarizes.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes future-dated generated_at receipts so support and weekly proof cannot outrun wall-clock truth.
+          - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M102 verifier in no-PYTHONPATH bootstrap proof so repeat-prevention cannot silently break on import path assumptions.
+          - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0.
+          - /docker/fleet/scripts/materialize_support_case_packets.py now fail-closes duplicate next90-m102-fleet-reporter-receipts queue rows, duplicate design-queue rows, and duplicate registry work-task rows so stale closure proof cannot hide behind the first matching row.
+          - /docker/fleet/scripts/materialize_support_case_packets.py now requires generated successor scope-drift, closure-field drift, and missing Fleet proof-anchor markers in both the Fleet queue mirror and design-owned queue source so future shards verify the closed proof floor instead of repeating it.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py now fail-closes runtime handoff metadata proof markers so copied worker-run metadata cannot close the package.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py now fail-closes stale ready action-group receipt mismatches so fix-available, please-test, feedback, or recovery rows cannot stay "ready" when install receipt, release receipt, fixed receipt, or installed-build values drift from the claimed packet truth.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py now fail-closes missing per-row install-aware receipt gates so ready action-group rows cannot pass on summary counters alone.
+          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py now records the cached packet fallback provenance guard and seeded cached-packet mirror provenance guard so ready followthrough cannot survive `cached_packets_fallback` or `seeded_from_cached_packets_generated_at`.
+          - /docker/fleet/scripts/materialize_support_case_packets.py now fail-closes completed queue rows that omit `verify_closed_package_only` or the package-specific do-not-reopen reason in either the Fleet queue mirror or the design-owned queue source.
+          - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md records the closed-scope anti-reopen rule and exact proof anchors for future shards.
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+
+def _write_queue(path: Path, design_queue: Path) -> None:
+    payload = f"""
+program_wave: next_90_day_product_advance
+source_design_queue_path: {design_queue}
+items:
+  - title: Gate fix followthrough against real install and receipt truth
+    task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
+    package_id: next90-m102-fleet-reporter-receipts
+    frontier_id: 2454416974
+    milestone_id: 102
+    wave: W6
+    repo: fleet
+    status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.
+    proof:
+      - /docker/fleet/scripts/materialize_support_case_packets.py
+      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/tests/test_materialize_support_case_packets.py
+      - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
+      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
+      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
+      - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
+      - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
+      - python3 tests/test_materialize_support_case_packets.py exits 0
+      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
+      - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
+      - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
+      - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
+      - standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries
+      - generated support-packet proof hygiene requires empty disallowed active-run proof entries
+      - stale generated support proof gaps fail the standalone verifier
+      - generated support successor scope drift fails the standalone verifier
+      - generated support successor closure-field drift fails the standalone verifier
+      - weekly/support receipt-count drift fails the standalone verifier
+      - weekly/support generated_at freshness fails the standalone verifier
+      - weekly support-packet source sha256 drift fails the standalone verifier
+      - future-dated support and weekly generated_at receipts fail the standalone verifier
+      - weekly support-packet source-path drift fails the standalone verifier
+      - standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates
+      - standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready
+      - design queue source path rejects active-run helper paths
+      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
+      - no-PYTHONPATH bootstrap guard includes the standalone M102 verifier
+      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
+      - design-owned queue source row matches the Fleet completed queue proof assignment
+      - design-owned queue source proof markers fail the standalone verifier
+      - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
+      - telemetry command proof markers fail the standalone verifier and shared successor authority check
+      - runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check
+      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
+      - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
+      - cached packet fallback provenance guard keeps ready followthrough closed when `source.refresh_mode=cached_packets_fallback`
+      - seeded cached-packet mirror provenance guard keeps ready followthrough closed when `seeded_from_cached_packets_generated_at` is present
+      - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - feedback_loop_ready:install_receipts
+      - product_governor:followthrough
+""".lstrip()
+    path.write_text(payload, encoding="utf-8")
+    design_queue.write_text(payload.replace(f"source_design_queue_path: {design_queue}\n", ""), encoding="utf-8")
 
 
 def test_normalize_proof_capture_commands_preserves_canonical_startup_smoke_tail() -> None:
@@ -300,183 +430,29 @@ def test_materialize_support_case_packets_proves_successor_package_authority(tmp
         + "\n",
         encoding="utf-8",
     )
-    registry.write_text(
-        """
-product: chummer
-program_wave: next_90_day_product_advance
-milestones:
-  - id: 102
-    title: Desktop-native claim, update, rollback, and support followthrough
-    wave: W6
-    owners:
-      - chummer6-hub
-      - chummer6-hub-registry
-      - chummer6-ui
-      - fleet
-    status: in_progress
-    dependencies:
-      - 101
-    work_tasks:
-      - id: 102.4
-        owner: fleet
-        title: Gate the staged reporter mail loop against real install and fix receipts, not only queued support state.
-        status: complete
-        evidence:
-          - /docker/fleet/scripts/materialize_support_case_packets.py compiles reporter followthrough from support packets only after install truth, installation-bound installed-build receipts, and release-channel receipts agree.
-          - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold.
-          - /docker/fleet/tests/test_materialize_support_case_packets.py covers receipt gating.
-          - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json reports successor_package_verification.status=pass.
-          - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json projects fix-available, please-test, and recovery counts.
-          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly/support generated_at freshness drift so WEEKLY_GOVERNOR_PACKET.generated.json cannot predate the SUPPORT_CASE_PACKETS.generated.json receipt gates it summarizes.
-          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes weekly support-packet source sha256 drift so WEEKLY_GOVERNOR_PACKET.generated.json must name the exact SUPPORT_CASE_PACKETS.generated.json bytes it summarizes.
-          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py fail-closes future-dated generated_at receipts so support and weekly proof cannot outrun wall-clock truth.
-          - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py includes the standalone M102 verifier in no-PYTHONPATH bootstrap proof.
-          - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0.
-          - /docker/fleet/scripts/materialize_support_case_packets.py now fail-closes duplicate next90-m102-fleet-reporter-receipts queue rows, duplicate design-queue rows, and duplicate registry work-task rows so stale closure proof cannot hide behind the first matching row.
-          - /docker/fleet/scripts/materialize_support_case_packets.py now requires generated successor scope-drift, closure-field drift, and missing Fleet proof-anchor markers in both the Fleet queue mirror and design-owned queue source so future shards verify the closed proof floor instead of repeating it.
-          - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py now fail-closes runtime handoff metadata proof markers so copied worker-run metadata cannot close the package.
-""".lstrip(),
-        encoding="utf-8",
-    )
-    queue.write_text(
-        f"""
-program_wave: next_90_day_product_advance
-source_design_queue_path: {design_queue}
-items:
-  - title: Gate fix followthrough against real install and receipt truth
-    task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
-    package_id: next90-m102-fleet-reporter-receipts
-    frontier_id: 2454416974
-    milestone_id: 102
-    wave: W6
-    repo: fleet
-    status: complete
-    proof:
-      - /docker/fleet/scripts/materialize_support_case_packets.py
-      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
-      - /docker/fleet/tests/test_materialize_support_case_packets.py
-      - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
-      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
-      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
-      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
-      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
-      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
-      - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
-      - python3 -m py_compile scripts/materialize_support_case_packets.py tests/test_materialize_support_case_packets.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
-      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
-      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
-      - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
-      - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
-      - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
-      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
-      - generated support-packet proof hygiene requires empty disallowed active-run proof entries
-      - stale generated support proof gaps fail the standalone verifier
-      - generated support successor scope drift fails the standalone verifier
-      - generated support successor closure-field drift fails the standalone verifier
-      - weekly/support receipt-count drift fails the standalone verifier
-      - weekly/support generated_at freshness fails the standalone verifier
-      - weekly support-packet source sha256 drift fails the standalone verifier
-      - future-dated support and weekly generated_at receipts fail the standalone verifier
-      - weekly support-packet source-path drift fails the standalone verifier
-      - design queue source path rejects active-run helper paths
-      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
-      - design-owned queue source proof markers fail the standalone verifier
-      - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
-      - telemetry command proof markers fail the standalone verifier and shared successor authority check
-      - runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check
-      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
-      - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
-      - design-owned queue source row matches the Fleet completed queue proof assignment
-    allowed_paths:
-      - scripts
-      - tests
-      - .codex-studio
-      - feedback
-    owned_surfaces:
-      - feedback_loop_ready:install_receipts
-      - product_governor:followthrough
-""".lstrip(),
-        encoding="utf-8",
-    )
-    design_queue.write_text(
-        """
-program_wave: next_90_day_product_advance
-items:
-  - title: Gate fix followthrough against real install and receipt truth
-    task: Compile feedback, fix-available, please-test, and recovery loops from install-aware release receipts instead of queued support state alone.
-    package_id: next90-m102-fleet-reporter-receipts
-    frontier_id: 2454416974
-    milestone_id: 102
-    wave: W6
-    repo: fleet
-    status: complete
-    proof:
-      - /docker/fleet/scripts/materialize_support_case_packets.py
-      - /docker/fleet/scripts/verify_next90_m102_fleet_reporter_receipts.py
-      - /docker/fleet/tests/test_materialize_support_case_packets.py
-      - /docker/fleet/tests/test_verify_next90_m102_fleet_reporter_receipts.py
-      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
-      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
-      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
-      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json
-      - /docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md
-      - /docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md
-      - python3 -m py_compile scripts/materialize_support_case_packets.py scripts/verify_next90_m102_fleet_reporter_receipts.py tests/test_materialize_support_case_packets.py tests/test_verify_next90_m102_fleet_reporter_receipts.py scripts/materialize_weekly_governor_packet.py tests/test_materialize_weekly_governor_packet.py
-      - python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0
-      - python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0
-      - installation-bound receipt gating blocks reporter followthrough when installed-build receipt installation id disagrees with the linked install
-      - fixed-version receipts and fixed-channel receipts are required before reporter followthrough leaves hold
-      - direct tmp_path fixture invocation for receipt-gated support followthrough tests exits 0
-      - successor frontier 2454416974 pinned for next90-m102-fleet-reporter-receipts repeat prevention
-      - generated support-packet proof hygiene requires empty disallowed active-run proof entries
-      - stale generated support proof gaps fail the standalone verifier
-      - generated support successor scope drift fails the standalone verifier
-      - generated support successor closure-field drift fails the standalone verifier
-      - weekly/support receipt-count drift fails the standalone verifier
-      - weekly/support generated_at freshness fails the standalone verifier
-      - weekly support-packet source sha256 drift fails the standalone verifier
-      - future-dated support and weekly generated_at receipts fail the standalone verifier
-      - weekly support-packet source-path drift fails the standalone verifier
-      - design queue source path rejects active-run helper paths
-      - weekly governor source-path hygiene and worker command guard fail the standalone verifier
-      - design-owned queue source proof markers fail the standalone verifier
-      - successor verifier fail-closes missing Fleet proof anchors and SUPPORT_CASE_PACKETS.generated.json reports missing_registry_proof_anchor_paths=[] and missing_queue_proof_anchor_paths=[]
-      - telemetry command proof markers fail the standalone verifier and shared successor authority check
-      - runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check
-      - distinct queue proof anti-collapse guard prevents broad prose proof lines from satisfying command and negative-proof rows
-      - duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check
-      - design-owned queue source row matches the Fleet completed queue proof assignment
-    allowed_paths:
-      - scripts
-      - tests
-      - .codex-studio
-      - feedback
-    owned_surfaces:
-      - feedback_loop_ready:install_receipts
-      - product_governor:followthrough
-""".lstrip(),
-        encoding="utf-8",
-    )
+    _write_registry(registry)
+    _write_queue(queue, design_queue)
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--source",
-            str(source),
-            "--release-channel",
-            str(release_channel),
-            "--successor-registry",
-            str(registry),
-            "--queue-staging",
-            str(queue),
-            "--out",
-            str(out_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    with _override_design_queue_path(design_queue):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--source",
+                str(source),
+                "--release-channel",
+                str(release_channel),
+                "--successor-registry",
+                str(registry),
+                "--queue-staging",
+                str(queue),
+                "--out",
+                str(out_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(out_path.read_text(encoding="utf-8"))
@@ -501,6 +477,7 @@ items:
     assert verification["design_queue_source_status"] == "complete"
     assert verification["design_queue_source_frontier_id"] == "2454416974"
     assert verification["missing_design_queue_source_proof_markers"] == []
+    assert verification["missing_queue_design_source_proof_markers"] == []
     assert verification["missing_design_queue_source_proof_anchor_paths"] == []
     assert verification["disallowed_design_queue_source_proof_entries"] == []
     assert verification["missing_queue_proof_markers"] == []
@@ -514,14 +491,28 @@ items:
     assert "fixed-version receipts" in verification["required_registry_evidence_markers"]
     assert "fixed-channel receipts" in verification["required_registry_evidence_markers"]
     assert "runtime handoff metadata proof markers" in verification["required_registry_evidence_markers"]
+    assert "cached packet fallback provenance guard" in verification["required_registry_evidence_markers"]
+    assert "seeded cached-packet mirror provenance guard" in verification["required_registry_evidence_markers"]
+    assert (
+        "feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md"
+        in verification["required_registry_evidence_markers"]
+    )
     assert (
         "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0"
+        in verification["required_registry_evidence_markers"]
+    )
+    assert (
+        "python3 tests/test_materialize_support_case_packets.py exits 0"
         in verification["required_registry_evidence_markers"]
     )
     assert "fixed-version receipts" in verification["required_queue_proof_markers"]
     assert "fixed-channel receipts" in verification["required_queue_proof_markers"]
     assert (
         "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0"
+        in verification["required_queue_proof_markers"]
+    )
+    assert (
+        "python3 tests/test_materialize_support_case_packets.py exits 0"
         in verification["required_queue_proof_markers"]
     )
     assert (
@@ -536,8 +527,14 @@ items:
     assert "design-owned queue source" in verification["required_queue_proof_markers"]
     assert "generated support-packet proof hygiene" in verification["required_queue_proof_markers"]
     assert "stale generated support proof gaps" in verification["required_queue_proof_markers"]
+    assert (
+        "weekly support-packet source sha256 drift fails the standalone verifier"
+        in verification["required_queue_proof_markers"]
+    )
     assert "design-owned queue source proof markers" in verification["required_queue_proof_markers"]
     assert "distinct queue proof anti-collapse guard" in verification["required_queue_proof_markers"]
+    assert "cached packet fallback provenance guard" in verification["required_queue_proof_markers"]
+    assert "seeded cached-packet mirror provenance guard" in verification["required_queue_proof_markers"]
     assert (
         "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md"
         in verification["required_queue_proof_markers"]
@@ -604,6 +601,125 @@ items:
     assert verification["missing_registry_evidence_markers"]
     assert verification["missing_queue_proof_markers"]
     assert any("WEEKLY_GOVERNOR_PACKET.generated.json" in issue for issue in verification["issues"])
+
+
+def test_materialize_support_case_packets_fails_when_queue_mirror_omits_design_source_proof_marker(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    design_queue = tmp_path / "design_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    _write_registry(registry)
+    _write_queue(queue, design_queue)
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(
+            "      - weekly support-packet source sha256 drift fails the standalone verifier\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
+
+    assert verification["status"] == "fail"
+    assert verification["missing_queue_proof_markers"] == [
+        "weekly support-packet source sha256 drift fails the standalone verifier"
+    ]
+    assert verification["missing_queue_design_source_proof_markers"] == [
+        "weekly support-packet source sha256 drift fails the standalone verifier"
+    ]
+    assert (
+        "successor queue item proof missing design-queue source marker: "
+        "weekly support-packet source sha256 drift fails the standalone verifier"
+        in verification["issues"]
+    )
+
+
+def test_materialize_support_case_packets_fails_when_design_queue_path_is_not_canonical(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    design_queue = tmp_path / "design_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    sibling_queue = tmp_path / "sibling_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    _write_registry(registry)
+    _write_queue(queue, design_queue)
+    sibling_queue.write_text(design_queue.read_text(encoding="utf-8"), encoding="utf-8")
+    queue.write_text(
+        queue.read_text(encoding="utf-8").replace(str(design_queue), str(sibling_queue)),
+        encoding="utf-8",
+    )
+
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
+
+    assert verification["status"] == "fail"
+    assert verification["design_queue_source_path"] == str(sibling_queue)
+    assert (
+        "successor queue staging source_design_queue_path drifted from canonical design queue path"
+        in verification["issues"]
+    )
+
+
+def test_materialize_support_case_packets_fails_when_completed_queue_action_fields_are_missing(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    design_queue = tmp_path / "design_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    _write_registry(registry)
+    _write_queue(queue, design_queue)
+    queue.write_text(
+        queue.read_text(encoding="utf-8")
+        .replace("    completion_action: verify_closed_package_only\n", "")
+        .replace(
+            "    do_not_reopen_reason: M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
+
+    assert verification["status"] == "fail"
+    assert verification["queue_completion_action"] == ""
+    assert verification["queue_do_not_reopen_reason"] == ""
+    assert "successor queue item completion_action must be verify_closed_package_only" in verification["issues"]
+    assert "successor queue item do_not_reopen_reason drifted" in verification["issues"]
+
+
+def test_materialize_support_case_packets_fails_when_design_queue_action_fields_are_missing(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    design_queue = tmp_path / "design_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    _write_registry(registry)
+    _write_queue(queue, design_queue)
+    design_queue.write_text(
+        design_queue.read_text(encoding="utf-8")
+        .replace("    completion_action: verify_closed_package_only\n", "")
+        .replace(
+            "    do_not_reopen_reason: M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
+
+    assert verification["status"] == "fail"
+    assert verification["design_queue_source_completion_action"] == ""
+    assert verification["design_queue_source_do_not_reopen_reason"] == ""
+    assert "successor design queue source completion_action must be verify_closed_package_only" in verification["issues"]
+    assert "successor design queue source do_not_reopen_reason drifted" in verification["issues"]
 
 
 def test_materialize_support_case_packets_rejects_active_run_proof_markers_case_insensitively() -> None:
@@ -880,7 +996,8 @@ items:
         encoding="utf-8",
     )
 
-    verification = module._successor_package_verification(registry, queue)
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
 
     assert verification["status"] == "fail"
     assert verification["design_queue_source_path"] == str(design_queue)
@@ -990,7 +1107,8 @@ items:
     )
     design_queue.write_text(queue.read_text(encoding="utf-8").replace(f"source_design_queue_path: {design_queue}\n", ""), encoding="utf-8")
 
-    verification = module._successor_package_verification(registry, queue)
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
 
     assert verification["status"] == "fail"
     assert verification["registry_work_task_count"] == 2
@@ -1092,7 +1210,8 @@ items:
         encoding="utf-8",
     )
 
-    verification = module._successor_package_verification(registry, queue)
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
 
     assert verification["status"] == "fail"
     assert verification["design_queue_source_status"] == "queued"
@@ -1194,7 +1313,8 @@ items:
         encoding="utf-8",
     )
 
-    verification = module._successor_package_verification(registry, queue)
+    with _override_design_queue_path(design_queue):
+        verification = module._successor_package_verification(registry, queue)
 
     assert verification["status"] == "fail"
     assert verification["design_queue_source_status"] == ""
@@ -1815,6 +1935,69 @@ def test_cached_packet_fallback_rebuilds_followthrough_without_trusting_cached_r
     assert payload["reporter_followthrough_plan"]["action_groups"]["please_test"] == []
 
 
+def test_source_mirror_fallback_seeded_from_cached_packets_preserves_cached_provenance() -> None:
+    module = _load_module()
+    release_channel_index = module._release_channel_index(
+        {
+            "channelId": "preview",
+            "status": "published",
+            "version": "1.2.3",
+            "releaseProof": {"status": "passed"},
+            "desktopTupleCoverage": {
+                "promotedInstallerTuples": [
+                    {
+                        "tupleId": "avalonia:linux-x64:linux",
+                        "head": "avalonia",
+                        "platform": "linux",
+                        "rid": "linux-x64",
+                        "artifactId": "avalonia-linux-x64-installer",
+                    }
+                ]
+            },
+        }
+    )
+
+    payload = module._source_mirror_fallback_payload(
+        {
+            "items": [
+                {
+                    "caseId": "support_case_cached_seed",
+                    "clusterKey": "support:cached-seed",
+                    "kind": "bug_report",
+                    "status": "fixed",
+                    "candidateOwnerRepo": "chummer6-ui",
+                    "installationId": "install-cached-seed",
+                    "releaseChannel": "preview",
+                    "headId": "avalonia",
+                    "platform": "linux",
+                    "arch": "x64",
+                    "installedVersion": "1.2.3",
+                    "fixedVersion": "1.2.3",
+                    "fixedChannel": "preview",
+                    "installedBuildReceiptId": "install-receipt-cached-seed",
+                    "installedBuildReceiptInstallationId": "install-cached-seed",
+                    "installedBuildReceiptVersion": "1.2.3",
+                    "installedBuildReceiptChannel": "preview",
+                }
+            ],
+            "count": 1,
+            "mirrored_at": "2026-04-18T18:00:00Z",
+            "origin_source_label": "https://chummer.run/api/v1/support/cases/triage",
+            "origin_source_kind": "remote_url",
+            "seeded_from_cached_packets_generated_at": "2026-04-18T17:55:00Z",
+        },
+        source_label="https://chummer.run/api/v1/support/cases/triage",
+        source_mirror_path=Path("/tmp/SUPPORT_CASE_SOURCE_MIRROR.generated.json"),
+        release_channel_index=release_channel_index,
+        refresh_error="HTTP Error 401: Unauthorized",
+    )
+
+    assert payload["source"]["refresh_mode"] == "cached_packets_fallback"
+    assert payload["source"]["seeded_from_cached_packets_generated_at"] == "2026-04-18T17:55:00Z"
+    assert payload["summary"]["reporter_followthrough_ready_count"] == 0
+    assert payload["summary"]["please_test_ready_count"] == 0
+
+
 def test_materialize_support_case_packets_enriches_install_truth_from_release_channel(tmp_path: Path) -> None:
     source = tmp_path / "support_cases.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
@@ -2081,6 +2264,153 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
     assert receipt_gates["blocker_counts"] == {}
     fix_states = sorted(item["fix_confirmation"]["state"] for item in payload["packets"])
     assert fix_states == ["awaiting_reporter_verification"]
+
+
+def test_followthrough_plan_recomputes_ready_groups_from_receipt_truth() -> None:
+    module = _load_module()
+
+    plan = module._reporter_followthrough_plan(
+        [
+            {
+                "support_case_backed": True,
+                "packet_id": "support_packet_stale_ready",
+                "kind": "bug_report",
+                "status": "fixed",
+                "target_repo": "chummer6-ui",
+                "installation_id": "install-stale-ready-1",
+                "release_channel": "preview",
+                "head_id": "avalonia",
+                "platform": "linux",
+                "arch": "x64",
+                "installed_version": "1.2.3",
+                "fixed_version": "1.2.3",
+                "fixed_channel": "preview",
+                "recovery_path": {"action_id": "open_downloads", "href": "/downloads"},
+                "reporter_followthrough": {
+                    "state": "please_test_ready",
+                    "next_action": "send_please_test",
+                    "feedback_loop_ready": True,
+                    "install_receipt_ready": True,
+                    "fixed_version_receipted": True,
+                    "fixed_channel_receipted": True,
+                    "installed_build_receipted": True,
+                    "current_install_on_fixed_build": True,
+                    "recovery_loop_ready": True,
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "installed_build_receipt_id": "install-receipt-stale-ready-1",
+                    "installed_build_receipt_installation_id": "install-stale-ready-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_head_id": "avalonia",
+                    "installed_build_receipt_platform": "linux",
+                    "installed_build_receipt_rid": "linux-x64",
+                    "installed_build_receipt_tuple_id": "avalonia:linux-x64:linux",
+                    "installed_build_receipt_source": "queued_support_state",
+                    "installed_build_receipt_installation_source": "queued_support_state",
+                    "installed_build_receipt_version_source": "queued_support_state",
+                    "installed_build_receipt_channel_source": "queued_support_state",
+                    "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                    "fixed_version_receipt_id": "fix-version-receipt-stale-ready-1",
+                    "fixed_channel_receipt_id": "fix-channel-receipt-stale-ready-1",
+                    "fixed_receipt_installation_id": "install-stale-ready-1",
+                    "fixed_receipt_installation_source": "queued_support_state",
+                    "fixed_receipt_installation_matches": True,
+                    "fixed_version_receipt_source": "queued_support_state",
+                    "fixed_channel_receipt_source": "queued_support_state",
+                    "blockers": [],
+                },
+            }
+        ],
+        generated_at="2026-04-18T18:30:00Z",
+    )
+
+    assert plan["ready_count"] == 0
+    assert plan["feedback_ready_count"] == 0
+    assert plan["fix_available_ready_count"] == 0
+    assert plan["please_test_ready_count"] == 0
+    assert plan["recovery_loop_ready_count"] == 0
+    assert plan["action_groups"]["feedback"] == []
+    assert plan["action_groups"]["fix_available"] == []
+    assert plan["action_groups"]["please_test"] == []
+    assert plan["action_groups"]["recovery"] == []
+
+
+def test_followthrough_receipt_gates_recompute_counts_from_receipt_truth() -> None:
+    module = _load_module()
+
+    gates = module._followthrough_receipt_gates(
+        [
+            {
+                "support_case_backed": True,
+                "reporter_followthrough": {
+                    "state": "fix_available_ready",
+                    "feedback_loop_ready": True,
+                    "install_receipt_ready": True,
+                    "release_receipt_state": "release_receipt_ready",
+                    "release_receipt_id": "release-channel:preview:1.2.3:passed",
+                    "release_receipt_source": "release_channel",
+                    "release_receipt_channel": "preview",
+                    "release_receipt_version": "1.2.3",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-gates-1",
+                    "installed_build_receipt_installation_id": "install-gates-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "queued_support_state",
+                    "installed_build_receipt_installation_source": "queued_support_state",
+                    "installed_build_receipt_version_source": "queued_support_state",
+                    "installed_build_receipt_channel_source": "queued_support_state",
+                    "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                    "fixed_version_receipted": True,
+                    "fixed_channel_receipted": True,
+                    "fixed_version_receipt_id": "fix-version-receipt-gates-1",
+                    "fixed_channel_receipt_id": "fix-channel-receipt-gates-1",
+                    "fixed_receipt_installation_id": "install-gates-1",
+                    "fixed_receipt_installation_source": "queued_support_state",
+                    "fixed_receipt_installation_matches": True,
+                    "fixed_version_receipt_source": "queued_support_state",
+                    "fixed_channel_receipt_source": "queued_support_state",
+                    "blockers": [],
+                },
+                "installation_id": "install-gates-1",
+                "install_truth_state": "promoted_tuple_match",
+                "status": "fixed",
+                "fixed_version": "1.2.3",
+                "fixed_channel": "preview",
+                "release_channel": "preview",
+                "installed_version": "1.2.3",
+                "head_id": "avalonia",
+                "platform": "linux",
+                "arch": "x64",
+                "recovery_path": {"action_id": "open_downloads", "href": "/downloads"},
+            }
+        ],
+        generated_at="2026-04-18T18:30:00Z",
+    )
+
+    assert gates["ready_count"] == 0
+    assert gates["gate_counts"]["install_receipt_ready"] == 1
+    assert gates["gate_counts"]["install_truth_ready"] == 1
+    assert gates["gate_counts"]["feedback_loop_ready"] == 0
+    assert gates["gate_counts"]["fixed_version_receipted"] == 0
+    assert gates["gate_counts"]["fixed_channel_receipted"] == 0
+    assert gates["gate_counts"]["fixed_receipt_installation_bound"] == 0
+    assert gates["gate_counts"]["installed_build_receipted"] == 0
+    assert gates["gate_counts"]["installed_build_receipt_installation_bound"] == 0
+    assert gates["gate_counts"]["installed_build_receipt_version_matches"] == 0
+    assert gates["gate_counts"]["installed_build_receipt_channel_matches"] == 0
+    assert gates["gate_counts"]["installed_build_receipt_tuple_bound"] == 0
+    assert gates["gate_counts"]["current_install_on_fixed_build"] == 0
 
 
 def test_materialize_support_case_packets_blocks_reporter_followthrough_without_install_receipts(tmp_path: Path) -> None:
@@ -3162,7 +3492,7 @@ def test_materialize_support_case_packets_blocks_reporter_followthrough_on_recei
     assert packet["install_diagnosis"]["case_installed_build_receipt_channel"] == "nightly"
     assert packet["fix_confirmation"]["installed_build_receipt_version"] == "1.2.2"
     assert packet["fix_confirmation"]["installed_build_receipt_channel"] == "nightly"
-    assert packet["reporter_followthrough"]["state"] == "blocked_missing_install_receipts"
+    assert packet["reporter_followthrough"]["state"] == "blocked_receipt_mismatch"
     assert packet["reporter_followthrough"]["installed_build_receipted"] is False
     assert packet["reporter_followthrough"]["installed_build_receipt_version_matches"] is False
     assert packet["reporter_followthrough"]["installed_build_receipt_channel_matches"] is False
@@ -3175,8 +3505,8 @@ def test_materialize_support_case_packets_blocks_reporter_followthrough_on_recei
     assert receipt_gates["blocked_missing_install_receipts_count"] == 1
     assert receipt_gates["blocked_receipt_mismatch_count"] == 1
     assert receipt_gates["gate_counts"]["installed_build_receipted"] == 0
-    assert receipt_gates["gate_counts"]["installed_build_receipt_id_present"] == 1
-    assert receipt_gates["gate_counts"]["installed_build_receipt_installation_bound"] == 1
+    assert receipt_gates["gate_counts"]["installed_build_receipt_id_present"] == 0
+    assert receipt_gates["gate_counts"]["installed_build_receipt_installation_bound"] == 0
     assert receipt_gates["gate_counts"]["installed_build_receipt_version_matches"] == 0
     assert receipt_gates["gate_counts"]["installed_build_receipt_channel_matches"] == 0
     assert receipt_gates["blocker_counts"] == {
@@ -3398,7 +3728,7 @@ def test_materialize_support_case_packets_blocks_reporter_followthrough_on_recei
     packet = payload["packets"][0]
     assert packet["install_diagnosis"]["case_installed_build_receipt_installation_id"] == "install-other-7"
     assert packet["fix_confirmation"]["installed_build_receipt_installation_id"] == "install-other-7"
-    assert packet["reporter_followthrough"]["state"] == "blocked_missing_install_receipts"
+    assert packet["reporter_followthrough"]["state"] == "blocked_receipt_mismatch"
     assert packet["reporter_followthrough"]["installed_build_receipted"] is False
     assert packet["reporter_followthrough"]["installed_build_receipt_installation_matches"] is False
     assert packet["reporter_followthrough"]["blockers"] == [
@@ -3712,6 +4042,7 @@ def test_materialize_support_case_packets_rejects_cross_case_fix_receipt_on_same
     assert payload["summary"]["fix_available_ready_count"] == 0
     assert payload["summary"]["please_test_ready_count"] == 0
     assert payload["summary"]["recovery_loop_ready_count"] == 0
+    assert payload["summary"]["reporter_followthrough_hold_until_fix_receipt_count"] == 1
     packet = payload["packets"][0]
     assert packet["fixed_version"] == ""
     assert packet["fixed_channel"] == ""
@@ -4915,6 +5246,108 @@ def test_materialize_support_case_packets_prefers_install_bound_fix_receipt_over
     ] == "install-bound-fix"
 
 
+def test_materialize_support_case_packets_derives_please_test_from_receipts_even_when_case_is_accepted(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "support_cases.json"
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    source.write_text(
+        json.dumps(
+            {
+                "installReceipts": [
+                    {
+                        "receiptId": "install-receipt-open-case-1",
+                        "installationId": "install-open-case-1",
+                        "version": "1.2.3",
+                        "channel": "preview",
+                        "headId": "avalonia",
+                        "platform": "linux",
+                        "rid": "linux-x64",
+                        "recordedAtUtc": "2026-04-17T11:30:00Z",
+                    }
+                ],
+                "fixReceipts": [
+                    {
+                        "installationId": "install-open-case-1",
+                        "receiptId": "fix-receipt-open-case-1",
+                        "fixedVersion": "1.2.3",
+                        "fixedChannel": "preview",
+                        "recordedAtUtc": "2026-04-17T12:00:00Z",
+                    }
+                ],
+                "items": [
+                    {
+                        "caseId": "support_case_open_but_receipted",
+                        "clusterKey": "support:open-but-receipted",
+                        "kind": "bug_report",
+                        "status": "accepted",
+                        "title": "Receipts show the fix is installed before support state closes",
+                        "summary": "Reporter followthrough should come from the install-aware receipt truth, not the queued case status.",
+                        "candidateOwnerRepo": "chummer6-ui",
+                        "installationId": "install-open-case-1",
+                        "releaseChannel": "preview",
+                        "headId": "avalonia",
+                        "platform": "linux",
+                        "arch": "x64",
+                        "installedVersion": "1.2.3",
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    release_channel.write_text(
+        json.dumps(
+            {
+                "channelId": "preview",
+                "status": "published",
+                "version": "1.2.3",
+                "releaseProof": {"status": "passed"},
+                "desktopTupleCoverage": {
+                    "promotedInstallerTuples": [
+                        {
+                            "tupleId": "avalonia:linux:linux-x64",
+                            "head": "avalonia",
+                            "platform": "linux",
+                            "rid": "linux-x64",
+                            "artifactId": "avalonia-linux-x64-installer",
+                        }
+                    ]
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--source", str(source), "--release-channel", str(release_channel), "--out", str(out_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["reporter_followthrough_ready_count"] == 1
+    assert payload["summary"]["fix_available_ready_count"] == 0
+    assert payload["summary"]["please_test_ready_count"] == 1
+    packet = payload["packets"][0]
+    assert packet["status"] == "accepted"
+    assert packet["reporter_followthrough"]["state"] == "please_test_ready"
+    assert packet["reporter_followthrough"]["next_action"] == "send_please_test"
+    assert packet["reporter_followthrough"]["feedback_loop_ready"] is True
+    assert packet["reporter_followthrough"]["current_install_on_fixed_build"] is True
+    assert packet["reporter_followthrough"]["blockers"] == []
+    please_test_row = payload["reporter_followthrough_plan"]["action_groups"]["please_test"][0]
+    assert please_test_row["status"] == "accepted"
+    assert please_test_row["receipt_ready_for_please_test"] is True
+
+
 def test_materialize_support_case_packets_suppresses_queued_fix_fields_when_fix_receipt_feed_is_empty(
     tmp_path: Path,
 ) -> None:
@@ -5202,6 +5635,7 @@ def test_materialize_support_case_packets_blocks_recovery_until_fix_receipt_even
     assert len(plan["action_groups"]["feedback"]) == 1
     assert plan["action_groups"]["feedback"][0]["next_action"] == "send_feedback_progress"
     assert plan["hold_until_fix_receipt_count"] == 1
+    assert payload["summary"]["reporter_followthrough_hold_until_fix_receipt_count"] == 1
     assert plan["action_groups"]["recovery"] == []
     assert len(plan["action_groups"]["hold_until_fix_receipt"]) == 1
     assert plan["action_groups"]["hold_until_fix_receipt"][0]["recovery_path"]["action_id"] == "open_support_timeline"

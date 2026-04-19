@@ -22,6 +22,12 @@ The local queue staging packet at `/docker/fleet/.codex-studio/published/NEXT_90
 
 The generated support packet at `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` reports `successor_package_verification.status=pass` for this package.
 
+The 2026-04-18 canonical design-queue path guard now fail-closes the Fleet queue mirror if `source_design_queue_path` points at any existing sibling copy instead of `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`. Future shards cannot keep this package closed from a locally copied design-queue row that happens to carry the same proof text.
+
+The 2026-04-18 closed-queue action guard pass now requires both the Fleet queue row and the design-owned queue source row to carry `completion_action: verify_closed_package_only` plus the package-specific `do_not_reopen_reason`. The shared successor verifier emits those structured fields in `successor_package_verification`, so future shards must verify the closed package instead of repeating this slice from a generic `status: complete` row.
+
+The 2026-04-18 canonical-proof anchor pass now also requires this closeout note to appear in the canonical M102 registry evidence row, not just the Fleet queue proof list. Future shards cannot keep the package closed from script and generated-packet markers alone; the canonical successor registry must point at the scoped anti-reopen note that explains the exact proof anchors.
+
 The 2026-04-15 successor-wave tightening pass now also makes fixed-version receipt and fixed-channel receipt markers explicit in both the Fleet queue proof row and the generated successor authority guard, so future shards cannot repeat this closeout with install receipts alone.
 
 The later 2026-04-15 successor-wave guard pass tightened the executable gate itself: a fixed-version-only support packet now stays on hold with `fixed_channel_missing` until the fixed channel receipt also agrees with release-channel truth.
@@ -57,6 +63,8 @@ The 2026-04-15 active-run proof hygiene pass moved that rejection into the share
 The later 2026-04-15 weekly-input guard pass tightened the standalone verifier so the weekly governor packet must explicitly report `source_input_health.required_inputs.support_packets.successor_package_verification_status=pass`. A weekly packet can no longer keep the M102 closeout green while omitting the support-packet successor verification input that carries the receipt-gated followthrough truth.
 
 The 2026-04-15 support-packet proof hygiene pass tightened the standalone verifier against generated-receipt drift: `SUPPORT_CASE_PACKETS.generated.json` must expose empty `disallowed_registry_evidence_entries` and `disallowed_queue_proof_entries` in its successor package verification receipt. The closeout can no longer stay green if generated support-packet truth carries active-run handoffs, task-local telemetry, or blocked helper commands even when the registry and queue rows are clean.
+
+The 2026-04-18 successor-wave proof-tightening pass pinned the last unstated row-level negative cases into canonical proof. The registry evidence, Fleet queue row, and design-owned queue row now all require proof that the standalone verifier rejects both missing per-row install-aware receipt gates and stale "ready" action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree with packet truth.
 
 The later 2026-04-15 generated-receipt stale-gap pass tightened that same standalone verifier further: `SUPPORT_CASE_PACKETS.generated.json` must now carry the expected package id, frontier id, milestone id, and empty successor proof-gap lists for missing registry markers, missing queue markers, missing registry proof anchors, and missing queue proof anchors. This prevents a stale generated support packet with old proof gaps from staying green just because the standalone verifier can recompute current registry and queue truth.
 
@@ -130,6 +138,8 @@ The 2026-04-17 implementation-only followthrough value pass tightened the standa
 
 The later 2026-04-17 implementation-only verification pass added a direct no-pytest harness to `tests/test_materialize_support_case_packets.py`. The full materializer regression suite now runs in this worker environment with `python3 tests/test_materialize_support_case_packets.py`, covering the install receipt feed, fix receipt feed, recovery, update-required, queue-authority, and proof-hygiene cases without depending on unavailable pytest tooling.
 
+The later 2026-04-18 proof-floor tightening pass promoted that materializer harness from narrative evidence into required package authority. The canonical registry row, Fleet queue row, design-owned queue row, and standalone verifier receipt markers now all require `python3 tests/test_materialize_support_case_packets.py exits 0`, so future shards cannot keep this package closed by citing file paths or py_compile proof alone.
+
 The 2026-04-17 successor-wave receipt-summary guard pass tightened the standalone verifier so `SUPPORT_CASE_PACKETS.generated.json.summary` must agree with the receipt-backed `reporter_followthrough_plan` action groups. Queued support summary counts can no longer overclaim feedback, fix-available, please-test, recovery, missing-install-receipt, or receipt-mismatch followthrough after the plan rows fail install-aware receipt gates.
 
 The later 2026-04-17 implementation-only retry tightened that guard one step further: the standalone verifier now recomputes `reporter_followthrough_plan.ready_count` and blocked counts from the receipt-backed action groups before comparing support summary, weekly JSON, or weekly markdown. A stale plan counter can no longer keep fix followthrough green without real install-aware action rows.
@@ -155,6 +165,10 @@ The later 2026-04-17 timestamp-field guard tightened that receipt-time rule agai
 The 2026-04-17 successor-wave aggregate-count guard tightened the standalone verifier so `followthrough_receipt_gates.ready_count` and blocker totals must agree with the receipt-backed `reporter_followthrough_plan.action_groups`. A weekly governor packet can no longer keep stale receipt-gate aggregate counts green by echoing them when the underlying feedback, fix-available, please-test, or recovery action rows are absent.
 
 The later 2026-04-17 implementation-only release-fix receipt guard tightened authoritative fix receipt hydration so a release-only `releaseReceiptId` cannot stand in for both fixed-version and fixed-channel receipts. `fixReceipts` rows may still use their own fix receipt identity, but reporter followthrough now stays on hold when the feed only provides release-channel receipt identity without fixed-version or fixed-channel receipt facts. Regression coverage proves fix-available and please-test action groups remain empty in that case, and the regenerated support and weekly governor packets pass the standalone M102 verifier.
+
+The 2026-04-18 implementation-only cached-provenance guard closes the last mirror fallback loophole. When Fleet seeds `SUPPORT_CASE_SOURCE_MIRROR.generated.json` from cached packets, `materialize_support_case_packets.py` now preserves that path as `source.refresh_mode=cached_packets_fallback` instead of downgrading it to a generic mirror fallback, and the standalone verifier also fail-closes any ready followthrough rows that still carry `seeded_from_cached_packets_generated_at`. Ready feedback, fix-available, please-test, and recovery loops can no longer hide behind a mirror file whose only truth source was cached packet state.
+
+The 2026-04-18 proof-floor follow-up now pins that cached-fallback rule into the canonical M102 closure evidence as well. The successor registry and both queue rows must cite the cached packet fallback provenance guard and the seeded cached-packet mirror provenance guard, so future shards cannot keep this package closed unless the anti-reopen proof explicitly covers both cached fallback paths.
 
 ## Receipt-Gated Behavior
 

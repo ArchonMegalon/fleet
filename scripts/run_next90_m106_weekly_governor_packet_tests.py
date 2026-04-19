@@ -26,7 +26,11 @@ def _load_test_module(path: Path):
 def _iter_test_functions(module) -> list[tuple[str, Callable[..., object]]]:
     functions: list[tuple[str, Callable[..., object]]] = []
     for name, value in vars(module).items():
-        if name.startswith("test_") and callable(value):
+        if (
+            name.startswith("test_")
+            and inspect.isfunction(value)
+            and value.__module__ == module.__name__
+        ):
             functions.append((name, value))
     return sorted(functions)
 

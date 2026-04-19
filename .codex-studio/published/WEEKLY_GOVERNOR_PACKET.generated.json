@@ -108,9 +108,9 @@
       },
       {
         "name": "status_plane_final_claim",
-        "observed": "pass",
+        "observed": "fail",
         "required": "pass",
-        "state": "pass"
+        "state": "blocked"
       },
       {
         "name": "journey_gates",
@@ -182,7 +182,7 @@
       }
     ]
   },
-  "generated_at": "2026-04-17T20:55:18Z",
+  "generated_at": "2026-04-18T20:47:47Z",
   "governor_decisions": [
     {
       "action": "launch_expand",
@@ -218,8 +218,9 @@
   "governor_packet_schedule": {
     "cadence": "weekly",
     "cadence_seconds": 604800,
-    "generated_at": "2026-04-17T20:55:18Z",
-    "next_packet_due_at": "2026-04-24T20:55:18Z",
+    "generated_at": "2026-04-18T20:47:47Z",
+    "max_age_seconds": 604800,
+    "next_packet_due_at": "2026-04-25T20:47:47Z",
     "status": "scheduled"
   },
   "measured_rollout_loop": {
@@ -347,9 +348,10 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 3,
+          "blocking_gate_count": 4,
           "blocking_gates": [
             "successor_dependencies",
+            "status_plane_final_claim",
             "local_release_proof",
             "provider_canary"
           ],
@@ -365,7 +367,7 @@
             "package_authority": "pass",
             "provider_canary": "blocked",
             "source_input_health": "pass",
-            "status_plane_final_claim": "pass",
+            "status_plane_final_claim": "blocked",
             "successor_dependencies": "blocked",
             "support_followthrough_receipts": "pass",
             "support_packets": "pass",
@@ -494,9 +496,10 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 3,
+          "blocking_gate_count": 4,
           "blocking_gates": [
             "successor_dependencies",
+            "status_plane_final_claim",
             "local_release_proof",
             "provider_canary"
           ],
@@ -505,8 +508,8 @@
           "matrix_complete": true,
           "operator_action": "do_not_expand_launch",
           "ready_for_operator_packet": true,
-          "receipt_id": "m106-launch_expand-5bdcf4bbdcc1cdd1",
-          "receipt_sha256": "5bdcf4bbdcc1cdd1a0bc8f81eeba6fdd2c1790b39f57ad93a1edf6bf6bb690a0",
+          "receipt_id": "m106-launch_expand-bce96ef4e777882d",
+          "receipt_sha256": "bce96ef4e777882db465a477397acf0953dc54da6e82b22f0e7d3bb540df49ce",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -794,19 +797,20 @@
     "launch_gate_summary": {
       "accumulating_count": 0,
       "all_green": false,
-      "blocked_count": 3,
+      "blocked_count": 4,
       "blocking_gate_names": [
         "successor_dependencies",
+        "status_plane_final_claim",
         "local_release_proof",
         "provider_canary"
       ],
       "fail_count": 0,
       "gate_count": 16,
-      "pass_count": 13,
+      "pass_count": 12,
       "unknown_count": 0,
       "watch_count": 0
     },
-    "loop_status": "ready",
+    "loop_status": "blocked",
     "required_decision_actions": [
       "launch_expand",
       "freeze_launch",
@@ -821,6 +825,7 @@
       "incomplete_actions": [],
       "launch_gate_blocking_names": [
         "successor_dependencies",
+        "status_plane_final_claim",
         "local_release_proof",
         "provider_canary"
       ],
@@ -835,15 +840,16 @@
       "rows": [
         {
           "action": "launch_expand",
-          "blocking_gate_count": 3,
+          "blocking_gate_count": 4,
           "blocking_gates": [
             "successor_dependencies",
+            "status_plane_final_claim",
             "local_release_proof",
             "provider_canary"
           ],
           "next_decision": "Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green.",
           "operator_action": "do_not_expand_launch",
-          "receipt_id": "m106-launch_expand-5bdcf4bbdcc1cdd1",
+          "receipt_id": "m106-launch_expand-bce96ef4e777882d",
           "route": "weekly_governor_packet.launch_expand",
           "state": "blocked"
         },
@@ -1087,6 +1093,7 @@
     "design_queue_completion_action": "verify_closed_package_only",
     "design_queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "design_queue_frontier_id": "2376135131",
+    "design_queue_landed_commit": "b467c27",
     "design_queue_source_registry_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
     "design_queue_status": "complete",
     "disallowed_worker_proof_command_markers": [
@@ -1144,6 +1151,10 @@
       "execution rules inside this run",
       "execution discipline",
       "first action rule",
+      "if you stop, report only",
+      "what shipped:",
+      "what remains:",
+      "exact blocker:",
       "writable scope roots",
       "operator telemetry",
       "do not invoke operator telemetry",
@@ -1213,6 +1224,7 @@
     ],
     "expected_completion_action": "verify_closed_package_only",
     "expected_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
+    "expected_landed_commit": "b467c27",
     "expected_queue_task": "Turn readiness, parity, support, and rollout truth into a weekly governor packet that drives measured product decisions.",
     "expected_queue_title": "Publish weekly governor packets with measured launch, freeze, canary, and rollback decisions",
     "expected_registry_milestone_title": "Product-governor weekly adoption and measured rollout loop",
@@ -1560,6 +1572,7 @@
     "queue_completion_action": "verify_closed_package_only",
     "queue_do_not_reopen_reason": "M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.",
     "queue_frontier_id": "2376135131",
+    "queue_landed_commit": "b467c27",
     "queue_mirror_drift": [],
     "queue_mirror_status": "in_sync",
     "queue_source_design_queue_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
@@ -2309,6 +2322,10 @@
         "execution rules inside this run",
         "execution discipline",
         "first action rule",
+        "if you stop, report only",
+        "what shipped:",
+        "what remains:",
+        "exact blocker:",
         "writable scope roots",
         "operator telemetry",
         "do not invoke operator telemetry",
@@ -2408,13 +2425,13 @@
   ],
   "schema_version": 1,
   "source_input_fingerprint": {
-    "combined_source_sha256": "b8afcf35bca14ac7deaf0c14079dca20eb348deec1a10ec687f0bdff0f623406",
+    "combined_source_sha256": "0871e2a9620272bad9d210bad7c290df4e276e64e0b6dd09bd2a9547d9e0b527",
     "missing_inputs": [],
     "rows": [
       {
         "name": "successor_registry",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "5ef8cb8a876d707de1ba0e224e63c6289ca39db127e426af5f8438387daef40d"
+        "source_sha256": "8a77e5cfbd7ad34395fbbcfd2d09b5fa9433f64c5d19b5cea9ae0678e59330a4"
       },
       {
         "name": "closed_flagship_registry",
@@ -2424,12 +2441,12 @@
       {
         "name": "design_queue_staging",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "54b4af585455cde86db4a1ab403dfc2ec76d976d5a265f9cf09e4f5140cda5d0"
+        "source_sha256": "30f81d6b9a839c62b8fdde13f8a175bfa387f827a4623148d8ea5af05ee11a9b"
       },
       {
         "name": "queue_staging",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "f01c2c63afeb4a8dd7664aa7b837880564b746d485fc446e934d828337ab5861"
+        "source_sha256": "b29c41076ceb7f81c14721156174594339bc7366028b1aeb5345efb54d55d191"
       },
       {
         "name": "weekly_pulse",
@@ -2439,22 +2456,22 @@
       {
         "name": "flagship_readiness",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "159634999bacb7969dd893a34c8a20a258bd9cebd2dfead75ef7d897de3f2a24"
+        "source_sha256": "50f7b14fa56c5c0891e95440f77298193ac79c463446937270e41e033214c7c2"
       },
       {
         "name": "journey_gates",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "e87047017e457a1d42033dabb05951bbb56331bc7ed934f2db71c345da954439"
+        "source_sha256": "92dd25e89968ba17ad6fc4f74bf46f4663502be2061091238c2ce6b761f00eeb"
       },
       {
         "name": "support_packets",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "4c47cfa184cad05e6ecd7f583f7119fc8bf0f9ae8fe563c0b8eb6ff9cb34a858"
+        "source_sha256": "499fa9fc099a6c25ddee7231ec34b5f76c8b1bb807ab1ae745eacf4b3540b68c"
       },
       {
         "name": "status_plane",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "a817838958533956e65cdb8be1874f14d61de6078a0f7c08e02f0e6acae8642b"
+        "source_sha256": "5aa1a69912dc3ded73bc808e6ef947811349d90fd1f0ab30606569711842f03e"
       }
     ],
     "source_count": 9,
@@ -2478,23 +2495,23 @@
       "design_queue_staging": {
         "required_key": "items",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "54b4af585455cde86db4a1ab403dfc2ec76d976d5a265f9cf09e4f5140cda5d0",
+        "source_sha256": "30f81d6b9a839c62b8fdde13f8a175bfa387f827a4623148d8ea5af05ee11a9b",
         "state": "present"
       },
       "flagship_readiness": {
-        "generated_at": "2026-04-17T15:58:24Z",
+        "generated_at": "2026-04-18T20:28:23Z",
         "max_age_seconds": 691200,
         "required_key": "status",
         "source_path": "/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json",
-        "source_sha256": "159634999bacb7969dd893a34c8a20a258bd9cebd2dfead75ef7d897de3f2a24",
+        "source_sha256": "50f7b14fa56c5c0891e95440f77298193ac79c463446937270e41e033214c7c2",
         "state": "present"
       },
       "journey_gates": {
-        "generated_at": "2026-04-17T15:58:24Z",
+        "generated_at": "2026-04-18T20:28:23Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
-        "source_sha256": "e87047017e457a1d42033dabb05951bbb56331bc7ed934f2db71c345da954439",
+        "source_sha256": "92dd25e89968ba17ad6fc4f74bf46f4663502be2061091238c2ce6b761f00eeb",
         "state": "present"
       },
       "launch_signal_truth_alignment": {
@@ -2518,7 +2535,7 @@
       "queue_staging": {
         "required_key": "items",
         "source_path": "/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml",
-        "source_sha256": "f01c2c63afeb4a8dd7664aa7b837880564b746d485fc446e934d828337ab5861",
+        "source_sha256": "b29c41076ceb7f81c14721156174594339bc7366028b1aeb5345efb54d55d191",
         "state": "present"
       },
       "source_path_authority": {
@@ -2592,6 +2609,10 @@
           "execution rules inside this run",
           "execution discipline",
           "first action rule",
+          "if you stop, report only",
+          "what shipped:",
+          "what remains:",
+          "exact blocker:",
           "writable scope roots",
           "operator telemetry",
           "do not invoke operator telemetry",
@@ -2663,25 +2684,25 @@
         "state": "pass"
       },
       "status_plane": {
-        "generated_at": "2026-04-17T07:57:17Z",
+        "generated_at": "2026-04-18T17:24:27Z",
         "max_age_seconds": 691200,
         "required_key": "whole_product_final_claim_status",
         "source_path": "/docker/fleet/.codex-studio/published/STATUS_PLANE.generated.yaml",
-        "source_sha256": "a817838958533956e65cdb8be1874f14d61de6078a0f7c08e02f0e6acae8642b",
+        "source_sha256": "5aa1a69912dc3ded73bc808e6ef947811349d90fd1f0ab30606569711842f03e",
         "state": "present"
       },
       "successor_registry": {
         "required_key": "program_wave",
         "source_path": "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml",
-        "source_sha256": "5ef8cb8a876d707de1ba0e224e63c6289ca39db127e426af5f8438387daef40d",
+        "source_sha256": "8a77e5cfbd7ad34395fbbcfd2d09b5fa9433f64c5d19b5cea9ae0678e59330a4",
         "state": "present"
       },
       "support_packets": {
-        "generated_at": "2026-04-17T20:38:45Z",
+        "generated_at": "2026-04-18T20:37:22Z",
         "max_age_seconds": 691200,
         "required_key": "summary",
         "source_path": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
-        "source_sha256": "4c47cfa184cad05e6ecd7f583f7119fc8bf0f9ae8fe563c0b8eb6ff9cb34a858",
+        "source_sha256": "499fa9fc099a6c25ddee7231ec34b5f76c8b1bb807ab1ae745eacf4b3540b68c",
         "state": "present",
         "successor_package_verification_status": "pass"
       },
@@ -2706,8 +2727,8 @@
     "support_packets": "/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json",
     "weekly_pulse": "/docker/fleet/.codex-studio/published/WEEKLY_PRODUCT_PULSE.generated.json"
   },
-  "status": "ready",
-  "status_reason": "Fleet package is closed and the weekly measured rollout loop is ready.",
+  "status": "blocked",
+  "status_reason": "Fleet package is closed; measured rollout remains blocked by current source, dependency, or sibling gates.",
   "successor_frontier_ids": [
     "2376135131"
   ],
@@ -2727,7 +2748,7 @@
       "families_below_task_proven": [],
       "families_below_veteran_approved": [],
       "readiness_plane_status": "ready",
-      "registry_path": "/docker/fleet/.codex-design/product/FLAGSHIP_PARITY_REGISTRY.yaml",
+      "registry_path": "/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml",
       "registry_present": true,
       "release_truth_status": "gold_ready",
       "status_counts": {
@@ -2763,7 +2784,7 @@
     "journey_gate_state": "ready",
     "local_release_proof_status": "unknown",
     "provider_canary_status": "Canary evidence is still accumulating",
-    "status_plane_final_claim": "pass",
+    "status_plane_final_claim": "fail",
     "successor_dependency_package_routes": {
       "closed_package_count": 0,
       "incomplete_package_milestone_ids": [],
@@ -2891,6 +2912,7 @@
       "fix_available_ready_count": 0,
       "followthrough_receipt_gates_blocked_missing_install_receipts_count": 0,
       "followthrough_receipt_gates_blocked_receipt_mismatch_count": 0,
+      "followthrough_receipt_gates_hold_until_fix_receipt_count": 0,
       "followthrough_receipt_gates_installation_bound_count": 0,
       "followthrough_receipt_gates_installed_build_receipted_count": 0,
       "followthrough_receipt_gates_ready_count": 0,
@@ -2900,8 +2922,10 @@
       "recovery_loop_ready_count": 0,
       "reporter_followthrough_blocked_missing_install_receipts_count": 0,
       "reporter_followthrough_blocked_receipt_mismatch_count": 0,
+      "reporter_followthrough_hold_until_fix_receipt_count": 0,
       "reporter_followthrough_plan_blocked_missing_install_receipts_count": 0,
       "reporter_followthrough_plan_blocked_receipt_mismatch_count": 0,
+      "reporter_followthrough_plan_hold_until_fix_receipt_count": 0,
       "reporter_followthrough_plan_ready_count": 0,
       "reporter_followthrough_ready_count": 0,
       "update_required_misrouted_case_count": 0

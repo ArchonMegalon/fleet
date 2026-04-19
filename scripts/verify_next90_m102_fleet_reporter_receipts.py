@@ -20,6 +20,8 @@ try:
         SUCCESSOR_REGISTRY_PATH,
         SUCCESSOR_DISALLOWED_PROOF_MARKERS,
         _find_successor_queue_item,
+        _followthrough_packet_row,
+        _followthrough_row_gate_evidence,
         _normalize_list,
         _normalize_text,
         _successor_package_verification,
@@ -33,6 +35,8 @@ except ModuleNotFoundError:
         SUCCESSOR_REGISTRY_PATH,
         SUCCESSOR_DISALLOWED_PROOF_MARKERS,
         _find_successor_queue_item,
+        _followthrough_packet_row,
+        _followthrough_row_gate_evidence,
         _normalize_list,
         _normalize_text,
         _successor_package_verification,
@@ -83,15 +87,18 @@ REQUIRED_WEEKLY_SUPPORT_KEYS = {
     "recovery_loop_ready_count",
     "reporter_followthrough_blocked_missing_install_receipts_count",
     "reporter_followthrough_blocked_receipt_mismatch_count",
+    "reporter_followthrough_hold_until_fix_receipt_count",
     "followthrough_receipt_gates_ready_count",
     "followthrough_receipt_gates_blocked_missing_install_receipts_count",
     "followthrough_receipt_gates_blocked_receipt_mismatch_count",
+    "followthrough_receipt_gates_hold_until_fix_receipt_count",
     "followthrough_receipt_gates_installation_bound_count",
     "followthrough_receipt_gates_installed_build_receipted_count",
     "feedback_followthrough_ready_count",
     "reporter_followthrough_plan_ready_count",
     "reporter_followthrough_plan_blocked_missing_install_receipts_count",
     "reporter_followthrough_plan_blocked_receipt_mismatch_count",
+    "reporter_followthrough_plan_hold_until_fix_receipt_count",
 }
 REQUIRED_SUPPORT_SUMMARY_KEYS = {
     "reporter_followthrough_ready_count",
@@ -101,6 +108,7 @@ REQUIRED_SUPPORT_SUMMARY_KEYS = {
     "recovery_loop_ready_count",
     "reporter_followthrough_blocked_missing_install_receipts_count",
     "reporter_followthrough_blocked_receipt_mismatch_count",
+    "reporter_followthrough_hold_until_fix_receipt_count",
 }
 REQUIRED_PLAN_COUNT_KEYS = {
     "ready_count",
@@ -136,6 +144,7 @@ REQUIRED_SUPPORT_VERIFICATION_EMPTY_LIST_KEYS = {
     "missing_registry_evidence_markers",
     "missing_queue_proof_markers",
     "missing_design_queue_source_proof_markers",
+    "missing_queue_design_source_proof_markers",
     "missing_registry_proof_anchor_paths",
     "missing_queue_proof_anchor_paths",
     "missing_design_queue_source_proof_anchor_paths",
@@ -166,6 +175,8 @@ REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "queue_status",
     "queue_title",
     "queue_frontier_id",
+    "queue_completion_action",
+    "queue_do_not_reopen_reason",
     "queue_item_count",
     "design_queue_source_path",
     "design_queue_source_item_count",
@@ -177,6 +188,8 @@ REQUIRED_SUPPORT_VERIFICATION_MATCH_KEYS = {
     "design_queue_source_milestone_id",
     "design_queue_source_status",
     "design_queue_source_frontier_id",
+    "design_queue_source_completion_action",
+    "design_queue_source_do_not_reopen_reason",
 }
 REQUIRED_RULE_MARKERS = (
     "feedback",
@@ -213,18 +226,27 @@ REQUIRED_QUEUE_NEGATIVE_PROOF_MARKERS = {
     "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
     "telemetry command proof markers fail the standalone verifier and shared successor authority check",
     "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
+    "weekly support-packet source sha256 drift fails the standalone verifier",
     "future-dated support and weekly generated_at receipts fail the standalone verifier",
+    "standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates",
+    "standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready",
+    "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows",
 }
 REQUIRED_DISTINCT_QUEUE_PROOF_ENTRIES = {
     VERIFIER_PROOF_MARKER,
     TEST_PROOF_MARKER,
+    "python3 tests/test_materialize_support_case_packets.py exits 0",
     "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
     "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
     "standalone verifier rejects missing receipt-gate names, missing weekly receipt counters, and active-run telemetry helper proof entries",
     "no-PYTHONPATH bootstrap guard includes the standalone M102 verifier",
     "telemetry command proof markers fail the standalone verifier and shared successor authority check",
     "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
+    "weekly support-packet source sha256 drift fails the standalone verifier",
     "future-dated support and weekly generated_at receipts fail the standalone verifier",
+    "standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates",
+    "standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready",
+    "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows",
 }
 GENERATED_AT_MAX_FUTURE_SKEW_SECONDS = 300
 
@@ -607,6 +629,8 @@ def _receipt_feed_source_issues(support_source: Dict[str, Any], action_groups: D
 
     if _normalize_text(support_source.get("refresh_mode")) == "cached_packets_fallback":
         issues.append("ready reporter followthrough exists from cached packet fallback instead of refreshed receipt truth")
+    if _normalize_text(support_source.get("seeded_from_cached_packets_generated_at")):
+        issues.append("ready reporter followthrough exists from cached packet fallback instead of refreshed receipt truth")
 
     fix_bearing_rows = [
         row
@@ -621,18 +645,36 @@ def _receipt_feed_source_issues(support_source: Dict[str, Any], action_groups: D
 
     if _normalize_text(support_source.get("install_receipt_feed_state")) != "provided":
         issues.append("ready reporter followthrough exists without an authoritative install receipt feed")
+    install_receipt_source_count = _as_int(support_source.get("install_receipt_source_count"))
+    install_receipt_indexed_count = _as_int(support_source.get("install_receipt_indexed_count"))
+    install_receipt_hydrated_case_count = _as_int(support_source.get("install_receipt_hydrated_case_count"))
+    if install_receipt_source_count <= 0:
+        issues.append("ready reporter followthrough exists without install receipt source rows")
     if _as_int(support_source.get("install_receipt_indexed_count")) <= 0:
         issues.append("ready reporter followthrough exists without indexed install receipts")
-    if _as_int(support_source.get("install_receipt_hydrated_case_count")) <= 0:
+    if install_receipt_indexed_count > install_receipt_source_count:
+        issues.append("ready reporter followthrough indexes more install receipts than the source feed provides")
+    if install_receipt_hydrated_case_count <= 0:
         issues.append("ready reporter followthrough exists without hydrated install receipt cases")
+    if install_receipt_hydrated_case_count > install_receipt_indexed_count:
+        issues.append("ready reporter followthrough hydrates more install receipt cases than the indexed receipts allow")
 
     if fix_bearing_rows:
         if _normalize_text(support_source.get("fix_receipt_feed_state")) != "provided":
             issues.append("fix-bearing reporter followthrough exists without an authoritative fix receipt feed")
-        if _as_int(support_source.get("fix_receipt_indexed_count")) <= 0:
+        fix_receipt_source_count = _as_int(support_source.get("fix_receipt_source_count"))
+        fix_receipt_indexed_count = _as_int(support_source.get("fix_receipt_indexed_count"))
+        fix_receipt_hydrated_case_count = _as_int(support_source.get("fix_receipt_hydrated_case_count"))
+        if fix_receipt_source_count <= 0:
+            issues.append("fix-bearing reporter followthrough exists without fix receipt source rows")
+        if fix_receipt_indexed_count <= 0:
             issues.append("fix-bearing reporter followthrough exists without indexed fix receipts")
-        if _as_int(support_source.get("fix_receipt_hydrated_case_count")) <= 0:
+        if fix_receipt_indexed_count > fix_receipt_source_count:
+            issues.append("fix-bearing reporter followthrough indexes more fix receipts than the source feed provides")
+        if fix_receipt_hydrated_case_count <= 0:
             issues.append("fix-bearing reporter followthrough exists without hydrated fix receipt cases")
+        if fix_receipt_hydrated_case_count > fix_receipt_indexed_count:
+            issues.append("fix-bearing reporter followthrough hydrates more fix receipt cases than the indexed receipts allow")
 
     return issues
 
@@ -672,6 +714,19 @@ def _computed_plan_counts(action_groups: Dict[str, Any]) -> Dict[str, int]:
         ),
         "blocked_receipt_mismatch_count": len(_action_group_rows(action_groups, "blocked_receipt_mismatch")),
         "hold_until_fix_receipt_count": len(_action_group_rows(action_groups, "hold_until_fix_receipt")),
+    }
+
+
+def _computed_gate_counts(packets: List[Dict[str, Any]]) -> Dict[str, int]:
+    followthrough_rows = [
+        _followthrough_packet_row(packet, packet.get("reporter_followthrough") or {})
+        for packet in packets
+        if bool(packet.get("support_case_backed")) and isinstance(packet.get("reporter_followthrough"), dict)
+    ]
+    gate_evidence_rows = [_followthrough_row_gate_evidence(row) for row in followthrough_rows]
+    return {
+        key: sum(1 for row in gate_evidence_rows if bool(row.get(key)))
+        for key in sorted(REQUIRED_GATE_COUNT_NAMES)
     }
 
 
@@ -801,6 +856,22 @@ def verify(
     missing_gate_counts = sorted(REQUIRED_GATE_COUNT_NAMES - set(gate_counts.keys()))
     if missing_gate_counts:
         issues.append("followthrough receipt gates are missing required gate counters")
+    support_packet_rows = support_packets.get("packets")
+    if not isinstance(support_packet_rows, list):
+        support_packet_rows = []
+    computed_gate_counts = _computed_gate_counts(
+        [packet for packet in support_packet_rows if isinstance(packet, dict)]
+    )
+    gate_count_mismatches = {
+        key: {
+            "receipt_backed_followthrough_rows": expected,
+            "followthrough_receipt_gates": _as_int(gate_counts.get(key)),
+        }
+        for key, expected in computed_gate_counts.items()
+        if key in gate_counts and _as_int(gate_counts.get(key)) != expected
+    }
+    if gate_count_mismatches:
+        issues.append("followthrough receipt gate counters disagree with receipt-backed followthrough rows")
     gate_rule_missing = _contains_all_markers(_normalize_text(receipt_gates.get("source_rule")), REQUIRED_RULE_MARKERS)
     if gate_rule_missing:
         issues.append("followthrough receipt gate rule is missing receipt markers")
@@ -884,6 +955,9 @@ def verify(
         ),
         "reporter_followthrough_blocked_receipt_mismatch_count": _as_int(
             computed_plan_counts["blocked_receipt_mismatch_count"]
+        ),
+        "reporter_followthrough_hold_until_fix_receipt_count": _as_int(
+            computed_plan_counts["hold_until_fix_receipt_count"]
         ),
     }
     support_summary_count_mismatches = {
@@ -1038,12 +1112,21 @@ def verify(
         "reporter_followthrough_blocked_receipt_mismatch_count": _as_int(
             computed_plan_counts["blocked_receipt_mismatch_count"]
         ),
+        "reporter_followthrough_hold_until_fix_receipt_count": _as_int(
+            computed_plan_counts["hold_until_fix_receipt_count"]
+        ),
         "reporter_followthrough_plan_ready_count": computed_plan_counts["ready_count"],
         "reporter_followthrough_plan_blocked_missing_install_receipts_count": _as_int(
             computed_plan_counts["blocked_missing_install_receipts_count"]
         ),
         "reporter_followthrough_plan_blocked_receipt_mismatch_count": _as_int(
             computed_plan_counts["blocked_receipt_mismatch_count"]
+        ),
+        "reporter_followthrough_plan_hold_until_fix_receipt_count": _as_int(
+            computed_plan_counts["hold_until_fix_receipt_count"]
+        ),
+        "followthrough_receipt_gates_hold_until_fix_receipt_count": _as_int(
+            receipt_gates.get("hold_until_fix_receipt_count")
         ),
     }
     weekly_count_mismatches = {
@@ -1071,6 +1154,7 @@ def verify(
             receipt_gates.get("blocked_missing_install_receipts_count")
         ),
         "Followthrough receipt mismatches": _as_int(receipt_gates.get("blocked_receipt_mismatch_count")),
+        "Followthrough waiting on fix receipt": _as_int(computed_plan_counts["hold_until_fix_receipt_count"]),
         "Receipt-gated followthrough ready": _as_int(receipt_gates.get("ready_count")),
         "Receipt-gated installed-build receipts": _as_int(gate_counts.get("installed_build_receipted")),
     }
@@ -1114,6 +1198,7 @@ def verify(
         "support_packet_successor_field_mismatches": support_verification_field_mismatches,
         "missing_gate_names": missing_gate_names,
         "missing_gate_counts": missing_gate_counts,
+        "gate_count_mismatches": gate_count_mismatches,
         "missing_action_groups": missing_action_groups,
         "missing_plan_count_keys": missing_plan_count_keys,
         "plan_count_mismatches": plan_count_mismatches,

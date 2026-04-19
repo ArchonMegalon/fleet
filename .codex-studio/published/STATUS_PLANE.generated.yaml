@@ -1,6 +1,6 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-17T07:57:17Z'
+generated_at: '2026-04-18T17:24:27Z'
 source_public_status_generated_at: '2026-04-04T00:00:00Z'
 mission_snapshot: {}
 queue_forecast: {}
@@ -21,26 +21,28 @@ readiness_summary:
   - hub
   - mobile
   - ui
-  warning_count: 0
+  warning_count: 1
   whole_product_final_claim_accept_lowered_standards: false
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_feedback_autofix_loop_required: true
-  whole_product_final_claim_ready: 1
-  whole_product_final_claim_status: pass
-  whole_product_final_claim_warning_keys: []
+  whole_product_final_claim_ready: 0
+  whole_product_final_claim_status: fail
+  whole_product_final_claim_warning_keys:
+  - fleet_and_operator_loop
   whole_product_final_claim_whole_project_frontier_required: true
 final_claim_ready: 3
 final_claim_ready_project_ids:
 - hub
 - mobile
 - ui
-whole_product_final_claim_status: pass
+whole_product_final_claim_status: fail
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
 whole_product_final_claim_feedback_autofix_loop_required: true
 whole_product_final_claim_accept_lowered_standards: false
-whole_product_final_claim_ready: 1
-whole_product_final_claim_warning_keys: []
+whole_product_final_claim_ready: 0
+whole_product_final_claim_warning_keys:
+- fleet_and_operator_loop
 dispatch_policy: {}
 support_summary: {}
 publish_readiness: {}

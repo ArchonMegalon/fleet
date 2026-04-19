@@ -44,6 +44,11 @@ SUCCESSOR_REGISTRY_PATH = (
     / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
 )
 NEXT_90_QUEUE_STAGING_PATH = ROOT / ".codex-studio" / "published" / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+DESIGN_NEXT_90_QUEUE_STAGING_PATH = (
+    Path("/docker/chummercomplete/chummer-design/products/chummer")
+    / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+)
+DESIGN_NEXT_90_QUEUE_STAGING_PATH_ENV = "FLEET_DESIGN_NEXT_90_QUEUE_STAGING_PATH"
 SUCCESSOR_PACKAGE_ID = "next90-m102-fleet-reporter-receipts"
 SUCCESSOR_FRONTIER_ID = "2454416974"
 SUCCESSOR_MILESTONE_ID = 102
@@ -57,13 +62,21 @@ SUCCESSOR_QUEUE_TASK = (
 )
 SUCCESSOR_ALLOWED_PATHS = ["scripts", "tests", ".codex-studio", "feedback"]
 SUCCESSOR_OWNED_SURFACES = ["feedback_loop_ready:install_receipts", "product_governor:followthrough"]
+SUCCESSOR_COMPLETION_ACTION = "verify_closed_package_only"
+SUCCESSOR_DO_NOT_REOPEN_REASON = (
+    "M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, "
+    "standalone verifier, registry row, queue row, and design queue row instead of reopening the "
+    "install-aware followthrough package."
+)
 SUCCESSOR_WORK_TASK_ID = "102.4"
 SUCCESSOR_WORK_TASK_TITLE = "Gate the staged reporter mail loop against real install and fix receipts, not only queued support state."
 SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS = [
     "scripts/materialize_support_case_packets.py",
     "tests/test_materialize_support_case_packets.py",
+    "python3 tests/test_materialize_support_case_packets.py exits 0",
     "SUPPORT_CASE_PACKETS.generated.json",
     "WEEKLY_GOVERNOR_PACKET.generated.json",
+    "feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
     "install truth",
     "installation-bound installed-build receipts",
     "installed-build receipts",
@@ -78,6 +91,12 @@ SUCCESSOR_REQUIRED_REGISTRY_EVIDENCE_MARKERS = [
     "generated successor scope-drift",
     "missing Fleet proof-anchor markers",
     "runtime handoff metadata proof markers",
+    "cached packet fallback provenance guard",
+    "seeded cached-packet mirror provenance guard",
+    "stale ready action-group receipt mismatches",
+    "missing per-row install-aware receipt gates",
+    "verify_closed_package_only",
+    "do-not-reopen reason",
 ]
 SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/scripts/materialize_support_case_packets.py",
@@ -91,6 +110,7 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
     "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
     "python3 -m py_compile",
+    "python3 tests/test_materialize_support_case_packets.py exits 0",
     "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
     "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
     "installation-bound receipt gating",
@@ -105,8 +125,11 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "generated support successor closure-field drift",
     "weekly/support receipt-count drift",
     "weekly/support generated_at freshness",
+    "weekly support-packet source sha256 drift fails the standalone verifier",
     "future-dated support and weekly generated_at receipts fail the standalone verifier",
     "weekly support-packet source-path drift",
+    "standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates",
+    "standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready",
     "design queue source path rejects active-run helper paths",
     "weekly governor source-path hygiene and worker command guard",
     "design-owned queue source proof markers",
@@ -115,6 +138,9 @@ SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS = [
     "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
     "distinct queue proof anti-collapse guard",
     "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check",
+    "cached packet fallback provenance guard",
+    "seeded cached-packet mirror provenance guard",
+    "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows",
 ]
 SUCCESSOR_DISALLOWED_PROOF_MARKERS = (
     "/var/lib/codex-fleet",
@@ -1198,6 +1224,14 @@ def _normalize_text(value: Any, fallback: str = "") -> str:
     return str(value).strip() or fallback
 
 
+def _is_receipt_mismatch_blocker(value: Any) -> bool:
+    blocker = _normalize_text(value)
+    return bool(
+        "receipt_" in blocker
+        and (blocker.endswith("_mismatch") or "_mismatch_for_recovery" in blocker)
+    )
+
+
 def _normalize_proof_capture_command(value: Any) -> str:
     raw = _normalize_text(value)
     if not raw:
@@ -1400,12 +1434,31 @@ def _successor_queue_source_path(queue: Dict[str, Any], queue_path: Path) -> Pat
     return source_path
 
 
+def _canonical_design_next_90_queue_staging_path() -> Path:
+    raw = _normalize_text(os.environ.get(DESIGN_NEXT_90_QUEUE_STAGING_PATH_ENV, ""))
+    if not raw:
+        return DESIGN_NEXT_90_QUEUE_STAGING_PATH
+    configured_path = Path(raw).expanduser()
+    if not configured_path.is_absolute():
+        configured_path = ROOT / configured_path
+    return configured_path
+
+
 def _source_queue_assignment_issues(
     source_item: Dict[str, Any],
     queue_item: Dict[str, Any],
 ) -> List[str]:
     issues: List[str] = []
-    assignment_fields = ("title", "task", "package_id", "milestone_id", "wave", "repo")
+    assignment_fields = (
+        "title",
+        "task",
+        "package_id",
+        "milestone_id",
+        "wave",
+        "repo",
+        "completion_action",
+        "do_not_reopen_reason",
+    )
     for field in assignment_fields:
         source_value = source_item.get(field)
         queue_value = queue_item.get(field)
@@ -1498,6 +1551,7 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
     )
     missing_queue_proof = _missing_markers(queue_proof, SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS)
     missing_source_queue_proof = _missing_markers(source_queue_proof, SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS)
+    missing_queue_design_source_proof_markers = _missing_markers(queue_proof, source_queue_proof)
     missing_registry_proof_anchor_paths = _missing_proof_anchor_paths(registry_evidence)
     missing_queue_proof_anchor_paths = _missing_proof_anchor_paths(queue_proof)
     missing_source_queue_proof_anchor_paths = _missing_proof_anchor_paths(source_queue_proof)
@@ -1546,6 +1600,10 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             issues.append("successor queue item allowed_paths drifted")
         if _normalize_list(queue_item.get("owned_surfaces")) != SUCCESSOR_OWNED_SURFACES:
             issues.append("successor queue item owned_surfaces drifted")
+        if _normalize_text(queue_item.get("completion_action")) != SUCCESSOR_COMPLETION_ACTION:
+            issues.append("successor queue item completion_action must be verify_closed_package_only")
+        if _normalize_text(queue_item.get("do_not_reopen_reason")) != SUCCESSOR_DO_NOT_REOPEN_REASON:
+            issues.append("successor queue item do_not_reopen_reason drifted")
         for marker in missing_queue_proof:
             issues.append(f"successor queue item proof missing marker: {marker}")
         for entry in disallowed_queue_proof_entries:
@@ -1556,6 +1614,8 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             issues.append("successor queue staging source_design_queue_path cites active-run telemetry/helper path")
         if not queue_source_path:
             issues.append("successor queue staging source_design_queue_path missing")
+        elif queue_source_path != _canonical_design_next_90_queue_staging_path():
+            issues.append("successor queue staging source_design_queue_path drifted from canonical design queue path")
         elif not queue_source_path.exists():
             issues.append(f"successor design queue source missing on disk: {queue_source_path}")
         elif not queue_source_item:
@@ -1564,8 +1624,22 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
             if len(queue_source_items) > 1:
                 issues.append(f"successor design queue source item {SUCCESSOR_PACKAGE_ID} appears more than once")
             issues.extend(_source_queue_assignment_issues(queue_source_item, queue_item))
+            if _normalize_text(queue_source_item.get("completion_action")) != SUCCESSOR_COMPLETION_ACTION:
+                issues.append(
+                    "successor design queue source completion_action must be verify_closed_package_only"
+                )
+            if (
+                _normalize_text(queue_source_item.get("do_not_reopen_reason"))
+                != SUCCESSOR_DO_NOT_REOPEN_REASON
+            ):
+                issues.append("successor design queue source do_not_reopen_reason drifted")
             for marker in missing_source_queue_proof:
                 issues.append(f"successor design queue source proof missing marker: {marker}")
+            for marker in missing_queue_design_source_proof_markers:
+                issues.append(
+                    "successor queue item proof missing design-queue source marker: "
+                    f"{marker}"
+                )
             for entry in disallowed_source_queue_proof_entries:
                 issues.append(
                     "successor design queue source proof cites active-run telemetry/helper proof: "
@@ -1611,7 +1685,12 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "design_queue_source_milestone_id": _coerce_int(queue_source_item.get("milestone_id"), -1),
         "design_queue_source_status": _normalize_text(queue_source_item.get("status")),
         "design_queue_source_frontier_id": _normalize_text(queue_source_item.get("frontier_id")),
+        "design_queue_source_completion_action": _normalize_text(queue_source_item.get("completion_action")),
+        "design_queue_source_do_not_reopen_reason": _normalize_text(
+            queue_source_item.get("do_not_reopen_reason")
+        ),
         "missing_design_queue_source_proof_markers": missing_source_queue_proof,
+        "missing_queue_design_source_proof_markers": missing_queue_design_source_proof_markers,
         "missing_design_queue_source_proof_anchor_paths": missing_source_queue_proof_anchor_paths,
         "disallowed_design_queue_source_proof_entries": disallowed_source_queue_proof_entries,
         "registry_wave": _normalize_text(milestone.get("wave")),
@@ -1637,6 +1716,8 @@ def _successor_package_verification(registry_path: Path, queue_path: Path) -> Di
         "queue_milestone_id": _coerce_int(queue_item.get("milestone_id"), -1),
         "queue_status": _normalize_text(queue_item.get("status")),
         "queue_frontier_id": _normalize_text(queue_item.get("frontier_id")),
+        "queue_completion_action": _normalize_text(queue_item.get("completion_action")),
+        "queue_do_not_reopen_reason": _normalize_text(queue_item.get("do_not_reopen_reason")),
         "queue_item_count": len(queue_items),
         "required_queue_proof_markers": list(SUCCESSOR_REQUIRED_QUEUE_PROOF_MARKERS),
         "missing_queue_proof_markers": missing_queue_proof,
@@ -2092,7 +2173,6 @@ def _first_receipt_field(item: Dict[str, Any], field_names: Iterable[str]) -> tu
 
 def _reporter_followthrough(
     *,
-    status: str,
     installation_id: str,
     installed_version: str,
     installed_build_receipt_id: str,
@@ -2261,7 +2341,6 @@ def _reporter_followthrough(
         fix_available_ready
         and installed_build_receipt_ready
         and current_install_on_fixed_build
-        and status in {"fixed", "released_to_reporter_channel", "user_notified"}
     )
     blockers: List[str] = []
     if has_fix and not installation_id:
@@ -2353,6 +2432,8 @@ def _reporter_followthrough(
     if fix_available_ready and installed_build_receipt_ready and update_required:
         blockers.append("installed_build_behind_fixed_receipt")
 
+    has_receipt_mismatch = any(_is_receipt_mismatch_blocker(blocker) for blocker in blockers)
+
     if please_test_ready:
         state = "please_test_ready"
         next_action = "send_please_test"
@@ -2365,6 +2446,9 @@ def _reporter_followthrough(
     elif recovery_loop_ready:
         state = "recovery_ready"
         next_action = "send_recovery"
+    elif has_fix and has_receipt_mismatch:
+        state = "blocked_receipt_mismatch"
+        next_action = "hold_reporter_followthrough"
     elif has_fix:
         state = "blocked_missing_install_receipts"
         next_action = "hold_reporter_followthrough"
@@ -2693,7 +2777,6 @@ def _decision_for_case(item: Dict[str, Any], *, release_channel_index: Dict[str,
     )
     release_receipt_id, release_receipt_source = _release_receipt_identity(release_channel_index)
     reporter_followthrough = _reporter_followthrough(
-        status=status,
         installation_id=installation_id,
         installed_version=installed_version,
         installed_build_receipt_id=installed_build_receipt_id,
@@ -3350,105 +3433,31 @@ def _reporter_followthrough_plan(packets: List[Dict[str, Any]], *, generated_at:
         followthrough = packet.get("reporter_followthrough")
         if not isinstance(followthrough, dict):
             continue
-        state = _normalize_text(followthrough.get("state")).lower()
-        next_action = _normalize_text(followthrough.get("next_action")).lower()
-        blockers = [
-            _normalize_text(blocker)
-            for blocker in (followthrough.get("blockers") or [])
-            if _normalize_text(blocker)
-        ]
-        row = {
-            "packet_id": _normalize_text(packet.get("packet_id")),
-            "kind": _normalize_text(packet.get("kind")),
-            "status": _normalize_text(packet.get("status")),
-            "target_repo": _normalize_text(packet.get("target_repo")),
-            "installation_id": _normalize_text(packet.get("installation_id")),
-            "release_channel": _normalize_text(packet.get("release_channel")),
-            "head_id": _normalize_text(packet.get("head_id")),
-            "platform": _normalize_text(packet.get("platform")),
-            "arch": _normalize_text(packet.get("arch")),
-            "installed_version": _normalize_text(packet.get("installed_version")),
-            "installed_build_receipt_id": _normalize_text(followthrough.get("installed_build_receipt_id")),
-            "installed_build_receipt_installation_id": _normalize_text(
-                followthrough.get("installed_build_receipt_installation_id")
-            ),
-            "installed_build_receipt_version": _normalize_text(
-                followthrough.get("installed_build_receipt_version")
-            ),
-            "installed_build_receipt_channel": _normalize_text(
-                followthrough.get("installed_build_receipt_channel")
-            ),
-            "installed_build_receipt_head_id": _normalize_text(
-                followthrough.get("installed_build_receipt_head_id")
-            ),
-            "installed_build_receipt_platform": _normalize_text(
-                followthrough.get("installed_build_receipt_platform")
-            ),
-            "installed_build_receipt_rid": _normalize_text(
-                followthrough.get("installed_build_receipt_rid")
-            ),
-            "installed_build_receipt_tuple_id": _normalize_text(
-                followthrough.get("installed_build_receipt_tuple_id")
-            ),
-            "installed_build_receipt_source": _normalize_text(followthrough.get("installed_build_receipt_source")),
-            "installed_build_receipt_installation_source": _normalize_text(
-                followthrough.get("installed_build_receipt_installation_source")
-            ),
-            "installed_build_receipt_version_source": _normalize_text(
-                followthrough.get("installed_build_receipt_version_source")
-            ),
-            "installed_build_receipt_channel_source": _normalize_text(
-                followthrough.get("installed_build_receipt_channel_source")
-            ),
-            "fixed_version": _normalize_text(packet.get("fixed_version")),
-            "fixed_channel": _normalize_text(packet.get("fixed_channel")),
-            "fixed_version_receipt_id": _normalize_text(followthrough.get("fixed_version_receipt_id")),
-            "fixed_channel_receipt_id": _normalize_text(followthrough.get("fixed_channel_receipt_id")),
-            "fixed_receipt_installation_id": _normalize_text(followthrough.get("fixed_receipt_installation_id")),
-            "fixed_receipt_installation_source": _normalize_text(
-                followthrough.get("fixed_receipt_installation_source")
-            ),
-            "fixed_receipt_installation_matches": bool(followthrough.get("fixed_receipt_installation_matches")),
-            "fixed_version_receipt_source": _normalize_text(followthrough.get("fixed_version_receipt_source")),
-            "fixed_channel_receipt_source": _normalize_text(followthrough.get("fixed_channel_receipt_source")),
-            "install_truth_state": _normalize_text(packet.get("install_truth_state")),
-            "release_receipt_state": _normalize_text(followthrough.get("release_receipt_state")),
-            "release_receipt_id": _normalize_text(followthrough.get("release_receipt_id")),
-            "release_receipt_source": _normalize_text(followthrough.get("release_receipt_source")),
-            "release_receipt_channel": _normalize_text(followthrough.get("release_receipt_channel")),
-            "release_receipt_version": _normalize_text(followthrough.get("release_receipt_version")),
-            "state": state,
-            "next_action": next_action,
-            "feedback_loop_ready": bool(followthrough.get("feedback_loop_ready")),
-            "install_receipt_ready": bool(followthrough.get("install_receipt_ready")),
-            "fixed_version_receipted": bool(followthrough.get("fixed_version_receipted")),
-            "fixed_channel_receipted": bool(followthrough.get("fixed_channel_receipted")),
-            "installed_build_receipted": bool(followthrough.get("installed_build_receipted")),
-            "installed_build_receipt_identity_matches": bool(
-                followthrough.get("installed_build_receipt_identity_matches")
-            ),
-            "current_install_on_fixed_build": bool(followthrough.get("current_install_on_fixed_build")),
-            "recovery_loop_ready": bool(followthrough.get("recovery_loop_ready")),
-            "blockers": blockers,
-            "recovery_path": dict(packet.get("recovery_path") or {}),
+        row = _followthrough_packet_row(packet, followthrough)
+        derived_receipt_truth = _followthrough_row_receipt_truth(row)
+        grouping = _derived_followthrough_grouping(row, derived_receipt_truth)
+        row["derived_receipt_truth"] = dict(derived_receipt_truth)
+        row["derived_grouping"] = {
+            key: value for key, value in grouping.items() if isinstance(value, bool)
         }
-        if bool(row["feedback_loop_ready"]):
-            groups["feedback"].append({**row, "next_action": "send_feedback_progress"})
-        if bool(row["recovery_loop_ready"]):
-            groups["recovery"].append({**row, "next_action": "send_recovery"})
-        if state == "please_test_ready":
-            groups["please_test"].append(row)
-        elif state in {"fix_available_ready", "fix_available_update_required"}:
-            groups["fix_available"].append(row)
-        elif state == "blocked_missing_install_receipts":
-            groups["blocked_missing_install_receipts"].append(row)
-            if any(
-                blocker.endswith("_mismatch") or "_mismatch_for_recovery" in blocker
-                for blocker in blockers
-            ):
-                groups["blocked_receipt_mismatch"].append(row)
-        elif state == "no_fix_recorded":
-            groups["hold_until_fix_receipt"].append(row)
+        row["receipt_ready_for_feedback"] = bool(derived_receipt_truth["feedback_loop_ready"])
+        row["receipt_ready_for_fix_available"] = bool(derived_receipt_truth["fix_available_ready"])
+        row["receipt_ready_for_please_test"] = bool(derived_receipt_truth["please_test_ready"])
+        row["receipt_ready_for_recovery"] = bool(derived_receipt_truth["recovery_loop_ready"])
+        if bool(grouping["feedback_ready"]):
+            groups["feedback"].append({**row, "next_action": grouping["feedback_next_action"]})
+        if bool(grouping["recovery_ready"]):
+            groups["recovery"].append({**row, "next_action": grouping["recovery_next_action"]})
+        if bool(grouping["please_test_ready"]):
+            groups["please_test"].append({**row, "next_action": grouping["please_test_next_action"]})
+        elif bool(grouping["fix_available_ready"]):
+            groups["fix_available"].append({**row, "next_action": grouping["fix_available_next_action"]})
+        if bool(grouping["blocked_missing_install_receipts"]):
+            groups["blocked_missing_install_receipts"].append({**row, "next_action": grouping["blocked_next_action"]})
+        if bool(grouping["blocked_receipt_mismatch"]):
+            groups["blocked_receipt_mismatch"].append({**row, "next_action": grouping["blocked_next_action"]})
+        if bool(grouping["hold_until_fix_receipt"]):
+            groups["hold_until_fix_receipt"].append({**row, "next_action": grouping["hold_next_action"]})
 
     for key in list(groups.keys()):
         groups[key] = sorted(
@@ -3488,29 +3497,318 @@ def _reporter_followthrough_plan(packets: List[Dict[str, Any]], *, generated_at:
     }
 
 
+def _followthrough_packet_row(packet: Dict[str, Any], followthrough: Dict[str, Any]) -> Dict[str, Any]:
+    blockers = [
+        _normalize_text(blocker)
+        for blocker in (followthrough.get("blockers") or [])
+        if _normalize_text(blocker)
+    ]
+    return {
+        "packet_id": _normalize_text(packet.get("packet_id")),
+        "kind": _normalize_text(packet.get("kind")),
+        "status": _normalize_text(packet.get("status")),
+        "target_repo": _normalize_text(packet.get("target_repo")),
+        "installation_id": _normalize_text(packet.get("installation_id")),
+        "release_channel": _normalize_text(packet.get("release_channel")),
+        "head_id": _normalize_text(packet.get("head_id")),
+        "platform": _normalize_text(packet.get("platform")),
+        "arch": _normalize_text(packet.get("arch")),
+        "installed_version": _normalize_text(packet.get("installed_version")),
+        "installed_build_receipt_id": _normalize_text(followthrough.get("installed_build_receipt_id")),
+        "installed_build_receipt_installation_id": _normalize_text(
+            followthrough.get("installed_build_receipt_installation_id")
+        ),
+        "installed_build_receipt_version": _normalize_text(
+            followthrough.get("installed_build_receipt_version")
+        ),
+        "installed_build_receipt_channel": _normalize_text(
+            followthrough.get("installed_build_receipt_channel")
+        ),
+        "installed_build_receipt_head_id": _normalize_text(
+            followthrough.get("installed_build_receipt_head_id")
+        ),
+        "installed_build_receipt_platform": _normalize_text(
+            followthrough.get("installed_build_receipt_platform")
+        ),
+        "installed_build_receipt_rid": _normalize_text(
+            followthrough.get("installed_build_receipt_rid")
+        ),
+        "installed_build_receipt_tuple_id": _normalize_text(
+            followthrough.get("installed_build_receipt_tuple_id")
+        ),
+        "installed_build_receipt_source": _normalize_text(followthrough.get("installed_build_receipt_source")),
+        "installed_build_receipt_installation_source": _normalize_text(
+            followthrough.get("installed_build_receipt_installation_source")
+        ),
+        "installed_build_receipt_version_source": _normalize_text(
+            followthrough.get("installed_build_receipt_version_source")
+        ),
+        "installed_build_receipt_channel_source": _normalize_text(
+            followthrough.get("installed_build_receipt_channel_source")
+        ),
+        "fixed_version": _normalize_text(packet.get("fixed_version")),
+        "fixed_channel": _normalize_text(packet.get("fixed_channel")),
+        "fixed_version_receipt_id": _normalize_text(followthrough.get("fixed_version_receipt_id")),
+        "fixed_channel_receipt_id": _normalize_text(followthrough.get("fixed_channel_receipt_id")),
+        "fixed_receipt_installation_id": _normalize_text(followthrough.get("fixed_receipt_installation_id")),
+        "fixed_receipt_installation_source": _normalize_text(
+            followthrough.get("fixed_receipt_installation_source")
+        ),
+        "fixed_receipt_installation_matches": bool(followthrough.get("fixed_receipt_installation_matches")),
+        "fixed_version_receipt_source": _normalize_text(followthrough.get("fixed_version_receipt_source")),
+        "fixed_channel_receipt_source": _normalize_text(followthrough.get("fixed_channel_receipt_source")),
+        "install_truth_state": _normalize_text(packet.get("install_truth_state")),
+        "release_receipt_state": _normalize_text(followthrough.get("release_receipt_state")),
+        "release_receipt_id": _normalize_text(followthrough.get("release_receipt_id")),
+        "release_receipt_source": _normalize_text(followthrough.get("release_receipt_source")),
+        "release_receipt_channel": _normalize_text(followthrough.get("release_receipt_channel")),
+        "release_receipt_version": _normalize_text(followthrough.get("release_receipt_version")),
+        "state": _normalize_text(followthrough.get("state")).lower(),
+        "next_action": _normalize_text(followthrough.get("next_action")).lower(),
+        "feedback_loop_ready": bool(followthrough.get("feedback_loop_ready")),
+        "install_receipt_ready": bool(followthrough.get("install_receipt_ready")),
+        "fixed_version_receipted": bool(followthrough.get("fixed_version_receipted")),
+        "fixed_channel_receipted": bool(followthrough.get("fixed_channel_receipted")),
+        "installed_build_receipted": bool(followthrough.get("installed_build_receipted")),
+        "installed_build_receipt_installation_matches": bool(
+            followthrough.get("installed_build_receipt_installation_matches")
+        ),
+        "installed_build_receipt_version_matches": bool(
+            followthrough.get("installed_build_receipt_version_matches")
+        ),
+        "installed_build_receipt_channel_matches": bool(
+            followthrough.get("installed_build_receipt_channel_matches")
+        ),
+        "installed_build_receipt_identity_matches": bool(
+            followthrough.get("installed_build_receipt_identity_matches")
+        ),
+        "current_install_on_fixed_build": bool(followthrough.get("current_install_on_fixed_build")),
+        "recovery_loop_ready": bool(followthrough.get("recovery_loop_ready")),
+        "blockers": blockers,
+        "recovery_path": dict(packet.get("recovery_path") or {}),
+    }
+
+
+def _followthrough_row_receipt_truth(row: Dict[str, Any]) -> Dict[str, bool]:
+    installation_id = _normalize_text(row.get("installation_id"))
+    install_truth_ready = (
+        bool(installation_id)
+        and bool(row.get("install_receipt_ready"))
+        and _normalize_text(row.get("install_truth_state")).lower() == "promoted_tuple_match"
+    )
+    release_receipt_ready = (
+        _normalize_text(row.get("release_receipt_state")).lower() == "release_receipt_ready"
+        and bool(_normalize_text(row.get("release_receipt_id")))
+        and _normalize_text(row.get("release_receipt_source")) == "release_channel"
+        and bool(_normalize_text(row.get("release_receipt_channel")))
+        and bool(_normalize_text(row.get("release_receipt_version")))
+    )
+    installed_build_receipt_ready = bool(
+        install_truth_ready
+        and release_receipt_ready
+        and bool(row.get("installed_build_receipted"))
+        and bool(_normalize_text(row.get("installed_build_receipt_id")))
+        and bool(_normalize_text(row.get("installed_build_receipt_installation_id")))
+        and bool(_normalize_text(row.get("installed_build_receipt_version")))
+        and bool(_normalize_text(row.get("installed_build_receipt_channel")))
+        and _normalize_text(row.get("installed_build_receipt_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_installation_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_version_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_channel_source")) == "install_receipts"
+        and bool(row.get("installed_build_receipt_installation_matches"))
+        and bool(row.get("installed_build_receipt_version_matches"))
+        and bool(row.get("installed_build_receipt_channel_matches"))
+        and bool(row.get("installed_build_receipt_identity_matches"))
+    )
+    has_fix = bool(
+        _normalize_text(row.get("fixed_version"))
+        or _normalize_text(row.get("fixed_channel"))
+        or bool(row.get("fixed_version_receipted"))
+        or bool(row.get("fixed_channel_receipted"))
+    )
+    fix_receipts_ready = bool(
+        not has_fix
+        or (
+            bool(_normalize_text(row.get("fixed_version")))
+            and bool(_normalize_text(row.get("fixed_channel")))
+            and bool(row.get("fixed_version_receipted"))
+            and bool(row.get("fixed_channel_receipted"))
+            and bool(_normalize_text(row.get("fixed_version_receipt_id")))
+            and bool(_normalize_text(row.get("fixed_channel_receipt_id")))
+            and bool(_normalize_text(row.get("fixed_receipt_installation_id")))
+            and _normalize_text(row.get("fixed_version_receipt_source")) == "fix_receipts"
+            and _normalize_text(row.get("fixed_channel_receipt_source")) == "fix_receipts"
+            and _normalize_text(row.get("fixed_receipt_installation_source")) == "fix_receipts"
+            and bool(row.get("fixed_receipt_installation_matches"))
+        )
+    )
+    feedback_loop_ready = bool(
+        install_truth_ready
+        and release_receipt_ready
+        and installed_build_receipt_ready
+        and fix_receipts_ready
+    )
+    fix_available_ready = bool(has_fix and feedback_loop_ready)
+    please_test_ready = bool(
+        fix_available_ready
+        and bool(row.get("current_install_on_fixed_build"))
+    )
+    recovery_loop_ready = bool(
+        fix_available_ready
+        and _normalize_text(((row.get("recovery_path") or {}).get("action_id"))).lower()
+        in {"open_downloads", "open_support_timeline", "open_account_access"}
+    )
+    return {
+        "install_truth_ready": install_truth_ready,
+        "release_receipt_ready": release_receipt_ready,
+        "installed_build_receipt_ready": installed_build_receipt_ready,
+        "fix_receipts_ready": fix_receipts_ready,
+        "feedback_loop_ready": feedback_loop_ready,
+        "fix_available_ready": fix_available_ready,
+        "please_test_ready": please_test_ready,
+        "recovery_loop_ready": recovery_loop_ready,
+    }
+
+
+def _followthrough_row_gate_evidence(row: Dict[str, Any]) -> Dict[str, bool]:
+    derived_truth = _followthrough_row_receipt_truth(row)
+    release_receipt_version = _normalize_text(row.get("release_receipt_version"))
+    release_receipt_channel = _normalize_text(row.get("release_receipt_channel"))
+    fixed_version = _normalize_text(row.get("fixed_version"))
+    fixed_channel = _normalize_text(row.get("fixed_channel"))
+    fixed_version_receipted = bool(
+        fixed_version
+        and bool(row.get("fixed_version_receipted"))
+        and bool(_normalize_text(row.get("fixed_version_receipt_id")))
+        and _normalize_text(row.get("fixed_version_receipt_source")) == "fix_receipts"
+        and release_receipt_version
+        and _version_matches(fixed_version, release_receipt_version)
+    )
+    fixed_channel_receipted = bool(
+        fixed_channel
+        and bool(row.get("fixed_channel_receipted"))
+        and bool(_normalize_text(row.get("fixed_channel_receipt_id")))
+        and _normalize_text(row.get("fixed_channel_receipt_source")) == "fix_receipts"
+        and release_receipt_channel
+        and _receipt_field_matches(fixed_channel, release_receipt_channel)
+    )
+    fixed_receipt_installation_bound = bool(
+        fixed_version_receipted
+        and fixed_channel_receipted
+        and bool(_normalize_text(row.get("fixed_receipt_installation_id")))
+        and _normalize_text(row.get("fixed_receipt_installation_source")) == "fix_receipts"
+        and bool(row.get("fixed_receipt_installation_matches"))
+    )
+    installed_build_receipt_id_present = bool(
+        bool(_normalize_text(row.get("installed_build_receipt_id")))
+        and _normalize_text(row.get("installed_build_receipt_source")) == "install_receipts"
+    )
+    installed_build_receipted = bool(
+        installed_build_receipt_id_present
+        and bool(_normalize_text(row.get("installed_build_receipt_installation_id")))
+        and bool(_normalize_text(row.get("installed_build_receipt_version")))
+        and bool(_normalize_text(row.get("installed_build_receipt_channel")))
+        and _normalize_text(row.get("installed_build_receipt_installation_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_version_source")) == "install_receipts"
+        and _normalize_text(row.get("installed_build_receipt_channel_source")) == "install_receipts"
+        and bool(row.get("installed_build_receipted"))
+    )
+    installed_build_receipt_installation_bound = bool(
+        installed_build_receipted and bool(row.get("installed_build_receipt_installation_matches"))
+    )
+    installed_build_receipt_version_matches = bool(
+        installed_build_receipted and bool(row.get("installed_build_receipt_version_matches"))
+    )
+    installed_build_receipt_channel_matches = bool(
+        installed_build_receipted and bool(row.get("installed_build_receipt_channel_matches"))
+    )
+    installed_build_receipt_tuple_bound = bool(
+        installed_build_receipted and bool(row.get("installed_build_receipt_identity_matches"))
+    )
+    current_install_on_fixed_build = bool(
+        fixed_version_receipted
+        and fixed_channel_receipted
+        and bool(row.get("current_install_on_fixed_build"))
+    )
+    return {
+        "install_receipt_ready": bool(derived_truth.get("install_truth_ready")),
+        "install_truth_ready": bool(derived_truth.get("install_truth_ready")),
+        "feedback_loop_ready": bool(derived_truth.get("feedback_loop_ready")),
+        "release_receipt_ready": bool(derived_truth.get("release_receipt_ready")),
+        "release_receipt_id_present": bool(derived_truth.get("release_receipt_ready")),
+        "fixed_version_receipted": fixed_version_receipted,
+        "fixed_channel_receipted": fixed_channel_receipted,
+        "fixed_receipt_installation_bound": fixed_receipt_installation_bound,
+        "installed_build_receipted": installed_build_receipted,
+        "installed_build_receipt_id_present": installed_build_receipt_id_present,
+        "installed_build_receipt_installation_bound": installed_build_receipt_installation_bound,
+        "installed_build_receipt_version_matches": installed_build_receipt_version_matches,
+        "installed_build_receipt_channel_matches": installed_build_receipt_channel_matches,
+        "installed_build_receipt_tuple_bound": installed_build_receipt_tuple_bound,
+        "current_install_on_fixed_build": current_install_on_fixed_build,
+    }
+
+
+def _derived_followthrough_grouping(
+    row: Dict[str, Any],
+    derived_truth: Dict[str, bool],
+) -> Dict[str, Any]:
+    blockers = [str(blocker) for blocker in row.get("blockers") or [] if _normalize_text(blocker)]
+    has_fix = bool(
+        _normalize_text(row.get("fixed_version"))
+        or _normalize_text(row.get("fixed_channel"))
+        or bool(row.get("fixed_version_receipted"))
+        or bool(row.get("fixed_channel_receipted"))
+        or bool(_normalize_text(row.get("fixed_version_receipt_id")))
+        or bool(_normalize_text(row.get("fixed_channel_receipt_id")))
+    )
+    has_receipt_mismatch = any(_is_receipt_mismatch_blocker(blocker) for blocker in blockers)
+    ready_any = any(
+        bool(derived_truth.get(flag))
+        for flag in (
+            "feedback_loop_ready",
+            "fix_available_ready",
+            "please_test_ready",
+            "recovery_loop_ready",
+        )
+    )
+    return {
+        "feedback_ready": bool(derived_truth.get("feedback_loop_ready")),
+        "fix_available_ready": bool(derived_truth.get("fix_available_ready"))
+        and not bool(derived_truth.get("please_test_ready")),
+        "please_test_ready": bool(derived_truth.get("please_test_ready")),
+        "recovery_ready": bool(derived_truth.get("recovery_loop_ready")),
+        "blocked_missing_install_receipts": bool(has_fix and not ready_any),
+        "blocked_receipt_mismatch": bool(has_fix and not ready_any and has_receipt_mismatch),
+        "hold_until_fix_receipt": bool(not has_fix),
+        "feedback_next_action": "send_feedback_progress",
+        "fix_available_next_action": "send_fix_available_with_update",
+        "please_test_next_action": "send_please_test",
+        "recovery_next_action": "send_recovery",
+        "blocked_next_action": "hold_reporter_followthrough",
+        "hold_next_action": "hold_until_fix_receipt",
+    }
+
+
 def _followthrough_receipt_gates(packets: List[Dict[str, Any]], *, generated_at: str) -> Dict[str, Any]:
     support_packets = [dict(packet) for packet in packets if bool(packet.get("support_case_backed"))]
     followthrough_rows = [
-        dict(packet.get("reporter_followthrough") or {})
+        _followthrough_packet_row(packet, packet.get("reporter_followthrough") or {})
         for packet in support_packets
         if isinstance(packet.get("reporter_followthrough"), dict)
     ]
+    derived_truth_rows = [_followthrough_row_receipt_truth(row) for row in followthrough_rows]
     blocker_counts = _counter_map(
         _normalize_text(blocker)
         for row in followthrough_rows
         for blocker in (row.get("blockers") or [])
     )
     state_counts = _counter_map(_normalize_text(row.get("state")).lower() for row in followthrough_rows)
-    ready_states = {"fix_available_ready", "fix_available_update_required", "please_test_ready", "recovery_ready"}
-    receipt_mismatch_count = sum(
-        1
-        for row in followthrough_rows
-        if any(
-            _normalize_text(blocker).endswith("_mismatch")
-            or "_mismatch_for_recovery" in _normalize_text(blocker)
-            for blocker in (row.get("blockers") or [])
-        )
-    )
+    grouping_rows = [
+        _derived_followthrough_grouping(row, truth)
+        for row, truth in zip(followthrough_rows, derived_truth_rows)
+    ]
+    gate_evidence_rows = [_followthrough_row_gate_evidence(row) for row in followthrough_rows]
     return {
         "generated_at": generated_at,
         "package_id": SUCCESSOR_PACKAGE_ID,
@@ -3538,60 +3836,67 @@ def _followthrough_receipt_gates(packets: List[Dict[str, Any]], *, generated_at:
         "followthrough_row_count": len(followthrough_rows),
         "ready_count": sum(
             1
-            for row in followthrough_rows
-            if bool(row.get("feedback_loop_ready")) or _normalize_text(row.get("state")).lower() in ready_states
+            for truth in derived_truth_rows
+            if any(
+                bool(truth.get(flag))
+                for flag in (
+                    "feedback_loop_ready",
+                    "fix_available_ready",
+                    "please_test_ready",
+                    "recovery_loop_ready",
+                )
+            )
         ),
-        "blocked_missing_install_receipts_count": state_counts.get("blocked_missing_install_receipts", 0),
-        "blocked_receipt_mismatch_count": receipt_mismatch_count,
-        "hold_until_fix_receipt_count": state_counts.get("no_fix_recorded", 0),
+        "feedback_ready_count": sum(1 for truth in derived_truth_rows if bool(truth.get("feedback_loop_ready"))),
+        "fix_available_ready_count": sum(
+            1
+            for truth in derived_truth_rows
+            if bool(truth.get("fix_available_ready")) and not bool(truth.get("please_test_ready"))
+        ),
+        "please_test_ready_count": sum(1 for truth in derived_truth_rows if bool(truth.get("please_test_ready"))),
+        "recovery_loop_ready_count": sum(1 for truth in derived_truth_rows if bool(truth.get("recovery_loop_ready"))),
+        "blocked_missing_install_receipts_count": sum(
+            1 for grouping in grouping_rows if bool(grouping.get("blocked_missing_install_receipts"))
+        ),
+        "blocked_receipt_mismatch_count": sum(
+            1 for grouping in grouping_rows if bool(grouping.get("blocked_receipt_mismatch"))
+        ),
+        "hold_until_fix_receipt_count": sum(
+            1 for grouping in grouping_rows if bool(grouping.get("hold_until_fix_receipt"))
+        ),
         "state_counts": state_counts,
         "blocker_counts": blocker_counts,
         "gate_counts": {
-            "install_receipt_ready": sum(1 for row in followthrough_rows if bool(row.get("install_receipt_ready"))),
-            "install_truth_ready": sum(1 for row in followthrough_rows if bool(row.get("install_receipt_ready"))),
-            "feedback_loop_ready": sum(1 for row in followthrough_rows if bool(row.get("feedback_loop_ready"))),
-            "release_receipt_ready": sum(
-                1
-                for row in followthrough_rows
-                if _normalize_text(row.get("release_receipt_state")).lower() == "release_receipt_ready"
-            ),
+            "install_receipt_ready": sum(1 for row in gate_evidence_rows if bool(row.get("install_receipt_ready"))),
+            "install_truth_ready": sum(1 for row in gate_evidence_rows if bool(row.get("install_truth_ready"))),
+            "feedback_loop_ready": sum(1 for row in gate_evidence_rows if bool(row.get("feedback_loop_ready"))),
+            "release_receipt_ready": sum(1 for row in gate_evidence_rows if bool(row.get("release_receipt_ready"))),
             "release_receipt_id_present": sum(
-                1
-                for row in followthrough_rows
-                if bool(_normalize_text(row.get("release_receipt_id")))
-                and _normalize_text(row.get("release_receipt_source")) == "release_channel"
+                1 for row in gate_evidence_rows if bool(row.get("release_receipt_id_present"))
             ),
-            "fixed_version_receipted": sum(1 for row in followthrough_rows if bool(row.get("fixed_version_receipted"))),
-            "fixed_channel_receipted": sum(1 for row in followthrough_rows if bool(row.get("fixed_channel_receipted"))),
+            "fixed_version_receipted": sum(1 for row in gate_evidence_rows if bool(row.get("fixed_version_receipted"))),
+            "fixed_channel_receipted": sum(1 for row in gate_evidence_rows if bool(row.get("fixed_channel_receipted"))),
             "fixed_receipt_installation_bound": sum(
-                1 for row in followthrough_rows if bool(row.get("fixed_receipt_installation_matches"))
+                1 for row in gate_evidence_rows if bool(row.get("fixed_receipt_installation_bound"))
             ),
-            "installed_build_receipted": sum(1 for row in followthrough_rows if bool(row.get("installed_build_receipted"))),
+            "installed_build_receipted": sum(1 for row in gate_evidence_rows if bool(row.get("installed_build_receipted"))),
             "installed_build_receipt_id_present": sum(
-                1 for row in followthrough_rows if bool(_normalize_text(row.get("installed_build_receipt_id")))
+                1 for row in gate_evidence_rows if bool(row.get("installed_build_receipt_id_present"))
             ),
             "installed_build_receipt_installation_bound": sum(
-                1
-                for row in followthrough_rows
-                if bool(row.get("installed_build_receipt_installation_matches"))
+                1 for row in gate_evidence_rows if bool(row.get("installed_build_receipt_installation_bound"))
             ),
             "installed_build_receipt_version_matches": sum(
-                1
-                for row in followthrough_rows
-                if bool(row.get("installed_build_receipt_version_matches"))
+                1 for row in gate_evidence_rows if bool(row.get("installed_build_receipt_version_matches"))
             ),
             "installed_build_receipt_channel_matches": sum(
-                1
-                for row in followthrough_rows
-                if bool(row.get("installed_build_receipt_channel_matches"))
+                1 for row in gate_evidence_rows if bool(row.get("installed_build_receipt_channel_matches"))
             ),
             "installed_build_receipt_tuple_bound": sum(
-                1
-                for row in followthrough_rows
-                if bool(row.get("installed_build_receipt_identity_matches"))
+                1 for row in gate_evidence_rows if bool(row.get("installed_build_receipt_tuple_bound"))
             ),
             "current_install_on_fixed_build": sum(
-                1 for row in followthrough_rows if bool(row.get("current_install_on_fixed_build"))
+                1 for row in gate_evidence_rows if bool(row.get("current_install_on_fixed_build"))
             ),
         },
     }
@@ -3696,17 +4001,20 @@ def build_packets_payload(source_payload: Dict[str, Any], source_label: str, *, 
                 if bool((item.get("fix_confirmation") or {}).get("update_required"))
                 and _normalize_text((item.get("recovery_path") or {}).get("action_id")).lower() != "open_downloads"
             ),
-            "reporter_followthrough_ready_count": int(reporter_followthrough_plan.get("ready_count") or 0),
-            "feedback_followthrough_ready_count": int(reporter_followthrough_plan.get("feedback_ready_count") or 0),
+            "reporter_followthrough_ready_count": int(followthrough_receipt_gates.get("ready_count") or 0),
+            "feedback_followthrough_ready_count": int(followthrough_receipt_gates.get("feedback_ready_count") or 0),
             "reporter_followthrough_blocked_missing_install_receipts_count": int(
-                reporter_followthrough_plan.get("blocked_missing_install_receipts_count") or 0
+                followthrough_receipt_gates.get("blocked_missing_install_receipts_count") or 0
             ),
             "reporter_followthrough_blocked_receipt_mismatch_count": int(
-                reporter_followthrough_plan.get("blocked_receipt_mismatch_count") or 0
+                followthrough_receipt_gates.get("blocked_receipt_mismatch_count") or 0
             ),
-            "fix_available_ready_count": int(reporter_followthrough_plan.get("fix_available_ready_count") or 0),
-            "please_test_ready_count": int(reporter_followthrough_plan.get("please_test_ready_count") or 0),
-            "recovery_loop_ready_count": int(reporter_followthrough_plan.get("recovery_loop_ready_count") or 0),
+            "reporter_followthrough_hold_until_fix_receipt_count": int(
+                followthrough_receipt_gates.get("hold_until_fix_receipt_count") or 0
+            ),
+            "fix_available_ready_count": int(followthrough_receipt_gates.get("fix_available_ready_count") or 0),
+            "please_test_ready_count": int(followthrough_receipt_gates.get("please_test_ready_count") or 0),
+            "recovery_loop_ready_count": int(followthrough_receipt_gates.get("recovery_loop_ready_count") or 0),
             "external_proof_required_case_count": sum(
                 1 for item in case_packets if bool((item.get("install_diagnosis") or {}).get("external_proof_required"))
             ),
@@ -3810,7 +4118,12 @@ def _source_mirror_fallback_payload(
 ) -> Dict[str, Any]:
     payload = build_packets_payload(mirror_payload, str(source_mirror_path), release_channel_index=release_channel_index)
     source = dict(payload.get("source") or {})
-    source["refresh_mode"] = "source_mirror_fallback"
+    seeded_from_cached_packets_generated_at = _normalize_text(
+        mirror_payload.get("seeded_from_cached_packets_generated_at")
+    )
+    source["refresh_mode"] = (
+        "cached_packets_fallback" if seeded_from_cached_packets_generated_at else "source_mirror_fallback"
+    )
     source["refresh_error"] = _normalize_text(refresh_error)
     origin_source_label = _normalize_text(mirror_payload.get("origin_source_label") or source_label)
     if origin_source_label:
@@ -3819,7 +4132,6 @@ def _source_mirror_fallback_payload(
     mirrored_at = _normalize_text(mirror_payload.get("mirrored_at"))
     if mirrored_at:
         source["source_mirror_generated_at"] = mirrored_at
-    seeded_from_cached_packets_generated_at = _normalize_text(mirror_payload.get("seeded_from_cached_packets_generated_at"))
     if seeded_from_cached_packets_generated_at:
         source["seeded_from_cached_packets_generated_at"] = seeded_from_cached_packets_generated_at
     payload["source"] = source

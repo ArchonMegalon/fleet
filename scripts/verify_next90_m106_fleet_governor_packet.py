@@ -409,6 +409,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "packet governor_packet_schedule cadence_seconds drifted",
     )
+    _require(
+        schedule.get("max_age_seconds") == weekly.WEEKLY_PACKET_CADENCE_SECONDS,
+        issues,
+        "packet governor_packet_schedule max_age_seconds drifted",
+    )
     packet_cadence_issues = _packet_cadence_issues(
         packet_generated_at=str(packet.get("generated_at") or "")
     )
@@ -467,15 +472,32 @@ def verify(args: argparse.Namespace) -> List[str]:
     _require(decision_alignment.get("status") == "pass", issues, "packet decision_alignment.status is not pass")
     source_input_status = source_health.get("status")
     source_input_blocked = source_input_status != "pass"
+    package_complete = (
+        packet_verification.get("status") == "pass"
+        and str(packet_verification.get("queue_status") or "").strip().lower()
+        in weekly.COMPLETE_STATUSES
+        and str(packet_verification.get("registry_work_task_status") or "").strip().lower()
+        in weekly.COMPLETE_STATUSES
+    )
+    expected_ready_status_reason = (
+        "Fleet package is closed and the weekly measured rollout loop is ready."
+    )
+    expected_blocked_status_reason = (
+        "Fleet package is closed; measured rollout remains blocked by current "
+        "source, dependency, or sibling gates."
+    )
+    expected_closeout_blocked_status_reason = (
+        "Fleet package closeout is blocked; inspect package_verification issues "
+        "before treating this slice as closed."
+    )
+    packet_loop_status = str(loop.get("loop_status") or "").strip()
+    measured_loop_blocked = bool(package_complete) and packet_loop_status == "blocked"
     if source_input_blocked:
         _require(source_health.get("issues") != [], issues, "blocked source_input_health does not name its blocking issue")
         _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite source input failure")
         _require(
             str(packet.get("status_reason") or "")
-            == (
-                "Fleet package is closed; measured rollout remains blocked by current "
-                "source, dependency, or sibling gates."
-            ),
+            == expected_blocked_status_reason,
             issues,
             "source-blocked packet status_reason no longer distinguishes closed package proof from rollout blockage",
         )
@@ -541,11 +563,24 @@ def verify(args: argparse.Namespace) -> List[str]:
             issues,
             "source-blocked packet does not keep freeze_launch active",
         )
+    elif measured_loop_blocked:
+        _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite measured rollout gates remaining open")
+        _require(
+            str(packet.get("status_reason") or "") == expected_blocked_status_reason,
+            issues,
+            "blocked packet status_reason no longer distinguishes closed package proof from rollout blockage",
+        )
+    elif not package_complete:
+        _require(packet.get("status") == "blocked", issues, "packet status is not blocked despite package closeout failure")
+        _require(
+            str(packet.get("status_reason") or "") == expected_closeout_blocked_status_reason,
+            issues,
+            "package-closeout blocked packet status_reason no longer distinguishes blocked closeout from blocked rollout",
+        )
     else:
         _require(packet.get("status") == "ready", issues, "packet status is not ready")
         _require(
-            str(packet.get("status_reason") or "")
-            == "Fleet package is closed and the weekly measured rollout loop is ready.",
+            str(packet.get("status_reason") or "") == expected_ready_status_reason,
             issues,
             "ready packet status_reason no longer confirms closed package and ready measured rollout",
         )
@@ -598,6 +633,21 @@ def verify(args: argparse.Namespace) -> List[str]:
     _require(packet_verification.get("package_id") == PACKAGE_ID, issues, "packet package_id drifted")
     _require(packet_verification.get("queue_frontier_id") == SUCCESSOR_FRONTIER_ID, issues, "packet queue_frontier_id drifted")
     _require(packet_verification.get("design_queue_frontier_id") == SUCCESSOR_FRONTIER_ID, issues, "packet design_queue_frontier_id drifted")
+    _require(
+        packet_verification.get("queue_landed_commit") == weekly.EXPECTED_LANDED_COMMIT,
+        issues,
+        "packet queue_landed_commit drifted",
+    )
+    _require(
+        packet_verification.get("design_queue_landed_commit") == weekly.EXPECTED_LANDED_COMMIT,
+        issues,
+        "packet design_queue_landed_commit drifted",
+    )
+    _require(
+        packet_verification.get("expected_landed_commit") == weekly.EXPECTED_LANDED_COMMIT,
+        issues,
+        "packet expected_landed_commit drifted",
+    )
     _require(packet_verification.get("queue_mirror_status") == "in_sync", issues, "packet queue mirror is not in_sync")
     _require(
         required_resolving_paths == list(weekly.REQUIRED_RESOLVING_PROOF_PATHS),
@@ -655,11 +705,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         "compile manifest does not list weekly governor packet artifact(s): "
         + ", ".join(missing_compile_artifacts),
     )
-    if source_input_blocked:
+    if source_input_blocked or measured_loop_blocked or not package_complete:
         _require(
             loop.get("loop_status") == "blocked",
             issues,
-            "source-blocked packet measured rollout loop is not blocked",
+            "blocked packet measured rollout loop is not blocked",
         )
     else:
         _require(loop.get("loop_status") == "ready", issues, "measured rollout loop is not ready")

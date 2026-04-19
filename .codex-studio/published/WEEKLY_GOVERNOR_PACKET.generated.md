@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-17T20:55:18Z
+Generated: 2026-04-18T20:47:47Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,16 +20,16 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: b8afcf35bca14ac7deaf0c14079dca20eb348deec1a10ec687f0bdff0f623406
+- Source input fingerprint: 0871e2a9620272bad9d210bad7c290df4e276e64e0b6dd09bd2a9547d9e0b527
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: freeze_launch
 - Actual launch action: freeze_launch
 - Package closeout: fleet_package_complete
 - Do not reopen package: True
-- Measured rollout loop: ready
+- Measured rollout loop: blocked
 - Governor packet cadence: weekly
-- Next packet due: 2026-04-24T20:55:18Z
+- Next packet due: 2026-04-25T20:47:47Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -39,10 +39,10 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Weekly operator handoff actions: 5 / 5
 - Launch expansion ready: False
 - Launch gates green: False
-- Launch gate pass count: 13
-- Launch gate blocked count: 3
+- Launch gate pass count: 12
+- Launch gate blocked count: 4
 - Launch gate fail count: 0
-- Launch gate blocking names: successor_dependencies, local_release_proof, provider_canary
+- Launch gate blocking names: successor_dependencies, status_plane_final_claim, local_release_proof, provider_canary
 - Freeze active: True
 - Canary ready: False
 - Rollback watch: False
@@ -79,6 +79,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Recovery-loop ready: 0
 - Followthrough blocked on install receipts: 0
 - Followthrough receipt mismatches: 0
+- Followthrough waiting on fix receipt: 0
 - Receipt-gated followthrough ready: 0
 - Receipt-gated installed-build receipts: 0
 - Closeout reason: Fleet package authority, queue closeout, registry work task 106.1, generated packet, markdown packet, and proof markers are current.
@@ -100,7 +101,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Remaining sibling work tasks: 106.3, 106.4
 - Handoff rule: Do not repeat the Fleet weekly governor packet slice when package_verification.status is pass; route remaining M106 work to the listed dependency or sibling packages.
 - Worker command guard: active_run_helpers_forbidden
-- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, run_chummer_design_supervisor.sh, run_ooda_design_supervisor.sh, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json, first_commands, focus_owners, focus_profiles, focus_texts, frontier_briefs, status: complete; owners:, deps: 101, 102, 103, 104, 105, own and prove the surface slice(s): weekly_governor_packet, measured_rollout_loop, refresh flagship proof and close out the queue slice honestly, frontier ids:, open milestone ids:, mode: successor_wave, polling_disabled, runtime_handoff_path, shard runtime handoff, use the shard runtime handoff as the worker-safe resume context, status_query_supported, task-local telemetry file, local machine-readable context, implementation-only, implementation only, implementation-only retry, this retry is implementation-only, previous attempt burned time on supervisor helper loops, retry is implementation-only, successor-wave pass, product advance successor-wave pass, next-90-day product advance successor-wave pass, run these exact commands first, do not invent another orientation step, read these files directly first, historical operator status snippets, stale notes rather than commands, remaining milestones, remaining queue items, critical path, successor-wave telemetry:, eta:, eta , successor frontier detail:, successor frontier ids to prioritize first, current steering focus, assigned successor queue package, assigned slice authority, execution rules inside this run, execution discipline, first action rule, writable scope roots, operator telemetry, do not invoke operator telemetry, do not invoke operator telemetry or active-run helper commands from inside worker runs, supervisor helper loop, supervisor helper loops, supervisor status polling, supervisor eta polling, supervisor status or eta helpers, supervisor status or eta helpers inside this worker run, do not query supervisor status, do not query supervisor status or eta, do not run supervisor status or eta helpers, polling the supervisor again, current flagship closeout, do not reopen the closed flagship wave, reopen the closed flagship wave, active-run telemetry, active run, run id:, selected account, selected model, prompt path, recent stderr tail, active-run helper, active-run helper commands, active run helper, active worker run, worker runs, operator/OODA loop, operator ooda loop, operator/OODA loop owns telemetry, operator/OODA loop owns telemetry; keep working the assigned slice, operator ooda loop owns telemetry, ooda loop owns telemetry, operator-owned telemetry, operator-owned run-helper, operator-owned helper, inside worker runs, run failure, count as run failure, hard-blocked, helpers are hard-blocked, hard blocked, non-zero during active runs, return non-zero during active runs, nonzero during active runs, --telemetry-answer, codexea telemetry, codexea status, codexea eta, codexea watch, codexea-watchdog, codexea --telemetry, codexea --status, codexea --eta, codexea --watch, chummer_design_supervisor status, chummer_design_supervisor eta, supervisor status, supervisor eta, operator telemetry helper, active-run status helper, chummer_design_supervisor.py, chummer_design_supervisor.py status, chummer_design_supervisor.py eta
+- Blocked helper markers: /var/lib/codex-fleet, ACTIVE_RUN_HANDOFF.generated.md, run_ooda_design_supervisor_until_quiet, run_chummer_design_supervisor.sh, run_ooda_design_supervisor.sh, ooda_design_supervisor.py, TASK_LOCAL_TELEMETRY.generated.json, first_commands, focus_owners, focus_profiles, focus_texts, frontier_briefs, status: complete; owners:, deps: 101, 102, 103, 104, 105, own and prove the surface slice(s): weekly_governor_packet, measured_rollout_loop, refresh flagship proof and close out the queue slice honestly, frontier ids:, open milestone ids:, mode: successor_wave, polling_disabled, runtime_handoff_path, shard runtime handoff, use the shard runtime handoff as the worker-safe resume context, status_query_supported, task-local telemetry file, local machine-readable context, implementation-only, implementation only, implementation-only retry, this retry is implementation-only, previous attempt burned time on supervisor helper loops, retry is implementation-only, successor-wave pass, product advance successor-wave pass, next-90-day product advance successor-wave pass, run these exact commands first, do not invent another orientation step, read these files directly first, historical operator status snippets, stale notes rather than commands, remaining milestones, remaining queue items, critical path, successor-wave telemetry:, eta:, eta , successor frontier detail:, successor frontier ids to prioritize first, current steering focus, assigned successor queue package, assigned slice authority, execution rules inside this run, execution discipline, first action rule, if you stop, report only, what shipped:, what remains:, exact blocker:, writable scope roots, operator telemetry, do not invoke operator telemetry, do not invoke operator telemetry or active-run helper commands from inside worker runs, supervisor helper loop, supervisor helper loops, supervisor status polling, supervisor eta polling, supervisor status or eta helpers, supervisor status or eta helpers inside this worker run, do not query supervisor status, do not query supervisor status or eta, do not run supervisor status or eta helpers, polling the supervisor again, current flagship closeout, do not reopen the closed flagship wave, reopen the closed flagship wave, active-run telemetry, active run, run id:, selected account, selected model, prompt path, recent stderr tail, active-run helper, active-run helper commands, active run helper, active worker run, worker runs, operator/OODA loop, operator ooda loop, operator/OODA loop owns telemetry, operator/OODA loop owns telemetry; keep working the assigned slice, operator ooda loop owns telemetry, ooda loop owns telemetry, operator-owned telemetry, operator-owned run-helper, operator-owned helper, inside worker runs, run failure, count as run failure, hard-blocked, helpers are hard-blocked, hard blocked, non-zero during active runs, return non-zero during active runs, nonzero during active runs, --telemetry-answer, codexea telemetry, codexea status, codexea eta, codexea watch, codexea-watchdog, codexea --telemetry, codexea --status, codexea --eta, codexea --watch, chummer_design_supervisor status, chummer_design_supervisor eta, supervisor status, supervisor eta, operator telemetry helper, active-run status helper, chummer_design_supervisor.py, chummer_design_supervisor.py status, chummer_design_supervisor.py eta
 - Flagship wave guard: closed_wave_not_reopened
 - Closed flagship wave: next_12_biggest_wins
 - Flagship readiness inputs: read-only readiness, parity, journey, and support snapshots
@@ -125,7 +126,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 | flagship_readiness | pass | pass | pass |
 | flagship_parity | pass | gold_ready | gold_ready |
 | flagship_quality | pass | localization pass and accessibility/polish proof ready | pass |
-| status_plane_final_claim | pass | pass | pass |
+| status_plane_final_claim | blocked | pass | fail |
 | journey_gates | pass | ready | ready |
 | local_release_proof | blocked | passed | unknown |
 | weekly_adoption_truth | pass | present with measured history | early / 15 history snapshots |
@@ -166,7 +167,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 
 | Action | Owner | Route | Cadence | Trigger gate | Route blocked | Operator action | Blocked action | Clear action | Blocking gates | Next decision | Ready |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | launch_gate_summary.all_green | True | do_not_expand_launch | do_not_expand_launch | promote_measured_launch_expansion | successor_dependencies, local_release_proof, provider_canary | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. | True |
+| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | launch_gate_summary.all_green | True | do_not_expand_launch | do_not_expand_launch | promote_measured_launch_expansion | successor_dependencies, status_plane_final_claim, local_release_proof, provider_canary | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. | True |
 | freeze_launch | fleet | weekly_governor_packet.freeze_launch | weekly | launch_gate_summary.blocking_gate_names | True | keep_launch_frozen | keep_launch_frozen | leave_freeze_available | fail_closed_default | Freeze launch expansion until fresh local release proof passes on the public edge. | True |
 | canary | fleet | measured_rollout_loop.canary | weekly | provider_canary | True | collect_canary_evidence | collect_canary_evidence | keep_canary_ready | provider_canary | Canary evidence is still accumulating | True |
 | rollback | fleet | measured_rollout_loop.rollback | weekly | release_health | False | keep_rollback_armed | prepare_rollback_or_revoke | keep_rollback_armed | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. | True |
@@ -177,11 +178,11 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Source: measured_rollout_loop.decision_action_routes+decision_receipts
 - Cadence: weekly
 - Schedule ref: governor_packet_schedule.next_packet_due_at
-- Launch gate blocking names: successor_dependencies, local_release_proof, provider_canary
+- Launch gate blocking names: successor_dependencies, status_plane_final_claim, local_release_proof, provider_canary
 
 | Action | State | Route | Operator action | Receipt | Blocking gates | Next decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| launch_expand | blocked | weekly_governor_packet.launch_expand | do_not_expand_launch | m106-launch_expand-5bdcf4bbdcc1cdd1 | successor_dependencies, local_release_proof, provider_canary | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. |
+| launch_expand | blocked | weekly_governor_packet.launch_expand | do_not_expand_launch | m106-launch_expand-bce96ef4e777882d | successor_dependencies, status_plane_final_claim, local_release_proof, provider_canary | Hold expansion until successor dependencies, readiness, parity, localization/accessibility quality, status-plane final claim, local release proof, canary, closure, and support gates are all green. |
 | freeze_launch | active | weekly_governor_packet.freeze_launch | keep_launch_frozen | m106-freeze_launch-98c7727e35d8f9e9 | fail_closed_default | Freeze launch expansion until fresh local release proof passes on the public edge. |
 | canary | accumulating | measured_rollout_loop.canary | collect_canary_evidence | m106-canary-d26c9d22096a0e20 | provider_canary | Canary evidence is still accumulating |
 | rollback | armed | measured_rollout_loop.rollback | keep_rollback_armed | m106-rollback-5e74d9319f6f7334 | none | Rollback stays armed from release/support truth; watch is active when support closure or release health is not clear. |

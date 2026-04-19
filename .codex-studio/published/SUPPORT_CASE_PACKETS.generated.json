@@ -4,6 +4,8 @@
     "blocked_missing_install_receipts_count": 0,
     "blocked_receipt_mismatch_count": 0,
     "blocker_counts": {},
+    "feedback_ready_count": 0,
+    "fix_available_ready_count": 0,
     "followthrough_row_count": 0,
     "gate_counts": {
       "current_install_on_fixed_build": 0,
@@ -22,11 +24,13 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-17T20:38:45Z",
+    "generated_at": "2026-04-19T07:01:15Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
+    "please_test_ready_count": 0,
     "ready_count": 0,
+    "recovery_loop_ready_count": 0,
     "required_gates": [
       "feedback_loop_ready",
       "install_truth_ready",
@@ -45,7 +49,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-17T20:38:45Z",
+  "generated_at": "2026-04-19T07:01:15Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -61,7 +65,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-04-17T20:38:45Z",
+    "generated_at": "2026-04-19T07:01:15Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -95,6 +99,8 @@
       ".codex-studio",
       "feedback"
     ],
+    "design_queue_source_completion_action": "verify_closed_package_only",
+    "design_queue_source_do_not_reopen_reason": "M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.",
     "design_queue_source_frontier_id": "2454416974",
     "design_queue_source_item_count": 1,
     "design_queue_source_item_found": true,
@@ -113,6 +119,7 @@
     "milestone_id": 102,
     "missing_design_queue_source_proof_anchor_paths": [],
     "missing_design_queue_source_proof_markers": [],
+    "missing_queue_design_source_proof_markers": [],
     "missing_queue_proof_anchor_paths": [],
     "missing_queue_proof_markers": [],
     "missing_registry_evidence_markers": [],
@@ -122,6 +129,8 @@
       "product_governor:followthrough"
     ],
     "package_id": "next90-m102-fleet-reporter-receipts",
+    "queue_completion_action": "verify_closed_package_only",
+    "queue_do_not_reopen_reason": "M102 Fleet reporter receipts are complete; future shards must verify the support-packet receipt, standalone verifier, registry row, queue row, and design queue row instead of reopening the install-aware followthrough package.",
     "queue_frontier_id": "2454416974",
     "queue_item_count": 1,
     "queue_milestone_id": 102,
@@ -155,6 +164,7 @@
       "/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.md",
       "/docker/fleet/feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
       "python3 -m py_compile",
+      "python3 tests/test_materialize_support_case_packets.py exits 0",
       "python3 scripts/verify_next90_m102_fleet_reporter_receipts.py exits 0",
       "python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py exits 0",
       "installation-bound receipt gating",
@@ -169,8 +179,11 @@
       "generated support successor closure-field drift",
       "weekly/support receipt-count drift",
       "weekly/support generated_at freshness",
+      "weekly support-packet source sha256 drift fails the standalone verifier",
       "future-dated support and weekly generated_at receipts fail the standalone verifier",
       "weekly support-packet source-path drift",
+      "standalone verifier rejects fix-available, please-test, feedback, or recovery action-group rows that omit their own install-aware receipt gates",
+      "standalone verifier rejects ready action-group rows whose install receipt, release receipt, fixed receipt, or installed-build values disagree even when stale generated booleans claim ready",
       "design queue source path rejects active-run helper paths",
       "weekly governor source-path hygiene and worker command guard",
       "design-owned queue source proof markers",
@@ -178,13 +191,18 @@
       "telemetry command proof markers fail the standalone verifier and shared successor authority check",
       "runtime handoff frontier metadata proof markers fail the standalone verifier and shared successor authority check",
       "distinct queue proof anti-collapse guard",
-      "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check"
+      "duplicate queue, design-queue, and registry work-task rows for next90-m102-fleet-reporter-receipts fail the shared successor authority check",
+      "cached packet fallback provenance guard",
+      "seeded cached-packet mirror provenance guard",
+      "completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason on Fleet and design queue rows"
     ],
     "required_registry_evidence_markers": [
       "scripts/materialize_support_case_packets.py",
       "tests/test_materialize_support_case_packets.py",
+      "python3 tests/test_materialize_support_case_packets.py exits 0",
       "SUPPORT_CASE_PACKETS.generated.json",
       "WEEKLY_GOVERNOR_PACKET.generated.json",
+      "feedback/2026-04-15-next90-m102-fleet-reporter-receipts-closeout.md",
       "install truth",
       "installation-bound installed-build receipts",
       "installed-build receipts",
@@ -198,7 +216,13 @@
       "duplicate next90-m102-fleet-reporter-receipts queue rows",
       "generated successor scope-drift",
       "missing Fleet proof-anchor markers",
-      "runtime handoff metadata proof markers"
+      "runtime handoff metadata proof markers",
+      "cached packet fallback provenance guard",
+      "seeded cached-packet mirror provenance guard",
+      "stale ready action-group receipt mismatches",
+      "missing per-row install-aware receipt gates",
+      "verify_closed_package_only",
+      "do-not-reopen reason"
     ],
     "status": "pass"
   },
@@ -225,6 +249,7 @@
     "recovery_loop_ready_count": 0,
     "reporter_followthrough_blocked_missing_install_receipts_count": 0,
     "reporter_followthrough_blocked_receipt_mismatch_count": 0,
+    "reporter_followthrough_hold_until_fix_receipt_count": 0,
     "reporter_followthrough_ready_count": 0,
     "status_counts": {},
     "support_case_backed_open_count": 0,
@@ -248,11 +273,11 @@
   },
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
-    "capture_deadline_utc": "2026-04-18T12:03:23Z",
-    "generated_at": "2026-04-17T20:38:45Z",
+    "capture_deadline_utc": "2026-04-19T19:53:27Z",
+    "generated_at": "2026-04-19T07:01:15Z",
     "host_groups": {},
     "hosts": [],
-    "release_channel_generated_at": "2026-04-17T12:03:23Z",
+    "release_channel_generated_at": "2026-04-18T19:53:27Z",
     "request_count": 0
   }
 }
