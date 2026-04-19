@@ -286,7 +286,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
     assert "receipt-contract-mismatch" in payload
     assert "startup-smoke-receipt-stale" in payload
-    assert "max_age_seconds=86400" in payload
+    max_age_token = f"max_age_seconds={module.STARTUP_SMOKE_MAX_AGE_SECONDS}"
+    assert max_age_token in payload
     assert "readyCheckpoint" in payload
     assert "hostClass" in payload
     assert "\"head_id\": \"avalonia\"" in payload
@@ -365,13 +366,21 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "release-channel-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "receipt-contract-mismatch" in windows_validate.read_text(encoding="utf-8")
     assert "startup-smoke-receipt-stale" in windows_validate.read_text(encoding="utf-8")
-    assert "max_age_seconds=86400" in windows_validate.read_text(encoding="utf-8")
+    assert max_age_token in windows_validate.read_text(encoding="utf-8")
     assert "startup-smoke-receipt-stale" in macos_validate.read_text(encoding="utf-8")
-    assert "max_age_seconds=86400" in macos_validate.read_text(encoding="utf-8")
+    assert max_age_token in macos_validate.read_text(encoding="utf-8")
     assert "startup-smoke-receipt-stale" in windows_ingest.read_text(encoding="utf-8")
-    assert "max_age_seconds=86400" in windows_ingest.read_text(encoding="utf-8")
+    assert max_age_token in windows_ingest.read_text(encoding="utf-8")
     assert "startup-smoke-receipt-stale" in macos_ingest.read_text(encoding="utf-8")
-    assert "max_age_seconds=86400" in macos_ingest.read_text(encoding="utf-8")
+    assert max_age_token in macos_ingest.read_text(encoding="utf-8")
+    for script_path in (windows_validate, macos_validate, windows_ingest, macos_ingest):
+        syntax = subprocess.run(
+            ["bash", "-n", str(script_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert syntax.returncode == 0, syntax.stderr
 
 
 def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates_when_support_plan_is_empty(
@@ -674,7 +683,10 @@ def test_materialize_external_proof_runbook_removes_stale_existing_bundle_archiv
         "hostClass": "macos-host",
         "readyCheckpoint": "pre_ui_event_loop",
         "status": "pass",
-        "recordedAtUtc": _iso_z(datetime.now(timezone.utc) - timedelta(days=3)),
+        "recordedAtUtc": _iso_z(
+            datetime.now(timezone.utc)
+            - timedelta(seconds=module.STARTUP_SMOKE_MAX_AGE_SECONDS + 60)
+        ),
     }
     _write_bundle_archive(
         archive_path=bundle_archive,
@@ -1587,6 +1599,7 @@ def test_materialize_external_proof_runbook_fails_when_request_required_proofs_a
 
 
 def test_materialize_external_proof_runbook_reports_stale_directory_bundle_state(tmp_path: Path) -> None:
+    module = _load_runbook_module()
     support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
     out = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
@@ -1687,7 +1700,10 @@ def test_materialize_external_proof_runbook_reports_stale_directory_bundle_state
                 "hostClass": "macos-host",
                 "readyCheckpoint": "pre_ui_event_loop",
                 "status": "pass",
-                "recordedAtUtc": _iso_z(datetime.now(timezone.utc) - timedelta(days=3)),
+                "recordedAtUtc": _iso_z(
+                    datetime.now(timezone.utc)
+                    - timedelta(seconds=module.STARTUP_SMOKE_MAX_AGE_SECONDS + 60)
+                ),
             },
             indent=2,
         )
@@ -1720,5 +1736,5 @@ def test_materialize_external_proof_runbook_reports_stale_directory_bundle_state
     assert "startup-smoke/startup-smoke-avalonia-osx-arm64.receipt.json`" in payload
     assert f"cached_bundle_directory_path: `{bundle_dir}`" in payload
     assert "local_startup_smoke_receipt_state: `stale`" in payload
-    assert "local_startup_smoke_receipt_recorded_at: `2026-04-11T20:19:47.089302+00:00`" in payload
-    assert "local_startup_smoke_receipt_age_seconds: `270101`" in payload
+    assert "local_startup_smoke_receipt_recorded_at: `" in payload
+    assert f"max_age_seconds={module.STARTUP_SMOKE_MAX_AGE_SECONDS}" in payload

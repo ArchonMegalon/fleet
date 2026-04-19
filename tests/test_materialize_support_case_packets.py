@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -219,6 +220,9 @@ def test_lookup_promoted_tuple_uses_canonical_install_receipt_tuple_order() -> N
 def test_external_proof_local_evidence_reports_stale_receipt(tmp_path: Path) -> None:
     module = _load_module()
     previous_root = module.UI_DOCKER_DOWNLOADS_ROOT
+    stale_recorded_at = (
+        datetime.now(timezone.utc) - timedelta(seconds=module.REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS + 60)
+    ).isoformat()
     try:
         module.UI_DOCKER_DOWNLOADS_ROOT = tmp_path
         files_dir = tmp_path / "files"
@@ -238,7 +242,7 @@ def test_external_proof_local_evidence_reports_stale_receipt(tmp_path: Path) -> 
                     "hostClass": "macos-host",
                     "readyCheckpoint": "pre_ui_event_loop",
                     "status": "pass",
-                    "recordedAtUtc": "2026-04-11T20:19:47.089302+00:00",
+                    "recordedAtUtc": stale_recorded_at,
                 },
                 indent=2,
             )
@@ -266,9 +270,9 @@ def test_external_proof_local_evidence_reports_stale_receipt(tmp_path: Path) -> 
 
     assert evidence["installer_artifact"]["state"] == "present_sha256_match"
     assert evidence["startup_smoke_receipt"]["state"] == "stale"
-    assert evidence["startup_smoke_receipt"]["recorded_at_utc"] == "2026-04-11T20:19:47.089302+00:00"
+    assert evidence["startup_smoke_receipt"]["recorded_at_utc"] == stale_recorded_at
     assert evidence["startup_smoke_receipt"]["contract_matches_expected"] is True
-    assert evidence["startup_smoke_receipt"]["age_seconds"] > 86400
+    assert evidence["startup_smoke_receipt"]["age_seconds"] > module.REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS
 
 
 def test_source_items_from_cached_packets_preserves_installed_build_receipts() -> None:
@@ -1999,6 +2003,7 @@ def test_source_mirror_fallback_seeded_from_cached_packets_preserves_cached_prov
 
 
 def test_materialize_support_case_packets_enriches_install_truth_from_release_channel(tmp_path: Path) -> None:
+    module = _load_module()
     source = tmp_path / "support_cases.json"
     release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
     out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
@@ -2187,7 +2192,7 @@ def test_materialize_support_case_packets_enriches_install_truth_from_release_ch
                 "path": "",
                 "present": False,
                 "state": "missing",
-                "max_age_seconds": 86400,
+                "max_age_seconds": module.REQUIRED_STARTUP_SMOKE_MAX_AGE_SECONDS,
             },
         },
     }

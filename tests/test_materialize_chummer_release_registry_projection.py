@@ -45,7 +45,7 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            missing_primary = module.DEFAULT_STARTUP_SMOKE_DIR
+            missing_primary = root / "missing-startup-smoke"
             fallback = root / "ui-startup-smoke"
             fallback.mkdir(parents=True, exist_ok=True)
             (fallback / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
@@ -53,22 +53,28 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            resolved = module.resolve_startup_smoke_dir(
-                missing_primary,
-                fallback_dirs=(missing_primary, fallback),
-            )
+            with mock.patch.object(module, "DEFAULT_STARTUP_SMOKE_DIR", missing_primary):
+                resolved = module.resolve_startup_smoke_dir(
+                    missing_primary,
+                    fallback_dirs=(missing_primary, fallback),
+                )
             self.assertEqual(resolved, fallback)
 
     def test_resolve_startup_smoke_dir_skips_stale_receipts_for_fresh_fallback(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            missing_primary = root / "missing-startup-smoke"
             stale = root / "stale-startup-smoke"
             fresh = root / "fresh-startup-smoke"
             stale.mkdir(parents=True, exist_ok=True)
             fresh.mkdir(parents=True, exist_ok=True)
             (stale / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
-                self._receipt_json(recorded_at_utc=self._utc_iso(hours_ago=72)),
+                self._receipt_json(
+                    recorded_at_utc=self._utc_iso(
+                        hours_ago=(module.STARTUP_SMOKE_MAX_AGE_SECONDS // 3600) + 1
+                    )
+                ),
                 encoding="utf-8",
             )
             (fresh / "startup-smoke-avalonia-linux-x64.receipt.json").write_text(
@@ -76,10 +82,11 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            resolved = module.resolve_startup_smoke_dir(
-                module.DEFAULT_STARTUP_SMOKE_DIR,
-                fallback_dirs=(stale, fresh),
-            )
+            with mock.patch.object(module, "DEFAULT_STARTUP_SMOKE_DIR", missing_primary):
+                resolved = module.resolve_startup_smoke_dir(
+                    missing_primary,
+                    fallback_dirs=(stale, fresh),
+                )
             self.assertEqual(resolved, fresh)
 
     def test_resolve_startup_smoke_dir_respects_explicit_nondefault_path(self) -> None:
@@ -104,6 +111,7 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            missing_primary = root / "missing-startup-smoke"
             wrong_checkpoint = root / "wrong-startup-smoke"
             correct_checkpoint = root / "correct-startup-smoke"
             wrong_checkpoint.mkdir(parents=True, exist_ok=True)
@@ -117,16 +125,18 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            resolved = module.resolve_startup_smoke_dir(
-                module.DEFAULT_STARTUP_SMOKE_DIR,
-                fallback_dirs=(wrong_checkpoint, correct_checkpoint),
-            )
+            with mock.patch.object(module, "DEFAULT_STARTUP_SMOKE_DIR", missing_primary):
+                resolved = module.resolve_startup_smoke_dir(
+                    missing_primary,
+                    fallback_dirs=(wrong_checkpoint, correct_checkpoint),
+                )
             self.assertEqual(resolved, correct_checkpoint)
 
     def test_resolve_startup_smoke_dir_ignores_future_dated_receipts(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            missing_primary = root / "missing-startup-smoke"
             future = root / "future-startup-smoke"
             fresh = root / "fresh-startup-smoke"
             future.mkdir(parents=True, exist_ok=True)
@@ -140,10 +150,11 @@ class MaterializeReleaseRegistryProjectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            resolved = module.resolve_startup_smoke_dir(
-                module.DEFAULT_STARTUP_SMOKE_DIR,
-                fallback_dirs=(future, fresh),
-            )
+            with mock.patch.object(module, "DEFAULT_STARTUP_SMOKE_DIR", missing_primary):
+                resolved = module.resolve_startup_smoke_dir(
+                    missing_primary,
+                    fallback_dirs=(future, fresh),
+                )
             self.assertEqual(resolved, fresh)
 
     def test_main_skips_proof_argument_by_default(self) -> None:

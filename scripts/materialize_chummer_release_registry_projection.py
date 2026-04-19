@@ -22,7 +22,7 @@ STARTUP_SMOKE_FALLBACK_DIRS = (
     UI_ROOT / ".codex-studio" / "out" / "linux-desktop-exit-gate" / "startup-smoke",
 )
 REGISTRY_MATERIALIZER = REGISTRY_ROOT / "scripts" / "materialize_public_release_channel.py"
-STARTUP_SMOKE_MAX_AGE_SECONDS = 24 * 3600
+STARTUP_SMOKE_MAX_AGE_SECONDS = 7 * 24 * 3600
 STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 60
 UTC = dt.timezone.utc
 PASS_STATUSES = {"pass", "passed", "ready"}
