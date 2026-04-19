@@ -18,6 +18,9 @@ VETERAN_GATE_PATH = Path("/docker/chummercomplete/chummer-design/products/chumme
 FLAGSHIP_PARITY_REGISTRY_PATH = Path("/docker/chummercomplete/chummer-design/products/chummer/FLAGSHIP_PARITY_REGISTRY.yaml")
 SUCCESSOR_REGISTRY_PATH = Path("/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml")
 SUCCESSOR_QUEUE_PATH = Path("/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml")
+DESIGN_SUCCESSOR_QUEUE_PATH = Path(
+    "/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+)
 READINESS_PATH = Path("/docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json")
 DESKTOP_EXECUTABLE_EXIT_GATE_PATH = Path(
     "/docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
@@ -135,8 +138,8 @@ def _expected_task_local_snapshot(task_local_telemetry: dict) -> dict:
     }
 
 
-def _successor_queue_m103_item() -> dict:
-    queue = _yaml(SUCCESSOR_QUEUE_PATH)
+def _successor_queue_m103_item(path: Path) -> dict:
+    queue = _yaml(path)
     items = [dict(item) for item in (queue.get("items") or [])]
     matches = [item for item in items if str(item.get("package_id") or "").strip() == "next90-m103-ea-parity-lab"]
     assert len(matches) == 1
@@ -559,7 +562,8 @@ def test_ea_pack_sync_context_matches_worker_safe_inputs() -> None:
 
 
 def test_ea_closed_package_proof_points_at_fleet_owned_artifacts() -> None:
-    queue_item = _successor_queue_m103_item()
+    queue_item = _successor_queue_m103_item(SUCCESSOR_QUEUE_PATH)
+    design_queue_item = _successor_queue_m103_item(DESIGN_SUCCESSOR_QUEUE_PATH)
     registry_task = _successor_registry_m103_task()
 
     expected_paths = {
@@ -582,6 +586,17 @@ def test_ea_closed_package_proof_points_at_fleet_owned_artifacts() -> None:
     assert expected_paths <= queue_proof
     assert "python3 tests/test_ea_parity_lab_capture_pack.py" in queue_proof
     assert not [item for item in queue_proof if item.startswith(forbidden_prefixes)]
+
+    assert design_queue_item.get("status") == "complete"
+    assert design_queue_item.get("completion_action") == "verify_closed_package_only"
+    assert list(design_queue_item.get("allowed_paths") or []) == ["skills", "tests", "feedback", "docs"]
+    assert list(design_queue_item.get("owned_surfaces") or []) == ["parity_lab:capture", "veteran_compare_packs"]
+    design_queue_proof = {
+        str(item).strip() for item in (design_queue_item.get("proof") or []) if str(item).strip()
+    }
+    assert expected_paths <= design_queue_proof
+    assert "python3 tests/test_ea_parity_lab_capture_pack.py" in design_queue_proof
+    assert not [item for item in design_queue_proof if item.startswith(forbidden_prefixes)]
 
     assert registry_task.get("status") == "complete"
     registry_evidence = {str(item).strip() for item in (registry_task.get("evidence") or []) if str(item).strip()}

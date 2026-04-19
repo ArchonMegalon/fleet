@@ -8,3 +8,4 @@
   - `tests/test_ea_parity_lab_capture_pack.py`
 - Extended `tests/test_ea_parity_lab_capture_pack.py` so future shards fail closed if the completed M103 queue or registry rows drift back to `/docker/EA` proof roots, lose the current Fleet-owned proof anchors, or widen the package scope.
 - No new Chummer5a oracle extraction was required in this pass; the shipped work is closure hardening so materially complete package proof stays honest and repeat-proof.
+- Refreshed the Fleet-owned parity-lab manifests and README to the current worker-safe shard-4 run `20260419T121945Z-shard-4`, current readiness receipt `2026-04-19T11:57:17Z`, and current shard runtime handoff first output `2026-04-19T12:19:54Z` so the oracle pack now resumes from the latest retry context instead of a stale earlier shard snapshot.

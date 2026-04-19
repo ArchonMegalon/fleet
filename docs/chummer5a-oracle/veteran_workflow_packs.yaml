@@ -1,17 +1,17 @@
 contract_name: executive_assistant.veteran_compare_packs
 schema_version: 1
-generated_at: 2026-04-19T11:29:41Z
+generated_at: 2026-04-19T11:57:17Z
 milestone:
   id: 103
   package_id: next90-m103-ea-parity-lab
   owned_surfaces:
     - veteran_compare_packs
 sync_context:
-  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/runs/20260419T112432Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
+  task_local_telemetry_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/runs/20260419T121945Z-shard-4/TASK_LOCAL_TELEMETRY.generated.json
   task_local_telemetry_snapshot:
     mode: implementation_only
     scope_label: Next 90-day product advance wave
-    slice_summary: "20 next-wave milestones remain across 42 queue slices (20 in progress, 0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 -> 105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120."
+    slice_summary: "20 next-wave milestones remain across 43 queue slices (20 in progress, 0 not started). Current dependency critical path: 101 -> 102 -> 103 -> 104 -> 105 -> 106 -> 107 -> 109 -> 114 -> 115 -> 116 -> 117 -> 119 -> 120."
     status_query_supported: false
     polling_disabled: true
     package_id: next90-m103-ea-parity-lab
@@ -26,11 +26,11 @@ sync_context:
       - feedback
       - docs
   readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  readiness_generated_at: 2026-04-19T11:29:41Z
+  readiness_generated_at: 2026-04-19T11:57:17Z
   desktop_executable_exit_gate_path: /docker/chummercomplete/chummer6-ui/.codex-studio/published/DESKTOP_EXECUTABLE_EXIT_GATE.generated.json
   desktop_executable_exit_gate_generated_at: 2026-04-18T18:19:11.035798Z
   runtime_handoff_path: /var/lib/codex-fleet/chummer_design_supervisor/shard-4/ACTIVE_RUN_HANDOFF.generated.md
-  runtime_handoff_first_output_at: 2026-04-19T11:30:58Z
+  runtime_handoff_first_output_at: 2026-04-19T12:19:54Z
 required_landmarks:
   - File menu
   - Tools menu

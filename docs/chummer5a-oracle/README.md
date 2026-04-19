@@ -11,7 +11,7 @@ This folder closes milestone `103` package `next90-m103-ea-parity-lab` for the E
 - `veteran_workflow_packs.yaml`: veteran first-minute tasks and parity-family compare packs aligned to flagship parity families, including tuple-level compare packs for the promoted Avalonia Linux, macOS, and Windows desktop routes, visual-familiarity screenshot receipt inventory, explicit workflow maps for build/explain/publish plus import/export round-trip, and a new `veteran_task_compare_packs` crosswalk that ties each first-minute task directly to baseline screenshots and compare artifacts.
 - `veteran_workflow_packs.yaml` carries both `task_local_frontier_context` and `whole_product_frontier_coverage`: the first preserves the shard-4 successor-wave assignment context from task-local telemetry, while the second records the current published readiness slice that matters to this oracle pack. It is oracle evidence, not a release certificate.
 - Both manifests carry `sync_context` so the package can be audited back to the exact worker-safe telemetry file, embedded task-local telemetry snapshot, Fleet readiness receipt, and UI desktop executable-gate receipt used for this sync.
-- The current sync for this run is pinned to shard-4 run `20260419T112432Z-shard-4`, readiness receipt `2026-04-19T11:29:41Z`, shard runtime handoff first output `2026-04-19T11:30:58Z`, and desktop executable-gate receipt `2026-04-18T18:19:11.035798Z`.
+- The current sync for this run is pinned to shard-4 run `20260419T121945Z-shard-4`, readiness receipt `2026-04-19T11:57:17Z`, shard runtime handoff first output `2026-04-19T12:19:54Z`, and desktop executable-gate receipt `2026-04-18T18:19:11.035798Z`.
 
 ## Current Readiness Note
 
