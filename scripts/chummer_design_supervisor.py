@@ -7751,6 +7751,49 @@ def _tail_text_file(path: Path, *, max_bytes: int = 8192, max_lines: int = 40) -
     return "\n".join(lines).strip()
 
 
+def _tail_transport_reconnect_state(path: Path) -> Dict[str, Any]:
+    if not path.exists() or not path.is_file():
+        return {}
+    lines = [line.strip() for line in _tail_text_file(path, max_bytes=16384, max_lines=80).splitlines() if line.strip()]
+    if not lines:
+        return {}
+    reconnect_attempt = 0
+    reconnect_total = 0
+    reconnect_active = False
+    for line in reversed(lines):
+        compact = " ".join(str(line or "").split())
+        if not compact:
+            continue
+        trace_match = re.match(
+            r"^Trace:\s*provider=liz transport=(reconnecting|recovered)\b(?:.*?\battempt=(\d+)(?:/(\d+))?)?",
+            compact,
+            re.IGNORECASE,
+        )
+        if trace_match is not None:
+            reconnect_active = str(trace_match.group(1) or "").strip().lower() == "reconnecting"
+            reconnect_attempt = _coerce_int(trace_match.group(2), 0)
+            reconnect_total = _coerce_int(trace_match.group(3), 0)
+            break
+        raw_match = re.match(r"^ERROR:\s*Reconnecting\.\.\.\s*(\d+)\s*/\s*(\d+)\b", compact, re.IGNORECASE)
+        if raw_match is not None:
+            reconnect_active = True
+            reconnect_attempt = _coerce_int(raw_match.group(1), 0)
+            reconnect_total = _coerce_int(raw_match.group(2), 0)
+            break
+    if not reconnect_active:
+        return {}
+    try:
+        updated_at = dt.datetime.fromtimestamp(path.stat().st_mtime, tz=dt.timezone.utc)
+    except OSError:
+        updated_at = None
+    return {
+        "state": "reconnecting",
+        "retry_count": reconnect_attempt,
+        "retry_total": reconnect_total,
+        "updated_at": _iso(updated_at) if updated_at is not None else "",
+    }
+
+
 def _write_runtime_handoff(state_root: Path) -> None:
     try:
         resolved_state_root = Path(state_root).resolve()
@@ -7941,6 +7984,12 @@ def _run_worker_attempt(
         "tripped": False,
         "termination_reason": "",
     }
+    transport_reconnect_state = {
+        "active": False,
+        "started_monotonic": 0.0,
+        "last_attempt": "",
+        "last_total": "",
+    }
     handoff_heartbeat_seconds = _runtime_handoff_heartbeat_seconds()
 
     def _worker_stderr_chunk_is_waiting_trace(chunk: str) -> bool:
@@ -7948,6 +7997,15 @@ def _run_worker_attempt(
         if not compact:
             return False
         return bool(re.match(r"^Trace:\s*lane=.*waiting for model output(?:\s*\([^)]*\))?$", compact, re.IGNORECASE))
+
+    def _worker_stderr_chunk_transport_reconnect_attempt(chunk: str) -> Optional[Tuple[str, str]]:
+        compact = str(chunk or "").strip()
+        if not compact:
+            return None
+        match = re.match(r"^ERROR:\s*Reconnecting\.\.\.\s*([0-9]+)(?:/([0-9]+))?\s*$", compact, re.IGNORECASE)
+        if not match:
+            return None
+        return str(match.group(1) or "").strip(), str(match.group(2) or "").strip()
 
     def _worker_stderr_chunk_is_nonprogress_noise(chunk: str) -> bool:
         compact = str(chunk or "").strip()
@@ -7963,6 +8021,8 @@ def _run_worker_attempt(
         if lowered.startswith("[fleet-supervisor] "):
             return True
         if lowered.startswith("trace: lane="):
+            return True
+        if lowered.startswith("trace: provider=liz transport="):
             return True
         if lowered.startswith("openai codex v"):
             return True
@@ -8045,7 +8105,65 @@ def _run_worker_attempt(
             return False
         if stream_name == "stdout":
             return True
+        if _worker_stderr_chunk_transport_reconnect_attempt(compact) is not None:
+            return False
         return not _worker_stderr_chunk_is_nonprogress_noise(compact)
+
+    def _append_synthetic_stderr_line(line: str) -> None:
+        rendered = line if str(line).endswith("\n") else f"{line}\n"
+        with output_lock:
+            stderr_chunks.append(rendered)
+            if stderr_sink is not None:
+                try:
+                    stderr_sink.write(rendered)
+                    stderr_sink.flush()
+                except ValueError:
+                    pass
+
+    def _transport_reconnect_attempt_suffix() -> str:
+        attempt = str(transport_reconnect_state.get("last_attempt") or "").strip()
+        total = str(transport_reconnect_state.get("last_total") or "").strip()
+        if attempt and total:
+            return f" attempt={attempt}/{total}"
+        if attempt:
+            return f" attempt={attempt}"
+        return ""
+
+    def _mark_transport_reconnecting(*, emit_trace: bool) -> None:
+        now_monotonic = time.monotonic()
+        now_iso = _iso_now()
+        if not bool(transport_reconnect_state["active"]):
+            transport_reconnect_state["started_monotonic"] = now_monotonic
+        transport_reconnect_state["active"] = True
+        _update_active_run_fields(
+            state_root,
+            run_id,
+            worker_last_output_at=now_iso,
+            progress_state="transport_reconnecting",
+        )
+        if emit_trace:
+            started_monotonic = float(transport_reconnect_state.get("started_monotonic") or now_monotonic)
+            elapsed_seconds = max(0, int(now_monotonic - started_monotonic))
+            _append_synthetic_stderr_line(
+                "Trace: provider=liz transport=reconnecting"
+                f"{_transport_reconnect_attempt_suffix()} elapsed={elapsed_seconds}s"
+            )
+
+    def _clear_transport_reconnecting(*, emit_recovery_trace: bool) -> None:
+        if not bool(transport_reconnect_state["active"]):
+            return
+        now_monotonic = time.monotonic()
+        if emit_recovery_trace:
+            started_monotonic = float(transport_reconnect_state.get("started_monotonic") or now_monotonic)
+            elapsed_seconds = max(0, int(now_monotonic - started_monotonic))
+            _append_synthetic_stderr_line(
+                "Trace: provider=liz transport=recovered"
+                f"{_transport_reconnect_attempt_suffix()} elapsed={elapsed_seconds}s"
+            )
+        transport_reconnect_state["active"] = False
+        transport_reconnect_state["started_monotonic"] = 0.0
+        transport_reconnect_state["last_attempt"] = ""
+        transport_reconnect_state["last_total"] = ""
 
     def _stop_handoff_heartbeat(thread: Optional[threading.Thread]) -> None:
         handoff_heartbeat_stop.set()
@@ -8105,6 +8223,20 @@ def _run_worker_attempt(
                             sink.flush()
                         except ValueError:
                             sink = None
+                reconnect_attempt = None
+                if stream_name == "stderr":
+                    reconnect_attempt = _worker_stderr_chunk_transport_reconnect_attempt(chunk)
+                    if reconnect_attempt is not None:
+                        attempt, total = reconnect_attempt
+                        if attempt:
+                            transport_reconnect_state["last_attempt"] = attempt
+                        if total:
+                            transport_reconnect_state["last_total"] = total
+                        _mark_transport_reconnecting(emit_trace=True)
+                    elif str(chunk or "").strip() and bool(transport_reconnect_state["active"]):
+                        _clear_transport_reconnecting(emit_recovery_trace=True)
+                elif str(chunk or "").strip() and bool(transport_reconnect_state["active"]):
+                    _clear_transport_reconnecting(emit_recovery_trace=True)
                 if stream_name == "stderr":
                     blocked_status_detected = self_poll_status_marker in chunk
                     raw_status_command_detected = any(marker in chunk for marker in self_poll_command_markers)
@@ -8185,6 +8317,8 @@ def _run_worker_attempt(
             return
         while not handoff_heartbeat_stop.wait(handoff_heartbeat_seconds):
             _write_runtime_handoff(state_root)
+            if bool(transport_reconnect_state["active"]):
+                _mark_transport_reconnecting(emit_trace=True)
 
     try:
         process = subprocess.Popen(command, **kwargs)
@@ -8334,6 +8468,8 @@ def _run_worker_attempt(
     stdout_thread.join(timeout=5)
     stderr_thread.join(timeout=5)
     _stop_handoff_heartbeat(handoff_heartbeat_thread)
+    if bool(transport_reconnect_state["active"]) and int(process.returncode or 0) == 0:
+        _clear_transport_reconnecting(emit_recovery_trace=True)
     if model_wait_state["tripped"]:
         stdout_text = "".join(stdout_chunks)
         stderr_text = "".join(stderr_chunks)
@@ -12542,6 +12678,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
         )
         worker_transport_state = str(worker_transport.get("state") or "").strip()
         worker_transport_current_outage = bool(worker_transport.get("current_outage"))
+        worker_transport_retry_count = _coerce_int(worker_transport.get("retry_count"), 0)
         active_run_worker_first_output_at = str(
             shard_state.get("active_run_worker_first_output_at") or active_run.get("worker_first_output_at") or ""
         ).strip()
@@ -12551,30 +12688,44 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
         persisted_progress_state = str(
             shard_state.get("active_run_progress_state") or active_run.get("progress_state") or ""
         ).strip()
+        stderr_transport_reconnect = (
+            _tail_transport_reconnect_state(Path(resolved_paths.get("stderr") or ""))
+            if not worker_transport_current_outage
+            else {}
+        )
+        reconnect_active = bool(stderr_transport_reconnect)
+        if reconnect_active and not worker_transport_state:
+            worker_transport_state = "reconnecting"
+        if reconnect_active and worker_transport_retry_count <= 0:
+            worker_transport_retry_count = _coerce_int(stderr_transport_reconnect.get("retry_count"), 0)
         computed_progress_state = (
             "transport_outage_waiting"
             if worker_transport_current_outage and worker_pid > 0
             else (
-                "closing"
-                if (
-                    worker_pid > 0
-                    and process_probe_scope == "local"
-                    and process_alive is False
-                    and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
-                )
+                "transport_reconnecting"
+                if reconnect_active and worker_pid > 0
                 else (
-                    "streaming"
-                    if str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+                    "closing"
+                    if (
+                        worker_pid > 0
+                        and process_probe_scope == "local"
+                        and process_alive is False
+                        and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+                    )
                     else (
-                        "running_silent"
-                        if process_alive is True
+                        "streaming"
+                        if str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
                         else (
-                            "container_scoped"
-                            if worker_pid > 0 and process_probe_scope == "container_local"
+                            "running_silent"
+                            if process_alive is True
                             else (
-                                "missing_process"
-                                if worker_pid > 0 and process_alive is False
-                                else (f"idle_{idle_reason}" if idle_reason else "unknown")
+                                "container_scoped"
+                                if worker_pid > 0 and process_probe_scope == "container_local"
+                                else (
+                                    "missing_process"
+                                    if worker_pid > 0 and process_alive is False
+                                    else (f"idle_{idle_reason}" if idle_reason else "unknown")
+                                )
                             )
                         )
                     )
@@ -12632,14 +12783,18 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                 "active_run_output_sizes": active_run_output_sizes,
                 "worker_transport_state": worker_transport_state,
                 "worker_transport_current_outage": worker_transport_current_outage,
-                "worker_transport_updated_at": str(worker_transport.get("updated_at") or "").strip(),
+                "worker_transport_updated_at": str(
+                    worker_transport.get("updated_at") or stderr_transport_reconnect.get("updated_at") or ""
+                ).strip(),
                 "worker_transport_outage_started_at": str(worker_transport.get("outage_started_at") or "").strip(),
                 "worker_transport_outage_seconds": _coerce_int(worker_transport.get("outage_seconds"), 0),
                 "worker_transport_last_http_status": _coerce_int(worker_transport.get("last_http_status"), 0),
                 "worker_transport_last_cf_ray": str(worker_transport.get("last_cf_ray") or "").strip(),
-                "worker_transport_last_reason": str(worker_transport.get("last_reason") or "").strip(),
+                "worker_transport_last_reason": str(
+                    worker_transport.get("last_reason") or ("reconnecting" if reconnect_active else "")
+                ).strip(),
                 "worker_transport_last_error": str(worker_transport.get("last_error") or "").strip(),
-                "worker_transport_retry_count": _coerce_int(worker_transport.get("retry_count"), 0),
+                "worker_transport_retry_count": worker_transport_retry_count,
                 "worker_transport_next_retry_at": str(worker_transport.get("next_retry_at") or "").strip(),
                 "worker_transport_state_path": str(worker_transport.get("state_path") or "").strip(),
             }

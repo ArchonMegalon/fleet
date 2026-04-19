@@ -262,6 +262,46 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertIn("9eea4e0d8a1d9730-FRA", html)
         self.assertIn("file:///tmp/queue-recovery-demo.generated.json", html)
 
+    def test_operator_surface_flags_transport_reconnecting_without_outage(self) -> None:
+        self.admin.utc_now = lambda: self.admin.parse_iso("2026-04-19T10:05:00Z")
+        status = {
+            "generated_at": "2026-04-19T10:05:00Z",
+            "config": {"projects": [], "groups": []},
+            "projects": [],
+            "groups": [],
+            "account_pools": [],
+            "cockpit": {"worker_breakdown": {"active_workers": 1}, "queue_forecast": {}, "capacity_forecast": {}, "blocker_forecast": {}},
+            "runtime_healing": {"summary": {"alert_state": "nominal"}},
+        }
+
+        payload = self.admin.operator_surface_payload(
+            status,
+            active_shards_payload={
+                "configured_shard_count": 13,
+                "active_run_count": 1,
+                "active_shards": [
+                    {
+                        "name": "shard-13",
+                        "active_run_id": "run-13",
+                        "active_run_process_alive": True,
+                        "active_run_progress_state": "transport_reconnecting",
+                        "worker_transport_state": "reconnecting",
+                        "worker_transport_current_outage": False,
+                        "worker_transport_retry_count": 2,
+                        "worker_transport_updated_at": "2026-04-19T10:04:55Z",
+                        "worker_transport_last_reason": "reconnecting",
+                    }
+                ],
+            },
+            artifact_freshness={},
+            completion_frontier={},
+        )
+
+        self.assertEqual(payload["worker_transport_health"]["state"], "attention")
+        self.assertEqual(payload["worker_transport_health"]["reconnecting_shard_count"], 1)
+        self.assertEqual(payload["worker_transport_health"]["retrying_shard_count"], 1)
+        self.assertIn("reconnecting to local external-worker transport", payload["next_page"])
+
 
 if __name__ == "__main__":
     unittest.main()

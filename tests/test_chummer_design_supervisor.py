@@ -6774,6 +6774,174 @@ def test_run_worker_attempt_marks_waiting_for_model_output_without_streaming(mon
         assert payload.get("worker_last_output_at") in (None, "")
 
 
+def test_run_worker_attempt_surfaces_transport_reconnect_and_recovery_traces(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43223
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(
+                [
+                    "ERROR: Reconnecting... 1/5\n",
+                    "Trace: lane=core waiting for model output (0s)\n",
+                ]
+            )
+
+        def wait(self, timeout=None) -> int:
+            return int(self.returncode or 0)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.0)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-reconnect-recovery",
+                    "started_at": "2026-04-19T13:31:03Z",
+                }
+            },
+        )
+        stderr_sink = io.StringIO()
+        completed = module._run_worker_attempt(
+            ["codexliz", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.0,
+            last_message_path=root / "last_message.txt",
+            state_root=state_root,
+            run_id="run-reconnect-recovery",
+            stdout_sink=io.StringIO(),
+            stderr_sink=stderr_sink,
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 0
+        assert "Trace: provider=liz transport=reconnecting attempt=1/5" in completed.stderr
+        assert "Trace: provider=liz transport=recovered attempt=1/5" in completed.stderr
+        assert "Trace: provider=liz transport=reconnecting attempt=1/5" in stderr_sink.getvalue()
+        assert "Trace: provider=liz transport=recovered attempt=1/5" in stderr_sink.getvalue()
+        assert payload["active_run_progress_state"] in {"waiting_for_model_output", "stream_connected_waiting"}
+
+
+def test_run_worker_attempt_keeps_transport_reconnect_trace_alive_during_silence(monkeypatch) -> None:
+    module = _load_module()
+
+    class _FakeInput:
+        def __init__(self) -> None:
+            self.closed = False
+            self.buffer = ""
+
+        def write(self, value: str) -> None:
+            self.buffer += value
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _ReplayStream:
+        def __init__(self, lines: list[str]) -> None:
+            self._lines = list(lines)
+            self._closed = False
+
+        def readline(self) -> str:
+            if self._lines:
+                return self._lines.pop(0)
+            return ""
+
+        def close(self) -> None:
+            self._closed = True
+
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.pid = 43224
+            self.returncode = 0
+            self.stdin = _FakeInput()
+            self.stdout = _ReplayStream([])
+            self.stderr = _ReplayStream(["ERROR: Reconnecting... 3/5\n"])
+
+        def wait(self, timeout=None) -> int:
+            import time as _time
+
+            _time.sleep(0.06)
+            if self.returncode not in (None, 0):
+                return int(self.returncode or 0)
+            raise subprocess.TimeoutExpired(["codexliz", "core", "exec"], timeout=timeout or 0.05)
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _FakeProcess())
+    monkeypatch.setattr(module, "_runtime_handoff_heartbeat_seconds", lambda: 0.01)
+    monkeypatch.setattr(module, "_worker_model_output_stall_seconds", lambda workspace_root, timeout_seconds: 999.0)
+    monkeypatch.setattr(module.os, "killpg", lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError()))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_root = root / "state"
+        module._write_json(
+            state_root / "state.json",
+            {
+                "active_run": {
+                    "run_id": "run-reconnect-heartbeat",
+                    "started_at": "2026-04-19T13:31:03Z",
+                }
+            },
+        )
+        completed = module._run_worker_attempt(
+            ["codexliz", "core", "exec"],
+            prompt="Run the flagship full-product delivery pass for Chummer.\n",
+            workspace_root=root,
+            worker_env={},
+            timeout_seconds=0.05,
+            last_message_path=root / "last_message.txt",
+            state_root=state_root,
+            run_id="run-reconnect-heartbeat",
+            stdout_sink=io.StringIO(),
+            stderr_sink=io.StringIO(),
+        )
+
+        payload = module._read_state(state_root / "state.json")
+
+        assert completed.returncode == 124
+        assert completed.stderr.count("Trace: provider=liz transport=reconnecting attempt=3/5") >= 2
+        assert payload["active_run_progress_state"] == "transport_reconnecting"
+
+
 def test_run_worker_attempt_ignores_supervisor_status_probe_output_as_progress(monkeypatch) -> None:
     module = _load_module()
 
@@ -17075,6 +17243,56 @@ def test_statefile_shard_summaries_surfaces_codexliz_transport_outage_waiting(
         assert shard["worker_transport_last_http_status"] == 502
         assert shard["worker_transport_retry_count"] == 11
         assert shard["worker_transport_last_cf_ray"] == "9eea4e0d8a1d9730-FRA"
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
+def test_statefile_shard_summaries_surfaces_codexliz_transport_reconnecting(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-13"
+        run_dir = shard_root / "runs" / "20260419T095700Z-shard-13"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stderr_path.write_text(
+            "ERROR: Reconnecting... 2/5\n"
+            "Trace: provider=liz transport=reconnecting attempt=2/5 elapsed=31s\n",
+            encoding="utf-8",
+        )
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-19T09:58:00Z",
+                "mode": "completion_review",
+                "frontier_ids": [1184],
+                "open_milestone_ids": [1184],
+                "active_run_id": "20260419T095700Z-shard-13",
+                "active_run_started_at": "2026-04-19T09:57:00Z",
+                "active_run_worker_pid": 43210,
+                "active_run_progress_state": "transport_reconnecting",
+                "worker_stderr_path": "/var/lib/codex-fleet/chummer_design_supervisor/shard-13/runs/20260419T095700Z-shard-13/worker.stderr.log",
+                "selected_account_alias": "direct-default",
+                "selected_model": "qwen3-coder-next:q8_0",
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: False)
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert len(summaries) == 1
+        shard = summaries[0]
+        assert shard["active_run_progress_state"] == "transport_reconnecting"
+        assert shard["worker_transport_state"] == "reconnecting"
+        assert shard["worker_transport_current_outage"] is False
+        assert shard["worker_transport_retry_count"] == 2
+        assert shard["worker_transport_last_reason"] == "reconnecting"
     finally:
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 

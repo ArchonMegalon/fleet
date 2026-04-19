@@ -9829,8 +9829,11 @@ def operator_surface_payload(
     worker_transport_state_counts: Dict[str, int] = {}
     worker_transport_outage_count = 0
     worker_transport_retrying_count = 0
+    worker_transport_reconnecting_count = 0
     for item in shard_rows:
         transport_state = str(item.get("worker_transport_state") or "").strip().lower()
+        if not transport_state and str(item.get("active_run_progress_state") or "").strip().lower() == "transport_reconnecting":
+            transport_state = "reconnecting"
         current_outage = bool(item.get("worker_transport_current_outage"))
         retry_count = int(item.get("worker_transport_retry_count") or 0)
         if current_outage:
@@ -9846,7 +9849,9 @@ def operator_surface_payload(
         worker_transport_state_counts[operator_state] = worker_transport_state_counts.get(operator_state, 0) + 1
         if current_outage:
             worker_transport_outage_count += 1
-        if retry_count > 0:
+        if transport_state == "reconnecting":
+            worker_transport_reconnecting_count += 1
+        if retry_count > 0 or transport_state == "reconnecting":
             worker_transport_retrying_count += 1
         if current_outage or transport_state or retry_count > 0:
             worker_transport_rows.append(
@@ -9886,6 +9891,7 @@ def operator_surface_payload(
         "counts": worker_transport_state_counts,
         "shard_count": len(worker_transport_rows),
         "outage_shard_count": worker_transport_outage_count,
+        "reconnecting_shard_count": worker_transport_reconnecting_count,
         "retrying_shard_count": worker_transport_retrying_count,
         "rows": worker_transport_rows,
         "attention_rows": [row for row in worker_transport_rows if str(row.get("operator_state") or "") != "nominal"][:8],
@@ -9970,6 +9976,10 @@ def operator_surface_payload(
         alerts.append(f"{proof_freshness['stale_or_missing_count']} proof artifact(s) are stale or missing")
     if worker_transport_health["outage_shard_count"]:
         alerts.append(f"{worker_transport_health['outage_shard_count']} shard(s) are waiting on local external-worker transport")
+    if worker_transport_health["reconnecting_shard_count"]:
+        alerts.append(
+            f"{worker_transport_health['reconnecting_shard_count']} shard(s) are reconnecting to local external-worker transport"
+        )
     if account_health["state"] == "blocked":
         alerts.append("one or more account pools are red")
     if not alerts and blocked_milestones:
