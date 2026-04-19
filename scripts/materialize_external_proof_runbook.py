@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -72,6 +73,7 @@ ALLOWED_REQUIRED_HOSTS = frozenset({"windows", "macos", "linux"})
 ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smoke_receipt"})
 STARTUP_SMOKE_MAX_AGE_SECONDS = 7 * 24 * 3600
 STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 300
+COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
 
 def _post_capture_republish_commands(
     *,
@@ -131,13 +133,14 @@ def _post_capture_republish_commands(
 
 
 def _finalize_after_host_proof_commands(*, hosts: list[str], commands_dir: Path) -> list[str]:
+    retained_hosts = hosts or sorted(ALLOWED_REQUIRED_HOSTS)
     commands = [
         f"cd {shlex.quote(str(commands_dir))}",
     ]
-    for host in hosts:
+    for host in retained_hosts:
         host_token = _normalize_host_token(host)
-        commands.append(f"./ingest-{host_token}-proof-bundle.sh")
         commands.append(f"./validate-{host_token}-proof.sh")
+        commands.append(f"./ingest-{host_token}-proof-bundle.sh")
     commands.append("./republish-after-host-proof.sh")
     return commands
 
@@ -448,6 +451,38 @@ def _existing_bundle_state(
         "archive_reusable": archive_reusable,
         "directory_reusable": directory_reusable,
         "host": host,
+    }
+
+
+def _command_bundle_fingerprint(commands_dir: Path) -> dict[str, Any]:
+    files: list[dict[str, Any]] = []
+    aggregate = hashlib.sha256()
+    if not commands_dir.exists():
+        return {"sha256": "", "file_count": 0, "files": files}
+    for candidate in sorted(
+        path for path in commands_dir.rglob("*") if path.is_file() and path.suffix.lower() in COMMAND_BUNDLE_SUFFIXES
+    ):
+        relative_path = candidate.relative_to(commands_dir).as_posix()
+        payload = candidate.read_bytes()
+        file_sha256 = hashlib.sha256(payload).hexdigest()
+        executable = os.access(candidate, os.X_OK)
+        aggregate.update(relative_path.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(file_sha256.encode("ascii"))
+        aggregate.update(b"\0")
+        aggregate.update(b"1" if executable else b"0")
+        aggregate.update(b"\n")
+        files.append(
+            {
+                "path": relative_path,
+                "sha256": file_sha256,
+                "executable": executable,
+            }
+        )
+    return {
+        "sha256": aggregate.hexdigest() if files else "",
+        "file_count": len(files),
+        "files": files,
     }
 
 
@@ -1922,11 +1957,14 @@ def _materialize_command_files(
         ),
         executable=True,
     )
+    command_bundle_fingerprint = _command_bundle_fingerprint(commands_dir)
     return {
         "commands_dir": str(commands_dir),
         "hosts": host_files,
         "post_capture_script": str(post_capture_script),
         "finalize_script": str(finalize_script),
+        "command_bundle_sha256": str(command_bundle_fingerprint.get("sha256") or ""),
+        "command_bundle_file_count": int(command_bundle_fingerprint.get("file_count") or 0),
     }
 
 
@@ -1973,6 +2011,12 @@ def materialize_markdown(
         lines.append("## Generated Command Files")
         lines.append("")
         lines.append(f"- commands_dir: `{_normalize_text(command_files.get('commands_dir'))}`")
+        command_bundle_sha256 = _normalize_text(command_files.get("command_bundle_sha256"))
+        if command_bundle_sha256:
+            lines.append(f"- command_bundle_sha256: `{command_bundle_sha256}`")
+        command_bundle_file_count = int(command_files.get("command_bundle_file_count") or 0)
+        if command_bundle_file_count > 0:
+            lines.append(f"- command_bundle_file_count: {command_bundle_file_count}")
         for host_row in command_files.get("hosts") or []:
             if not isinstance(host_row, dict):
                 continue

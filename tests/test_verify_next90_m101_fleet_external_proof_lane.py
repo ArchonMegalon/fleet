@@ -1,0 +1,489 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import stat
+import subprocess
+import sys
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import yaml
+
+
+SCRIPT = Path("/docker/fleet/scripts/verify_next90_m101_fleet_external_proof_lane.py")
+RUNBOOK_MATERIALIZER = Path("/docker/fleet/scripts/materialize_external_proof_runbook.py")
+
+
+def _load_module():
+    previous_sys_path = list(sys.path)
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        spec = importlib.util.spec_from_file_location("verify_next90_m101_fleet_external_proof_lane", SCRIPT)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = previous_sys_path
+
+
+def _env_without_pythonpath() -> dict[str, str]:
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    return env
+
+
+def _iso_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_yaml(path: Path, payload: dict) -> None:
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _write_executable(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def _touch_lane_bundle(commands_dir: Path) -> None:
+    for host in ("linux", "macos", "windows"):
+        for name in (
+            f"preflight-{host}-proof.sh",
+            f"capture-{host}-proof.sh",
+            f"validate-{host}-proof.sh",
+            f"bundle-{host}-proof.sh",
+            f"ingest-{host}-proof-bundle.sh",
+        ):
+            _write_executable(
+                commands_dir / name,
+                "#!/usr/bin/env bash\nset -euo pipefail\necho ok >/dev/null\n",
+            )
+        _write_executable(
+            commands_dir / f"run-{host}-proof-lane.sh",
+            "\n".join(
+                [
+                    "#!/usr/bin/env bash",
+                    "set -euo pipefail",
+                    f"./preflight-{host}-proof.sh",
+                    f"./capture-{host}-proof.sh",
+                    f"./validate-{host}-proof.sh",
+                    f"./bundle-{host}-proof.sh",
+                    "",
+                ]
+            ),
+        )
+    for name in (
+        "preflight-windows-proof.ps1",
+        "capture-windows-proof.ps1",
+        "validate-windows-proof.ps1",
+        "bundle-windows-proof.ps1",
+        "ingest-windows-proof-bundle.ps1",
+        "run-windows-proof-lane.ps1",
+    ):
+        _write_executable(
+            commands_dir / name,
+            "$ErrorActionPreference = 'Stop'\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n",
+        )
+    _write_executable(
+        commands_dir / "finalize-external-host-proof.sh",
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                "./validate-linux-proof.sh",
+                "./ingest-linux-proof-bundle.sh",
+                "./validate-macos-proof.sh",
+                "./ingest-macos-proof-bundle.sh",
+                "./validate-windows-proof.sh",
+                "./ingest-windows-proof-bundle.sh",
+                "./republish-after-host-proof.sh",
+                "",
+            ]
+        ),
+    )
+    (commands_dir / "host-proof-bundles").mkdir(parents=True, exist_ok=True)
+
+
+def _package_row(module) -> dict:
+    return {
+        "title": module.QUEUE_TITLE,
+        "task": module.QUEUE_TASK,
+        "package_id": module.PACKAGE_ID,
+        "frontier_id": module.FRONTIER_ID,
+        "milestone_id": module.MILESTONE_ID,
+        "wave": module.WAVE,
+        "repo": "fleet",
+        "status": "complete",
+        "completion_action": module.COMPLETION_ACTION,
+        "do_not_reopen_reason": module.DO_NOT_REOPEN_REASON,
+        "proof": list(module.REQUIRED_QUEUE_PROOF_MARKERS),
+        "allowed_paths": list(module.ALLOWED_PATHS),
+        "owned_surfaces": list(module.OWNED_SURFACES),
+    }
+
+
+def _registry_payload(module) -> dict:
+    return {
+        "program_wave": "next_90_day_product_advance",
+        "milestones": [
+            {
+                "id": module.MILESTONE_ID,
+                "title": module.MILESTONE_TITLE,
+                "wave": module.WAVE,
+                "owners": ["chummer6-ui", "chummer6-hub-registry", "fleet", "chummer6-design"],
+                "status": "in_progress",
+                "work_tasks": [
+                    {
+                        "id": module.WORK_TASK_ID,
+                        "owner": "fleet",
+                        "title": module.WORK_TASK_TITLE,
+                        "status": "complete",
+                        "evidence": list(module.REQUIRED_REGISTRY_EVIDENCE_MARKERS),
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def _queue_payload(module, *, registry_path: Path, design_queue_path: Path) -> dict:
+    return {
+        "mode": "append",
+        "program_wave": "next_90_day_product_advance",
+        "status": "live_parallel_successor",
+        "source_registry_path": str(registry_path),
+        "source_design_queue_path": str(design_queue_path),
+        "items": [_package_row(module)],
+    }
+
+
+def _design_queue_payload(module, *, registry_path: Path) -> dict:
+    return {
+        "mode": "append",
+        "program_wave": "next_90_day_product_advance",
+        "status": "live_parallel_successor",
+        "source_registry_path": str(registry_path),
+        "items": [_package_row(module)],
+    }
+
+
+def _readiness_payload(
+    module,
+    *,
+    runbook_path: Path,
+    support_generated_at: str,
+    release_generated_at: str,
+    runbook_generated_at: str,
+) -> dict:
+    return {
+        "generated_at": runbook_generated_at,
+        "status": "pass",
+        "ready_keys": ["desktop_client", "fleet_and_operator_loop"],
+        "external_host_proof": {
+            "status": "pass",
+            "reason": module.EXPECTED_EXTERNAL_HOST_REASON,
+            "runbook_path": str(runbook_path),
+            "runbook_generated_at": runbook_generated_at,
+            "runbook_plan_generated_at": support_generated_at,
+            "runbook_release_channel_generated_at": release_generated_at,
+            "runbook_synced": True,
+            "runbook_sync_reasons": [],
+            "unresolved_request_count": 0,
+            "unresolved_hosts": [],
+            "unresolved_tuples": [],
+        },
+        "coverage_details": {
+            "fleet_and_operator_loop": {
+                "status": "ready",
+                "evidence": {
+                    "external_proof_backlog_request_count": 0,
+                    "external_proof_backlog_request_observation_count": 0,
+                    "external_proof_backlog_duplicate_observation_count": 0,
+                    "external_proof_runbook_path": str(runbook_path),
+                    "external_proof_runbook_generated_at": runbook_generated_at,
+                    "external_proof_runbook_plan_generated_at": support_generated_at,
+                    "external_proof_runbook_release_channel_generated_at": release_generated_at,
+                    "external_proof_runbook_sync_issue_count": 0,
+                    "external_proof_runbook_synced": True,
+                    "journey_effective_blocked_external_only_count": 0,
+                    "journey_overall_state": "ready",
+                },
+            }
+        },
+    }
+
+
+def _closed_fixture(tmp_path: Path):
+    module = _load_module()
+    now = datetime.now(timezone.utc)
+    release_generated_at = _iso_z(now - timedelta(minutes=2))
+    support_generated_at = _iso_z(now - timedelta(minutes=1))
+    release_channel = tmp_path / "RELEASE_CHANNEL.generated.json"
+    support_packets = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
+    journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+    runbook = tmp_path / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+    commands_dir = tmp_path / "external-proof-commands"
+    readiness = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+    design_queue = tmp_path / "DESIGN_NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+    closeout = tmp_path / "2026-04-19-next90-m101-fleet-external-proof-lane-closeout.md"
+
+    _write_json(
+        release_channel,
+        {
+            "generatedAt": release_generated_at,
+            "desktopTupleCoverage": {
+                "missingRequiredPlatforms": [],
+                "missingRequiredPlatformHeadPairs": [],
+                "missingRequiredPlatformHeadRidTuples": [],
+                "externalProofRequests": [],
+            },
+        },
+    )
+    _write_json(
+        support_packets,
+        {
+            "generated_at": support_generated_at,
+            "summary": {
+                "unresolved_external_proof_request_count": 0,
+                "unresolved_external_proof_request_hosts": [],
+                "unresolved_external_proof_request_tuples": [],
+                "unresolved_external_proof_request_specs": {},
+                "unresolved_external_proof_request_host_counts": {},
+                "unresolved_external_proof_request_tuple_counts": {},
+            },
+            "unresolved_external_proof": {
+                "count": 0,
+                "host_counts": {},
+                "hosts": [],
+                "specs": {},
+                "tuple_counts": {},
+                "tuples": [],
+            },
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": support_generated_at,
+                "request_count": 0,
+                "hosts": [],
+                "host_groups": {},
+                "capture_deadline_hours": 24,
+                "capture_deadline_utc": _iso_z(_load_module()._parse_iso_utc(release_generated_at) + timedelta(hours=24)),
+                "release_channel_generated_at": release_generated_at,
+            },
+        },
+    )
+    _write_json(
+        journey_gates,
+        {
+            "summary": {
+                "overall_state": "ready",
+                "blocked_external_only_count": 0,
+                "blocked_external_only_hosts": [],
+                "blocked_external_only_host_counts": {},
+                "blocked_external_only_tuples": [],
+            },
+            "journeys": [
+                {
+                    "id": journey_id,
+                    "state": "ready",
+                    "blockers": [],
+                    "blocking_reasons": [],
+                    "external_blocking_reasons": [],
+                    "blocked_by_external_constraints_only": False,
+                    "external_proof_requests": [],
+                    "evidence": {
+                        "support_packets_generated_at": support_generated_at,
+                        "external_proof_requests": [],
+                    },
+                }
+                for journey_id in module.RELEVANT_JOURNEY_IDS
+            ],
+        },
+    )
+    materialize = subprocess.run(
+        [
+            sys.executable,
+            str(RUNBOOK_MATERIALIZER),
+            "--support-packets",
+            str(support_packets),
+            "--journey-gates",
+            str(journey_gates),
+            "--release-channel",
+            str(release_channel),
+            "--out",
+            str(runbook),
+            "--commands-dir",
+            str(commands_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert materialize.returncode == 0, materialize.stderr
+    _touch_lane_bundle(commands_dir)
+    runbook_generated_at = _load_module()._extract_runbook_field(runbook.read_text(encoding="utf-8"), "generated_at")
+    _write_json(
+        readiness,
+        _readiness_payload(
+            module,
+            runbook_path=runbook,
+            support_generated_at=support_generated_at,
+            release_generated_at=release_generated_at,
+            runbook_generated_at=runbook_generated_at,
+        ),
+    )
+    _write_yaml(registry, _registry_payload(module))
+    _write_yaml(design_queue, _design_queue_payload(module, registry_path=registry))
+    _write_yaml(queue, _queue_payload(module, registry_path=registry, design_queue_path=design_queue))
+    closeout.write_text("# closeout\n", encoding="utf-8")
+
+    return {
+        "module": module,
+        "support_packets": support_packets,
+        "journey_gates": journey_gates,
+        "release_channel": release_channel,
+        "runbook": runbook,
+        "commands_dir": commands_dir,
+        "readiness": readiness,
+        "registry": registry,
+        "queue": queue,
+        "design_queue": design_queue,
+        "closeout": closeout,
+    }
+
+
+class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
+    def test_verify_script_runs_without_pythonpath(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=_env_without_pythonpath(),
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("No module named", result.stdout + result.stderr)
+
+    def test_verifier_passes_with_closed_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("verified next90-m101-fleet-external-proof-lane", result.stdout)
+
+    def test_verifier_fails_when_zero_backlog_bundle_drops_host_lane_scripts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            (fixture["commands_dir"] / "run-macos-proof-lane.sh").unlink()
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("external proof command artifact is missing", result.stderr)
+            self.assertIn("run-macos-proof-lane.sh", result.stderr)
+
+    def test_verifier_fails_when_design_queue_assignment_drifts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            design_queue = yaml.safe_load(fixture["design_queue"].read_text(encoding="utf-8"))
+            design_queue["items"][0]["task"] = "drifted task"
+            _write_yaml(fixture["design_queue"], design_queue)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("design-owned queue source row does not match Fleet queue field: task", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

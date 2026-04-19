@@ -9,6 +9,7 @@ from pathlib import Path
 SCRIPTS = (
     Path("/docker/fleet/scripts/verify_external_proof_closure.py"),
     Path("/docker/fleet/scripts/materialize_external_proof_runbook.py"),
+    Path("/docker/fleet/scripts/verify_next90_m101_fleet_external_proof_lane.py"),
     Path("/docker/fleet/scripts/materialize_journey_gates.py"),
     Path("/docker/fleet/scripts/materialize_status_plane.py"),
     Path("/docker/fleet/scripts/verify_status_plane_semantics.py"),

@@ -521,8 +521,8 @@ def test_materialize_external_proof_runbook_recovers_requests_from_journey_gates
     assert "./validate-macos-proof.sh" in finalize_payload
     assert "./ingest-macos-proof-bundle.sh" in finalize_payload
     assert "./republish-after-host-proof.sh" in finalize_payload
-    assert finalize_payload.index("./ingest-macos-proof-bundle.sh") < finalize_payload.index(
-        "./validate-macos-proof.sh"
+    assert finalize_payload.index("./validate-macos-proof.sh") < finalize_payload.index(
+        "./ingest-macos-proof-bundle.sh"
     )
 
 
@@ -976,6 +976,19 @@ def test_materialize_external_proof_runbook_reports_no_backlog(tmp_path: Path) -
     assert f"commands_dir: `{commands_dir}`" in payload
     assert "No unresolved external-proof requests are currently queued." in payload
     assert (commands_dir / "republish-after-host-proof.sh").is_file()
+    finalize_payload = (commands_dir / "finalize-external-host-proof.sh").read_text(encoding="utf-8")
+    for host in ("linux", "macos", "windows"):
+        assert f"./validate-{host}-proof.sh" in finalize_payload
+        assert f"./ingest-{host}-proof-bundle.sh" in finalize_payload
+    assert finalize_payload.index("./validate-linux-proof.sh") < finalize_payload.index(
+        "./ingest-linux-proof-bundle.sh"
+    )
+    assert finalize_payload.index("./validate-macos-proof.sh") < finalize_payload.index(
+        "./ingest-macos-proof-bundle.sh"
+    )
+    assert finalize_payload.index("./validate-windows-proof.sh") < finalize_payload.index(
+        "./ingest-windows-proof-bundle.sh"
+    )
 
 
 def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_path: Path) -> None:

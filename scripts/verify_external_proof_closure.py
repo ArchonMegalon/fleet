@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -62,6 +63,7 @@ REQUIRED_POST_CAPTURE_COMMAND_TOKENS = (
 )
 ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smoke_receipt"})
 ALLOWED_REQUIRED_HOSTS = frozenset({"windows", "macos", "linux"})
+COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
 
 
 
@@ -213,6 +215,38 @@ def _extract_runbook_field(markdown: str, key: str) -> str:
         if line.startswith(needle):
             return line[len(needle) :].strip().strip("`")
     return ""
+
+
+def _command_bundle_fingerprint(commands_dir: Path) -> dict[str, Any]:
+    files: list[dict[str, Any]] = []
+    aggregate = hashlib.sha256()
+    if not commands_dir.exists():
+        return {"sha256": "", "file_count": 0, "files": files}
+    for candidate in sorted(
+        path for path in commands_dir.rglob("*") if path.is_file() and path.suffix.lower() in COMMAND_BUNDLE_SUFFIXES
+    ):
+        relative_path = candidate.relative_to(commands_dir).as_posix()
+        payload = candidate.read_bytes()
+        file_sha256 = hashlib.sha256(payload).hexdigest()
+        executable = os.access(candidate, os.X_OK)
+        aggregate.update(relative_path.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(file_sha256.encode("ascii"))
+        aggregate.update(b"\0")
+        aggregate.update(b"1" if executable else b"0")
+        aggregate.update(b"\n")
+        files.append(
+            {
+                "path": relative_path,
+                "sha256": file_sha256,
+                "executable": executable,
+            }
+        )
+    return {
+        "sha256": aggregate.hexdigest() if files else "",
+        "file_count": len(files),
+        "files": files,
+    }
 
 
 def _is_sha256_hex(value: Any) -> bool:
@@ -1886,11 +1920,15 @@ def main() -> int:
     external_proof_runbook_path, external_proof_commands_dir = _coerce_external_bundle_paths(args)
     runbook_generated_at = ""
     parsed_runbook_generated_at: datetime | None = None
+    runbook_command_bundle_sha256 = ""
+    parsed_runbook_command_bundle_file_count = -1
     if external_proof_runbook_path is not None:
         runbook_body = _load_text(external_proof_runbook_path, label="external proof runbook")
         runbook_generated_at = _extract_runbook_field(runbook_body, "generated_at")
         runbook_plan_generated_at = _extract_runbook_field(runbook_body, "plan_generated_at")
         runbook_release_generated_at = _extract_runbook_field(runbook_body, "release_channel_generated_at")
+        runbook_command_bundle_sha256 = _extract_runbook_field(runbook_body, "command_bundle_sha256")
+        runbook_command_bundle_file_count = _extract_runbook_field(runbook_body, "command_bundle_file_count")
         if not runbook_generated_at:
             failures.append("external proof runbook generated_at is missing")
         else:
@@ -1914,7 +1952,24 @@ def main() -> int:
                 "external proof runbook release_channel_generated_at "
                 f"({runbook_release_generated_at}) does not match release channel generatedAt ({release_generated_at})"
             )
-
+        if not runbook_command_bundle_sha256:
+            failures.append("external proof runbook command_bundle_sha256 is missing")
+        elif not _is_sha256_hex(runbook_command_bundle_sha256):
+            failures.append(
+                "external proof runbook command_bundle_sha256 is not a valid SHA-256 digest: "
+                + runbook_command_bundle_sha256
+            )
+        if not runbook_command_bundle_file_count:
+            failures.append("external proof runbook command_bundle_file_count is missing")
+        else:
+            try:
+                parsed_runbook_command_bundle_file_count = int(runbook_command_bundle_file_count)
+            except ValueError:
+                failures.append(
+                    "external proof runbook command_bundle_file_count is not a valid integer: "
+                    + runbook_command_bundle_file_count
+                )
+                parsed_runbook_command_bundle_file_count = -1
     if external_proof_commands_dir is not None:
         if not external_proof_commands_dir.is_dir():
             failures.append(
@@ -1922,6 +1977,25 @@ def main() -> int:
                 + str(external_proof_commands_dir)
             )
         else:
+            command_bundle_fingerprint = _command_bundle_fingerprint(external_proof_commands_dir)
+            if not command_bundle_fingerprint.get("sha256"):
+                failures.append(
+                    "external proof commands directory does not contain any bundled shell or PowerShell entrypoints: "
+                    + str(external_proof_commands_dir)
+                )
+            elif runbook_command_bundle_sha256 and command_bundle_fingerprint.get("sha256") != runbook_command_bundle_sha256:
+                failures.append(
+                    "external proof command bundle fingerprint drifted from runbook command_bundle_sha256 "
+                    f"({runbook_command_bundle_sha256} != {command_bundle_fingerprint.get('sha256')})"
+                )
+            if (
+                parsed_runbook_command_bundle_file_count >= 0
+                and int(command_bundle_fingerprint.get("file_count") or 0) != parsed_runbook_command_bundle_file_count
+            ):
+                failures.append(
+                    "external proof command bundle file count drifted from runbook command_bundle_file_count "
+                    f"({parsed_runbook_command_bundle_file_count} != {int(command_bundle_fingerprint.get('file_count') or 0)})"
+                )
             post_capture_script = external_proof_commands_dir / "republish-after-host-proof.sh"
             if not post_capture_script.is_file():
                 failures.append(

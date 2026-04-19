@@ -299,6 +299,48 @@ items:
     owned_surfaces:
       - desktop_release_train:avalonia
       - flagship_route_truth:desktop
+  - title: Keep native-host proof capture and ingest repeatable for release truth
+    task: Close the external host proof lane with a generated runbook, retained per-host command bundles, ingest validation, and readiness-backed repeat prevention.
+    package_id: next90-m101-fleet-external-proof-lane
+    frontier_id: 2450443085
+    milestone_id: 101
+    wave: W6
+    repo: fleet
+    status: complete
+    completion_action: verify_closed_package_only
+    do_not_reopen_reason: M101 Fleet external proof lane is complete; future shards must verify the external-proof runbook, command bundle, standalone verifier, registry row, queue row, design queue row, and flagship readiness receipt instead of reopening native-host proof capture and ingest.
+    proof:
+      - /docker/fleet/scripts/materialize_external_proof_runbook.py
+      - /docker/fleet/scripts/verify_external_proof_closure.py
+      - /docker/fleet/scripts/verify_next90_m101_fleet_external_proof_lane.py
+      - /docker/fleet/tests/test_materialize_external_proof_runbook.py
+      - /docker/fleet/tests/test_verify_external_proof_closure.py
+      - /docker/fleet/tests/test_verify_next90_m101_fleet_external_proof_lane.py
+      - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py
+      - /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py
+      - /docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md
+      - /docker/fleet/.codex-studio/published/external-proof-commands/
+      - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json
+      - /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json
+      - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
+      - /docker/fleet/feedback/2026-04-19-next90-m101-fleet-external-proof-lane-closeout.md
+      - python3 scripts/verify_next90_m101_fleet_external_proof_lane.py exits 0
+      - python3 -m pytest -q tests/test_materialize_external_proof_runbook.py tests/test_verify_external_proof_closure.py tests/test_verify_next90_m101_fleet_external_proof_lane.py tests/test_fleet_script_bootstrap_without_pythonpath.py
+      - successor frontier 2450443085 pinned for next90-m101-fleet-external-proof-lane repeat prevention
+      - support packet external-proof backlog is zero and the execution plan remains a zero-request release packet lane
+      - journey gates external-proof blockers are zero for install, build, and report release journeys
+      - flagship readiness external_host_proof.status=pass and Fleet external-proof backlog observations remain zero
+      - zero-backlog command bundle retains per-host preflight/capture/validate/bundle/ingest/run scripts plus finalize and republish entrypoints
+      - design-owned queue source row matches the Fleet completed queue proof assignment
+      - completed queue action guard requires verify_closed_package_only and package-specific do_not_reopen_reason
+    allowed_paths:
+      - scripts
+      - tests
+      - .codex-studio
+      - feedback
+    owned_surfaces:
+      - desktop_release_train:external_proof_lane
+      - desktop_release_train:proof_ingest
   - title: Extract Chummer5a oracle baselines and veteran workflow packs
     task: Capture screenshot baselines, first-minute veteran tasks, and compare artifacts from the Chummer5a oracle repo.
     package_id: next90-m103-ea-parity-lab

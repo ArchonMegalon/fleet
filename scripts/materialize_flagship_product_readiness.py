@@ -76,8 +76,10 @@ DEFAULT_PROGRESS_HISTORY = ROOT / ".codex-studio" / "published" / "PROGRESS_HIST
 DEFAULT_JOURNEY_GATES = ROOT / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
 DEFAULT_SUPPORT_PACKETS = ROOT / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
 DEFAULT_EXTERNAL_PROOF_RUNBOOK = ROOT / ".codex-studio" / "published" / "EXTERNAL_PROOF_RUNBOOK.generated.md"
+DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR = ROOT / ".codex-studio" / "published" / "external-proof-commands"
 DEFAULT_SUPERVISOR_STATE = ROOT / "state" / "chummer_design_supervisor" / "state.json"
 DEFAULT_OODA_STATE = ROOT / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+EXTERNAL_PROOF_COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
 
 def _preferred_ui_repo_root() -> Path:
     override = str(os.environ.get("CHUMMER_UI_REPO_ROOT", "") or "").strip()
@@ -605,6 +607,40 @@ def extract_runbook_field(markdown: str, key: str) -> str:
         if line.startswith(needle):
             return line[len(needle) :].strip().strip("`")
     return ""
+
+
+def external_proof_command_bundle_fingerprint(commands_dir: Path) -> Dict[str, Any]:
+    files: List[Dict[str, Any]] = []
+    aggregate = hashlib.sha256()
+    if not commands_dir.exists():
+        return {"sha256": "", "file_count": 0, "files": files}
+    for candidate in sorted(
+        path
+        for path in commands_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in EXTERNAL_PROOF_COMMAND_BUNDLE_SUFFIXES
+    ):
+        relative_path = candidate.relative_to(commands_dir).as_posix()
+        payload = candidate.read_bytes()
+        file_sha256 = hashlib.sha256(payload).hexdigest()
+        executable = os.access(candidate, os.X_OK)
+        aggregate.update(relative_path.encode("utf-8"))
+        aggregate.update(b"\0")
+        aggregate.update(file_sha256.encode("ascii"))
+        aggregate.update(b"\0")
+        aggregate.update(b"1" if executable else b"0")
+        aggregate.update(b"\n")
+        files.append(
+            {
+                "path": relative_path,
+                "sha256": file_sha256,
+                "executable": executable,
+            }
+        )
+    return {
+        "sha256": aggregate.hexdigest() if files else "",
+        "file_count": len(files),
+        "files": files,
+    }
 
 
 def report_path(path: Path) -> str:
@@ -2694,6 +2730,17 @@ def build_flagship_product_readiness_payload(
     runbook_generated_at = extract_runbook_field(external_proof_runbook, "generated_at")
     runbook_plan_generated_at = extract_runbook_field(external_proof_runbook, "plan_generated_at")
     runbook_release_generated_at = extract_runbook_field(external_proof_runbook, "release_channel_generated_at")
+    runbook_command_bundle_sha256 = extract_runbook_field(external_proof_runbook, "command_bundle_sha256")
+    runbook_command_bundle_file_count = _nonnegative_int(
+        extract_runbook_field(external_proof_runbook, "command_bundle_file_count"),
+        0,
+    )
+    effective_external_proof_commands_dir = (
+        DEFAULT_EXTERNAL_PROOF_COMMANDS_DIR
+        if external_proof_runbook_path is None and effective_external_proof_runbook_path == DEFAULT_EXTERNAL_PROOF_RUNBOOK
+        else effective_external_proof_runbook_path.parent / "external-proof-commands"
+    )
+    external_command_bundle = external_proof_command_bundle_fingerprint(effective_external_proof_commands_dir)
     effective_supervisor_state_path, supervisor_state = _select_best_supervisor_state(supervisor_state_path)
     effective_active_shards_path, active_shards_payload = _load_active_shards_payload(effective_supervisor_state_path)
     runtime_focus_profiles = _runtime_env_list(
@@ -5017,6 +5064,26 @@ def build_flagship_product_readiness_payload(
                 "External proof runbook release_channel_generated_at does not match release-channel generatedAt; tuple instructions are stale."
             )
             external_runbook_synced = False
+    if not runbook_command_bundle_sha256:
+        external_runbook_sync_reasons.append(
+            "External proof runbook is missing command_bundle_sha256; retained host entrypoints are not pinned."
+        )
+        external_runbook_synced = False
+    elif external_command_bundle.get("sha256") != runbook_command_bundle_sha256:
+        external_runbook_sync_reasons.append(
+            "External proof runbook command_bundle_sha256 does not match the retained host command bundle; repeat prevention is stale."
+        )
+        external_runbook_synced = False
+    if not runbook_command_bundle_file_count:
+        external_runbook_sync_reasons.append(
+            "External proof runbook is missing command_bundle_file_count; retained host entrypoint coverage cannot be counted."
+        )
+        external_runbook_synced = False
+    elif int(external_command_bundle.get("file_count") or 0) != runbook_command_bundle_file_count:
+        external_runbook_sync_reasons.append(
+            "External proof runbook command_bundle_file_count does not match the retained host command bundle; repeat prevention is stale."
+        )
+        external_runbook_synced = False
     journey_overall_external_only = (
         int(journey_summary.get("blocked_count") or 0) > 0
         and int(journey_summary.get("blocked_count") or 0) == int(journey_summary.get("blocked_external_only_count") or 0)
@@ -5258,6 +5325,11 @@ def build_flagship_product_readiness_payload(
             "external_proof_runbook_generated_at": runbook_generated_at,
             "external_proof_runbook_plan_generated_at": runbook_plan_generated_at,
             "external_proof_runbook_release_channel_generated_at": runbook_release_generated_at,
+            "external_proof_commands_dir": str(effective_external_proof_commands_dir),
+            "external_proof_command_bundle_sha256": str(external_command_bundle.get("sha256") or ""),
+            "external_proof_command_bundle_file_count": int(external_command_bundle.get("file_count") or 0),
+            "external_proof_runbook_command_bundle_sha256": runbook_command_bundle_sha256,
+            "external_proof_runbook_command_bundle_file_count": runbook_command_bundle_file_count,
             "external_proof_runbook_synced": external_runbook_synced,
             "external_proof_runbook_sync_issue_count": len(external_runbook_sync_reasons),
             "dispatchable_truth_ready": bool(compile_manifest.get("dispatchable_truth_ready")),
@@ -5780,6 +5852,11 @@ def build_flagship_product_readiness_payload(
             "runbook_generated_at": runbook_generated_at,
             "runbook_plan_generated_at": runbook_plan_generated_at,
             "runbook_release_channel_generated_at": runbook_release_generated_at,
+            "commands_dir": str(effective_external_proof_commands_dir),
+            "command_bundle_sha256": str(external_command_bundle.get("sha256") or ""),
+            "command_bundle_file_count": int(external_command_bundle.get("file_count") or 0),
+            "runbook_command_bundle_sha256": runbook_command_bundle_sha256,
+            "runbook_command_bundle_file_count": runbook_command_bundle_file_count,
             "runbook_synced": external_runbook_synced,
             "runbook_sync_reasons": external_runbook_sync_reasons,
         },

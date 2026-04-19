@@ -10,6 +10,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPTS = (
     SCRIPT_DIR / "verify_external_proof_closure.py",
     SCRIPT_DIR / "materialize_external_proof_runbook.py",
+    SCRIPT_DIR / "verify_next90_m101_fleet_external_proof_lane.py",
     SCRIPT_DIR / "materialize_journey_gates.py",
     SCRIPT_DIR / "materialize_status_plane.py",
     SCRIPT_DIR / "verify_status_plane_semantics.py",

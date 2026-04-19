@@ -24,7 +24,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-19T10:18:04Z",
+    "generated_at": "2026-04-19T11:24:56Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -49,7 +49,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-19T10:18:04Z",
+  "generated_at": "2026-04-19T11:24:56Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -65,7 +65,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-04-19T10:18:04Z",
+    "generated_at": "2026-04-19T11:24:56Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -274,7 +274,7 @@
   "unresolved_external_proof_execution_plan": {
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-04-19T19:53:27Z",
-    "generated_at": "2026-04-19T10:18:04Z",
+    "generated_at": "2026-04-19T11:24:56Z",
     "host_groups": {},
     "hosts": [],
     "release_channel_generated_at": "2026-04-18T19:53:27Z",

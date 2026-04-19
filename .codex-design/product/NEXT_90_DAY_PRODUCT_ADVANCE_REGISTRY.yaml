@@ -96,6 +96,16 @@ milestones:
       - id: 101.1
         owner: fleet
         title: Turn native-host proof capture and ingest into a repeatable release packet lane.
+        status: complete
+        evidence:
+          - /docker/fleet/.codex-studio/published/EXTERNAL_PROOF_RUNBOOK.generated.md now records zero external desktop host-proof backlog, the release-synced republish entrypoint, and the generated zero-backlog note for the external host proof lane.
+          - /docker/fleet/.codex-studio/published/external-proof-commands/ retains executable preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows plus finalize/republish entrypoints even when the external-proof backlog is zero.
+          - /docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json reports zero external proof backlog and a zero-request external proof execution plan, while /docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json keeps the install, build, and report journeys free of external-only blockers.
+          - /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json reports external_host_proof.status=pass and zero Fleet external-proof backlog observations on the ready flagship surface.
+          - /docker/fleet/scripts/materialize_external_proof_runbook.py, /docker/fleet/scripts/verify_external_proof_closure.py, and /docker/fleet/scripts/verify_next90_m101_fleet_external_proof_lane.py bind runbook generation, closure verification, and completed-package repeat prevention for this package.
+          - /docker/fleet/tests/test_materialize_external_proof_runbook.py, /docker/fleet/tests/test_verify_external_proof_closure.py, and /docker/fleet/tests/test_verify_next90_m101_fleet_external_proof_lane.py cover runbook, closure, and package-verifier regressions including zero-backlog host-lane retention and design-queue assignment drift.
+          - /docker/fleet/scripts/verify_script_bootstrap_no_pythonpath.py and /docker/fleet/tests/test_fleet_script_bootstrap_without_pythonpath.py include the standalone M101 verifier in no-PYTHONPATH bootstrap proof.
+          - /docker/fleet/feedback/2026-04-19-next90-m101-fleet-external-proof-lane-closeout.md records the do-not-reopen rule and exact proof anchors for future shards.
       - id: 101.2
         owner: chummer6-hub-registry
         title: Publish per-head promotion, fallback, and rollback rationale directly in channel truth.
