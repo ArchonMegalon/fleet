@@ -362,6 +362,7 @@ def _closed_fixture(tmp_path: Path):
                 "- journey gates keep external-only blockers at zero",
                 "- flagship readiness keeps `external_host_proof.status=pass`",
                 "- the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
+                "- the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
                 "- the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
                 "",
             ]
@@ -515,6 +516,50 @@ class VerifyNext90M101FleetExternalProofLaneTests(unittest.TestCase):
             fixture["closeout"].write_text(
                 closeout_payload.replace(
                     "Worker-assignment frontier ids from active successor runs are scheduler-local context only and must never replace the canonical package frontier in closure proof.\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--support-packets",
+                    str(fixture["support_packets"]),
+                    "--journey-gates",
+                    str(fixture["journey_gates"]),
+                    "--release-channel",
+                    str(fixture["release_channel"]),
+                    "--external-proof-runbook",
+                    str(fixture["runbook"]),
+                    "--external-proof-commands-dir",
+                    str(fixture["commands_dir"]),
+                    "--flagship-readiness",
+                    str(fixture["readiness"]),
+                    "--successor-registry",
+                    str(fixture["registry"]),
+                    "--queue-staging",
+                    str(fixture["queue"]),
+                    "--design-queue-staging",
+                    str(fixture["design_queue"]),
+                    "--closeout-note",
+                    str(fixture["closeout"]),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("closeout note missing marker", result.stderr)
+
+    def test_verifier_fails_when_closeout_note_drops_finalize_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _closed_fixture(Path(tmp))
+            closeout_payload = fixture["closeout"].read_text(encoding="utf-8")
+            fixture["closeout"].write_text(
+                closeout_payload.replace(
+                    "- the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available\n",
                     "",
                     1,
                 ),

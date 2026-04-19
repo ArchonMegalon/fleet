@@ -142,6 +142,7 @@ REQUIRED_CLOSEOUT_NOTE_MARKERS = [
     "journey gates keep external-only blockers at zero",
     "flagship readiness keeps `external_host_proof.status=pass`",
     "the zero-backlog command bundle still retains per-host preflight, capture, validate, bundle, ingest, and run entrypoints for Linux, macOS, and Windows",
+    "the finalize entrypoint still republishes after the per-host validate and ingest lanes remain available",
     "the standalone verifier and bootstrap no-PYTHONPATH guard stay runnable without ambient worker state",
 ]
 REQUIRED_ANCHOR_PATHS = [
