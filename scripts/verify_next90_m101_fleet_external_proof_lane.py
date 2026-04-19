@@ -16,7 +16,7 @@ import yaml
 ROOT = Path("/docker/fleet")
 PUBLISHED = ROOT / ".codex-studio" / "published"
 PACKAGE_ID = "next90-m101-fleet-external-proof-lane"
-FRONTIER_ID = "2450443085"
+FRONTIER_ID = "1324843972"
 MILESTONE_ID = 101
 MILESTONE_TITLE = "Native-host desktop release train and promotion discipline"
 WAVE = "W6"

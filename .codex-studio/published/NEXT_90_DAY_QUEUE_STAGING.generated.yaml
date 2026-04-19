@@ -304,7 +304,7 @@ items:
   - title: Keep native-host proof capture and ingest repeatable for release truth
     task: Close the external host proof lane with a generated runbook, retained per-host command bundles, ingest validation, and readiness-backed repeat prevention.
     package_id: next90-m101-fleet-external-proof-lane
-    frontier_id: 2450443085
+    frontier_id: 1324843972
     milestone_id: 101
     wave: W6
     repo: fleet
@@ -328,7 +328,7 @@ items:
       - /docker/fleet/feedback/2026-04-19-next90-m101-fleet-external-proof-lane-closeout.md
       - python3 scripts/verify_next90_m101_fleet_external_proof_lane.py exits 0
       - python3 -m pytest -q tests/test_materialize_external_proof_runbook.py tests/test_verify_external_proof_closure.py tests/test_verify_next90_m101_fleet_external_proof_lane.py tests/test_fleet_script_bootstrap_without_pythonpath.py
-      - successor frontier 2450443085 pinned for next90-m101-fleet-external-proof-lane repeat prevention
+      - successor frontier 1324843972 pinned for next90-m101-fleet-external-proof-lane repeat prevention
       - support packet external-proof backlog is zero and the execution plan remains a zero-request release packet lane
       - journey gates external-proof blockers are zero for install, build, and report release journeys
       - flagship readiness external_host_proof.status=pass and Fleet external-proof backlog observations remain zero
