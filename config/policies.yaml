@@ -21,6 +21,16 @@ policies:
   named_bridge_service_floor: 3
   auditor_interval_seconds: 30
   stale_heartbeat_seconds: 1800
+  queue_recovery:
+    shard_debt_attention_after_seconds: 900
+    shard_debt_blocked_after_seconds: 3600
+    recent_auto_requeue_window_seconds: 86400
+    stalled_worker_alert_triggers:
+    - stale_worker_session_requeued
+    - orphaned_runtime_requeued
+    - abandoned_run_rehydrated
+    signed_receipts_required: true
+    receipt_contract_name: fleet.queue_recovery_receipt
   restart_cooldown_seconds: 30
   feedback_cooldown_seconds: 120
   rate_limit_backoff_base: 60

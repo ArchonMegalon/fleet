@@ -1045,6 +1045,7 @@ class AdminForecastTests(unittest.TestCase):
             workers=[
                 {
                     "worker_id": "run-1",
+                    "trace_id": "controller-coding-20260419t010000z-abc123def456",
                     "project_id": "fleet",
                     "phase": "coding",
                     "current_slice": "Route jury review",
@@ -1065,6 +1066,51 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(active["backend"], "chatplayground")
         self.assertEqual(active["provider"], "browseract")
         self.assertEqual(active["brain"], "ea-review-light")
+        self.assertEqual(active["trace_id"], "controller-coding-20260419t010000z-abc123def456")
+
+    def test_build_worker_posture_payload_keeps_trace_ids_for_recent_runs(self) -> None:
+        payload = self.admin.build_worker_posture_payload(
+            {
+                "config": {"accounts": {}},
+                "projects": [
+                    {
+                        "id": "fleet",
+                        "current_slice": "Refresh operator runway",
+                        "selected_lane": "core",
+                        "selected_profile": "core",
+                        "selected_lane_capacity_state": "ready",
+                        "selected_lane_capacity": {
+                            "lane": "core",
+                            "profile": "core",
+                            "backend": "chatplayground",
+                            "primary_provider_key": "browseract",
+                            "capacity_summary": {"configured_slots": 2, "ready_slots": 1, "slot_owners": ["core"]},
+                            "providers": [{"provider_key": "browseract", "backend": "chatplayground"}],
+                        },
+                    }
+                ],
+                "recent_runs": [
+                    {
+                        "id": 42,
+                        "trace_id": "controller-coding-20260419t010500z-fedcba654321",
+                        "project_id": "fleet",
+                        "account_alias": "acct-core-a",
+                        "model": "gpt-5.4",
+                        "status": "complete",
+                        "slice_name": "Refresh operator runway",
+                        "started_at": "2026-04-19T01:05:00Z",
+                        "finished_at": "2026-04-19T01:09:00Z",
+                        "log_path": "",
+                        "final_message_path": "",
+                    }
+                ],
+            },
+            workers=[],
+        )
+
+        recent = payload["recent"][0]
+        self.assertEqual(recent["run_id"], "42")
+        self.assertEqual(recent["trace_id"], "controller-coding-20260419t010500z-fedcba654321")
 
     def test_execution_loop_payload_tracks_zero_credit_jury_landing(self) -> None:
         payload = self.admin.execution_loop_payload(
@@ -1185,8 +1231,24 @@ class AdminForecastTests(unittest.TestCase):
 
         self.admin.jury_review_run_rows = fake_jury_review_run_rows
         self.admin.participant_lane_rows_for_admin = lambda statuses=None: [
-            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1", "lane_role": "review", "telemetry": {"auth_ready": True}, "auth_completed_at": "2026-03-19T08:10:00Z"},
-            {"project_id": "fleet", "hub_user_id": "usr_1", "subject_id": "subject-1", "lane_role": "coding", "telemetry": {"auth_ready": True}, "auth_completed_at": "2026-03-19T08:11:00Z"},
+            {
+                "project_id": "fleet",
+                "hub_user_id": "usr_1",
+                "subject_id": "subject-1",
+                "lane_role": "review",
+                "telemetry": {"auth_ready": True, "receipts": {"last_status": "sent:slice_reviewed"}},
+                "auth_completed_at": "2026-03-19T08:10:00Z",
+                "consented_at": "2026-03-19T08:00:00Z",
+            },
+            {
+                "project_id": "fleet",
+                "hub_user_id": "usr_1",
+                "subject_id": "subject-1",
+                "lane_role": "coding",
+                "telemetry": {"auth_ready": True, "receipts": {"last_status": "failed:slice_landed"}},
+                "auth_completed_at": "2026-03-19T08:11:00Z",
+                "reward_receipt_error": "timeout",
+            },
         ]
 
         payload = self.admin.jury_telemetry_payload(
@@ -1275,6 +1337,11 @@ class AdminForecastTests(unittest.TestCase):
         self.assertEqual(payload["participant_burst"]["active_by_role"]["review"], 1)
         self.assertEqual(payload["participant_burst"]["active_by_role"]["coding"], 1)
         self.assertEqual(payload["participant_burst"]["sponsor_ready_lanes"], 2)
+        self.assertEqual(payload["participant_burst"]["consented_lanes"], 1)
+        self.assertEqual(payload["participant_burst"]["missing_consent_trace_lanes"], 1)
+        self.assertEqual(payload["participant_burst"]["receipt_status_counts"]["sent:slice_reviewed"], 1)
+        self.assertEqual(payload["participant_burst"]["receipt_status_counts"]["failed:slice_landed"], 1)
+        self.assertEqual(payload["participant_burst"]["receipt_failure_count"], 1)
         self.assertEqual(payload["participant_burst"]["premium_queue_depth"], 1)
         self.assertIn("fleet", payload["participant_burst"]["surge_mode_projects"])
 
@@ -1432,12 +1499,17 @@ class AdminForecastTests(unittest.TestCase):
 
         booster = payload["booster_runtime_card"]
         self.assertEqual(booster["active_boosters"], 2)
+        self.assertEqual(booster["active_managed_boosters"], 0)
         self.assertEqual(booster["sponsor_ready_boosters"], 2)
         self.assertEqual(booster["hourly_burn_rate_credits"], 20000.0)
         self.assertEqual(booster["per_booster_hourly_burn_rate_credits"], 10000.0)
         self.assertEqual(booster["active_onemin_codexers"], 2)
         self.assertEqual(booster["active_onemin_projects"], ["core", "ui"])
         self.assertEqual(booster["per_onemin_codexer_hourly_burn_rate_credits"], 10000.0)
+        self.assertEqual(booster["managed_vs_participant"]["participant_direct_burst"], 2)
+        self.assertEqual(booster["managed_vs_participant"]["managed_core_burst"], 0)
+        self.assertEqual(booster["participant_share_percent"], 100.0)
+        self.assertEqual(booster["managed_share_percent"], 0.0)
         self.assertEqual(booster["credits_left_percent"], 40.0)
         self.assertEqual(booster["hours_remaining_with_topup"], 420.0)
         self.assertEqual(booster["effective_capacity_by_project"]["core"], 3)
@@ -1918,6 +1990,252 @@ class AdminForecastTests(unittest.TestCase):
         )
         self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
 
+    def test_publish_readiness_warns_when_weekly_governor_packet_is_past_due(self) -> None:
+        status = {
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+        artifact_freshness = {
+            "status_plane": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
+            "release_channel": {"state": "fresh"},
+            "weekly_governor_packet": {"state": "fresh"},
+        }
+        support_surface = {"summary": {}, "freshness": {"state": "fresh"}}
+        journey_gates = {"summary": {"overall_state": "ready"}}
+        release_channel = {
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "supportabilityState": "supported",
+            "release_proof": {"status": "passed"},
+            "proof_freshness": {"state": "fresh"},
+        }
+        generated_at = "2026-03-01T00:00:00Z"
+        weekly_governor_packet = {
+            "generated_at": generated_at,
+            "status": "ready",
+            "decision_board": {
+                "current_launch_action": "launch_expand",
+                "current_launch_reason": "All measured launch gates are green.",
+            },
+            "public_status_copy": {
+                "state": "launch_expand_allowed",
+                "body": "All measured launch gates are green.",
+            },
+            "governor_packet_schedule": {
+                "cadence": "weekly",
+                "generated_at": generated_at,
+                "next_packet_due_at": "2026-03-08T00:00:00Z",
+                "cadence_seconds": 604800,
+                "max_age_seconds": 604800,
+                "status": "scheduled",
+            },
+            "measured_rollout_loop": {
+                "rollback_watch": False,
+            },
+        }
+
+        with mock.patch.object(self.admin, "utc_now", return_value=self.admin.parse_iso("2026-03-08T01:00:00Z")):
+            payload = self.admin.publish_readiness_payload(
+                status,
+                artifact_freshness=artifact_freshness,
+                support_surface=support_surface,
+                journey_gates=journey_gates,
+                release_channel=release_channel,
+                weekly_governor_packet=weekly_governor_packet,
+                provider_routes=[],
+            )
+
+        self.assertEqual(payload["state"], "warning")
+        self.assertIn(
+            "Weekly governor packet is past due for its weekly cadence.",
+            payload["warning_reasons"],
+        )
+        self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
+        self.assertEqual(payload["signals"]["weekly_governor_packet_schedule_state"], "overdue")
+
+    def test_publish_readiness_warns_when_weekly_governor_packet_source_truth_is_newer(self) -> None:
+        status = {
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+        artifact_freshness = {
+            "status_plane": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
+            "release_channel": {"state": "fresh"},
+            "weekly_governor_packet": {"state": "fresh"},
+        }
+        support_surface = {"summary": {}, "freshness": {"state": "fresh"}}
+        journey_gates = {"summary": {"overall_state": "ready"}}
+        release_channel = {
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "supportabilityState": "supported",
+            "release_proof": {"status": "passed"},
+            "proof_freshness": {"state": "fresh"},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = Path(tmpdir) / "WEEKLY_PRODUCT_PULSE.generated.json"
+            source_path.write_text("{}", encoding="utf-8")
+            newer_timestamp = dt.datetime(2026, 3, 8, 0, 20, tzinfo=dt.timezone.utc).timestamp()
+            os.utime(source_path, (newer_timestamp, newer_timestamp))
+            weekly_governor_packet = {
+                "generated_at": "2026-03-08T00:00:00Z",
+                "status": "ready",
+                "decision_board": {
+                    "current_launch_action": "launch_expand",
+                    "current_launch_reason": "All measured launch gates are green.",
+                },
+                "public_status_copy": {
+                    "state": "launch_expand_allowed",
+                    "body": "All measured launch gates are green.",
+                },
+                "governor_packet_schedule": {
+                    "cadence": "weekly",
+                    "generated_at": "2026-03-08T00:00:00Z",
+                    "next_packet_due_at": "2026-03-15T00:00:00Z",
+                    "cadence_seconds": 604800,
+                    "max_age_seconds": 604800,
+                    "status": "scheduled",
+                },
+                "measured_rollout_loop": {
+                    "rollback_watch": False,
+                },
+                "source_paths": {
+                    "weekly_pulse": str(source_path),
+                },
+            }
+
+            with mock.patch.object(
+                self.admin,
+                "utc_now",
+                return_value=self.admin.parse_iso("2026-03-08T00:00:00Z"),
+            ):
+                payload = self.admin.publish_readiness_payload(
+                    status,
+                    artifact_freshness=artifact_freshness,
+                    support_surface=support_surface,
+                    journey_gates=journey_gates,
+                    release_channel=release_channel,
+                    weekly_governor_packet=weekly_governor_packet,
+                    provider_routes=[],
+                )
+
+        self.assertEqual(payload["state"], "warning")
+        self.assertEqual(payload["signals"]["weekly_governor_packet_freshness_state"], "stale")
+        self.assertIn(
+            "newer than the published weekly governor packet",
+            " ".join(payload["warning_reasons"]),
+        )
+
+    def test_publish_readiness_blocks_when_weekly_governor_packet_freezes_launch(self) -> None:
+        status = {
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+        artifact_freshness = {
+            "status_plane": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
+            "release_channel": {"state": "fresh"},
+            "weekly_governor_packet": {"state": "fresh"},
+        }
+        support_surface = {"summary": {}, "freshness": {"state": "fresh"}}
+        journey_gates = {"summary": {"overall_state": "ready"}}
+        release_channel = {
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "supportabilityState": "supported",
+            "release_proof": {"status": "passed"},
+            "proof_freshness": {"state": "fresh"},
+        }
+        weekly_governor_packet = {
+            "status": "blocked",
+            "status_reason": "Fleet package is closed; measured rollout remains blocked.",
+            "decision_board": {
+                "current_launch_action": "freeze_launch",
+                "current_launch_reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+            },
+            "public_status_copy": {
+                "state": "freeze_launch",
+                "body": "Freeze launch expansion until fresh local release proof passes on the public edge.",
+            },
+            "measured_rollout_loop": {
+                "rollback_watch": False,
+            },
+        }
+
+        payload = self.admin.publish_readiness_payload(
+            status,
+            artifact_freshness=artifact_freshness,
+            support_surface=support_surface,
+            journey_gates=journey_gates,
+            release_channel=release_channel,
+            weekly_governor_packet=weekly_governor_packet,
+            provider_routes=[],
+        )
+
+        self.assertEqual(payload["state"], "blocked")
+        self.assertIn(
+            "Freeze launch expansion until fresh local release proof passes on the public edge.",
+            payload["blocking_reasons"],
+        )
+        self.assertEqual(payload["signals"]["weekly_governor_packet_status"], "blocked")
+        self.assertEqual(payload["signals"]["weekly_governor_launch_action"], "freeze_launch")
+        self.assertEqual(payload["signals"]["weekly_governor_public_state"], "freeze_launch")
+
+    def test_publish_readiness_blocks_when_weekly_governor_packet_enters_rollback_watch(self) -> None:
+        status = {
+            "runtime_healing": {"summary": {"alert_state": "healthy"}},
+        }
+        artifact_freshness = {
+            "status_plane": {"state": "fresh"},
+            "progress_report": {"state": "fresh"},
+            "journey_gates": {"state": "fresh"},
+            "release_channel": {"state": "fresh"},
+            "weekly_governor_packet": {"state": "fresh"},
+        }
+        support_surface = {"summary": {}, "freshness": {"state": "fresh"}}
+        journey_gates = {"summary": {"overall_state": "ready"}}
+        release_channel = {
+            "status": "published",
+            "rolloutState": "promoted_preview",
+            "supportabilityState": "supported",
+            "release_proof": {"status": "passed"},
+            "proof_freshness": {"state": "fresh"},
+        }
+        weekly_governor_packet = {
+            "status": "blocked",
+            "status_reason": "Fleet package is closed; measured rollout remains blocked.",
+            "decision_board": {
+                "current_launch_action": "freeze_launch",
+                "current_launch_reason": "Launch expansion is frozen with rollback watch active.",
+            },
+            "public_status_copy": {
+                "state": "freeze_with_rollback_watch",
+                "body": "Launch expansion is frozen with rollback watch active.",
+            },
+            "measured_rollout_loop": {
+                "rollback_watch": True,
+            },
+        }
+
+        payload = self.admin.publish_readiness_payload(
+            status,
+            artifact_freshness=artifact_freshness,
+            support_surface=support_surface,
+            journey_gates=journey_gates,
+            release_channel=release_channel,
+            weekly_governor_packet=weekly_governor_packet,
+            provider_routes=[],
+        )
+
+        self.assertEqual(payload["state"], "blocked")
+        self.assertIn(
+            "Launch expansion is frozen with rollback watch active.",
+            payload["blocking_reasons"],
+        )
+        self.assertEqual(payload["signals"]["weekly_governor_public_state"], "freeze_with_rollback_watch")
+
     def test_public_progress_report_payload_refreshes_stale_artifact_before_loading_generated_bundle(self) -> None:
         stale = {
             "progress_report": {"state": "stale"},
@@ -2050,6 +2368,23 @@ class AdminForecastTests(unittest.TestCase):
 
         self.assertEqual(payload["runtime_healing"]["summary"]["alert_state"], "healthy")
         self.assertEqual(payload["runtime_healing"]["services"][0]["service"], "fleet-controller")
+
+    def test_canonical_public_status_payload_includes_trace_context(self) -> None:
+        with mock.patch.object(self.admin, "runtime_healing_payload", return_value={"generated_at": "2026-03-27T12:00:00Z", "enabled": True, "summary": {}, "services": []}):
+            payload = self.admin.canonical_public_status_payload(
+                {
+                    "generated_at": "2026-03-24T12:00:00Z",
+                    "trace": {"trace_id": "admin-status-20260324t120000z-abcdef123456"},
+                    "auditor": {"last_run": {"trace_id": "auditor-20260324t115500z-fedcba654321"}},
+                    "projects": [{"id": "fleet", "active_run_id": 42, "active_run_trace_id": "controller-core-20260324t115000z-a1b2c3d4e5f6"}],
+                    "groups": [],
+                    "cockpit": {"summary": {}, "mission_board": {}},
+                }
+            )
+
+        self.assertEqual(payload["trace"]["trace_id"], "admin-status-20260324t120000z-abcdef123456")
+        self.assertEqual(payload["trace"]["auditor_trace_id"], "auditor-20260324t115500z-fedcba654321")
+        self.assertEqual(payload["trace"]["active_run_traces"][0]["trace_id"], "controller-core-20260324t115000z-a1b2c3d4e5f6")
 
     def test_sync_runtime_healing_incidents_opens_and_resolves_service_incident(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -209,6 +209,8 @@ STATUS_PLANE_FILENAME = "STATUS_PLANE.generated.yaml"
 SUPPORT_CASE_PACKETS_FILENAME = "SUPPORT_CASE_PACKETS.generated.json"
 JOURNEY_GATES_FILENAME = "JOURNEY_GATES.generated.json"
 WEEKLY_GOVERNOR_PACKET_FILENAME = "WEEKLY_GOVERNOR_PACKET.generated.json"
+FLAGSHIP_READINESS_FILENAME = "FLAGSHIP_PRODUCT_READINESS.generated.json"
+CAMPAIGN_OS_CONTINUITY_LIVENESS_FILENAME = "CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json"
 WEEKLY_GOVERNOR_PACKET_MARKDOWN_FILENAME = "WEEKLY_GOVERNOR_PACKET.generated.md"
 CHUMMER_RELEASE_CHANNEL_PATH = pathlib.Path("/docker/chummercomplete/chummer-hub-registry/.codex-studio/published/RELEASE_CHANNEL.generated.json")
 CHUMMER_RELEASE_REGISTRY_CURRENT_URL = str(os.environ.get("CHUMMER_RELEASE_REGISTRY_CURRENT_URL", "") or "").strip()
@@ -279,6 +281,18 @@ DEFAULT_AUTO_HEAL_PLAYBOOKS = {
         "max_attempts": 2,
     },
 }
+DEFAULT_QUEUE_RECOVERY_POLICY = {
+    "shard_debt_attention_after_seconds": 15 * 60,
+    "shard_debt_blocked_after_seconds": 60 * 60,
+    "recent_auto_requeue_window_seconds": 24 * 60 * 60,
+    "stalled_worker_alert_triggers": [
+        "stale_worker_session_requeued",
+        "orphaned_runtime_requeued",
+        "abandoned_run_rehydrated",
+    ],
+    "signed_receipts_required": True,
+    "receipt_contract_name": "fleet.queue_recovery_receipt",
+}
 QUEUE_SOURCE_ACTIVE_STATUSES = {
     "todo",
     "in progress",
@@ -325,6 +339,16 @@ DEFAULT_GLOBAL_ACCOUNT_POLICY = {
         },
     },
 }
+
+
+def new_service_trace_id(service: str, *, generated_at: Optional[str] = None) -> str:
+    stamp_source = parse_iso(generated_at) if generated_at else None
+    stamp = (stamp_source or utc_now()).strftime("%Y%m%dT%H%M%SZ").lower()
+    token = hashlib.sha256(f"{service}:{generated_at or stamp}:{time.time_ns()}".encode("utf-8")).hexdigest()[:12]
+    clean_service = re.sub(r"[^a-z0-9]+", "-", str(service or "").strip().lower()).strip("-") or "fleet"
+    return f"{clean_service}-{stamp}-{token}"
+
+
 EA_STATUS_BASE_URL = os.environ.get("EA_MCP_BASE_URL", "http://host.docker.internal:8090").rstrip("/")
 EA_STATUS_API_TOKEN = os.environ.get("EA_MCP_API_TOKEN", "")
 EA_STATUS_PRINCIPAL_ID = os.environ.get("EA_MCP_PRINCIPAL_ID", "codex-fleet")
@@ -6522,6 +6546,7 @@ def merged_projects(*, cache_only: bool = False) -> List[Dict[str, Any]]:
         if not active_run_id and runtime_status in {"starting", "running", "verifying"}:
             active_run_id = runtime_row.get("active_run_id")
         row["active_run_id"] = active_run_id
+        row["active_run_trace_id"] = str(active_run.get("trace_id") or "").strip() if active_run_id else ""
         active_run_alias = str(active_run.get("account_alias") or "").strip() if active_run_id else ""
         row["active_run_account_alias"] = active_run_alias if active_run_alias else None
         active_preview = run_preview_payload(active_run) if active_run_id else {"log_preview": "", "final_preview": ""}
@@ -7772,6 +7797,7 @@ def build_worker_posture_payload(
         return {
             "project_id": str(base.get("project_id") or project.get("id") or "").strip(),
             "run_id": str(base.get("run_id") or "").strip(),
+            "trace_id": str(base.get("trace_id") or "").strip(),
             "phase": str(base.get("phase") or "").strip(),
             "status": str(base.get("status") or "").strip(),
             "current_slice": str(base.get("current_slice") or project.get("current_slice") or project.get("next_action") or "").strip(),
@@ -7802,6 +7828,7 @@ def build_worker_posture_payload(
                 base={
                     "project_id": project_id,
                     "run_id": str(worker.get("worker_id") or "").strip(),
+                    "trace_id": str(worker.get("trace_id") or "").strip(),
                     "phase": str(worker.get("phase") or "").strip(),
                     "status": str(worker.get("phase") or "").strip(),
                     "current_slice": str(worker.get("current_slice") or "").strip(),
@@ -7849,6 +7876,7 @@ def build_worker_posture_payload(
                 base={
                     "project_id": project_id,
                     "run_id": run_id,
+                    "trace_id": str(row.get("trace_id") or "").strip(),
                     "phase": "recent",
                     "status": str(row.get("status") or "").strip(),
                     "current_slice": str(row.get("slice_name") or project.get("current_slice") or "").strip(),
@@ -9307,6 +9335,374 @@ def _operator_state_from_counts(counts: Dict[str, int]) -> str:
     return "nominal"
 
 
+def _age_seconds_from_timestamp(value: Any) -> Optional[int]:
+    stamp = parse_iso(value)
+    if stamp is None:
+        return None
+    return max(0, int((utc_now() - stamp).total_seconds()))
+
+
+def queue_recovery_policy_payload(status: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    policies: Dict[str, Any] = {}
+    if isinstance(status, dict):
+        policies = dict((((status.get("config") or {}).get("policies")) or {}))
+    if not policies:
+        policies = dict((normalize_config().get("policies")) or {})
+    configured = dict(policies.get("queue_recovery") or {})
+    payload = dict(DEFAULT_QUEUE_RECOVERY_POLICY)
+    payload.update(configured)
+    for key in (
+        "shard_debt_attention_after_seconds",
+        "shard_debt_blocked_after_seconds",
+        "recent_auto_requeue_window_seconds",
+    ):
+        try:
+            payload[key] = max(1, int(payload.get(key) or DEFAULT_QUEUE_RECOVERY_POLICY[key]))
+        except (TypeError, ValueError):
+            payload[key] = int(DEFAULT_QUEUE_RECOVERY_POLICY[key])
+    triggers = payload.get("stalled_worker_alert_triggers")
+    if not isinstance(triggers, list):
+        triggers = list(DEFAULT_QUEUE_RECOVERY_POLICY["stalled_worker_alert_triggers"])
+    payload["stalled_worker_alert_triggers"] = [
+        str(item).strip() for item in triggers if str(item).strip()
+    ] or list(DEFAULT_QUEUE_RECOVERY_POLICY["stalled_worker_alert_triggers"])
+    payload["signed_receipts_required"] = bool(payload.get("signed_receipts_required", True))
+    payload["receipt_contract_name"] = (
+        str(payload.get("receipt_contract_name") or DEFAULT_QUEUE_RECOVERY_POLICY["receipt_contract_name"]).strip()
+        or str(DEFAULT_QUEUE_RECOVERY_POLICY["receipt_contract_name"])
+    )
+    payload["stall_attention_human"] = human_duration(int(payload["shard_debt_attention_after_seconds"]))
+    payload["stall_blocked_human"] = human_duration(int(payload["shard_debt_blocked_after_seconds"]))
+    payload["recent_auto_requeue_window_human"] = human_duration(int(payload["recent_auto_requeue_window_seconds"]))
+    return payload
+
+
+def _shard_debt_aging_payload(shard_rows: Sequence[Dict[str, Any]], *, policy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    queue_policy = dict(policy or queue_recovery_policy_payload())
+    attention_seconds = int(queue_policy.get("shard_debt_attention_after_seconds") or 15 * 60)
+    blocked_seconds = max(attention_seconds, int(queue_policy.get("shard_debt_blocked_after_seconds") or 60 * 60))
+    rows: List[Dict[str, Any]] = []
+    state_counts: Dict[str, int] = {}
+    for item in shard_rows:
+        shard_name = str(item.get("name") or "").strip()
+        updated_at = str(item.get("updated_at") or item.get("active_run_worker_last_output_at") or "").strip()
+        age_seconds = _age_seconds_from_timestamp(updated_at)
+        open_count = len(item.get("open_milestone_ids") or [])
+        progress_state = str(item.get("active_run_progress_state") or "idle").strip() or "idle"
+        if open_count <= 0 and progress_state.startswith("idle"):
+            debt_state = "nominal"
+        elif age_seconds is None:
+            debt_state = "attention"
+        elif age_seconds >= blocked_seconds:
+            debt_state = "blocked"
+        elif age_seconds >= attention_seconds:
+            debt_state = "attention"
+        else:
+            debt_state = "nominal"
+        state_counts[debt_state] = state_counts.get(debt_state, 0) + 1
+        rows.append(
+            {
+                "name": shard_name,
+                "mode": str(item.get("mode") or "").strip(),
+                "progress_state": progress_state,
+                "open_milestone_count": open_count,
+                "updated_at": updated_at,
+                "debt_age_seconds": age_seconds,
+                "debt_age_human": human_duration(age_seconds) if age_seconds is not None else "unknown",
+                "debt_state": debt_state,
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            0 if row["debt_state"] == "blocked" else 1 if row["debt_state"] == "attention" else 2,
+            -(int(row.get("debt_age_seconds") or 0)),
+            row.get("name") or "",
+        )
+    )
+    return {
+        "state": _operator_state_from_counts(state_counts),
+        "counts": state_counts,
+        "attention_after_seconds": attention_seconds,
+        "blocked_after_seconds": blocked_seconds,
+        "attention_after_human": human_duration(attention_seconds),
+        "blocked_after_human": human_duration(blocked_seconds),
+        "rows": rows[:8],
+    }
+
+
+def _recent_auto_requeue_payload(projects: Sequence[Dict[str, Any]], *, policy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    queue_policy = dict(policy or queue_recovery_policy_payload())
+    recent_seconds = int(queue_policy.get("recent_auto_requeue_window_seconds") or 24 * 60 * 60)
+    stalled_triggers = {
+        str(item).strip()
+        for item in (queue_policy.get("stalled_worker_alert_triggers") or [])
+        if str(item).strip()
+    }
+    rows: List[Dict[str, Any]] = []
+    for project in projects:
+        stamp = str(project.get("last_auto_requeue_at") or "").strip()
+        if not stamp:
+            continue
+        age_seconds = _age_seconds_from_timestamp(stamp)
+        if age_seconds is None or age_seconds > recent_seconds:
+            continue
+        rows.append(
+            {
+                "id": str(project.get("id") or "").strip(),
+                "trigger": str(project.get("last_auto_requeue_trigger") or "").strip(),
+                "reason": str(project.get("last_auto_requeue_reason") or "").strip(),
+                "receipt_id": str(project.get("last_auto_requeue_receipt_id") or "").strip(),
+                "receipt_path": str(project.get("last_auto_requeue_receipt_path") or "").strip(),
+                "receipt_contract_name": str(queue_policy.get("receipt_contract_name") or "").strip(),
+                "signed_receipts_required": bool(queue_policy.get("signed_receipts_required")),
+                "at": stamp,
+                "age_seconds": age_seconds,
+                "age_human": human_duration(age_seconds),
+            }
+        )
+    rows.sort(key=lambda row: (int(row.get("age_seconds") or 0), row.get("id") or ""))
+    stalled_rows = [row for row in rows if str(row.get("trigger") or "").strip() in stalled_triggers]
+    return {
+        "count": len(rows),
+        "stalled_worker_alert_count": len(stalled_rows),
+        "recent_window_seconds": recent_seconds,
+        "recent_window_human": human_duration(recent_seconds),
+        "stalled_worker_alert_triggers": sorted(stalled_triggers),
+        "rows": rows[:8],
+        "stalled_rows": stalled_rows[:8],
+    }
+
+
+def _history_snapshot_date(snapshot: Dict[str, Any]) -> Optional[dt.date]:
+    raw = str(snapshot.get("as_of") or snapshot.get("generated_at") or "").strip()
+    if not raw:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        try:
+            return dt.date.fromisoformat(raw)
+        except ValueError:
+            return None
+    parsed = parse_iso(raw)
+    return parsed.date() if parsed else None
+
+
+def _history_baseline_window(
+    snapshots: Sequence[Dict[str, Any]],
+    *,
+    current_date: dt.date,
+    window_days: int,
+) -> Dict[str, Any]:
+    target_date = current_date - dt.timedelta(days=max(1, int(window_days)))
+    candidates: List[Tuple[dt.date, Dict[str, Any]]] = []
+    for snapshot in snapshots:
+        snapshot_date = _history_snapshot_date(snapshot)
+        if snapshot_date is None:
+            continue
+        candidates.append((snapshot_date, snapshot))
+    if not candidates:
+        return {
+            "window_days": int(window_days),
+            "available": False,
+            "target_as_of": target_date.isoformat(),
+            "snapshot_as_of": "",
+            "snapshot_age_days": None,
+            "overall_progress_percent": None,
+            "phase_label": "",
+        }
+    eligible = [(snapshot_date, snapshot) for snapshot_date, snapshot in candidates if snapshot_date <= target_date]
+    snapshot_date, snapshot = (eligible[-1] if eligible else candidates[0])
+    return {
+        "window_days": int(window_days),
+        "available": True,
+        "target_as_of": target_date.isoformat(),
+        "snapshot_as_of": snapshot_date.isoformat(),
+        "snapshot_age_days": max(0, (current_date - snapshot_date).days),
+        "overall_progress_percent": int(snapshot.get("overall_progress_percent") or 0),
+        "phase_label": str(snapshot.get("phase_label") or "").strip(),
+    }
+
+
+def queue_reconciliation_payload(
+    status: Optional[Dict[str, Any]] = None,
+    *,
+    progress_report: Optional[Dict[str, Any]] = None,
+    progress_history: Optional[Dict[str, Any]] = None,
+    readiness: Optional[Dict[str, Any]] = None,
+    journey_gates: Optional[Dict[str, Any]] = None,
+    support_packets: Optional[Dict[str, Any]] = None,
+    status_plane: Optional[Dict[str, Any]] = None,
+    completion_frontier: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    resolved_status = dict(status or admin_status_payload())
+    resolved_progress_report = dict(progress_report or public_progress_report_payload())
+    resolved_progress_history = dict(progress_history or load_published_json_payload(PROGRESS_HISTORY_FILENAME))
+    resolved_readiness = dict(readiness or load_published_json_payload("FLAGSHIP_PRODUCT_READINESS.generated.json"))
+    resolved_journey_gates = dict(journey_gates or journey_gates_surface_payload())
+    resolved_support_packets = dict(support_packets or support_case_surface_payload())
+    resolved_status_plane = dict(status_plane or load_published_yaml_payload(STATUS_PLANE_FILENAME))
+    resolved_completion_frontier = dict(completion_frontier or load_completion_review_frontier_payload())
+
+    queue_health = operator_surface_payload(
+        resolved_status,
+        artifact_freshness=published_artifact_freshness_payload(),
+        completion_frontier=resolved_completion_frontier,
+    ).get("queue_health") or {}
+
+    summary = dict(resolved_support_packets.get("summary") or {})
+    readiness_summary = dict(resolved_readiness.get("summary") or {})
+    readiness_completion_audit = dict(resolved_readiness.get("completion_audit") or {})
+    readiness_planes = dict(resolved_readiness.get("readiness_planes") or {})
+    journey_summary = dict(resolved_journey_gates.get("summary") or {})
+    frontier_repo_backlog = dict(resolved_completion_frontier.get("repo_backlog_audit") or {})
+    public_flagship = dict(resolved_progress_report.get("flagship_readiness") or {})
+
+    current_date = utc_now().date()
+    history_snapshots = [
+        dict(item)
+        for item in (resolved_progress_history.get("snapshots") or [])
+        if isinstance(item, dict)
+    ]
+    baseline_24h = _history_baseline_window(history_snapshots, current_date=current_date, window_days=1)
+    baseline_7d = _history_baseline_window(history_snapshots, current_date=current_date, window_days=7)
+    current_progress_percent = int(
+        resolved_progress_report.get("overall_progress_percent")
+        or resolved_progress_report.get("progress_percent")
+        or resolved_progress_report.get("percent_complete")
+        or 0
+    )
+    for baseline in (baseline_24h, baseline_7d):
+        reference = baseline.get("overall_progress_percent")
+        baseline["delta_progress_percent"] = (
+            current_progress_percent - int(reference)
+            if baseline.get("available") and isinstance(reference, int)
+            else None
+        )
+
+    readiness_drift: List[str] = []
+    shell_surface_deltas: List[Dict[str, Any]] = []
+
+    public_flagship_status = str(public_flagship.get("status") or "").strip().lower()
+    current_readiness_status = str(resolved_readiness.get("status") or "").strip().lower()
+    if public_flagship_status == "ready" and current_readiness_status != "ready":
+        missing = ", ".join(str(item).strip() for item in (resolved_readiness.get("missing_keys") or []) if str(item).strip())
+        readiness_drift.append(
+            f"Public progress still says flagship readiness is ready while current readiness is {current_readiness_status or 'unknown'}"
+            + (f"; missing coverage: {missing}." if missing else ".")
+        )
+        shell_surface_deltas.append(
+            {
+                "surface": "desktop_client",
+                "state": "blocked",
+                "public_claim": str(public_flagship.get("desktop_executable_gate_status") or public_flagship.get("summary") or "ready").strip(),
+                "current_truth": current_readiness_status or "unknown",
+                "reason": readiness_drift[-1],
+            }
+        )
+
+    veteran_status = str((readiness_planes.get("veteran_ready") or {}).get("status") or "").strip().lower()
+    if bool(public_flagship.get("layout_familiarity_proven")) and veteran_status not in {"", "ready"}:
+        reasons = "; ".join(str(item).strip() for item in ((readiness_planes.get("veteran_ready") or {}).get("reasons") or [])[:2] if str(item).strip())
+        shell_surface_deltas.append(
+            {
+                "surface": "visual_familiarity",
+                "state": "attention",
+                "public_claim": "layout familiarity proven",
+                "current_truth": veteran_status or "unknown",
+                "reason": reasons or "Veteran-orientation readiness is not green.",
+            }
+        )
+
+    journey_overall_state = str(journey_summary.get("overall_state") or "").strip().lower()
+    if str(public_flagship.get("desktop_executable_gate_status") or "").strip().lower() == "pass" and journey_overall_state != "ready":
+        install_journey = next(
+            (
+                dict(item)
+                for item in (resolved_journey_gates.get("journeys") or [])
+                if isinstance(item, dict) and str(item.get("id") or "").strip() == "install_claim_restore_continue"
+            ),
+            {},
+        )
+        blocker = first_nonempty(*((install_journey.get("blocking_reasons") or [])[:2]), "Install/claim/restore journey is blocked.")
+        shell_surface_deltas.append(
+            {
+                "surface": "install_claim_restore_continue",
+                "state": "blocked",
+                "public_claim": "desktop executable gate pass",
+                "current_truth": journey_overall_state or "unknown",
+                "reason": blocker,
+            }
+        )
+
+    report_repo_backlog = dict(resolved_progress_report.get("repo_backlog") or {})
+    report_backlog_open = int(report_repo_backlog.get("open_item_count") or 0)
+    frontier_backlog_open = int(frontier_repo_backlog.get("open_item_count") or 0)
+    if report_backlog_open == 0 and frontier_backlog_open > 0:
+        reason = str(frontier_repo_backlog.get("reason") or "repo-local backlog reopened").strip()
+        readiness_drift.append(f"Public progress reports zero repo backlog while completion review sees {frontier_backlog_open} open item(s): {reason}")
+        shell_surface_deltas.append(
+            {
+                "surface": "release_truth",
+                "state": "blocked",
+                "public_claim": "repo backlog 0 / overall complete",
+                "current_truth": f"{frontier_backlog_open} repo backlog item(s)",
+                "reason": reason,
+            }
+        )
+
+    final_claim_status = str(resolved_status_plane.get("whole_product_final_claim_status") or "").strip().lower()
+    report_overall_status = str(resolved_progress_report.get("overall_status") or "").strip().lower()
+    if report_overall_status == "complete" and final_claim_status not in {"", "pass", "ready"}:
+        readiness_drift.append(
+            f"Public progress reports overall status complete while status-plane final claim is {final_claim_status or 'unknown'}."
+        )
+
+    state_counts: Dict[str, int] = {
+        "blocked": 1 if shell_surface_deltas else 0,
+        "attention": 1 if int(queue_health.get("stalled_worker_alert_count") or 0) > 0 else 0,
+    }
+    if frontier_backlog_open > 0:
+        state_counts["blocked"] = state_counts.get("blocked", 0) + 1
+    if int(summary.get("open_packet_count") or 0) > 0 or int(summary.get("closure_waiting_on_release_truth") or 0) > 0:
+        state_counts["attention"] = state_counts.get("attention", 0) + 1
+
+    return {
+        "contract_name": "fleet.queue_reconciliation",
+        "schema_version": 1,
+        "generated_at": resolved_status.get("generated_at") or iso(utc_now()),
+        "overall_state": _operator_state_from_counts(state_counts),
+        "summary": {
+            "queue_state": str(queue_health.get("state") or "unknown").strip(),
+            "open_queue_project_count": int(queue_health.get("open_queue_project_count") or 0),
+            "blocked_project_count": int(queue_health.get("blocked_project_count") or 0),
+            "stalled_worker_alert_count": int(queue_health.get("stalled_worker_alert_count") or 0),
+            "repo_backlog_open_item_count": frontier_backlog_open,
+            "journey_blocked_count": int(journey_summary.get("blocked_count") or 0),
+            "readiness_status": current_readiness_status or "unknown",
+            "readiness_warning_count": int(readiness_summary.get("warning_count") or 0),
+            "readiness_missing_count": int(readiness_summary.get("missing_count") or 0),
+            "support_open_packet_count": int(summary.get("open_packet_count") or 0),
+            "support_waiting_on_release_truth_count": int(summary.get("closure_waiting_on_release_truth") or 0),
+            "shell_surface_delta_count": len(shell_surface_deltas),
+        },
+        "history_windows": [baseline_24h, baseline_7d],
+        "readiness_drift": {
+            "current_status": current_readiness_status or "unknown",
+            "completion_audit_status": str(readiness_completion_audit.get("status") or "unknown").strip().lower() or "unknown",
+            "public_progress_status": public_flagship_status or "unknown",
+            "whole_product_final_claim_status": final_claim_status or "unknown",
+            "reasons": readiness_drift,
+        },
+        "support_backlog": {
+            "open_packet_count": int(summary.get("open_packet_count") or 0),
+            "open_non_external_packet_count": int(summary.get("open_non_external_packet_count") or 0),
+            "closure_waiting_on_release_truth": int(summary.get("closure_waiting_on_release_truth") or 0),
+            "update_required_case_count": int(summary.get("update_required_case_count") or 0),
+            "update_required_misrouted_case_count": int(summary.get("update_required_misrouted_case_count") or 0),
+        },
+        "shell_surface_deltas": shell_surface_deltas[:8],
+    }
+
+
 def operator_surface_payload(
     status: Dict[str, Any],
     *,
@@ -9325,6 +9721,7 @@ def operator_surface_payload(
     blocker_forecast = cockpit.get("blocker_forecast") or {}
     runtime_healing = status.get("runtime_healing") or {}
     runtime_healing_summary = runtime_healing.get("summary") or {}
+    queue_recovery_policy = queue_recovery_policy_payload(status)
     active_shards = dict(active_shards_payload if active_shards_payload is not None else load_design_supervisor_active_shards_payload())
     shard_rows = [dict(item) for item in (active_shards.get("active_shards") or []) if isinstance(item, dict)]
     freshness = dict(artifact_freshness if artifact_freshness is not None else published_artifact_freshness_payload())
@@ -9340,6 +9737,7 @@ def operator_surface_payload(
     ]
     shard_modes = _count_by_clean_state(shard_rows, "mode")
     shard_progress = _count_by_clean_state(shard_rows, "active_run_progress_state", default="idle")
+    shard_debt_aging = _shard_debt_aging_payload(shard_rows, policy=queue_recovery_policy)
     focus_owner_counts: Dict[str, int] = {}
     for item in shard_rows:
         for owner in item.get("focus_owners") or []:
@@ -9366,6 +9764,7 @@ def operator_surface_payload(
     blocked_projects: List[Dict[str, Any]] = []
     review_waiting_projects: List[Dict[str, Any]] = []
     queue_open_count = 0
+    recent_auto_requeues = _recent_auto_requeue_payload(projects, policy=queue_recovery_policy)
     for project in projects:
         project_id = str(project.get("id") or "").strip()
         queue_len = project_queue_length(project)
@@ -9386,15 +9785,20 @@ def operator_surface_payload(
         if runtime_status in REVIEW_WAITING_STATUSES or runtime_status in REVIEW_VISIBLE_STATUSES:
             review_waiting_projects.append(row)
     queue_health = {
-        "state": "blocked" if blocked_projects else ("attention" if review_waiting_projects else "nominal"),
+        "state": "blocked" if blocked_projects else ("attention" if review_waiting_projects or recent_auto_requeues["stalled_worker_alert_count"] else "nominal"),
         "project_count": len(project_rows),
         "open_queue_project_count": queue_open_count,
         "blocked_project_count": len(blocked_projects),
         "review_waiting_project_count": len(review_waiting_projects),
+        "recent_auto_requeue_count": recent_auto_requeues["count"],
+        "stalled_worker_alert_count": recent_auto_requeues["stalled_worker_alert_count"],
         "now": queue_forecast.get("now") or {},
         "next": queue_forecast.get("next") or {},
         "blocked_projects": blocked_projects[:8],
         "review_waiting_projects": review_waiting_projects[:8],
+        "recent_auto_requeues": recent_auto_requeues["rows"],
+        "recent_auto_requeue_window_human": recent_auto_requeues.get("recent_window_human") or "",
+        "policy": queue_recovery_policy,
     }
 
     proof_rows = []
@@ -9494,6 +9898,8 @@ def operator_surface_payload(
         alerts.append(str((frontier_payload.get("completion_audit") or {}).get("reason") or "completion audit is failing").strip())
     if blocked_projects:
         alerts.append(f"{len(blocked_projects)} project(s) are blocked")
+    if recent_auto_requeues["stalled_worker_alert_count"]:
+        alerts.append(f"{recent_auto_requeues['stalled_worker_alert_count']} recent stalled-worker auto-requeue alert(s)")
     if proof_freshness["stale_or_missing_count"]:
         alerts.append(f"{proof_freshness['stale_or_missing_count']} proof artifact(s) are stale or missing")
     if account_health["state"] == "blocked":
@@ -9505,6 +9911,7 @@ def operator_surface_payload(
 
     section_states = {
         "shard_mix": "attention" if shard_mix["running_shard_count"] < shard_mix["active_run_count"] else "nominal",
+        "shard_debt_aging": shard_debt_aging["state"],
         "queue_health": queue_health["state"],
         "proof_freshness": proof_freshness["state"],
         "account_health": account_health["state"],
@@ -9520,6 +9927,7 @@ def operator_surface_payload(
         "next_page": alerts[0],
         "section_states": section_states,
         "shard_mix": shard_mix,
+        "shard_debt_aging": shard_debt_aging,
         "queue_health": queue_health,
         "proof_freshness": proof_freshness,
         "account_health": account_health,
@@ -9705,20 +10113,27 @@ def booster_runtime_card_payload(
     onemin_runtime = onemin_codexer_runtime_payload(cache_only=cache_only)
     active_onemin_codexers = max(0, int(onemin_runtime.get("active_onemin_codexers") or 0))
     active_onemin_booster_codexers = max(0, int(onemin_runtime.get("active_onemin_booster_codexers") or 0))
+    active_managed_boosters = active_onemin_booster_codexers
     active_boosters = active_participant_boosters + active_onemin_booster_codexers
     free_credits = float_or_none(provider_credit.get("free_credits"))
     hours_no_topup = float_or_none(provider_credit.get("hours_remaining_at_current_pace_no_topup"))
     hourly_burn = None
     per_booster_hourly_burn = None
     per_onemin_codexer_hourly_burn = None
+    participant_share_percent = None
+    managed_share_percent = None
     if free_credits is not None and hours_no_topup is not None and hours_no_topup > 0:
         hourly_burn = free_credits / hours_no_topup
         if active_boosters > 0:
             per_booster_hourly_burn = hourly_burn / active_boosters
         if active_onemin_codexers > 0:
             per_onemin_codexer_hourly_burn = hourly_burn / active_onemin_codexers
+    if active_boosters > 0:
+        participant_share_percent = round((active_participant_boosters / active_boosters) * 100.0, 2)
+        managed_share_percent = round((active_managed_boosters / active_boosters) * 100.0, 2)
     return {
         "active_boosters": active_boosters,
+        "active_managed_boosters": active_managed_boosters,
         "active_participant_boosters": active_participant_boosters,
         "sponsor_ready_boosters": sponsor_ready_boosters,
         "active_onemin_codexers": active_onemin_codexers,
@@ -9726,6 +10141,12 @@ def booster_runtime_card_payload(
         "active_onemin_projects": list(onemin_runtime.get("active_onemin_projects") or []),
         "active_onemin_accounts": list(onemin_runtime.get("active_onemin_accounts") or []),
         "active_onemin_lane_usage": dict(onemin_runtime.get("active_onemin_lane_usage") or {}),
+        "managed_vs_participant": {
+            "managed_core_burst": active_managed_boosters,
+            "participant_direct_burst": active_participant_boosters,
+        },
+        "participant_share_percent": participant_share_percent,
+        "managed_share_percent": managed_share_percent,
         "credits_left_percent": provider_credit.get("remaining_percent_total"),
         "free_credits": provider_credit.get("free_credits"),
         "max_credits": provider_credit.get("max_credits"),
@@ -10092,6 +10513,10 @@ def jury_telemetry_payload(
     active_subject_counts: Dict[str, int] = {}
     active_role_counts: Dict[str, int] = {}
     sponsor_ready_lanes = 0
+    receipt_status_counts: Dict[str, int] = {}
+    receipt_failure_count = 0
+    consented_lanes = 0
+    missing_consent_trace_lanes = 0
     for lane in participant_rows:
         project_id = str(lane.get("project_id") or "").strip()
         if project_id:
@@ -10107,6 +10532,15 @@ def jury_telemetry_payload(
         if subject_key:
             active_subject_counts[subject_key] = active_subject_counts.get(subject_key, 0) + 1
         telemetry = dict(lane.get("telemetry") or {})
+        receipts = dict(telemetry.get("receipts") or {})
+        receipt_status = str(receipts.get("last_status") or lane.get("reward_receipt_status") or "missing").strip().lower() or "missing"
+        receipt_status_counts[receipt_status] = receipt_status_counts.get(receipt_status, 0) + 1
+        if receipt_status.startswith("failed") or receipt_status.startswith("partial") or str(lane.get("reward_receipt_error") or "").strip():
+            receipt_failure_count += 1
+        if str(lane.get("consented_at") or "").strip():
+            consented_lanes += 1
+        else:
+            missing_consent_trace_lanes += 1
         if bool(telemetry.get("auth_ready")) or lane.get("auth_completed_at"):
             sponsor_ready_lanes += 1
     shared_subject_conflicts = [
@@ -10269,10 +10703,14 @@ def jury_telemetry_payload(
             "active_unique_subjects": len(active_subject_counts),
             "active_by_role": active_role_counts,
             "sponsor_ready_lanes": sponsor_ready_lanes,
+            "consented_lanes": consented_lanes,
+            "missing_consent_trace_lanes": missing_consent_trace_lanes,
             "premium_queue_depth": premium_queue_depth,
             "surge_mode_projects": surge_mode_projects,
             "effective_capacity_by_project": effective_capacity_by_project,
             "credit_guard_by_project": credit_guard_by_project,
+            "receipt_status_counts": receipt_status_counts,
+            "receipt_failure_count": receipt_failure_count,
             "shared_subject_serialized": bool(shared_subject_conflicts),
             "shared_subject_conflicts": shared_subject_conflicts[:5],
         },
@@ -10373,6 +10811,37 @@ def artifact_freshness_payload(*, at: Optional[str], stale_after_hours: int = 24
     }
 
 
+def weekly_governor_packet_freshness_payload(payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    resolved_payload = dict(payload or {})
+    schedule = dict(resolved_payload.get("governor_packet_schedule") or {})
+    cadence_seconds = max(
+        1,
+        int(
+            schedule.get("max_age_seconds")
+            or schedule.get("cadence_seconds")
+            or 7 * 24 * 60 * 60
+        ),
+    )
+    freshness = artifact_freshness_payload(
+        at=str(resolved_payload.get("generated_at") or "").strip(),
+        stale_after_hours=max(1, cadence_seconds // 3600),
+    )
+    due_at = parse_iso(str(schedule.get("next_packet_due_at") or "").strip())
+    if not due_at:
+        freshness["schedule_state"] = "unknown"
+        return freshness
+    due_in_seconds = int((due_at - utc_now()).total_seconds())
+    freshness["schedule_due_at"] = iso(due_at)
+    freshness["schedule_due_in_seconds"] = max(0, due_in_seconds)
+    freshness["schedule_overdue_seconds"] = max(0, -due_in_seconds)
+    freshness["schedule_state"] = "overdue" if due_in_seconds < 0 else "scheduled"
+    if due_in_seconds < 0:
+        freshness["state"] = "stale"
+        freshness["label"] = "stale"
+        freshness["reason"] = "Weekly governor packet is past due for its weekly cadence."
+    return freshness
+
+
 PUBLISHED_ARTIFACT_SOURCE_DRIFT_TOLERANCE_SECONDS = max(
     1,
     int(os.environ.get("FLEET_PUBLISHED_ARTIFACT_SOURCE_DRIFT_TOLERANCE_SECONDS", "300")),
@@ -10427,6 +10896,28 @@ def _status_plane_source_paths() -> List[pathlib.Path]:
     return paths
 
 
+def _campaign_os_monitor_source_paths() -> List[pathlib.Path]:
+    return [
+        published_artifact_path(FLAGSHIP_READINESS_FILENAME),
+        published_artifact_path(JOURNEY_GATES_FILENAME),
+        published_artifact_path(SUPPORT_CASE_PACKETS_FILENAME),
+        published_artifact_path(PROGRESS_REPORT_FILENAME),
+        published_artifact_path(PROGRESS_HISTORY_FILENAME),
+        published_artifact_path(WEEKLY_GOVERNOR_PACKET_FILENAME),
+        published_artifact_path("COMPLETION_REVIEW_FRONTIER.generated.yaml"),
+    ]
+
+
+def _weekly_governor_packet_source_paths(payload: Optional[Dict[str, Any]] = None) -> List[pathlib.Path]:
+    source_paths = dict((payload or {}).get("source_paths") or {})
+    paths: List[pathlib.Path] = []
+    for value in source_paths.values():
+        text = str(value or "").strip()
+        if text:
+            paths.append(pathlib.Path(text))
+    return paths
+
+
 def _apply_source_drift_freshness(
     freshness: Dict[str, Any],
     *,
@@ -10434,6 +10925,8 @@ def _apply_source_drift_freshness(
     artifact_label: str,
 ) -> Dict[str, Any]:
     payload = dict(freshness or {})
+    if not source_paths:
+        return payload
     artifact_at = parse_iso(str(payload.get("at") or "").strip())
     if artifact_at is None:
         return payload
@@ -10540,6 +11033,25 @@ def journey_gates_surface_payload() -> Dict[str, Any]:
     }
 
 
+def weekly_governor_packet_surface_payload() -> Dict[str, Any]:
+    payload = load_published_json_payload(WEEKLY_GOVERNOR_PACKET_FILENAME)
+    decision_board = dict(payload.get("decision_board") or {})
+    measured_rollout_loop = dict(payload.get("measured_rollout_loop") or {})
+    public_status_copy = dict(payload.get("public_status_copy") or {})
+    freshness = _apply_source_drift_freshness(
+        weekly_governor_packet_freshness_payload(payload),
+        source_paths=_weekly_governor_packet_source_paths(payload),
+        artifact_label="weekly governor packet",
+    )
+    return {
+        **payload,
+        "decision_board": decision_board,
+        "measured_rollout_loop": measured_rollout_loop,
+        "public_status_copy": public_status_copy,
+        "freshness": freshness,
+    }
+
+
 def release_channel_runtime_url() -> str:
     if CHUMMER_RELEASE_REGISTRY_CURRENT_URL:
         return CHUMMER_RELEASE_REGISTRY_CURRENT_URL
@@ -10593,20 +11105,24 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
     progress_history = load_published_json_payload(PROGRESS_HISTORY_FILENAME)
     status_plane = load_published_yaml_payload(STATUS_PLANE_FILENAME)
     weekly_governor_packet = load_published_json_payload(WEEKLY_GOVERNOR_PACKET_FILENAME)
+    campaign_os_monitor = load_published_json_payload(CAMPAIGN_OS_CONTINUITY_LIVENESS_FILENAME)
     compile_manifest = compile_manifest_surface_payload()
     support_packets = support_case_surface_payload()
     journey_gates = journey_gates_surface_payload()
     release_channel = release_channel_surface_payload()
     progress_source_paths = _progress_artifact_source_paths()
     status_plane_source_paths = _status_plane_source_paths()
+    campaign_os_source_paths = _campaign_os_monitor_source_paths()
+    weekly_governor_source_paths = _weekly_governor_packet_source_paths(weekly_governor_packet)
     return {
         "compile_manifest": compile_manifest.get("freshness") or artifact_freshness_payload(at=""),
         "support_packets": support_packets.get("freshness") or artifact_freshness_payload(at=""),
         "journey_gates": journey_gates.get("freshness") or artifact_freshness_payload(at=""),
         "release_channel": release_channel.get("freshness") or artifact_freshness_payload(at=""),
-        "weekly_governor_packet": artifact_freshness_payload(
-            at=str(weekly_governor_packet.get("generated_at") or "").strip(),
-            stale_after_hours=24 * 8,
+        "weekly_governor_packet": _apply_source_drift_freshness(
+            weekly_governor_packet_freshness_payload(weekly_governor_packet),
+            source_paths=weekly_governor_source_paths,
+            artifact_label="weekly governor packet",
         ),
         "progress_report": _apply_source_drift_freshness(
             artifact_freshness_payload(
@@ -10632,6 +11148,14 @@ def published_artifact_freshness_payload() -> Dict[str, Any]:
             source_paths=status_plane_source_paths,
             artifact_label="status plane",
         ),
+        "campaign_os_continuity_liveness": _apply_source_drift_freshness(
+            artifact_freshness_payload(
+                at=str(campaign_os_monitor.get("generated_at") or "").strip(),
+                stale_after_hours=24,
+            ),
+            source_paths=campaign_os_source_paths,
+            artifact_label="campaign OS continuity monitor",
+        ),
     }
 
 
@@ -10643,6 +11167,7 @@ def publish_readiness_payload(
     support_surface: Optional[Dict[str, Any]] = None,
     journey_gates: Optional[Dict[str, Any]] = None,
     release_channel: Optional[Dict[str, Any]] = None,
+    weekly_governor_packet: Optional[Dict[str, Any]] = None,
     provider_routes: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     resolved_runtime_healing = dict(runtime_healing or status.get("runtime_healing") or runtime_healing_payload())
@@ -10650,11 +11175,21 @@ def publish_readiness_payload(
     resolved_support_surface = dict(support_surface or support_case_surface_payload())
     resolved_journey_gates = dict(journey_gates or journey_gates_surface_payload())
     resolved_release_channel = dict(release_channel or release_channel_surface_payload())
+    weekly_governor_in_scope = bool(
+        weekly_governor_packet is not None
+        or "weekly_governor_packet" in resolved_artifact_freshness
+    )
+    resolved_weekly_governor_packet = dict(
+        weekly_governor_packet or (weekly_governor_packet_surface_payload() if weekly_governor_in_scope else {})
+    )
     resolved_provider_routes = list(provider_routes or provider_route_summary_payload(status))
     runtime_summary = dict(resolved_runtime_healing.get("summary") or {})
     support_summary = dict(resolved_support_surface.get("summary") or {})
     journey_summary = dict(resolved_journey_gates.get("summary") or {})
     release_proof = dict(resolved_release_channel.get("release_proof") or {})
+    weekly_governor_decision_board = dict(resolved_weekly_governor_packet.get("decision_board") or {})
+    weekly_governor_public_status = dict(resolved_weekly_governor_packet.get("public_status_copy") or {})
+    weekly_governor_loop = dict(resolved_weekly_governor_packet.get("measured_rollout_loop") or {})
 
     blocking_reasons: List[str] = []
     warning_reasons: List[str] = []
@@ -10709,12 +11244,57 @@ def publish_readiness_payload(
             str(support_freshness.get("reason") or f"Support packet freshness is {support_state}.").strip()
         )
     weekly_governor_freshness = dict(resolved_artifact_freshness.get("weekly_governor_packet") or {})
+    computed_weekly_governor_freshness = weekly_governor_packet_freshness_payload(
+        resolved_weekly_governor_packet
+    )
+    computed_weekly_governor_freshness = _apply_source_drift_freshness(
+        computed_weekly_governor_freshness,
+        source_paths=_weekly_governor_packet_source_paths(resolved_weekly_governor_packet),
+        artifact_label="weekly governor packet",
+    )
+    if (
+        weekly_governor_in_scope
+        and str(weekly_governor_freshness.get("state") or "").strip().lower()
+        not in {"stale", "missing"}
+        and str(computed_weekly_governor_freshness.get("state") or "").strip().lower() == "stale"
+    ):
+        weekly_governor_freshness = computed_weekly_governor_freshness
     weekly_governor_state = str(weekly_governor_freshness.get("state") or "").strip().lower()
-    if weekly_governor_state in {"stale", "missing"}:
+    if weekly_governor_in_scope:
+        if weekly_governor_state in {"stale", "missing"}:
+            warning_reasons.append(
+                str(
+                    weekly_governor_freshness.get("reason")
+                    or f"Weekly governor packet freshness is {weekly_governor_state}."
+                ).strip()
+            )
+        else:
+            weekly_governor_status = str(resolved_weekly_governor_packet.get("status") or "").strip().lower()
+            weekly_governor_launch_action = str(
+                weekly_governor_decision_board.get("current_launch_action") or ""
+            ).strip().lower()
+            weekly_governor_public_state = str(
+                weekly_governor_public_status.get("state") or ""
+            ).strip().lower()
+            weekly_governor_reason = str(
+                weekly_governor_decision_board.get("current_launch_reason")
+                or weekly_governor_public_status.get("body")
+                or resolved_weekly_governor_packet.get("status_reason")
+                or "Weekly governor packet is not ready for launch expansion."
+            ).strip()
+            if weekly_governor_public_state == "freeze_with_rollback_watch" or bool(
+                weekly_governor_loop.get("rollback_watch")
+            ):
+                blocking_reasons.append(weekly_governor_reason)
+            elif weekly_governor_launch_action == "freeze_launch" or weekly_governor_status == "blocked":
+                blocking_reasons.append(weekly_governor_reason)
+    campaign_os_monitor_freshness = dict(resolved_artifact_freshness.get("campaign_os_continuity_liveness") or {})
+    campaign_os_monitor_state = str(campaign_os_monitor_freshness.get("state") or "").strip().lower()
+    if campaign_os_monitor_state in {"stale", "missing"}:
         warning_reasons.append(
             str(
-                weekly_governor_freshness.get("reason")
-                or f"Weekly governor packet freshness is {weekly_governor_state}."
+                campaign_os_monitor_freshness.get("reason")
+                or f"Campaign OS continuity monitor freshness is {campaign_os_monitor_state}."
             ).strip()
         )
     if int(support_summary.get("closure_waiting_on_release_truth") or 0) > 0:
@@ -10769,6 +11349,14 @@ def publish_readiness_payload(
             "release_channel_freshness_state": release_channel_freshness_state or "unknown",
             "support_freshness_state": support_state or "unknown",
             "weekly_governor_packet_freshness_state": weekly_governor_state or "unknown",
+            "weekly_governor_packet_schedule_state": str(
+                weekly_governor_freshness.get("schedule_state") or ""
+            ).strip()
+            or "unknown",
+            "weekly_governor_packet_status": str(resolved_weekly_governor_packet.get("status") or "").strip() or "unknown",
+            "weekly_governor_launch_action": str(weekly_governor_decision_board.get("current_launch_action") or "").strip() or "unknown",
+            "weekly_governor_public_state": str(weekly_governor_public_status.get("state") or "").strip() or "unknown",
+            "campaign_os_monitor_freshness_state": campaign_os_monitor_state or "unknown",
             "journey_gate_state": journey_state or "unknown",
             "release_channel_status": release_channel_status or "unknown",
             "release_channel_rollout_state": rollout_state or "unknown",
@@ -10849,6 +11437,8 @@ def _refreshable_artifact_keys(freshness: Dict[str, Any]) -> List[str]:
         or any(key in keys for key in {"status_plane", "journey_gates", "support_packets"})
     ):
         keys.append("weekly_governor_packet")
+    if _artifact_refresh_needed(dict(freshness.get("campaign_os_continuity_liveness") or {})):
+        keys.append("campaign_os_continuity_liveness")
     return sorted(set(keys))
 
 
@@ -10972,6 +11562,20 @@ def refresh_published_artifacts(*, force: bool = False, status_payload: Optional
             results.append(
                 {
                     "artifact": "weekly_governor_packet",
+                    "ok": bool(result.get("ok")),
+                    "state": "refreshed" if result.get("ok") else "error",
+                    "detail": result.get("stdout") or result.get("stderr") or "",
+                }
+            )
+        if force or "campaign_os_continuity_liveness" in refreshable:
+            result = _run_repo_python_script(
+                "materialize_campaign_os_continuity_monitor.py",
+                "--out",
+                str(published_artifact_path(CAMPAIGN_OS_CONTINUITY_LIVENESS_FILENAME)),
+            )
+            results.append(
+                {
+                    "artifact": "campaign_os_continuity_liveness",
                     "ok": bool(result.get("ok")),
                     "state": "refreshed" if result.get("ok") else "error",
                     "detail": result.get("stdout") or result.get("stderr") or "",
@@ -11913,6 +12517,18 @@ def canonical_public_status_payload(status: Dict[str, Any], *, cache_only: bool 
     cockpit = status.get("cockpit") or {}
     summary = cockpit.get("summary") or {}
     projects = status.get("projects", [])
+    generated_at = str(status.get("generated_at") or iso(utc_now()))
+    trace = dict(status.get("trace") or {})
+    trace_id = str(trace.get("trace_id") or new_service_trace_id("admin-status", generated_at=generated_at)).strip()
+    active_run_traces = [
+        {
+            "project_id": str(project.get("id") or "").strip(),
+            "run_id": str(project.get("active_run_id") or "").strip(),
+            "trace_id": str(project.get("active_run_trace_id") or "").strip(),
+        }
+        for project in projects
+        if str(project.get("active_run_trace_id") or "").strip()
+    ]
     runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
@@ -11971,7 +12587,13 @@ def canonical_public_status_payload(status: Dict[str, Any], *, cache_only: bool 
     return {
         "contract_name": PUBLIC_STATUS_CONTRACT_NAME,
         "contract_version": PUBLIC_STATUS_CONTRACT_VERSION,
-        "generated_at": status.get("generated_at"),
+        "generated_at": generated_at,
+        "trace": {
+            "trace_id": trace_id,
+            "source": "fleet-admin",
+            "auditor_trace_id": str((((status.get("auditor") or {}).get("last_run") or {}).get("trace_id")) or "").strip(),
+            "active_run_traces": active_run_traces[:12],
+        },
         "summary": {
             "mission_headline": summary.get("mission_headline") or ((cockpit.get("mission_snapshot") or {}).get("headline") or ""),
             "fleet_health": summary.get("fleet_health") or "unknown",
@@ -12388,6 +13010,17 @@ def admin_status_payload(*, public_mode: bool = False) -> Dict[str, Any]:
         "generated_at": iso(utc_now()),
         "participant_lanes": participant_lane_rows_for_admin(),
     }
+    payload["trace"] = {
+        "trace_id": new_service_trace_id("admin-status", generated_at=str(payload["generated_at"] or "")),
+        "source": "fleet-admin",
+        "auditor_trace_id": str(((payload.get("auditor") or {}).get("last_run") or {}).get("trace_id") or "").strip(),
+        "active_run_count": len([project for project in projects if str(project.get("active_run_trace_id") or "").strip()]),
+        "active_run_trace_ids": [
+            str(project.get("active_run_trace_id") or "").strip()
+            for project in projects
+            if str(project.get("active_run_trace_id") or "").strip()
+        ][:12],
+    }
     payload["cockpit"] = cockpit_payload_from_status(payload, cache_only=public_mode)
     payload["public_status"] = canonical_public_status_payload(payload, cache_only=public_mode)
     payload["summary"] = payload["cockpit"].get("summary", {})
@@ -12410,6 +13043,7 @@ def api_capacity_status() -> Dict[str, Any]:
     config = dict(status.get("config") or {})
     return {
         "generated_at": status.get("generated_at"),
+        "trace": dict(status.get("trace") or {}),
         "cockpit": status.get("cockpit", {}),
         "projects": status.get("projects", []),
         "groups": status.get("groups", []),
@@ -12744,6 +13378,7 @@ def api_cockpit_operator_surface() -> Dict[str, Any]:
 
 def render_operator_surface() -> str:
     payload = operator_surface_payload(admin_status_payload())
+    reconciliation = queue_reconciliation_payload()
 
     def td(value: Any) -> str:
         return html.escape("" if value is None else str(value))
@@ -12752,6 +13387,14 @@ def render_operator_surface() -> str:
         clean = str(value or "unknown").strip() or "unknown"
         clean_tone = str(tone or clean).strip().lower().replace("_", "-")
         return f'<span class="chip chip-{html.escape(clean_tone)}">{td(clean)}</span>'
+
+    def receipt_link(row: Dict[str, Any]) -> str:
+        receipt_id = str(row.get("receipt_id") or "").strip()
+        receipt_path = str(row.get("receipt_path") or "").strip()
+        if receipt_path:
+            label = receipt_id or "receipt"
+            return f'<a href="file://{html.escape(receipt_path)}">{td(label)}</a>'
+        return td(receipt_id or "missing")
 
     def state_tone(value: Any) -> str:
         clean = str(value or "").strip().lower()
@@ -12771,11 +13414,17 @@ def render_operator_surface() -> str:
         )
 
     shard_mix = payload.get("shard_mix") or {}
+    shard_debt = payload.get("shard_debt_aging") or {}
     queue = payload.get("queue_health") or {}
     proof = payload.get("proof_freshness") or {}
     accounts = payload.get("account_health") or {}
     resources = payload.get("resource_pressure") or {}
     blocked = payload.get("blocked_milestones") or []
+    queue_policy = queue.get("policy") or {}
+    reconciliation_summary = reconciliation.get("summary") or {}
+    reconciliation_windows = reconciliation.get("history_windows") or []
+    reconciliation_drift = (reconciliation.get("readiness_drift") or {}).get("reasons") or []
+    shell_surface_deltas = reconciliation.get("shell_surface_deltas") or []
 
     proof_rows = "".join(
         f"<tr><td>{td(row.get('key'))}</td><td>{chip(row.get('state'), tone=state_tone(row.get('state')))}</td><td>{td(row.get('age') or row.get('at'))}</td><td>{td(row.get('reason'))}</td></tr>"
@@ -12792,6 +13441,26 @@ def render_operator_surface() -> str:
     blocked_project_rows = "".join(
         f"<tr><td>{td(row.get('id'))}</td><td>{td(row.get('runtime_status'))}</td><td>{td(row.get('queue_length'))}</td><td>{td(row.get('current_slice'))}</td><td>{td(row.get('selected_lane'))}</td></tr>"
         for row in (queue.get("blocked_projects") or [])[:8]
+    )
+    shard_debt_rows = "".join(
+        f"<tr><td>{td(row.get('name'))}</td><td>{chip(row.get('debt_state'), tone=state_tone(row.get('debt_state')))}</td><td>{td(row.get('debt_age_human'))}</td><td>{td(row.get('open_milestone_count'))}</td><td>{td(row.get('progress_state'))}</td></tr>"
+        for row in (shard_debt.get("rows") or [])[:8]
+    )
+    auto_requeue_rows = "".join(
+        f"<tr><td>{td(row.get('id'))}</td><td>{td(row.get('trigger'))}</td><td>{td(row.get('age_human'))}</td><td>{receipt_link(row)}</td><td>{td(row.get('reason'))}</td></tr>"
+        for row in (queue.get("recent_auto_requeues") or [])[:8]
+    )
+    reconciliation_window_rows = "".join(
+        f"<tr><td>{td(str(row.get('window_days')) + 'd')}</td><td>{td(row.get('snapshot_as_of') or 'missing')}</td><td>{td(row.get('overall_progress_percent') if row.get('available') else 'n/a')}</td><td>{td(row.get('delta_progress_percent') if row.get('delta_progress_percent') is not None else 'n/a')}</td><td>{td(row.get('phase_label') or '')}</td></tr>"
+        for row in reconciliation_windows[:2]
+    )
+    reconciliation_drift_rows = "".join(
+        f"<tr><td>{td(row.get('surface'))}</td><td>{chip(row.get('state'), tone=state_tone(row.get('state')))}</td><td>{td(row.get('public_claim'))}</td><td>{td(row.get('current_truth'))}</td><td>{td(row.get('reason'))}</td></tr>"
+        for row in shell_surface_deltas[:8]
+    )
+    readiness_drift_rows = "".join(
+        f"<tr><td>{td(index + 1)}</td><td>{td(reason)}</td></tr>"
+        for index, reason in enumerate(reconciliation_drift[:8])
     )
 
     return f"""<!doctype html>
@@ -12850,6 +13519,7 @@ def render_operator_surface() -> str:
         <nav class="links">
           <a href="/admin">Command Deck</a>
           <a href="/admin/details">Explorer</a>
+          <a href="/api/admin/queue-reconciliation">Reconciliation API</a>
           <a href="/api/cockpit/operator-surface">API</a>
           <a href="/api/cockpit/status">Cockpit API</a>
         </nav>
@@ -12857,11 +13527,13 @@ def render_operator_surface() -> str:
 
       <section class="grid metrics">
         {metric('Shard Mix', f"{shard_mix.get('running_shard_count', 0)} / {shard_mix.get('configured_shard_count', 0)}", f"open milestones {shard_mix.get('open_milestone_count', 0)}")}
-        {metric('Queue Health', queue.get('state', 'unknown'), f"{queue.get('open_queue_project_count', 0)} open, {queue.get('blocked_project_count', 0)} blocked")}
+        {metric('Shard Debt', shard_debt.get('state', 'unknown'), f"{(shard_debt.get('counts') or {}).get('attention', 0) + (shard_debt.get('counts') or {}).get('blocked', 0)} aging")}
+        {metric('Queue Health', queue.get('state', 'unknown'), f"{queue.get('open_queue_project_count', 0)} open, {queue.get('stalled_worker_alert_count', 0)} stalled-worker alerts")}
         {metric('Proof Freshness', proof.get('state', 'unknown'), f"{proof.get('stale_or_missing_count', 0)} stale or missing")}
         {metric('Account Health', accounts.get('state', 'unknown'), f"{accounts.get('account_count', 0)} pools")}
         {metric('Resource Pressure', resources.get('critical_path_lane') or 'unknown', resources.get('mission_runway') or resources.get('state') or 'unknown')}
         {metric('Blocked Milestones', len(blocked), resources.get('runtime_healing_alert_state') or 'runtime unknown')}
+        {metric('Reconciliation', reconciliation.get('overall_state', 'unknown'), f"{reconciliation_summary.get('shell_surface_delta_count', 0)} shell deltas")}
       </section>
 
       <section class="grid main">
@@ -12871,11 +13543,28 @@ def render_operator_surface() -> str:
             <table><thead><tr><th>Project</th><th>Status</th><th>Queue</th><th>Slice</th><th>Lane</th></tr></thead><tbody>{blocked_project_rows or '<tr><td colspan="5" class="muted">No blocked projects.</td></tr>'}</tbody></table>
           </section>
           <section class="panel">
+            <h2>Recent Auto-Requeues</h2>
+            <p class="muted">Policy: debt goes to attention after {td(queue_policy.get('stall_attention_human') or 'unknown')} and blocked after {td(queue_policy.get('stall_blocked_human') or 'unknown')}. Signed receipts are {td('required' if queue_policy.get('signed_receipts_required') else 'optional')} and recent evidence stays visible for {td(queue.get('recent_auto_requeue_window_human') or 'unknown')}.</p>
+            <table><thead><tr><th>Project</th><th>Trigger</th><th>Age</th><th>Receipt</th><th>Reason</th></tr></thead><tbody>{auto_requeue_rows or '<tr><td colspan="5" class="muted">No recent auto-requeues.</td></tr>'}</tbody></table>
+          </section>
+          <section class="panel">
             <h2>Blocked Milestones and Frontier</h2>
             <table><thead><tr><th>Scope</th><th>Status</th><th>Remaining</th><th>Work</th><th>Blockers</th></tr></thead><tbody>{blocked_rows or '<tr><td colspan="5" class="muted">No blocked milestones.</td></tr>'}</tbody></table>
           </section>
+          <section class="panel">
+            <h2>Evidence Reconciliation</h2>
+            <table><thead><tr><th>Window</th><th>Snapshot</th><th>Progress</th><th>Delta</th><th>Phase</th></tr></thead><tbody>{reconciliation_window_rows or '<tr><td colspan="5" class="muted">No historical snapshots available.</td></tr>'}</tbody></table>
+          </section>
+          <section class="panel">
+            <h2>Readiness Drift</h2>
+            <table><thead><tr><th>#</th><th>Reason</th></tr></thead><tbody>{readiness_drift_rows or '<tr><td colspan="2" class="muted">No current public-vs-local readiness drift.</td></tr>'}</tbody></table>
+          </section>
         </div>
         <div class="grid">
+          <section class="panel">
+            <h2>Shard Debt Aging</h2>
+            <table><thead><tr><th>Shard</th><th>State</th><th>Age</th><th>Open</th><th>Progress</th></tr></thead><tbody>{shard_debt_rows or '<tr><td colspan="5" class="muted">No shard debt rows.</td></tr>'}</tbody></table>
+          </section>
           <section class="panel">
             <h2>Proof Freshness</h2>
             <table><thead><tr><th>Artifact</th><th>State</th><th>Age</th><th>Reason</th></tr></thead><tbody>{proof_rows or '<tr><td colspan="4" class="muted">No proof artifacts found.</td></tr>'}</tbody></table>
@@ -12884,11 +13573,20 @@ def render_operator_surface() -> str:
             <h2>Account Pressure</h2>
             <table><thead><tr><th>Account</th><th>State</th><th>Token</th><th>Left</th><th>Error</th></tr></thead><tbody>{account_rows or '<tr><td colspan="5" class="muted">No pressured accounts.</td></tr>'}</tbody></table>
           </section>
+          <section class="panel">
+            <h2>Shell-Surface Deltas</h2>
+            <table><thead><tr><th>Surface</th><th>State</th><th>Public Claim</th><th>Current Truth</th><th>Reason</th></tr></thead><tbody>{reconciliation_drift_rows or '<tr><td colspan="5" class="muted">No shell-surface deltas.</td></tr>'}</tbody></table>
+          </section>
         </div>
       </section>
     </main>
   </body>
 </html>"""
+
+
+@app.get("/api/admin/queue-reconciliation")
+def api_admin_queue_reconciliation() -> Dict[str, Any]:
+    return queue_reconciliation_payload()
 
 
 @app.post("/api/cockpit/refresh-artifacts")

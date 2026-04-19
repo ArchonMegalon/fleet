@@ -80,6 +80,44 @@ class ControllerRoutingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.controller = load_controller_module()
 
+    def test_upsert_github_review_run_persists_trace_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+            with self.controller.db() as conn:
+                now = self.controller.iso(self.controller.utc_now())
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', '', '[]', 0, 0, 'dispatch_pending', '', NULL, NULL, NULL, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root / "repo"), now),
+                )
+
+            run_id = self.controller.upsert_github_review_run(
+                "fleet",
+                slice_name="Review fleet",
+                pr_number=7,
+                pr_url="https://example.invalid/pr/7",
+                review_status="requested",
+                review_focus="focus=trace",
+            )
+
+            with self.controller.db() as conn:
+                row = conn.execute("SELECT trace_id FROM runs WHERE id=?", (run_id,)).fetchone()
+
+            self.assertIsNotNone(row)
+            self.assertTrue(str(row["trace_id"] or "").startswith("controller-github-review-"))
+
     def _ready_lane_capacity(self) -> dict[str, dict[str, object]]:
         lane_snapshot = {"state": "ready", "providers": []}
         return {
@@ -383,6 +421,7 @@ class ControllerRoutingTests(unittest.TestCase):
             root = Path(tmpdir)
             self.controller.DB_PATH = root / "fleet.db"
             self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
             self.controller.CODEX_HOME_ROOT = root / "homes"
             self.controller.GROUP_ROOT = root / "groups"
             self.controller.init_db()
@@ -417,6 +456,7 @@ class ControllerRoutingTests(unittest.TestCase):
             root = Path(tmpdir)
             self.controller.DB_PATH = root / "fleet.db"
             self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
             self.controller.CODEX_HOME_ROOT = root / "homes"
             self.controller.GROUP_ROOT = root / "groups"
             self.controller.init_db()
@@ -3990,6 +4030,7 @@ class ControllerRoutingTests(unittest.TestCase):
             root = Path(tmpdir)
             self.controller.DB_PATH = root / "fleet.db"
             self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
             self.controller.CODEX_HOME_ROOT = root / "homes"
             self.controller.GROUP_ROOT = root / "groups"
             self.controller.init_db()
@@ -4049,10 +4090,113 @@ class ControllerRoutingTests(unittest.TestCase):
                 task = conn.execute(
                     "SELECT task_state, run_id, started_at FROM runtime_tasks WHERE package_id='fleet'"
                 ).fetchone()
+                project = conn.execute(
+                    """
+                    SELECT last_auto_requeue_at, last_auto_requeue_reason, last_auto_requeue_trigger,
+                           last_auto_requeue_receipt_id, last_auto_requeue_receipt_path
+                    FROM projects
+                    WHERE id='fleet'
+                    """
+                ).fetchone()
 
-        self.assertEqual(task["task_state"], "scheduled")
-        self.assertIsNone(task["run_id"])
-        self.assertIsNone(task["started_at"])
+            self.assertEqual(task["task_state"], "scheduled")
+            self.assertIsNone(task["run_id"])
+            self.assertIsNone(task["started_at"])
+            self.assertEqual(project["last_auto_requeue_trigger"], "abandoned_run_rehydrated")
+            self.assertIn("rehydration", project["last_auto_requeue_reason"])
+            receipt_path = Path(project["last_auto_requeue_receipt_path"])
+            self.assertTrue(receipt_path.exists())
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["trigger"], "abandoned_run_rehydrated")
+            self.assertEqual(receipt["project_id"], "fleet")
+            self.assertEqual(receipt["receipt_id"], project["last_auto_requeue_receipt_id"])
+            self.assertTrue(str(receipt["signed_by_fleet"]).startswith(("sha256:", "hmac-sha256:")))
+
+    def test_reconcile_stale_worker_sessions_requeues_with_signed_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self.controller.DB_PATH = root / "fleet.db"
+            self.controller.LOG_DIR = root / "logs"
+            self.controller.QUEUE_RECOVERY_DIR = root / "queue-recovery"
+            self.controller.CODEX_HOME_ROOT = root / "homes"
+            self.controller.GROUP_ROOT = root / "groups"
+            self.controller.init_db()
+
+            stale_at = self.controller.parse_iso("2026-04-18T06:00:00Z")
+            assert stale_at is not None
+            now = stale_at + self.controller.dt.timedelta(seconds=4000)
+            self.controller.utc_now = lambda: now
+            (root / ".agent-state.json").write_text(
+                json.dumps({"updated_at_utc": self.controller.iso(stale_at)}, sort_keys=True),
+                encoding="utf-8",
+            )
+
+            with self.controller.db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO projects(
+                        id, path, design_doc, verify_cmd, feedback_dir, state_file, queue_json, queue_index,
+                        consecutive_failures, status, current_slice, active_run_id, cooldown_until, last_run_at,
+                        last_error, spider_tier, spider_model, spider_reason, updated_at
+                    )
+                    VALUES(?, ?, '', '', '', ?, '[]', 0, 0, 'running', 'slice', 7, NULL, ?, '', '', '', '', ?)
+                    """,
+                    ("fleet", str(root), ".agent-state.json", self.controller.iso(stale_at), self.controller.iso(stale_at)),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO runs(
+                        id, project_id, account_alias, slice_name, status, model, started_at, finished_at, job_kind
+                    )
+                    VALUES(7, 'fleet', 'acct-ea-core', 'slice', 'running', 'ea-coder-hard', ?, NULL, 'coding')
+                    """,
+                    (self.controller.iso(stale_at),),
+                )
+
+            recovered = self.controller.reconcile_stale_worker_sessions(
+                {
+                    "projects": [{"id": "fleet", "path": str(root), "state_file": ".agent-state.json"}],
+                    "policies": {
+                        "stale_heartbeat_seconds": 1800,
+                        "restart_cooldown_seconds": 30,
+                        "max_consecutive_failures": 3,
+                    },
+                }
+            )
+
+            self.assertEqual(recovered, 1)
+            with self.controller.db() as conn:
+                project = conn.execute(
+                    """
+                    SELECT status, active_run_id, consecutive_failures, cooldown_until,
+                           last_auto_requeue_at, last_auto_requeue_reason, last_auto_requeue_trigger,
+                           last_auto_requeue_receipt_id, last_auto_requeue_receipt_path
+                    FROM projects
+                    WHERE id='fleet'
+                    """
+                ).fetchone()
+                run = conn.execute(
+                    "SELECT status, finished_at, error_class, error_message FROM runs WHERE id=7"
+                ).fetchone()
+
+            self.assertEqual(project["status"], self.controller.READY_STATUS)
+            self.assertIsNone(project["active_run_id"])
+            self.assertEqual(project["consecutive_failures"], 1)
+            self.assertEqual(project["last_auto_requeue_trigger"], "stale_worker_session_requeued")
+            self.assertIn("without heartbeat or log activity", project["last_auto_requeue_reason"])
+            self.assertEqual(run["status"], "failed")
+            self.assertEqual(run["error_class"], "stale_heartbeat")
+            self.assertIn("without heartbeat or log activity", str(run["error_message"] or ""))
+            self.assertTrue(project["cooldown_until"])
+            receipt_path = Path(project["last_auto_requeue_receipt_path"])
+            self.assertTrue(receipt_path.exists())
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["trigger"], "stale_worker_session_requeued")
+            self.assertEqual(receipt["project_id"], "fleet")
+            self.assertEqual(receipt["receipt_id"], project["last_auto_requeue_receipt_id"])
+            self.assertEqual(receipt["evidence"]["stale_threshold_seconds"], 1800)
+            self.assertEqual(receipt["evidence"]["stale_age_seconds"], 4000)
+            self.assertTrue(str(receipt["signed_by_fleet"]).startswith(("sha256:", "hmac-sha256:")))
 
     def test_reconcile_abandoned_runs_releases_running_work_package_for_redispatch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -7742,7 +7886,11 @@ class ControllerRoutingTests(unittest.TestCase):
             "project_id": "fleet",
             "hub_user_id": "usr_1",
             "hub_group_id": "grp_1",
+            "boost_campaign_id": "boost_1",
             "sponsor_session_id": "sps_1",
+            "consented_at": "2026-03-19T09:45:00Z",
+            "auth_completed_at": "2026-03-19T09:50:00Z",
+            "public_contribution_visibility": "private",
             "activated_at": "2026-03-19T10:00:00Z",
             "telemetry": {
                 "authorization_tier": "business",
@@ -7757,10 +7905,16 @@ class ControllerRoutingTests(unittest.TestCase):
             slice_id="slice-1",
             accepted_on_round="1",
             verified=True,
+            consumption_trace={"estimated_cost_usd": 1.25, "participant_run_count": 1, "managed_run_count": 2},
         )
 
         self.assertEqual(receipt["authorization_tier_at_receipt"], "business")
         self.assertEqual(receipt["tier_source"], "fleet_detected")
+        self.assertEqual(receipt["consent_trace"]["consented_at_utc"], "2026-03-19T09:45:00Z")
+        self.assertEqual(receipt["consent_trace"]["public_contribution_visibility"], "private")
+        self.assertEqual(receipt["sponsor_billing_attribution"]["boost_campaign_id"], "boost_1")
+        self.assertEqual(receipt["sponsor_billing_attribution"]["sponsor_session_id"], "sps_1")
+        self.assertEqual(receipt["consumption_trace"]["estimated_cost_usd"], 1.25)
 
     def test_sync_config_to_db_materializes_generated_work_packages_and_scope_claims(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

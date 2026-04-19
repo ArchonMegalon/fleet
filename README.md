@@ -49,6 +49,12 @@ Quartermaster adds:
 - typed incidents such as `credit_runway_risk`, `booster_idle`, `review_backpressure`, `audit_debt`, `scope_contention`, and `slot_probe_stale`
 - a rolling telemetry log at `/var/lib/codex-fleet/state/quartermaster/telemetry.jsonl` plus a tail API at `/api/telemetry-log`
 
+Queue recovery and anti-starvation policy is explicit in `config/policies.yaml` under `policies.queue_recovery`:
+- shard debt turns `attention` after 15 minutes without fresh shard progress and `blocked` after 60 minutes
+- recent auto-requeues stay operator-visible for 24 hours
+- every controller auto-requeue must carry a signed `fleet.queue_recovery_receipt` under `state/queue-recovery/<project>/`
+- `/ops/` shows the same thresholds and links each recent auto-requeue back to its receipt path
+
 Published artifacts can include:
 - `VISION.md`
 - `ROADMAP.md`

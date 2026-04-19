@@ -176,6 +176,7 @@ DESIGN_MIRROR_NOTE_END = "<!-- fleet-design-mirror:end -->"
 
 DB_PATH = pathlib.Path(os.environ.get("FLEET_DB_PATH", "/var/lib/codex-fleet/fleet.db"))
 LOG_DIR = pathlib.Path(os.environ.get("FLEET_LOG_DIR", "/var/lib/codex-fleet/logs"))
+QUEUE_RECOVERY_DIR = pathlib.Path(os.environ.get("FLEET_QUEUE_RECOVERY_DIR", str(DB_PATH.parent / "queue-recovery")))
 WORKTREE_ROOT = pathlib.Path(os.environ.get("FLEET_WORKTREE_ROOT", str(DB_PATH.parent / "worktrees")))
 CONTROLLER_HEARTBEAT_PATH = pathlib.Path(
     os.environ.get("FLEET_CONTROLLER_HEARTBEAT_PATH", str(DB_PATH.parent / "controller-heartbeat.json"))
@@ -346,6 +347,7 @@ LOW_PRIORITY_DRAINING_STATE = "low_priority_draining"
 LOW_PRIORITY_DRAIN_LANES = {"easy", "groundwork"}
 REVIEW_FAILED_INCIDENT_KIND = "review_failed"
 REVIEW_STALLED_INCIDENT_KIND = "review_lane_stalled"
+WORKER_STALLED_INCIDENT_KIND = "worker_session_stalled"
 PR_CHECKS_FAILED_INCIDENT_KIND = "pr_checks_failed"
 BLOCKED_UNRESOLVED_INCIDENT_KIND = "blocked_unresolved"
 DESIRED_STATE_SCHEMA_VERSION = "2026-03-16.v1"
@@ -678,6 +680,13 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
         return None
 
 
+def new_service_trace_id(service: str, *, started_at: Optional[dt.datetime] = None) -> str:
+    stamp = (started_at or utc_now()).strftime("%Y%m%dT%H%M%SZ").lower()
+    token = uuid.uuid4().hex[:12]
+    clean_service = re.sub(r"[^a-z0-9]+", "-", str(service or "").strip().lower()).strip("-") or "fleet"
+    return f"{clean_service}-{stamp}-{token}"
+
+
 def float_or_none(value: Any) -> Optional[float]:
     try:
         if value is None:
@@ -932,6 +941,11 @@ def init_db() -> None:
                 cooldown_until TEXT,
                 last_run_at TEXT,
                 last_error TEXT,
+                last_auto_requeue_at TEXT,
+                last_auto_requeue_reason TEXT,
+                last_auto_requeue_trigger TEXT,
+                last_auto_requeue_receipt_id TEXT,
+                last_auto_requeue_receipt_path TEXT,
                 spider_tier TEXT,
                 spider_model TEXT,
                 spider_reason TEXT,
@@ -940,6 +954,7 @@ def init_db() -> None:
 
             CREATE TABLE IF NOT EXISTS runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT,
                 project_id TEXT NOT NULL,
                 package_id TEXT,
                 account_alias TEXT NOT NULL,
@@ -1333,7 +1348,21 @@ def migrate_db(conn: sqlite3.Connection) -> None:
     if "last_model_failure_at" not in account_cols:
         conn.execute("ALTER TABLE accounts ADD COLUMN last_model_failure_at TEXT")
 
+    project_cols = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    if "last_auto_requeue_at" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN last_auto_requeue_at TEXT")
+    if "last_auto_requeue_reason" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN last_auto_requeue_reason TEXT")
+    if "last_auto_requeue_trigger" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN last_auto_requeue_trigger TEXT")
+    if "last_auto_requeue_receipt_id" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN last_auto_requeue_receipt_id TEXT")
+    if "last_auto_requeue_receipt_path" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN last_auto_requeue_receipt_path TEXT")
+
     run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+    if "trace_id" not in run_cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN trace_id TEXT")
     if "job_kind" not in run_cols:
         conn.execute("ALTER TABLE runs ADD COLUMN job_kind TEXT NOT NULL DEFAULT 'coding'")
     if "package_id" not in run_cols:
@@ -4061,6 +4090,106 @@ def participant_receipt_id(*parts: object) -> str:
     return f"rcpt-{digest}"
 
 
+def queue_recovery_dir() -> pathlib.Path:
+    configured = str(os.environ.get("FLEET_QUEUE_RECOVERY_DIR") or "").strip()
+    if configured:
+        return pathlib.Path(configured)
+    queue_root = pathlib.Path(QUEUE_RECOVERY_DIR)
+    default_root = pathlib.Path("/var/lib/codex-fleet/queue-recovery")
+    if queue_root == default_root and DB_PATH.parent != default_root.parent:
+        return DB_PATH.parent / "queue-recovery"
+    return queue_root
+
+
+def queue_recovery_receipt_id(*parts: object) -> str:
+    material = "|".join(str(part or "").strip() for part in parts if str(part or "").strip())
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+    return f"queue-recovery-{digest}"
+
+
+def queue_recovery_receipt_signature(payload: Dict[str, Any]) -> str:
+    return participant_receipt_signature(payload)
+
+
+def write_queue_recovery_receipt(payload: Dict[str, Any]) -> Dict[str, Any]:
+    receipt = dict(payload or {})
+    generated_at = str(receipt.get("generated_at") or iso(utc_now()) or "").strip()
+    project_id = str(receipt.get("project_id") or "unknown").strip() or "unknown"
+    receipt_id = str(receipt.get("receipt_id") or "").strip()
+    if not receipt_id:
+        receipt_id = queue_recovery_receipt_id(
+            project_id,
+            receipt.get("trigger"),
+            receipt.get("run_id"),
+            generated_at,
+            receipt.get("current_slice"),
+        )
+    receipt["contract_name"] = "fleet.queue_recovery_receipt"
+    receipt["schema_version"] = 1
+    receipt["generated_at"] = generated_at
+    receipt["receipt_id"] = receipt_id
+    receipt["signed_by_fleet"] = queue_recovery_receipt_signature(receipt)
+    target_dir = queue_recovery_dir() / project_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{receipt_id}.generated.json"
+    target.write_text(json.dumps(receipt, indent=2, sort_keys=True), encoding="utf-8")
+    receipt["receipt_path"] = str(target)
+    return receipt
+
+
+def record_project_auto_requeue(
+    project_id: str,
+    *,
+    trigger: str,
+    reason: str,
+    current_slice: Optional[str],
+    run_id: Optional[int],
+    queue_index: Optional[int],
+    runtime_task_id: Optional[int] = None,
+    package_id: Optional[str] = None,
+    previous_status: Optional[str] = None,
+    next_status: Optional[str] = None,
+    evidence: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload = {
+        "project_id": str(project_id or "").strip(),
+        "trigger": str(trigger or "").strip(),
+        "reason": str(reason or "").strip(),
+        "current_slice": str(current_slice or "").strip(),
+        "run_id": int(run_id or 0) or None,
+        "queue_index": int(queue_index or 0) if queue_index is not None else None,
+        "runtime_task_id": int(runtime_task_id or 0) or None,
+        "package_id": str(package_id or "").strip(),
+        "previous_status": str(previous_status or "").strip(),
+        "next_status": str(next_status or "").strip(),
+        "evidence": dict(evidence or {}),
+    }
+    receipt = write_queue_recovery_receipt(payload)
+    with db() as conn:
+        conn.execute(
+            """
+            UPDATE projects
+            SET last_auto_requeue_at=?,
+                last_auto_requeue_reason=?,
+                last_auto_requeue_trigger=?,
+                last_auto_requeue_receipt_id=?,
+                last_auto_requeue_receipt_path=?,
+                updated_at=?
+            WHERE id=?
+            """,
+            (
+                receipt.get("generated_at"),
+                receipt.get("reason"),
+                receipt.get("trigger"),
+                receipt.get("receipt_id"),
+                receipt.get("receipt_path"),
+                iso(utc_now()),
+                project_id,
+            ),
+        )
+    return receipt
+
+
 def mark_participant_lane_receipt_status(
     lane_id: str,
     *,
@@ -4152,6 +4281,7 @@ def build_participant_contribution_receipt(
     files_touched: int = 0,
     diff_size: int = 0,
     issue_fingerprints: Optional[Sequence[str]] = None,
+    consumption_trace: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     clean_event = str(event_kind or "").strip() or "lane_event"
     lane_id = str(lane_row.get("lane_id") or "").strip()
@@ -4170,6 +4300,19 @@ def build_participant_contribution_receipt(
         lane_row.get("lane_role")
         or telemetry.get("lane_role")
     )
+    consent_trace = {
+        "consented_at_utc": str(lane_row.get("consented_at") or "").strip() or None,
+        "auth_completed_at_utc": str(lane_row.get("auth_completed_at") or "").strip() or None,
+        "authorization_tier": authorization_tier,
+        "tier_source": tier_source or None,
+        "public_contribution_visibility": str(lane_row.get("public_contribution_visibility") or "").strip() or None,
+    }
+    sponsor_billing_attribution = {
+        "user_id": str(lane_row.get("hub_user_id") or "").strip() or None,
+        "group_id": str(lane_row.get("hub_group_id") or "").strip() or None,
+        "boost_campaign_id": str(lane_row.get("boost_campaign_id") or "").strip() or None,
+        "sponsor_session_id": str(lane_row.get("sponsor_session_id") or "").strip() or None,
+    }
     receipt = {
         "receipt_id": participant_receipt_id(
             lane_id,
@@ -4195,6 +4338,8 @@ def build_participant_contribution_receipt(
         "accepted_on_round": str(accepted_on_round or "").strip() or None,
         "landed_sha": str(landed_sha or "").strip() or None,
         "landed_at_utc": str(landed_at or "").strip() or None,
+        "consent_trace": consent_trace,
+        "sponsor_billing_attribution": sponsor_billing_attribution,
         "verified": bool(verified),
         "cheap_loop_only": bool(cheap_loop_only),
         "paid_lane_used": bool(paid_lane_used),
@@ -4208,6 +4353,7 @@ def build_participant_contribution_receipt(
         "credit_burn_estimate": 0,
         "authorization_tier_at_receipt": authorization_tier,
         "tier_source": tier_source or None,
+        "consumption_trace": dict(consumption_trace or {}),
     }
     receipt["signed_by_fleet"] = participant_receipt_signature(receipt)
     return receipt
@@ -4300,6 +4446,19 @@ def emit_participant_slice_landed_receipts(
     review_rounds = int(telemetry_payload.get("review_rounds_used") or 0)
     cheap_loop_only = not bool(telemetry_payload.get("needs_core_rescue")) and int((telemetry_payload.get("usage_estimates") or {}).get("core_runs") or 0) <= 0
     paid_lane_used = True
+    allowance_burn_by_lane = dict(telemetry_payload.get("allowance_burn_by_lane") or {})
+    participant_run_count = len(aliases)
+    managed_run_count = max(
+        0,
+        int((telemetry_payload.get("usage_estimates") or {}).get("groundwork_runs") or 0)
+        + int((telemetry_payload.get("usage_estimates") or {}).get("jury_reviews") or 0)
+        + int((telemetry_payload.get("usage_estimates") or {}).get("core_runs") or 0)
+        - participant_run_count,
+    )
+    estimated_cost_usd = round(
+        sum(float(dict(item or {}).get("estimated_cost_usd") or 0.0) for item in allowance_burn_by_lane.values() if isinstance(item, dict)),
+        6,
+    )
     for alias in aliases:
         lane_row = participant_lane_row_for_alias(alias, refresh=True)
         if lane_row is None:
@@ -4324,6 +4483,13 @@ def emit_participant_slice_landed_receipts(
             files_touched=int(telemetry_payload.get("files_touched") or 0),
             diff_size=max(0, int(telemetry_payload.get("diff_added") or 0)) + max(0, int(telemetry_payload.get("diff_removed") or 0)),
             issue_fingerprints=issue_fingerprints,
+            consumption_trace={
+                "estimated_cost_usd": estimated_cost_usd,
+                "allowance_burn_by_lane": allowance_burn_by_lane,
+                "participant_run_count": participant_run_count,
+                "managed_run_count": managed_run_count,
+                "participant_worker_aliases": aliases,
+            },
         )
         result = emit_participant_receipt(lane_row, event_kind="slice_landed", payload=payload)
         record_participant_lane_event(
@@ -4368,6 +4534,14 @@ def emit_participant_slice_reviewed_receipts(
         lane_row = participant_lane_row_for_alias(alias, refresh=True)
         if lane_row is None:
             continue
+        estimated_cost_usd = round(
+            sum(
+                float(row.get("estimated_cost_usd") or 0.0)
+                for row in run_rows
+                if str(row.get("account_alias") or "").strip() == alias
+            ),
+            6,
+        )
         payload = build_participant_contribution_receipt(
             lane_row,
             event_kind="slice_reviewed",
@@ -4381,6 +4555,12 @@ def emit_participant_slice_reviewed_receipts(
             paid_lane_used=True,
             review_ms=max(0, int(review_duration_ms or 0)),
             issue_fingerprints=[str(item or "").strip() for item in issue_fingerprints if str(item or "").strip()],
+            consumption_trace={
+                "estimated_cost_usd": estimated_cost_usd,
+                "participant_run_count": 1,
+                "managed_run_count": 0,
+                "participant_worker_aliases": [alias],
+            },
         )
         result = emit_participant_receipt(lane_row, event_kind="slice_reviewed", payload=payload)
         record_participant_lane_event(
@@ -8393,8 +8573,25 @@ def reconcile_abandoned_runs(config: Optional[Dict[str, Any]] = None) -> None:
     cfg = config or normalize_config()
     max_failures = int(get_policy(cfg, "max_consecutive_failures", 3))
     recovery_failure_cap = max(0, max_failures - 1)
+    now_dt = utc_now()
+    now = iso(now_dt)
     with db() as conn:
-        now = iso(utc_now())
+        rows = conn.execute(
+            """
+            SELECT p.id,
+                   p.status,
+                   p.current_slice,
+                   p.queue_index,
+                   p.active_run_id,
+                   p.consecutive_failures,
+                   rt.package_id AS runtime_task_package_id,
+                   rt.task_state
+            FROM projects p
+            LEFT JOIN runtime_tasks rt ON rt.project_id = p.id AND rt.task_state='running'
+            WHERE p.status IN ('starting', 'running', 'verifying')
+            ORDER BY p.id
+            """
+        ).fetchall()
         conn.execute(
             "UPDATE runs SET status='abandoned', finished_at=COALESCE(finished_at, ?) WHERE status IN ('starting', 'running', 'verifying')",
             (now,),
@@ -8426,6 +8623,29 @@ def reconcile_abandoned_runs(config: Optional[Dict[str, Any]] = None) -> None:
                 """,
                 (now,),
             )
+    for row in rows:
+        project_id = str(row["id"] or "").strip()
+        if not project_id:
+            continue
+        run_id = int(row["active_run_id"] or 0) or None
+        record_project_auto_requeue(
+            project_id,
+            trigger="abandoned_run_rehydrated",
+            reason="controller restart or process loss requeued the active runtime task for rehydration",
+            current_slice=row["current_slice"],
+            run_id=run_id,
+            queue_index=int(row["queue_index"] or 0),
+            package_id=str(row["runtime_task_package_id"] or "").strip() or None,
+            previous_status=str(row["status"] or "").strip(),
+            next_status=READY_STATUS,
+            evidence={
+                "recovered_at": now,
+                "recovery_failure_cap": recovery_failure_cap,
+                "runtime_task_requeued": bool(row["runtime_task_package_id"]),
+                "task_state_before_requeue": str(row["task_state"] or "").strip(),
+                "abandoned_run_id": run_id,
+            },
+        )
     reconcile_stuck_work_package_runtime_links()
     save_runtime_task_cache_snapshot()
 
@@ -8593,6 +8813,24 @@ def reconcile_orphaned_active_runs(config: Dict[str, Any]) -> int:
             spider_model=row["spider_model"],
             spider_reason=row["spider_reason"],
         )
+        if next_status == READY_STATUS:
+            record_project_auto_requeue(
+                project_id,
+                trigger="orphaned_runtime_requeued",
+                reason=reason,
+                current_slice=row["current_slice"],
+                run_id=run_id,
+                queue_index=int(row["queue_index"] or 0),
+                previous_status=str(row["status"] or "").strip(),
+                next_status=next_status,
+                evidence={
+                    "recovered_at": iso(now),
+                    "stale_age_seconds": stale_age_seconds,
+                    "task_kind": task_kind,
+                    "activity_anchor_at": iso(anchor_at),
+                    "activity_last_seen_at": iso(activity_at) if activity_at else "",
+                },
+            )
         recovered += 1
     if recovered:
         reconcile_stuck_work_package_runtime_links()
@@ -8705,6 +8943,42 @@ def reconcile_stale_worker_sessions(config: Dict[str, Any]) -> int:
             spider_model=row["spider_model"],
             spider_reason=row["spider_reason"],
         )
+        if next_status == READY_STATUS:
+            record_project_auto_requeue(
+                project_id,
+                trigger="stale_worker_session_requeued",
+                reason=reason,
+                current_slice=row["current_slice"],
+                run_id=int(row["active_run_id"] or 0) or None,
+                queue_index=int(row["queue_index"] or 0),
+                previous_status=str(row["status"] or "").strip(),
+                next_status=next_status,
+                evidence={
+                    "recovered_at": iso(now),
+                    "stale_age_seconds": stale_age_seconds,
+                    "stale_threshold_seconds": stale_seconds,
+                    "cooldown_until": iso(cooldown_until),
+                    "activity_last_seen_at": iso(activity_at),
+                },
+            )
+        else:
+            open_or_update_incident(
+                scope_type="project",
+                scope_id=project_id,
+                incident_kind=WORKER_STALLED_INCIDENT_KIND,
+                severity="high",
+                title=f"{project_id} worker lane stalled",
+                summary="A worker session exceeded the stale-heartbeat threshold and the controller could not safely auto-requeue it.",
+                context={
+                    "project_id": project_id,
+                    "current_slice": str(row["current_slice"] or "").strip(),
+                    "last_error": reason,
+                    "stale_age_seconds": stale_age_seconds,
+                    "stale_threshold_seconds": stale_seconds,
+                    "operator_required": True,
+                    "can_resolve": False,
+                },
+            )
         recovered += 1
     if recovered:
         reconcile_stuck_work_package_runtime_links()
@@ -11635,6 +11909,7 @@ def upsert_github_review_run(
     review_focus: str,
 ) -> int:
     now = iso(utc_now())
+    trace_id = new_service_trace_id("controller-github-review")
     with db() as conn:
         row = conn.execute(
             "SELECT id FROM runs WHERE project_id=? AND job_kind='github_review' AND slice_name=? AND status IN ('queued','requested','received') ORDER BY id DESC LIMIT 1",
@@ -11649,10 +11924,18 @@ def upsert_github_review_run(
             return run_id
         cur = conn.execute(
             """
-            INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, decision_reason, started_at)
-            VALUES (?, 'github', 'github_review', ?, ?, ?, ?, ?)
+            INSERT INTO runs(trace_id, project_id, account_alias, job_kind, slice_name, status, model, decision_reason, started_at)
+            VALUES (?, ?, 'github', 'github_review', ?, ?, ?, ?, ?)
             """,
-            (project_id, slice_name, review_status, GITHUB_REVIEW_MODEL, f"pr #{pr_number} {pr_url} ; focus={review_focus}", now),
+            (
+                trace_id,
+                project_id,
+                slice_name,
+                review_status,
+                GITHUB_REVIEW_MODEL,
+                f"pr #{pr_number} {pr_url} ; focus={review_focus}",
+                now,
+            ),
         )
         return int(cur.lastrowid)
 
@@ -12920,6 +13203,7 @@ def incident_requires_operator_attention(item: Dict[str, Any]) -> bool:
         BLOCKED_UNRESOLVED_INCIDENT_KIND,
         REVIEW_FAILED_INCIDENT_KIND,
         REVIEW_STALLED_INCIDENT_KIND,
+        WORKER_STALLED_INCIDENT_KIND,
         PR_CHECKS_FAILED_INCIDENT_KIND,
     }
     if severity == "critical" or incident_kind in always_visible:
@@ -17947,6 +18231,7 @@ def update_project_status(
         handle_blocked_incidents(project_id, current_slice=current_slice, last_error=last_error)
     elif status != "blocked":
         resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[BLOCKED_UNRESOLVED_INCIDENT_KIND])
+        resolve_incidents(scope_type="project", scope_id=project_id, incident_kinds=[WORKER_STALLED_INCIDENT_KIND])
         for group in project_group_defs(normalize_config(), project_id):
             group_id = str(group.get("id") or "").strip()
             if group_id:
@@ -20292,6 +20577,7 @@ async def execute_project_slice(
         )
 
     started_at = utc_now()
+    trace_id = new_service_trace_id(f"controller-{job_kind}", started_at=started_at)
     ts = started_at.strftime("%Y%m%dT%H%M%SZ")
     safe_slice = re.sub(r"[^a-zA-Z0-9._-]+", "-", slice_name)[:80]
     package_log_dir = LOG_DIR / project_id / (package_safe_token(package_id) if package_id else "_project")
@@ -20331,10 +20617,11 @@ async def execute_project_slice(
     with db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO runs(project_id, package_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
-            VALUES (?, ?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO runs(trace_id, project_id, package_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+            VALUES (?, ?, ?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                trace_id,
                 project_id,
                 package_id or None,
                 account_alias,
@@ -21420,6 +21707,7 @@ async def execute_local_review_fallback(
         return
 
     started_at = utc_now()
+    trace_id = new_service_trace_id("controller-local-review", started_at=started_at)
     ts = started_at.strftime("%Y%m%dT%H%M%SZ")
     safe_slice = re.sub(r"[^a-zA-Z0-9._-]+", "-", slice_name)[:80]
     log_path = LOG_DIR / project_id / f"{ts}-{safe_slice}.local-review.jsonl"
@@ -21432,10 +21720,11 @@ async def execute_local_review_fallback(
     with db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO runs(project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
-            VALUES (?, ?, 'local_review', ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO runs(trace_id, project_id, account_alias, job_kind, slice_name, status, model, reasoning_effort, spider_tier, decision_reason, started_at, log_path, final_message_path, prompt_path)
+            VALUES (?, ?, ?, 'local_review', ?, 'starting', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                trace_id,
                 project_id,
                 account_alias,
                 slice_name,
@@ -21935,6 +22224,7 @@ async def execute_local_review_fallback(
                             "groundwork_time_ms": int(latest_pr.get("groundwork_time_ms") or 0),
                             "jury_time_ms": int(latest_pr.get("jury_time_ms") or 0) + review_duration,
                             "core_time_ms": int(latest_pr.get("core_time_ms") or 0),
+                            "allowance_burn_by_lane": json_field(latest_pr.get("allowance_burn_by_lane_json"), {}),
                             "issue_fingerprints": json_field(issue_fingerprints_json, []),
                         },
                     )

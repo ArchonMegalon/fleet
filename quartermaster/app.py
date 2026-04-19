@@ -4,6 +4,7 @@ import os
 import pathlib
 import sys
 import urllib.request
+import uuid
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -80,6 +81,12 @@ def parse_iso(value: Any) -> Optional[dt.datetime]:
         return None
 
 
+def new_service_trace_id(service: str, *, generated_at: Optional[dt.datetime] = None) -> str:
+    stamp = (generated_at or utc_now()).strftime("%Y%m%dT%H%M%SZ").lower()
+    token = uuid.uuid4().hex[:12]
+    return f"{service}-{stamp}-{token}"
+
+
 def load_cached_plan() -> Dict[str, Any]:
     if not PLAN_CACHE_PATH.exists():
         return {}
@@ -120,6 +127,8 @@ def build_telemetry_log_entry(payload: Dict[str, Any]) -> Dict[str, Any]:
     findings = list(plan.get("typed_findings") or [])
     return {
         "generated_at": str(payload.get("generated_at") or ""),
+        "trace_id": str(payload.get("trace_id") or ""),
+        "source_trace_id": str(payload.get("source_trace_id") or ""),
         "source_generated_at": str(payload.get("source_generated_at") or ""),
         "source": str(payload.get("source") or ""),
         "degraded": bool(payload.get("degraded")),
@@ -234,8 +243,12 @@ def build_plan_payload(*, source: str, degraded: bool, source_status: Dict[str, 
     plan_reference_now = parse_iso(source_status.get("generated_at")) or utc_now()
     plan = build_capacity_plan_payload(source_status, capacity_configs=configs, now=plan_reference_now)
     generated_at = iso(utc_now())
+    trace_id = new_service_trace_id("quartermaster", generated_at=parse_iso(generated_at))
+    source_trace = dict(source_status.get("trace") or {})
     status = {
         "generated_at": generated_at,
+        "trace_id": trace_id,
+        "source_trace_id": str(source_trace.get("trace_id") or ""),
         "source_generated_at": str(source_status.get("generated_at") or ""),
         "source": source,
         "degraded": degraded,
@@ -246,6 +259,8 @@ def build_plan_payload(*, source: str, degraded: bool, source_status: Dict[str, 
     plan["_quartermaster_status"] = status
     return {
         "generated_at": generated_at,
+        "trace_id": trace_id,
+        "source_trace_id": str(source_trace.get("trace_id") or ""),
         "source_generated_at": str(source_status.get("generated_at") or ""),
         "source": source,
         "degraded": degraded,

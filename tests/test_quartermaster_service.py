@@ -100,6 +100,7 @@ class QuartermasterServiceTests(unittest.TestCase):
 
             self.quartermaster.admin_cockpit_status = lambda: {
                 "generated_at": "2026-03-23T10:00:00Z",
+                "trace": {"trace_id": "admin-status-20260323t100000z-source12345678"},
                 "config": {"policies": {}, "projects": []},
                 "projects": [],
                 "groups": [],
@@ -121,10 +122,14 @@ class QuartermasterServiceTests(unittest.TestCase):
             ]
 
             self.assertEqual(payload["tick_reason"], "baseline")
+            self.assertTrue(str(payload.get("trace_id") or "").startswith("quartermaster-"))
+            self.assertEqual(payload.get("source_trace_id"), "admin-status-20260323t100000z-source12345678")
             self.assertEqual(payload["plan"]["runtime_authority"]["driver"], "controller_tick")
             self.assertEqual(cached["tick_reason"], "baseline")
             self.assertEqual(len(telemetry_entries), 1)
             self.assertEqual(telemetry_entries[0]["tick_reason"], "baseline")
+            self.assertEqual(telemetry_entries[0]["trace_id"], payload["trace_id"])
+            self.assertEqual(telemetry_entries[0]["source_trace_id"], payload["source_trace_id"])
             self.assertIn("review_cap", telemetry_entries[0]["caps"])
 
     def test_force_refresh_rolls_telemetry_log_to_configured_limit(self) -> None:
