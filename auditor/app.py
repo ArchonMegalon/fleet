@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import threading
 import traceback
+import uuid
 from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -89,6 +90,12 @@ def parse_iso(value: Optional[str]) -> Optional[dt.datetime]:
         return None
 
 
+def new_service_trace_id(service: str, *, started_at: Optional[dt.datetime] = None) -> str:
+    stamp = (started_at or utc_now()).strftime("%Y%m%dT%H%M%SZ").lower()
+    token = uuid.uuid4().hex[:12]
+    return f"{service}-{stamp}-{token}"
+
+
 def db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
@@ -115,6 +122,7 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS auditor_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_id TEXT,
                 status TEXT NOT NULL,
                 started_at TEXT NOT NULL,
                 finished_at TEXT,
@@ -195,9 +203,15 @@ def init_db() -> None:
             );
             """
         )
+        auditor_run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(auditor_runs)").fetchall()}
         group_runtime_cols = {row["name"] for row in conn.execute("PRAGMA table_info(group_runtime)").fetchall()}
         project_cols = {row["name"] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+        finding_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_findings)").fetchall()}
         audit_task_cols = {row["name"] for row in conn.execute("PRAGMA table_info(audit_task_candidates)").fetchall()}
+        if "trace_id" not in auditor_run_cols:
+            conn.execute("ALTER TABLE auditor_runs ADD COLUMN trace_id TEXT")
+        if "occurrence_count" not in finding_cols:
+            conn.execute("ALTER TABLE audit_findings ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 0")
         if "task_meta_json" not in audit_task_cols:
             conn.execute("ALTER TABLE audit_task_candidates ADD COLUMN task_meta_json TEXT NOT NULL DEFAULT '{}'")
 
@@ -324,6 +338,14 @@ def normalize_config() -> Dict[str, Any]:
 def auto_approve_finding_keys(config: Dict[str, Any]) -> set[str]:
     values = (config.get("policies") or {}).get("auto_approve_finding_keys") or []
     return {str(item).strip() for item in values if str(item).strip()}
+
+
+def int_policy(config: Dict[str, Any], key: str, default: int) -> int:
+    raw = (config.get("policies") or {}).get(key, default)
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return max(1, int(default))
 
 
 def finding_is_recommended(finding_key: Any) -> bool:
@@ -990,6 +1012,93 @@ def synthesize_uncovered_scope_tasks(
             }
         )
     return tasks
+
+
+def predicted_finding_occurrence_count(scope_type: str, scope_id: str, finding_key: str) -> int:
+    with contextlib.closing(db()) as conn:
+        row = conn.execute(
+            "SELECT occurrence_count FROM audit_findings WHERE scope_type=? AND scope_id=? AND finding_key=?",
+            (scope_type, scope_id, finding_key),
+        ).fetchone()
+    if row is None:
+        return 1
+    try:
+        return max(1, int(row["occurrence_count"] or 0) + 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def _design_mirror_cluster_key(path: str) -> str:
+    normalized = pathlib.PurePosixPath(str(path or "").strip()).as_posix()
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    if normalized.startswith(".codex-design/product/"):
+        product_rel = normalized[len(".codex-design/product/") :]
+        head = product_rel.split("/", 1)[0].strip().lower()
+        if head in {"projects", "sync", "maintenance", "public-guide", "horizons"}:
+            return f"product_{head}"
+        return "product_bundle"
+    if normalized.startswith(".codex-design/repo/"):
+        return "repo_scope"
+    if normalized.startswith(".codex-design/review/"):
+        return "review_context"
+    return "mirror_bundle"
+
+
+def synthesize_design_mirror_hygiene_tasks(
+    *,
+    project_id: str,
+    project_state: Dict[str, Any],
+    occurrence_count: int,
+    min_repeat_count: int,
+) -> List[Dict[str, Any]]:
+    if occurrence_count < max(1, int(min_repeat_count or 1)):
+        return []
+    source_items: List[str] = []
+    source_items.extend(str(path).strip() for path in (project_state.get("missing_targets") or []) if str(path).strip())
+    source_items.extend(
+        str((item or {}).get("path") or "").strip()
+        for item in (project_state.get("drifted_targets") or [])
+        if str((item or {}).get("path") or "").strip()
+    )
+    deduped_items = list(dict.fromkeys(source_items))
+    if not deduped_items:
+        return []
+    cluster_counts = Counter(_design_mirror_cluster_key(path) for path in deduped_items)
+    cluster_key, cluster_size = sorted(cluster_counts.items(), key=lambda item: (-item[1], item[0]))[0]
+    cluster_labels = {
+        "product_bundle": "product mirror bundle",
+        "product_projects": "mirrored project scope docs",
+        "product_sync": "mirrored sync manifests",
+        "product_maintenance": "mirrored maintenance docs",
+        "product_public-guide": "mirrored public-guide docs",
+        "product_horizons": "mirrored horizon docs",
+        "repo_scope": "repo implementation scope mirror",
+        "review_context": "review context mirror",
+        "mirror_bundle": "local design mirror bundle",
+    }
+    cluster_label = cluster_labels.get(cluster_key, "local design mirror bundle")
+    preview = "; ".join(deduped_items[:3])
+    if len(deduped_items) > 3:
+        preview = f"{preview}; +{len(deduped_items) - 3} more"
+    return [
+        {
+            "title": "Stabilize design-doc parity hygiene loop",
+            "detail": (
+                f"Auto-detect and repair recurring `{project_id}` mirror drift after {occurrence_count} repeated "
+                f"audit observations; keep one bounded queue slice for the affected {cluster_label} instead of "
+                "reopening one-off mirror refresh work."
+            ),
+            "synthesis_cluster": "design_mirror_hygiene",
+            "source_items": deduped_items,
+            "source_item_count": len(deduped_items),
+            "source_preview": preview,
+            "repeat_observation_count": occurrence_count,
+            "mirror_cluster": cluster_key,
+            "mirror_cluster_label": cluster_label,
+            "mirror_cluster_size": cluster_size,
+        }
+    ]
 
 
 def design_mirror_status(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -1746,11 +1855,31 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         project_id = str(project_state.get("project_id") or "")
         if project_id not in stale_design_mirror_projects:
             continue
+        occurrence_count = predicted_finding_occurrence_count(
+            "project",
+            project_id,
+            "project.design_mirror_missing_or_stale",
+        )
         evidence: List[Dict[str, Any]] = []
         for path in project_state.get("missing_targets") or []:
             evidence.append({"kind": "filesystem", "path": path, "detail": "missing local design mirror"})
         for item in project_state.get("drifted_targets") or []:
             evidence.append({"kind": "filesystem", **dict(item or {})})
+        candidate_tasks = synthesize_design_mirror_hygiene_tasks(
+            project_id=project_id,
+            project_state=project_state,
+            occurrence_count=occurrence_count,
+            min_repeat_count=int_policy(config, "design_mirror_hygiene_min_repeat_count", 3),
+        ) or [
+            {
+                "title": "Refresh local design mirror",
+                "detail": f"Sync the approved Chummer design bundle into `{project_id}` under `.codex-design/` and refresh repo-local review context.",
+                "mirror_state": str(project_state.get("state") or ""),
+                "missing_count": int(project_state.get("missing_count") or 0),
+                "drifted_count": int(project_state.get("drifted_count") or 0),
+                "repeat_observation_count": occurrence_count,
+            }
+        ]
         findings.append(
             make_finding(
                 scope_type="project",
@@ -1760,15 +1889,7 @@ def scan_chummer_contract_shape(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 title="Repo-local Chummer design mirror is missing or stale",
                 summary=f"{project_id} is missing synced `.codex-design` files or they have drifted from the canonical `chummer6-design` repo, so workers and GitHub review are not using the latest approved cross-repo context locally.",
                 evidence=evidence,
-                candidate_tasks=[
-                    {
-                        "title": "Refresh local design mirror",
-                        "detail": f"Sync the approved Chummer design bundle into `{project_id}` under `.codex-design/` and refresh repo-local review context.",
-                        "mirror_state": str(project_state.get("state") or ""),
-                        "missing_count": int(project_state.get("missing_count") or 0),
-                        "drifted_count": int(project_state.get("drifted_count") or 0),
-                    }
-                ],
+                candidate_tasks=candidate_tasks,
             )
         )
     if stale_design_mirror_projects:
@@ -1991,14 +2112,20 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
             evidence_json = json.dumps(item.get("evidence") or [])
             tasks_json = json.dumps(item.get("candidate_tasks") or [])
             row = conn.execute(
-                "SELECT first_seen_at FROM audit_findings WHERE scope_type=? AND scope_id=? AND finding_key=?",
+                "SELECT first_seen_at, occurrence_count FROM audit_findings WHERE scope_type=? AND scope_id=? AND finding_key=?",
                 (item["scope_type"], item["scope_id"], item["finding_key"]),
             ).fetchone()
             first_seen_at = row["first_seen_at"] if row else now_text
+            next_occurrence_count = 1
+            if row is not None:
+                try:
+                    next_occurrence_count = max(1, int(row["occurrence_count"] or 0) + 1)
+                except (TypeError, ValueError):
+                    next_occurrence_count = 1
             conn.execute(
                 """
-                INSERT INTO audit_findings(scope_type, scope_id, finding_key, severity, title, summary, status, source, evidence_json, candidate_tasks_json, first_seen_at, last_seen_at, resolved_at)
-                VALUES(?, ?, ?, ?, ?, ?, 'open', 'fleet-auditor', ?, ?, ?, ?, NULL)
+                INSERT INTO audit_findings(scope_type, scope_id, finding_key, severity, title, summary, status, source, evidence_json, candidate_tasks_json, first_seen_at, last_seen_at, resolved_at, occurrence_count)
+                VALUES(?, ?, ?, ?, ?, ?, 'open', 'fleet-auditor', ?, ?, ?, ?, NULL, ?)
                 ON CONFLICT(scope_type, scope_id, finding_key) DO UPDATE SET
                     severity=excluded.severity,
                     title=excluded.title,
@@ -2006,6 +2133,7 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                     status='open',
                     evidence_json=excluded.evidence_json,
                     candidate_tasks_json=excluded.candidate_tasks_json,
+                    occurrence_count=excluded.occurrence_count,
                     last_seen_at=excluded.last_seen_at,
                     resolved_at=NULL
                 """,
@@ -2020,6 +2148,7 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
                     tasks_json,
                     first_seen_at,
                     now_text,
+                    next_occurrence_count,
                 ),
             )
             for index, task in enumerate(item.get("candidate_tasks") or []):
@@ -2099,10 +2228,11 @@ def persist_findings(findings: List[Dict[str, Any]], now: dt.datetime) -> Tuple[
 
 async def run_audit_pass() -> None:
     now = utc_now()
+    trace_id = new_service_trace_id("auditor", started_at=now)
     with db() as conn:
         cur = conn.execute(
-            "INSERT INTO auditor_runs(status, started_at, finding_count, candidate_count) VALUES('running', ?, 0, 0)",
-            (iso(now),),
+            "INSERT INTO auditor_runs(trace_id, status, started_at, finding_count, candidate_count) VALUES(?, 'running', ?, 0, 0)",
+            (trace_id, iso(now)),
         )
         run_id = int(cur.lastrowid)
     try:

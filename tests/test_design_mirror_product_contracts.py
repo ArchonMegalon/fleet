@@ -183,6 +183,16 @@ def test_design_mirror_journey_files_live_under_journeys_directory() -> None:
         assert not (PRODUCT_ROOT / name).exists()
 
 
+def test_design_mirror_horizon_docs_match_canonical_horizon_set() -> None:
+    canonical_root = Path("/docker/chummercomplete/chummer-design/products/chummer/horizons")
+    mirror_root = PRODUCT_ROOT / "horizons"
+
+    canonical_docs = {path.name for path in canonical_root.glob("*.md") if path.is_file()}
+    mirrored_docs = {path.name for path in mirror_root.glob("*.md") if path.is_file()}
+
+    assert canonical_docs == mirrored_docs
+
+
 def test_design_mirror_progress_bundle_files_parse_and_expose_contract_names() -> None:
     report = _json(PRODUCT_ROOT / "PROGRESS_REPORT.generated.json")
     history = _json(PRODUCT_ROOT / "PROGRESS_HISTORY.generated.json")

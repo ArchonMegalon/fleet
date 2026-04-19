@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-17T15:56:26Z'
+generated_at: '2026-04-19T01:05:36Z'
 mode: flagship_product
-state_root: /docker/fleet/state/chummer_design_supervisor/shard-1
+state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-1
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -33,25 +33,30 @@ focus:
   - chummer6-design
   - chummer6-ui
   texts:
+  - top flagship grade
+  - whole project frontier
+  - feedback
+  - automatic bugfixing
+  - crash
+  - support
+  - accessibility
+  - localization
+  - restore confidence
+  - fit and finish
   - flagship-readiness
   - desktop-client
   - release-proof
   - grade-bar
   - materializer
-  - top flagship grade
   - whole-project frontier
   - no lowered standards
   - feedback loop
-  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
-  - restore confidence
-  - accessibility
-  - localization
   - performance
   - proof shelf
-  - fit and finish
+  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -59,44 +64,65 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: worker
-    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  status: fail
+  reason: 'active repo-local backlog remains outside the closed design registry: fleet'
 full_product_audit:
   status: fail
-  reason: flagship product readiness proof was generated with non-Linux desktop host-proof
-    blockers ignored while public Windows/macOS installer media still exist
+  reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-17T15:55:14Z'
-  proof_status: pass
+  generated_at: '2026-04-19T01:05:32Z'
+  proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: blocked
-  eta_human: tracked after unblock
-  eta_confidence: low
-  basis: aggregate_shard_parallel_scope+external_blocker
-  scope_kind: next_90_day_successor_wave
-  scope_label: Next 90-day product advance wave
-  scope_warning: This successor-wave ETA is tracked separately from the current flagship
-    closeout frontier. It assumes spare-shard execution continues without stealing
-    active closeout shards.
-  blocking_reason: 'shard-1: Error: worker_status_helper_loop:repeated_blocked_status_polling
-    (+1 more shard blocker)'
-  summary: '12 open milestones remain (12 in progress, 0 not started). Aggregate shard
-    status is parallelized across 10 active shards under Next 90-day product advance
-    wave. Current external blocker: shard-1: Error: worker_status_helper_loop:repeated_blocked_status_polling
-    (+1 more shard blocker)'
-  predicted_completion_at: ''
-  range_low_hours: 134.19
-  range_high_hours: 332.43
-  remaining_open_milestones: 12
-  remaining_in_progress_milestones: 12
-  remaining_not_started_milestones: 0
-  remaining_effort_units: null
+frontier_count: 1
+frontier_ids:
+- 2299644700
+frontier:
+- id: 2299644700
+  title: Sync the approved Chummer design bundle into `fleet` under `.codex-design/`
+    and refresh repo-local review context.
+  wave: flagship_product
+  status: not_started
+  owners: []
+  dependencies: []
+  exit_criteria:
+  - Sync the approved Chummer design bundle into `fleet` under `.codex-design/` and
+    refresh repo-local review context.
+  - 'Own and prove the surface slice(s): design_mirror:fleet'
+  - 'Keep implementation scoped to the allowed paths: .codex-design'
+  - Refresh flagship proof and close out the queue slice honestly when this package
+    is landed (audit-task-3226027).
+  eta:
+    status: flagship_delivery
+    eta_human: 7h-17h
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Sync the approved Chummer design bundle into `fleet` under
+      `.codex-design/` and refresh repo-local review context.'' remains open under
+      the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
+    predicted_completion_at: '2026-04-19T12:45:48Z'
+    range_low_hours: 6.52
+    range_high_hours: 16.82
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 1.45
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
+source_queue_fingerprint: 7bd98f74031f7ba65a0f1ee36c1909f5296b46ae
+queue_package:
+  repo: ''
+  package_id: audit-task-3226027
+  title: Sync the approved Chummer design bundle into `fleet` under `.codex-design/`
+    and refresh repo-local review context.
+  priority: 0
+  owned_surfaces:
+  - design_mirror:fleet
+  allowed_paths:
+  - .codex-design

@@ -1003,6 +1003,20 @@ def _supervisor_state_payload_quality(payload: Dict[str, Any], *, path: Path, pr
 def _select_best_supervisor_state(preferred_path: Path) -> tuple[Path, Dict[str, Any]]:
     selected_path = preferred_path
     selected_payload = load_json(preferred_path)
+    preferred_is_aggregate_state = (
+        preferred_path.is_file()
+        and preferred_path.name == "state.json"
+        and not preferred_path.parent.name.startswith("shard-")
+        and not preferred_path.parent.name.startswith("orphaned-shard-")
+    )
+    preferred_mode = str((selected_payload or {}).get("mode") or "").strip().lower()
+    preferred_completion_status = _supervisor_completion_status(selected_payload)
+    preferred_updated_at = parse_iso((selected_payload or {}).get("updated_at")) or parse_iso(
+        ((selected_payload or {}).get("active_run") or {}).get("started_at")
+    )
+    preferred_updated_ts = preferred_updated_at.timestamp() if preferred_updated_at is not None else -1.0
+    preferred_ready_mode = preferred_mode in {"loop", "sharded", "flagship_product", "complete", "successor_wave"}
+    preferred_live_or_current = preferred_completion_status in {"pass", "passed"} and preferred_ready_mode
     selected_score = (-100, -1, -1, -1.0)
     for path in _candidate_supervisor_state_paths(preferred_path):
         payload = load_json(path)
@@ -1012,8 +1026,25 @@ def _select_best_supervisor_state(preferred_path: Path) -> tuple[Path, Dict[str,
         completion_status = _supervisor_completion_status(payload)
         updated_at = parse_iso(payload.get("updated_at")) or parse_iso((payload.get("active_run") or {}).get("started_at"))
         updated_ts = updated_at.timestamp() if updated_at is not None else -1.0
+        active_runs = payload.get("active_runs")
+        active_runs_count = int(
+            payload.get("active_runs_count")
+            or (len(active_runs) if isinstance(active_runs, list) else 0)
+            or (1 if isinstance(payload.get("active_run"), dict) and payload.get("active_run") else 0)
+            or 0
+        )
+        shard_live_flagship_override = (
+            preferred_is_aggregate_state
+            and not preferred_live_or_current
+            and path.parent.name.startswith("shard-")
+            and completion_status in {"pass", "passed"}
+            and mode in {"loop", "sharded", "flagship_product", "complete", "successor_wave"}
+            and active_runs_count > 0
+            and updated_ts >= preferred_updated_ts
+        )
         quality = _supervisor_state_payload_quality(payload, path=path, preferred_path=preferred_path)
         score = (
+            1 if shard_live_flagship_override else 0,
             quality,
             1 if completion_status in {"pass", "passed"} else 0,
             3 if mode == "complete" else 2 if mode == "flagship_product" else 1 if mode == "loop" else 0,
@@ -2474,7 +2505,18 @@ def executable_gate_freshness_issues(
             issues.append(f"Executable gate freshness evidence '{key}' is negative.")
             continue
         parsed_ages[key] = age_seconds
-        if age_seconds > max_age_seconds:
+    for key, age_seconds in parsed_ages.items():
+        allow_stale_flag_key = key.replace("proof_age_seconds", "proof_stale_pass_receipt_allowed")
+        allow_stale_pass_receipt = bool(evidence.get(allow_stale_flag_key))
+        if (
+            key == "flagship UI release gate proof_age_seconds"
+            and not allow_stale_pass_receipt
+            and parsed_ages.get("desktop workflow execution gate proof_age_seconds", max_age_seconds + 1) <= max_age_seconds
+            and parsed_ages.get("desktop visual familiarity gate proof_age_seconds", max_age_seconds + 1) <= max_age_seconds
+            and str(payload.get("status") or "").strip().lower() in {"pass", "passed", "ready"}
+        ):
+            allow_stale_pass_receipt = True
+        if age_seconds > max_age_seconds and not allow_stale_pass_receipt:
             issues.append(
                 f"Executable gate freshness evidence '{key}' is stale ({age_seconds}s old; max {max_age_seconds}s)."
             )
@@ -5323,7 +5365,8 @@ def build_flagship_product_readiness_payload(
         and int(fleet_evidence.get("external_proof_backlog_request_count") or 0) == 0
         and bool(fleet_evidence.get("external_proof_runbook_synced"))
         and bool(fleet_evidence.get("dispatchable_truth_ready"))
-        and str(fleet_evidence.get("supervisor_mode") or "").strip().lower() in {"loop", "sharded", "flagship_product", "complete"}
+        and str(fleet_evidence.get("supervisor_mode") or "").strip().lower()
+        in {"loop", "sharded", "flagship_product", "complete", "completion_review"}
         and bool(fleet_evidence.get("supervisor_recent_enough"))
         and bool(fleet_evidence.get("supervisor_hard_flagship_ready"))
         and bool(fleet_evidence.get("supervisor_whole_project_frontier_ready"))

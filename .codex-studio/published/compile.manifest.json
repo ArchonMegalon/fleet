@@ -1,5 +1,6 @@
 {
   "artifacts": [
+    "CAMPAIGN_OS_CONTINUITY_LIVENESS.generated.json",
     "COMPLETION_REVIEW_FRONTIER.generated.yaml",
     "EXTERNAL_PROOF_RUNBOOK.generated.md",
     "FLAGSHIP_PRODUCT_READINESS.generated.json",
@@ -32,7 +33,7 @@
   },
   "dispatchable_truth_ready": true,
   "lifecycle": "live",
-  "published_at": "2026-04-17T20:55:18Z",
+  "published_at": "2026-04-19T07:34:33Z",
   "schema_version": "2026-03-10.v1",
   "stages": {
     "capacity_compile": true,

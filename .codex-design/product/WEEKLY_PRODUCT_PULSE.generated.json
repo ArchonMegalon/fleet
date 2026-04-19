@@ -1,12 +1,12 @@
 {
   "contract_name": "chummer.weekly_product_pulse",
   "contract_version": 3,
-  "generated_at": "2026-04-15T08:25:28Z",
-  "as_of": "2026-04-15",
+  "generated_at": "2026-04-16T19:01:44Z",
+  "as_of": "2026-04-16",
   "scorecard_source": "products/chummer/PRODUCT_HEALTH_SCORECARD.yaml",
   "progress_report_source": "products/chummer/PROGRESS_REPORT.generated.json",
   "progress_history_source": "products/chummer/PROGRESS_HISTORY.generated.json",
-  "summary": "Campaign Breadth and Promotion remains the active wave; journey proof is ready; overall progress is 99% in 'Public-fit polish'; the longest pole remains Core Engine; support closure is clear.",
+  "summary": "Campaign Breadth and Promotion remains the active wave; journey proof is ready; overall progress is 100% in 'Public-fit polish'; the longest pole remains Core Engine; support closure is clear.",
   "active_wave": "Campaign Breadth and Promotion",
   "active_wave_status": "complete",
   "release_health": {
@@ -67,12 +67,12 @@
   "public_promise_drift_count": 0,
   "governor_decisions": [
     {
-      "decision_id": "2026-04-15-closeout-and-continue-campaign-breadth-and-promotion",
+      "decision_id": "2026-04-16-closeout-and-continue-campaign-breadth-and-promotion",
       "action": "closeout_and_continue",
-      "reason": "Keep the recommended wave on Campaign Breadth and Promotion now that the Post-Audit Next 20 Big Wins program is materially closed. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 15 snapshots, and the pacing risk is still concentrated in Core Engine rather than in reopened foundation, campaign-middle, or trust-surface blockers.",
+      "reason": "Keep the recommended wave on Campaign Breadth and Promotion now that the Post-Audit Next 20 Big Wins program is materially closed. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 16 snapshots, and the pacing risk is still concentrated in Core Engine rather than in reopened foundation, campaign-middle, or trust-surface blockers.",
       "cited_signals": [
-        "overall_progress_percent=99",
-        "history_snapshot_count=15",
+        "overall_progress_percent=100",
+        "history_snapshot_count=16",
         "oldest_blocker_days=0",
         "phase_label=Public-fit polish",
         "longest_pole=Core Engine",
@@ -80,7 +80,7 @@
       ]
     },
     {
-      "decision_id": "2026-04-15-launch-governance",
+      "decision_id": "2026-04-16-launch-governance",
       "action": "freeze_launch",
       "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
       "cited_signals": [
@@ -152,12 +152,12 @@
     "public_promise_drift_count": 0,
     "governor_decisions": [
       {
-        "decision_id": "2026-04-15-closeout-and-continue-campaign-breadth-and-promotion",
+        "decision_id": "2026-04-16-closeout-and-continue-campaign-breadth-and-promotion",
         "action": "closeout_and_continue",
-        "reason": "Keep the recommended wave on Campaign Breadth and Promotion now that the Post-Audit Next 20 Big Wins program is materially closed. The pulse shows 99% overall progress in 'Public-fit polish', history depth has reached 15 snapshots, and the pacing risk is still concentrated in Core Engine rather than in reopened foundation, campaign-middle, or trust-surface blockers.",
+        "reason": "Keep the recommended wave on Campaign Breadth and Promotion now that the Post-Audit Next 20 Big Wins program is materially closed. The pulse shows 100% overall progress in 'Public-fit polish', history depth has reached 16 snapshots, and the pacing risk is still concentrated in Core Engine rather than in reopened foundation, campaign-middle, or trust-surface blockers.",
         "cited_signals": [
-          "overall_progress_percent=99",
-          "history_snapshot_count=15",
+          "overall_progress_percent=100",
+          "history_snapshot_count=16",
           "oldest_blocker_days=0",
           "phase_label=Public-fit polish",
           "longest_pole=Core Engine",
@@ -165,7 +165,7 @@
         ]
       },
       {
-        "decision_id": "2026-04-15-launch-governance",
+        "decision_id": "2026-04-16-launch-governance",
         "action": "freeze_launch",
         "reason": "Freeze launch expansion until fresh local release proof passes on the public edge.",
         "cited_signals": [
@@ -181,15 +181,15 @@
   },
   "supporting_signals": {
     "current_recommended_wave": "Campaign Breadth and Promotion",
-    "overall_progress_percent": 99,
+    "overall_progress_percent": 100,
     "phase_label": "Public-fit polish",
-    "history_snapshot_count": 15,
+    "history_snapshot_count": 16,
     "longest_pole": "Core Engine",
     "launch_readiness": "Hold launch expansion pending fresh local release proof on the public edge.",
     "provider_route_stewardship": {
       "default_status": "Pilot defaults are governed",
       "canary_status": "Canary evidence is still accumulating",
-      "review_due": "2026-04-29",
+      "review_due": "2026-04-30",
       "next_decision": "Hold broad promotion until public route canary coverage exists."
     },
     "journey_gate_source": "/docker/fleet/.codex-studio/published/JOURNEY_GATES.generated.json",
@@ -221,22 +221,18 @@
       "local_release_proof_status": "unknown",
       "proven_journey_count": 0,
       "proven_route_count": 0,
-      "history_snapshot_count": 15,
-      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 15 weekly snapshots are on record for the current public trust posture."
+      "history_snapshot_count": 16,
+      "summary": "Current local edge proof is unknown. Journey-proof evidence is still accumulating. 16 weekly snapshots are on record for the current public trust posture."
     },
     "progress_trend": {
-      "state": "steady",
-      "direction": "flat",
-      "delta_percent": 0,
-      "from_as_of": "2026-04-13",
-      "to_as_of": "2026-04-14",
-      "summary": "Flat trend 0% from 2026-04-13 to 2026-04-14. Trend window: 2026-04-02 100% -> 2026-04-03 100% -> 2026-04-04 100% -> 2026-04-05 100% -> 2026-04-11 99% -> 2026-04-12 99% -> 2026-04-13 99% -> 2026-04-14 99%.",
+      "state": "moving",
+      "direction": "up",
+      "delta_percent": 1,
+      "from_as_of": "2026-04-14",
+      "to_as_of": "2026-04-16",
+      "summary": "Upward momentum +1% from 2026-04-14 to 2026-04-16. Trend window: 2026-04-03 100% -> 2026-04-04 100% -> 2026-04-05 100% -> 2026-04-11 99% -> 2026-04-12 99% -> 2026-04-13 99% -> 2026-04-14 99% -> 2026-04-16 100%.",
       "sample_count": 8,
       "samples": [
-        {
-          "as_of": "2026-04-02",
-          "overall_progress_percent": 100
-        },
         {
           "as_of": "2026-04-03",
           "overall_progress_percent": 100
@@ -264,6 +260,10 @@
         {
           "as_of": "2026-04-14",
           "overall_progress_percent": 99
+        },
+        {
+          "as_of": "2026-04-16",
+          "overall_progress_percent": 100
         }
       ]
     }

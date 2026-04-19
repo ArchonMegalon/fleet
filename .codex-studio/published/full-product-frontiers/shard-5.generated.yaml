@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-17T15:13:37Z'
+generated_at: '2026-04-19T01:05:35Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-5
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -68,14 +68,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: worker
-    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-17T15:13:17Z'
+  generated_at: '2026-04-19T01:05:32Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -108,7 +106,7 @@ frontier:
     basis: full_product_single_milestone_heuristic
     summary: 'Milestone ''Mobile and play-shell flagship finish'' remains open under
       the flagship closeout frontier. Outstanding readiness coverage: fleet_and_operator_loop.'
-    predicted_completion_at: '2026-04-18T09:16:01Z'
+    predicted_completion_at: '2026-04-19T19:07:59Z'
     range_low_hours: 10.25
     range_high_hours: 25.83
     remaining_open_milestones: 1

@@ -116,6 +116,70 @@ class AuditorSynthesisTests(unittest.TestCase):
             self.assertEqual(payload["drifted_target_count"], 1)
             self.assertEqual(payload["projects"][0]["state"], "missing_and_drifted")
 
+    def test_synthesize_design_mirror_hygiene_tasks_requires_repeated_observations(self) -> None:
+        project_state = {
+            "missing_targets": [
+                ".codex-design/product/README.md",
+                ".codex-design/product/START_HERE.md",
+            ],
+            "drifted_targets": [
+                {"path": ".codex-design/product/ROADMAP.md"},
+                {"path": ".codex-design/review/REVIEW_CONTEXT.md"},
+            ],
+        }
+
+        none = self.auditor.synthesize_design_mirror_hygiene_tasks(
+            project_id="fleet",
+            project_state=project_state,
+            occurrence_count=2,
+            min_repeat_count=3,
+        )
+        tasks = self.auditor.synthesize_design_mirror_hygiene_tasks(
+            project_id="fleet",
+            project_state=project_state,
+            occurrence_count=3,
+            min_repeat_count=3,
+        )
+
+        self.assertEqual(none, [])
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["synthesis_cluster"], "design_mirror_hygiene")
+        self.assertEqual(tasks[0]["source_item_count"], 4)
+        self.assertEqual(tasks[0]["mirror_cluster"], "product_bundle")
+        self.assertEqual(tasks[0]["repeat_observation_count"], 3)
+
+    def test_persist_findings_tracks_occurrence_count_for_repeated_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            original_db_path = self.auditor.DB_PATH
+            self.auditor.DB_PATH = db_path
+            try:
+                self.auditor.init_db()
+                now = dt.datetime(2026, 4, 18, 18, 0, tzinfo=dt.timezone.utc)
+                finding = {
+                    "scope_type": "project",
+                    "scope_id": "fleet",
+                    "finding_key": "project.design_mirror_missing_or_stale",
+                    "severity": "medium",
+                    "title": "Repo-local Chummer design mirror is missing or stale",
+                    "summary": "mirror drift",
+                    "evidence": [],
+                    "candidate_tasks": [{"title": "Refresh local design mirror", "detail": "sync it"}],
+                }
+
+                self.auditor.persist_findings([finding], now)
+                self.auditor.persist_findings([finding], now + dt.timedelta(minutes=5))
+
+                with self.auditor.db() as conn:
+                    row = conn.execute(
+                        "SELECT occurrence_count FROM audit_findings WHERE scope_type='project' AND scope_id='fleet' AND finding_key='project.design_mirror_missing_or_stale'"
+                    ).fetchone()
+
+                self.assertIsNotNone(row)
+                self.assertEqual(row["occurrence_count"], 2)
+            finally:
+                self.auditor.DB_PATH = original_db_path
+
     def test_design_mirror_specs_expand_product_groups(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -232,6 +296,27 @@ mirrors:
                 self.assertIsNotNone(task)
                 self.assertEqual(task["status"], "resolved")
                 self.assertEqual(task["resolved_at"], now_text)
+            finally:
+                self.auditor.DB_PATH = original_db_path
+
+    def test_run_audit_pass_persists_trace_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "fleet.db"
+            original_db_path = self.auditor.DB_PATH
+            self.auditor.DB_PATH = db_path
+            try:
+                self.auditor.init_db()
+                self.auditor.normalize_config = lambda: {}
+                self.auditor.collect_findings = lambda _config: []
+                self.auditor.persist_findings = lambda findings, now: (0, 0)
+
+                import asyncio
+
+                asyncio.run(self.auditor.run_audit_pass())
+                status = self.auditor.auditor_status()
+
+                self.assertTrue(str((status.get("last_run") or {}).get("trace_id") or "").startswith("auditor-"))
+                self.assertEqual((status.get("last_run") or {}).get("status"), "succeeded")
             finally:
                 self.auditor.DB_PATH = original_db_path
 

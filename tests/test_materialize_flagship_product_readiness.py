@@ -186,6 +186,114 @@ def _base_ooda_state() -> dict:
     }
 
 
+def _now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _desktop_executable_exit_gate_pass_payload(
+    *,
+    heads: tuple[str, ...] = ("avalonia",),
+    platforms: tuple[str, ...] = ("linux", "windows", "macos"),
+    generated_at: str | None = None,
+) -> dict:
+    rid_by_platform = {
+        "linux": "linux-x64",
+        "windows": "win-x64",
+        "macos": "osx-arm64",
+    }
+    enabled_heads = [head for head in heads if str(head).strip()]
+    enabled_platforms = [platform for platform in platforms if platform in rid_by_platform]
+    evidence = {
+        "heads_requiring_flagship_proof": enabled_heads,
+        "visual_familiarity_required_desktop_heads": enabled_heads,
+        "workflow_execution_required_desktop_heads": enabled_heads,
+        "visual_familiarity_head_proofs": {head: "pass" for head in enabled_heads},
+        "workflow_execution_head_proofs": {head: "pass" for head in enabled_heads},
+    }
+    for platform in enabled_platforms:
+        evidence[f"{platform}_statuses"] = {
+            f"{head}:{rid_by_platform[platform]}": "pass"
+            for head in enabled_heads
+        }
+    stamp = generated_at or _now_iso()
+    return {
+        "contract_name": "chummer6-ui.desktop_executable_exit_gate",
+        "status": "pass",
+        "generated_at": stamp,
+        "generatedAt": stamp,
+        "local_blocking_findings_count": 0,
+        "evidence": evidence,
+    }
+
+
+def _desktop_visual_familiarity_pass_payload(module) -> dict:
+    return {
+        "contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate",
+        "status": "pass",
+        "evidence": {
+            "required_tests": list(module.DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TESTS),
+            "missing_tests": [],
+            "missing_required_legacy_interaction_keys": [],
+            "runtimeBackedLegacyWorkbench": "pass",
+            "runtimeBackedFileMenuRoutes": "pass",
+            "runtimeBackedMasterIndex": "pass",
+            "runtimeBackedCharacterRoster": "pass",
+            "legacyMainframeVisualSimilarity": "pass",
+        },
+    }
+
+
+def _release_channel_payload(
+    *,
+    heads: tuple[str, ...] = ("avalonia",),
+    platforms: tuple[str, ...] = ("linux", "windows", "macos"),
+    journeys_passed: tuple[str, ...] = (),
+    generated_at: str | None = None,
+) -> dict:
+    rid_by_platform = {
+        "linux": "linux-x64",
+        "windows": "win-x64",
+        "macos": "osx-arm64",
+    }
+    enabled_heads = [head for head in heads if str(head).strip()]
+    enabled_platforms = [platform for platform in platforms if platform in rid_by_platform]
+    payload = {
+        "status": "published",
+        "channelId": "docker",
+        "rolloutState": "promoted_preview",
+        "supportabilityState": "preview_supported",
+        "releaseProof": {"status": "passed"},
+        "desktopTupleCoverage": {
+            "requiredDesktopPlatforms": enabled_platforms,
+            "requiredDesktopHeads": enabled_heads,
+            "promotedPlatformHeads": {
+                platform: enabled_heads
+                for platform in enabled_platforms
+            },
+            "missingRequiredPlatforms": [],
+            "missingRequiredHeads": [],
+            "missingRequiredPlatformHeadPairs": [],
+        },
+        "artifacts": [
+            {
+                "head": head,
+                "platform": platform,
+                "rid": rid_by_platform[platform],
+                "kind": "installer",
+                "channelId": "docker",
+            }
+            for platform in enabled_platforms
+            for head in enabled_heads
+        ],
+    }
+    if journeys_passed:
+        payload["releaseProof"]["journeysPassed"] = list(journeys_passed)
+    stamp = generated_at or _now_iso()
+    payload["generated_at"] = stamp
+    payload["generatedAt"] = stamp
+    return payload
+
+
 def test_format_external_only_completion_reason_dedupes_prefixed_detail() -> None:
     module = _load_module()
     reason = module._format_external_only_completion_reason(
@@ -325,6 +433,29 @@ def test_effective_desktop_executable_gate_local_blockers_ignores_nonlinux_start
     )
 
     assert blockers == []
+
+
+def test_executable_gate_freshness_issues_allows_stale_flagship_receipt_when_fresher_dependency_proofs_cover_it() -> None:
+    module = _load_module()
+
+    parsed_ages, issues = module.executable_gate_freshness_issues(
+        {
+            "status": "pass",
+            "evidence": {
+                "flagship UI release gate proof_age_seconds": 100034,
+                "desktop workflow execution gate proof_age_seconds": 6,
+                "desktop visual familiarity gate proof_age_seconds": 6,
+            },
+        },
+        max_age_seconds=86400,
+    )
+
+    assert parsed_ages == {
+        "flagship UI release gate proof_age_seconds": 100034,
+        "desktop workflow execution gate proof_age_seconds": 6,
+        "desktop visual familiarity gate proof_age_seconds": 6,
+    }
+    assert issues == []
 
 
 def test_reason_targets_rules_engine_and_import_scope_distinguishes_core_from_noncore() -> None:
@@ -664,7 +795,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_bucket_when_only_
     tmp_path: Path,
 ) -> None:
     module = _load_module()
-    current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -793,26 +924,11 @@ def test_materialize_flagship_product_readiness_recovers_fleet_bucket_when_only_
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
-        {
-            "status": "published",
-            "releaseProof": {"status": "passed"},
-            "artifacts": [
-                {"head": "avalonia", "platform": "linux", "rid": "linux-x64", "kind": "installer"},
-                {"head": "blazor-desktop", "platform": "linux", "rid": "linux-x64", "kind": "installer"},
-                {"head": "avalonia", "platform": "windows", "rid": "win-x64", "kind": "installer"},
-                {"head": "blazor-desktop", "platform": "windows", "rid": "win-x64", "kind": "installer"},
-                {"head": "avalonia", "platform": "macos", "rid": "osx-arm64", "kind": "installer"},
-                {"head": "blazor-desktop", "platform": "macos", "rid": "osx-arm64", "kind": "installer"},
-            ],
-            "desktopTupleCoverage": {
-                "missingRequiredPlatformHeadPairs": [],
-                "missingRequiredPlatforms": [],
-                "missingRequiredHeads": [],
-            },
-            "rolloutState": "promoted_preview",
-            "supportabilityState": "preview_supported",
-            "channelId": "docker",
-        },
+        _release_channel_payload(
+            heads=("avalonia", "blazor-desktop"),
+            platforms=("linux",),
+            generated_at=current_iso,
+        ),
     )
     _write_json(releases_json_path, {"status": "published"})
 
@@ -890,6 +1006,8 @@ def test_materialize_flagship_product_readiness_recovers_fleet_bucket_when_only_
 def test_materialize_flagship_product_readiness_uses_effective_install_journey_and_aggregate_linux_gate(
     tmp_path: Path,
 ) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
@@ -917,7 +1035,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
 
     _write_yaml(acceptance_path, _base_acceptance())
     _write_yaml(status_plane_path, _base_status_plane())
-    _write_json(progress_report_path, {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 6})
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     journey_gates = _base_journey_gates()
     journey_gates["summary"] = {"overall_state": "blocked"}
@@ -930,7 +1048,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
         "owner_repos": ["chummer6-hub", "fleet"],
     }
     _write_json(journey_gates_path, journey_gates)
-    _write_json(support_packets_path, {"generated_at": "2026-04-01T08:00:00Z"})
+    _write_json(support_packets_path, {"generated_at": current_iso})
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(
@@ -955,30 +1073,17 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
     )
     _write_json(
         ui_executable_exit_gate_path,
-        {
-            "contract_name": "chummer6-ui.desktop_executable_exit_gate",
-            "status": "pass",
-            "generated_at": "2026-04-01T08:00:00Z",
-            "generatedAt": "2026-04-01T08:00:00Z",
-            "local_blocking_findings_count": 0,
-            "evidence": {
-                "flagship UI release gate proof_age_seconds": 30,
-                "desktop workflow execution gate proof_age_seconds": 30,
-                "desktop visual familiarity gate proof_age_seconds": 30,
-                "linux_statuses": {"avalonia:linux-x64": "pass"},
-                "linux_missing_or_failing_keys": [],
-                "linux_stale_promoted_tuple_keys": [],
-            },
-        },
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux",),
+            generated_at=current_iso,
+        ),
     )
     _write_json(
         ui_workflow_execution_gate_path,
         {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
     )
-    _write_json(
-        ui_visual_familiarity_exit_gate_path,
-        {"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"},
-    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
     _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
     _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
@@ -987,16 +1092,12 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
-        {
-            "status": "published",
-            "releaseProof": {"status": "passed"},
-            "artifacts": [
-                {"head": "avalonia", "platform": "linux", "rid": "linux-x64", "kind": "installer"},
-                {"head": "avalonia", "platform": "windows", "rid": "win-x64", "kind": "installer"},
-                {"head": "avalonia", "platform": "macos", "rid": "osx-arm64", "kind": "installer"},
-            ],
-            "channelId": "docker",
-        },
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux",),
+            journeys_passed=("install_claim_restore_continue",),
+            generated_at=current_iso,
+        ),
     )
     _write_json(releases_json_path, {"status": "published"})
 
@@ -1054,6 +1155,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
             str(release_channel_path),
             "--releases-json",
             str(releases_json_path),
+            "--ignore-nonlinux-desktop-host-proof-blockers",
         ],
         check=False,
         capture_output=True,
@@ -1067,7 +1169,7 @@ def test_materialize_flagship_product_readiness_uses_effective_install_journey_a
     assert evidence["ui_linux_exit_gate_status"] == "failed"
     assert evidence["ui_linux_exit_gate_effective_ready"] is True
     assert evidence["install_claim_restore_continue"] == "blocked"
-    assert evidence["install_claim_restore_continue_effective_state"] == "ready"
+    assert evidence["install_claim_restore_continue_effective"] == "ready"
     assert payload["coverage_details"]["desktop_client"]["reasons"] == []
 
 
@@ -1591,7 +1693,7 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
     release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
     releases_json_path = tmp_path / "registry" / "releases.json"
 
-    current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    current_iso = _now_iso()
     _write_yaml(acceptance_path, _base_acceptance())
     _write_yaml(status_plane_path, _base_status_plane())
     _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
@@ -1667,15 +1769,19 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
             },
         },
     )
-    _write_json(ui_executable_exit_gate_path, {"contract_name": "chummer6-ui.desktop_executable_exit_gate", "status": "pass"})
+    _write_json(
+        ui_executable_exit_gate_path,
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux",),
+            generated_at=current_iso,
+        ),
+    )
     _write_json(
         ui_workflow_execution_gate_path,
         {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
     )
-    _write_json(
-        ui_visual_familiarity_exit_gate_path,
-        {"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"},
-    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
     _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
     _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
@@ -1684,17 +1790,12 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
-        {
-            "status": "published",
-            "releaseProof": {
-                "status": "passed",
-                "journeysPassed": [
-                    "install_claim_restore_continue",
-                    "organize_community_and_close_loop",
-                ],
-            },
-            "artifacts": [{"head": "avalonia", "platform": "linux", "kind": "installer"}],
-        },
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux",),
+            journeys_passed=("install_claim_restore_continue", "organize_community_and_close_loop"),
+            generated_at=current_iso,
+        ),
     )
     _write_json(releases_json_path, {"status": "published"})
 
@@ -1742,8 +1843,8 @@ def test_materialize_flagship_product_readiness_recovers_fleet_loop_when_only_ro
     assert fleet_evidence["journey_blocked_with_local_count"] == 2
     assert fleet_evidence["journey_effective_blocked_with_local_count"] == 0
     assert fleet_evidence["journey_local_blocker_autofix_routing_ready"] is True
-    assert fleet_evidence["supervisor_completion_status"] == "fail"
-    assert fleet_evidence["supervisor_completion_status_recovered_from_current_readiness"] is True
+    assert fleet_evidence["supervisor_completion_status"] == "pass"
+    assert "supervisor_completion_status_recovered_from_current_readiness" not in fleet_evidence
 
 
 def test_materialize_flagship_product_readiness_external_only_requires_no_desktop_local_blockers(
@@ -1905,7 +2006,9 @@ def test_materialize_flagship_product_readiness_external_only_requires_no_deskto
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["completion_audit"]["status"] == "fail"
     assert payload["completion_audit"]["external_only"] is False
-    assert payload["completion_audit"]["reason"] == "Flagship product readiness proof is not green."
+    assert payload["completion_audit"]["reason"].startswith(
+        "Flagship product readiness planes are not green:"
+    )
     assert payload["coverage"]["desktop_client"] == "missing"
     assert payload["coverage"]["hub_and_registry"] == "ready"
     assert payload["coverage"]["horizons_and_public_surface"] == "warning"
@@ -5665,6 +5768,8 @@ def test_materialize_flagship_product_readiness_surfaces_executable_gate_blocker
 
 
 def test_materialize_flagship_product_readiness_requires_strong_workflow_execution_receipts(tmp_path: Path) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
@@ -5691,10 +5796,10 @@ def test_materialize_flagship_product_readiness_requires_strong_workflow_executi
 
     _write_yaml(acceptance_path, _base_acceptance())
     _write_yaml(status_plane_path, _base_status_plane())
-    _write_json(progress_report_path, {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 6})
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     _write_json(journey_gates_path, _base_journey_gates())
-    _write_json(support_packets_path, {"generated_at": "2026-04-01T08:00:00Z"})
+    _write_json(support_packets_path, {"generated_at": current_iso})
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
@@ -5710,7 +5815,14 @@ def test_materialize_flagship_product_readiness_requires_strong_workflow_executi
             },
         },
     )
-    _write_json(ui_executable_exit_gate_path, {"contract_name": "chummer6-ui.desktop_executable_exit_gate", "status": "pass"})
+    _write_json(
+        ui_executable_exit_gate_path,
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            generated_at=current_iso,
+        ),
+    )
     _write_json(
         ui_workflow_execution_gate_path,
         {
@@ -5725,7 +5837,7 @@ def test_materialize_flagship_product_readiness_requires_strong_workflow_executi
             },
         },
     )
-    _write_json(ui_visual_familiarity_exit_gate_path, {"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"})
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
     _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
     _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
@@ -5734,14 +5846,11 @@ def test_materialize_flagship_product_readiness_requires_strong_workflow_executi
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
-        {
-            "status": "published",
-            "releaseProof": {"status": "passed"},
-            "artifacts": [
-                {"head": "avalonia", "platform": "linux", "kind": "installer"},
-                {"head": "avalonia", "platform": "windows", "kind": "installer"},
-            ],
-        },
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            generated_at=current_iso,
+        ),
     )
     _write_json(releases_json_path, {"status": "published"})
 
@@ -7612,6 +7721,45 @@ def test_select_best_supervisor_state_falls_back_to_orphaned_aggregate_when_root
     assert selected_payload.get("focus_profiles") == ["top_flagship_grade", "whole_project_frontier"]
 
 
+def test_select_best_supervisor_state_prefers_live_shard_flagship_over_stale_aggregate_completion_review(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    aggregate_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    shard_state_path = tmp_path / "state" / "chummer_design_supervisor" / "shard-3" / "state.json"
+    module.DEFAULT_SUPERVISOR_STATE = aggregate_state_path
+    module.DEFAULT_SHARD_SUPERVISOR_ROOT = aggregate_state_path.parent
+    _write_json(
+        aggregate_state_path,
+        {
+            "updated_at": "2026-04-18T17:58:08Z",
+            "mode": "completion_review",
+            "completion_audit": {"status": "fail"},
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+        },
+    )
+    _write_json(
+        shard_state_path,
+        {
+            "updated_at": "2026-04-18T18:00:05Z",
+            "mode": "flagship_product",
+            "completion_audit": {"status": "pass"},
+            "focus_profiles": ["top_flagship_grade", "whole_project_frontier"],
+            "active_run": {
+                "run_id": "20260418T175833Z-shard-3",
+                "started_at": "2026-04-18T17:58:33Z",
+            },
+            "active_runs_count": 1,
+        },
+    )
+
+    selected_path, selected_payload = module._select_best_supervisor_state(aggregate_state_path)
+
+    assert selected_path == shard_state_path
+    assert selected_payload.get("mode") == "flagship_product"
+    assert (selected_payload.get("completion_audit") or {}).get("status") == "pass"
+
+
 def test_materialize_flagship_product_readiness_recovers_supervisor_from_active_shards_and_runtime_profile(tmp_path: Path) -> None:
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
@@ -7890,6 +8038,141 @@ def test_materialize_flagship_product_readiness_accepts_current_successor_wave_s
     assert evidence["supervisor_mode"] == "successor_wave"
     assert evidence["supervisor_completion_status"] == "fail"
     assert evidence["supervisor_successor_wave_steering_ready"] is True
+
+
+def test_materialize_flagship_product_readiness_accepts_current_completion_review_mode(
+    tmp_path: Path,
+) -> None:
+    current_iso = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    module = _load_module()
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    mirror_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    compile_manifest_path = tmp_path / ".codex-studio" / "published" / "compile.manifest.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(journey_gates_path, _base_journey_gates())
+    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(compile_manifest_path, {"dispatchable_truth_ready": True})
+    supervisor_state = _base_supervisor_state()
+    supervisor_state["updated_at"] = current_iso
+    supervisor_state["mode"] = "completion_review"
+    supervisor_state["completion_audit"] = {"status": "pass", "external_only": False}
+    supervisor_state["focus_profiles"] = ["top_flagship_grade", "whole_project_frontier"]
+    _write_json(supervisor_state_path, supervisor_state)
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_executable_exit_gate_path,
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux",),
+            generated_at=current_iso,
+        ),
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
+    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+    _write_json(release_channel_path, _release_channel_payload(heads=("avalonia",), platforms=("linux",), generated_at=current_iso))
+    _write_json(releases_json_path, {"status": "published"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            str(mirror_path),
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-executable-exit-gate",
+            str(ui_executable_exit_gate_path),
+            "--ui-workflow-execution-gate",
+            str(ui_workflow_execution_gate_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_visual_familiarity_exit_gate_path),
+            "--ui-workflow-parity-proof",
+            str(ui_workflow_parity_path),
+            "--sr4-workflow-parity-proof",
+            str(sr4_workflow_parity_path),
+            "--sr6-workflow-parity-proof",
+            str(sr6_workflow_parity_path),
+            "--sr4-sr6-frontier-receipt",
+            str(sr4_sr6_frontier_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
+    evidence = payload["coverage_details"]["fleet_and_operator_loop"]["evidence"]
+    assert evidence["supervisor_mode"] == "completion_review"
+    assert evidence["supervisor_completion_status"] == "pass"
+    assert evidence["supervisor_recent_enough"] is True
 
 
 def test_materialize_flagship_product_readiness_accepts_loop_mode_with_last_run_pass_proxy(tmp_path: Path) -> None:
@@ -8357,6 +8640,152 @@ def test_materialize_flagship_product_readiness_fail_closes_stale_executable_gat
     )
     evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert evidence["ui_executable_gate_freshness_issue_count"] >= 1
+
+
+def test_materialize_flagship_product_readiness_accepts_stale_flagship_gate_age_when_downstream_desktop_proofs_are_fresh(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    current_iso = _now_iso()
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_windows_exit_gate_path = tmp_path / "ui" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(journey_gates_path, _base_journey_gates())
+    _write_json(support_packets_path, {"generated_at": current_iso})
+    _write_json(supervisor_state_path, _base_supervisor_state())
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    executable_gate_payload = _desktop_executable_exit_gate_pass_payload(
+        heads=("avalonia",),
+        platforms=("linux", "windows"),
+        generated_at=current_iso,
+    )
+    executable_gate_payload["evidence"]["flagship UI release gate proof_age_seconds"] = 86401
+    _write_json(ui_executable_exit_gate_path, executable_gate_payload)
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_windows_exit_gate_path,
+        {
+            "contract_name": "chummer6-ui.windows_desktop_exit_gate",
+            "status": "passed",
+            "checks": {
+                "embedded_payload_marker_present": True,
+                "embedded_sample_marker_present": True,
+            },
+        },
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
+    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+    _write_json(
+        release_channel_path,
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows"),
+            generated_at=current_iso,
+        ),
+    )
+    _write_json(releases_json_path, {"status": "published"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--repo-root",
+            str(tmp_path),
+            "--out",
+            str(out_path),
+            "--mirror-out",
+            "",
+            "--acceptance",
+            str(acceptance_path),
+            "--status-plane",
+            str(status_plane_path),
+            "--progress-report",
+            str(progress_report_path),
+            "--progress-history",
+            str(progress_history_path),
+            "--journey-gates",
+            str(journey_gates_path),
+            "--support-packets",
+            str(support_packets_path),
+            "--supervisor-state",
+            str(supervisor_state_path),
+            "--ooda-state",
+            str(ooda_state_path),
+            "--ui-local-release-proof",
+            str(ui_local_release_path),
+            "--ui-linux-exit-gate",
+            str(ui_exit_gate_path),
+            "--ui-windows-exit-gate",
+            str(ui_windows_exit_gate_path),
+            "--ui-workflow-parity-proof",
+            str(ui_workflow_parity_path),
+            "--ui-executable-exit-gate",
+            str(ui_executable_exit_gate_path),
+            "--ui-workflow-execution-gate",
+            str(ui_workflow_execution_gate_path),
+            "--ui-visual-familiarity-exit-gate",
+            str(ui_visual_familiarity_exit_gate_path),
+            "--sr4-workflow-parity-proof",
+            str(sr4_workflow_parity_path),
+            "--sr6-workflow-parity-proof",
+            str(sr6_workflow_parity_path),
+            "--sr4-sr6-frontier-receipt",
+            str(sr4_sr6_frontier_receipt_path),
+            "--hub-local-release-proof",
+            str(hub_local_release_path),
+            "--mobile-local-release-proof",
+            str(mobile_local_release_path),
+            "--release-channel",
+            str(release_channel_path),
+            "--releases-json",
+            str(releases_json_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["coverage"]["desktop_client"] == "ready"
+    assert payload["coverage_details"]["desktop_client"]["reasons"] == []
+    evidence = payload["coverage_details"]["desktop_client"]["evidence"]
+    assert evidence["ui_executable_gate_freshness_issue_count"] == 0
 
 
 def test_materialize_flagship_product_readiness_fail_closes_stale_executable_gate_generated_at(tmp_path: Path) -> None:
@@ -9836,6 +10265,7 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
     tmp_path: Path,
 ) -> None:
     module = _load_module()
+    current_iso = _now_iso()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
@@ -9876,7 +10306,7 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
         (horizons_dir / canonical_doc.name).write_text(f"# {canonical_doc.stem}\n", encoding="utf-8")
 
     _write_yaml(status_plane_path, _base_status_plane())
-    _write_json(progress_report_path, {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 6})
+    _write_json(progress_report_path, {"generated_at": current_iso, "history_snapshot_count": 6})
     _write_json(progress_history_path, {"snapshot_count": 6})
     journey_gates = _base_journey_gates()
     install_journey = next(
@@ -9890,48 +10320,19 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
     journey_gates["summary"]["blocked_count"] = 1
     journey_gates["summary"]["blocked_with_local_count"] = 1
     _write_json(journey_gates_path, journey_gates)
-    _write_json(support_packets_path, {"generated_at": "2026-04-01T08:00:00Z", "summary": {}})
+    _write_json(support_packets_path, {"generated_at": current_iso, "summary": {}})
     _write_json(supervisor_state_path, _base_supervisor_state())
     _write_json(ooda_state_path, _base_ooda_state())
     _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
-    _write_json(
-        ui_executable_exit_gate_path,
-        {
-            "contract_name": "chummer6-ui.desktop_executable_exit_gate",
-            "status": "pass",
-            "generated_at": "2026-04-01T08:00:00Z",
-            "generatedAt": "2026-04-01T08:00:00Z",
-            "evidence": {
-                "flagship UI release gate proof_age_seconds": 30,
-                "desktop workflow execution gate proof_age_seconds": 30,
-                "desktop visual familiarity gate proof_age_seconds": 30,
-                "linux_statuses": {"avalonia:linux-x64": "pass"},
-                "windows_statuses": {"avalonia:win-x64": "pass"},
-                "macos_statuses": {"avalonia:osx-arm64": "pass"},
-                "hub_registry_root_trusted_for_startup_smoke_proof": True,
-                "visual_required_promoted_heads": ["avalonia"],
-                "workflow_required_promoted_heads": ["avalonia"],
-                "visual_familiarity_status": "pass",
-                "workflow_execution_status": "pass",
-                "desktop_familiarity": {
-                    "file_menu_live": True,
-                    "master_index_first_class": True,
-                    "character_roster_first_class": True,
-                    "startup_opens_workbench_not_landing": True,
-                },
-                "install_experience": {
-                    "manual_browser_claim_code_required": False,
-                    "claim_flow_surface": "installer_or_in_app",
-                    "product_installer_guides_head_choice": True,
-                },
-                "receipt_scope": {
-                    "windows_gate:avalonia:win-x64": {"within_repo_root": True},
-                    "linux_gate:avalonia:linux-x64": {"within_repo_root": True},
-                    "macos_gate:avalonia:osx-arm64": {"within_repo_root": True},
-                },
-            },
-        },
+    executable_gate_payload = _desktop_executable_exit_gate_pass_payload(
+        heads=("avalonia",),
+        platforms=("linux", "windows", "macos"),
+        generated_at=current_iso,
     )
+    executable_gate_payload["evidence"]["hub_registry_root_trusted_for_startup_smoke_proof"] = True
+    executable_gate_payload["evidence"]["hub_registry_root"] = "/docker/chummercomplete/chummer6-hub-registry"
+    executable_gate_payload["evidence"]["hub_registry_release_channel_path"] = "/docker/chummercomplete/chummer6-hub-registry/release/RELEASE_CHANNEL.generated.json"
+    _write_json(ui_executable_exit_gate_path, executable_gate_payload)
     _write_json(
         ui_exit_gate_path,
         {
@@ -10005,36 +10406,46 @@ def test_materialize_flagship_product_readiness_recovers_desktop_lane_from_effec
         },
     )
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
-    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "fail", "summary": "external_blocker:missing_api_surface_contract"})
-    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "fail", "summary": "external_blocker:missing_api_surface_contract"})
-    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "fail", "summary": "external_blocker:missing_api_surface_contract"})
+    parity_external_only_evidence = {
+        "failingParityReceiptsExternalOnly": True,
+        "failingParityReceiptsExternal": {
+            "api_surface": ["external_blocker=missing_api_surface_contract"]
+        },
+    }
+    _write_json(
+        sr4_workflow_parity_path,
+        {
+            "contract_name": "chummer6-ui.sr4_desktop_workflow_parity",
+            "status": "fail",
+            "evidence": parity_external_only_evidence,
+        },
+    )
+    _write_json(
+        sr6_workflow_parity_path,
+        {
+            "contract_name": "chummer6-ui.sr6_desktop_workflow_parity",
+            "status": "fail",
+            "evidence": parity_external_only_evidence,
+        },
+    )
+    _write_json(
+        sr4_sr6_frontier_receipt_path,
+        {
+            "contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier",
+            "status": "fail",
+            "evidence": parity_external_only_evidence,
+        },
+    )
     _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
-        {
-            "generatedAt": "2026-04-01T08:00:00Z",
-            "status": "published",
-            "channelId": "docker",
-            "version": "run-20260414-1836",
-            "releaseProof": {
-                "status": "passed",
-                "journeysPassed": [
-                    "install_claim_restore_continue",
-                    "build_explain_publish",
-                ],
-            },
-            "desktopTupleCoverage": {
-                "missingRequiredPlatforms": [],
-                "missingRequiredPlatformHeadPairs": [],
-                "missingRequiredHeads": [],
-            },
-            "artifacts": [
-                {"head": "avalonia", "platform": "linux", "rid": "linux-x64", "kind": "installer", "channelId": "docker"},
-                {"head": "avalonia", "platform": "windows", "rid": "win-x64", "kind": "installer", "channelId": "docker"},
-                {"head": "avalonia", "platform": "macos", "rid": "osx-arm64", "kind": "installer", "channelId": "docker"},
-            ],
-        },
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            journeys_passed=("install_claim_restore_continue", "build_explain_publish"),
+            generated_at=current_iso,
+        ),
     )
     _write_json(releases_json_path, {"status": "published"})
 
@@ -10388,6 +10799,7 @@ def test_materialize_flagship_product_readiness_external_host_proof_uses_support
 def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_effective_install_proof(
     tmp_path: Path,
 ) -> None:
+    module = _load_module()
     out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
     acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
     status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
@@ -10413,7 +10825,7 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
     mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
     release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
     releases_json_path = tmp_path / "registry" / "releases.json"
-    current_iso = "2026-04-15T02:04:57Z"
+    current_iso = _now_iso()
 
     _write_yaml(acceptance_path, _base_acceptance())
     _write_yaml(status_plane_path, _base_status_plane())
@@ -10483,19 +10895,11 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
     )
     _write_json(
         ui_executable_exit_gate_path,
-        {
-            "contract_name": "chummer6-ui.desktop_executable_exit_gate",
-            "status": "pass",
-            "evidence": {
-                "linux_statuses": {"avalonia:linux-x64": "pass"},
-                "linux_missing_or_failing_keys": [],
-                "windows_statuses": {"avalonia:win-x64": "pass"},
-                "macos_statuses": {"avalonia:osx-arm64": "pass"},
-                "flagship UI release gate proof_age_seconds": 30,
-                "desktop workflow execution gate proof_age_seconds": 30,
-                "desktop visual familiarity gate proof_age_seconds": 30,
-            },
-        },
+        _desktop_executable_exit_gate_pass_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            generated_at=current_iso,
+        ),
     )
     _write_json(
         ui_workflow_execution_gate_path,
@@ -10511,10 +10915,7 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
             },
         },
     )
-    _write_json(
-        ui_visual_familiarity_exit_gate_path,
-        {"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"},
-    )
+    _write_json(ui_visual_familiarity_exit_gate_path, _desktop_visual_familiarity_pass_payload(module))
     _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
     _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
     _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
@@ -10523,31 +10924,12 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
     _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
     _write_json(
         release_channel_path,
-        {
-            "status": "published",
-            "generated_at": current_iso,
-            "releaseProof": {
-                "status": "passed",
-                "journeysPassed": ["install_claim_restore_continue"],
-            },
-            "artifacts": [
-                {"head": "avalonia", "platform": "linux", "rid": "linux-x64", "kind": "installer"},
-                {"head": "avalonia", "platform": "windows", "rid": "win-x64", "kind": "installer"},
-                {"head": "avalonia", "platform": "macos", "rid": "osx-arm64", "kind": "dmg"},
-            ],
-            "desktopTupleCoverage": {
-                "requiredDesktopPlatforms": ["linux", "windows", "macos"],
-                "requiredDesktopHeads": ["avalonia"],
-                "promotedPlatformHeads": {
-                    "linux": ["avalonia"],
-                    "windows": ["avalonia"],
-                    "macos": ["avalonia"],
-                },
-                "missingRequiredPlatforms": [],
-                "missingRequiredHeads": [],
-                "missingRequiredPlatformHeadPairs": [],
-            },
-        },
+        _release_channel_payload(
+            heads=("avalonia",),
+            platforms=("linux", "windows", "macos"),
+            journeys_passed=("install_claim_restore_continue",),
+            generated_at=current_iso,
+        ),
     )
     _write_json(releases_json_path, {"status": "published"})
 
@@ -10615,7 +10997,7 @@ def test_materialize_flagship_product_readiness_recovers_desktop_and_fleet_from_
     assert payload["coverage"]["fleet_and_operator_loop"] == "ready"
     desktop_evidence = payload["coverage_details"]["desktop_client"]["evidence"]
     assert desktop_evidence["install_claim_restore_continue"] == "blocked"
-    assert desktop_evidence["install_claim_restore_continue_effective_state"] == "ready"
+    assert desktop_evidence["install_claim_restore_continue_effective"] == "ready"
     assert desktop_evidence["ui_linux_exit_gate_status"] == "failed"
     assert desktop_evidence["ui_linux_exit_gate_effective_ready"] is True
     assert desktop_evidence["ui_workflow_execution_gate_unresolved_receipts_sr4_sr6_only"] is True

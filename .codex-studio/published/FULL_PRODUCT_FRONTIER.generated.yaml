@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-17T18:12:27Z'
+generated_at: '2026-04-18T20:54:04Z'
 mode: complete
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -80,6 +80,7 @@ focus:
   - explain
   - export
   - feedback
+  - fit and finish
   - flagship-readiness
   - genesis
   - gm
@@ -119,16 +120,19 @@ focus:
   - release-proof
   - replay
   - restore
+  - restore confidence
   - roster
   - rule-environment
   - settings
   - sourcebook
   - support
+  - top flagship grade
   - translator
   - travel
   - trust
   - update
   - utility
+  - whole project frontier
   - workbench
   - xml
 quality_policy:
@@ -139,15 +143,13 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: worker
-    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
   status: pass
   reason: flagship product readiness proof is current across desktop, rules, hub,
     mobile, horizons, and operator lanes
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-17T15:58:24Z'
+  generated_at: '2026-04-18T20:54:03Z'
   proof_status: pass
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -167,7 +169,7 @@ eta:
     or parity claims still depend on the broader readiness surfaces staying green.
   blocking_reason: ''
   summary: Whole-product completion audit is green on current repo-local evidence.
-  predicted_completion_at: '2026-04-17T18:12:27Z'
+  predicted_completion_at: '2026-04-18T20:54:03Z'
   range_low_hours: 0.0
   range_high_hours: 0.0
   remaining_open_milestones: 0

@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-17T11:04:07Z'
+generated_at: '2026-04-19T01:05:28Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-10
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -57,7 +57,7 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
-  - horizons and public surface
+  - fleet and operator loop
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -65,89 +65,37 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: fail
-  reason: 'latest worker receipt 20260417T110038Z-shard-10 is not trusted: worker
-    exit 124'
+  status: pass
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-17T11:02:48Z'
+  generated_at: '2026-04-19T01:05:26Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 1
-frontier_ids:
-- 4087117301
-frontier:
-- id: 4087117301
-  title: Keep native-host release proof independent for the primary desktop head
-  wave: flagship_product
-  status: not_started
-  owners:
-  - chummer6-ui
-  dependencies: []
-  exit_criteria:
-  - Prove Avalonia as the primary desktop route on Windows, macOS, and Linux without
-    leaning on Blazor fallback receipts.
-  - 'Own and prove the surface slice(s): desktop_release_train:avalonia, flagship_route_truth:desktop'
-  - 'Keep implementation scoped to the allowed paths: Chummer.Avalonia, Chummer.Desktop.Runtime,
-    Chummer.Tests, scripts'
-  - Refresh flagship proof and close out the queue slice honestly when this package
-    is landed for `chummer6-ui` (next90-m101-ui-release-train).
-  eta:
-    status: flagship_delivery
-    eta_human: 9h-23h
-    eta_confidence: low
-    basis: full_product_single_milestone_heuristic
-    summary: 'Milestone ''Keep native-host release proof independent for the primary
-      desktop head'' remains open under the flagship closeout frontier. Outstanding
-      readiness coverage: horizons_and_public_surface.'
-    predicted_completion_at: '2026-04-18T02:54:31Z'
-    range_low_hours: 9.0
-    range_high_hours: 22.68
-    remaining_open_milestones: 1
-    remaining_in_progress_milestones: 0
-    remaining_not_started_milestones: 1
-    remaining_effort_units: 1.8
-    history_sample_count: 0
-    observed_burn_milestones_per_day: 0.0
-    blocking_reason: ''
-    scope_kind: flagship_product_readiness
-    scope_label: Full Chummer5A parity and flagship proof closeout
-    scope_warning: ''
-source_queue_fingerprint: next90-staging-20260415-next-big-wins-widening
-queue_package:
-  repo: chummer6-ui
-  package_id: next90-m101-ui-release-train
-  title: Keep native-host release proof independent for the primary desktop head
-  priority: 0
-  owned_surfaces:
-  - desktop_release_train:avalonia
-  - flagship_route_truth:desktop
-  allowed_paths:
-  - Chummer.Avalonia
-  - Chummer.Desktop.Runtime
-  - Chummer.Tests
-  - scripts
+frontier_count: 0
+frontier_ids: []
+frontier: []
 eta:
-  status: flagship_delivery
-  eta_human: 9h-23h
+  status: tracked
+  eta_human: tracked
   eta_confidence: low
-  basis: full_product_single_milestone_heuristic
+  basis: aggregate_shard_parallel_scope
   scope_kind: flagship_product_readiness
   scope_label: Full Chummer5A parity and flagship proof closeout
   scope_warning: ''
   blocking_reason: ''
-  summary: 'Milestone ''Keep native-host release proof independent for the primary
-    desktop head'' remains open under the flagship closeout frontier. Outstanding
-    readiness coverage: horizons_and_public_surface.'
-  predicted_completion_at: '2026-04-18T02:54:31Z'
-  range_low_hours: 9.0
-  range_high_hours: 22.68
-  remaining_open_milestones: 1
+  summary: 192 open milestones remain (0 in progress, 192 not started). Aggregate
+    shard status is parallelized across 1 active shards under Full Chummer5A parity
+    and flagship proof closeout.
+  predicted_completion_at: ''
+  range_low_hours: 6.52
+  range_high_hours: 16.82
+  remaining_open_milestones: 192
   remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 1
-  remaining_effort_units: 1.8
+  remaining_not_started_milestones: 192
+  remaining_effort_units: 1.45

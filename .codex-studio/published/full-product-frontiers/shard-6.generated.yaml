@@ -1,6 +1,6 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-17T15:13:18Z'
+generated_at: '2026-04-19T01:05:16Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-6
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -65,14 +65,12 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: pass
-  reason: 'current repo-local completion proof is green; using a supervisor evidence
-    receipt because the latest worker outcome is non-material to proof trust: worker
-    exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  reason: recent supervisor history ends with a trusted structured worker receipt
 full_product_audit:
   status: fail
   reason: 'flagship product readiness proof is not green: fail'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-17T15:13:17Z'
+  generated_at: '2026-04-19T01:05:14Z'
   proof_status: fail
   missing_coverage_keys: []
   parity_excluded_scope:
@@ -82,23 +80,21 @@ frontier_count: 0
 frontier_ids: []
 frontier: []
 eta:
-  status: blocked
-  eta_human: tracked after unblock
+  status: tracked
+  eta_human: tracked
   eta_confidence: low
-  basis: aggregate_shard_parallel_scope+external_blocker
-  scope_kind: next_90_day_successor_wave
-  scope_label: Next 90-day product advance wave
-  scope_warning: This successor-wave ETA is tracked separately from the current flagship
-    closeout frontier. It assumes spare-shard execution continues without stealing
-    active closeout shards.
-  blocking_reason: 'shard-1: Error: worker_status_helper_loop:repeated_blocked_status_polling'
-  summary: '2 open milestones remain (2 in progress, 0 not started). Aggregate shard
-    status is parallelized across 1 active shards under Next 90-day product advance
-    wave. Current external blocker: shard-1: Error: worker_status_helper_loop:repeated_blocked_status_polling'
+  basis: aggregate_shard_parallel_scope
+  scope_kind: flagship_product_readiness
+  scope_label: Full Chummer5A parity and flagship proof closeout
+  scope_warning: ''
+  blocking_reason: ''
+  summary: 2 open milestones remain (0 in progress, 2 not started). Aggregate shard
+    status is parallelized across 1 active shards under Full Chummer5A parity and
+    flagship proof closeout.
   predicted_completion_at: ''
-  range_low_hours: 134.19
-  range_high_hours: 332.43
+  range_low_hours: 6.52
+  range_high_hours: 16.82
   remaining_open_milestones: 2
-  remaining_in_progress_milestones: 2
-  remaining_not_started_milestones: 0
-  remaining_effort_units: null
+  remaining_in_progress_milestones: 0
+  remaining_not_started_milestones: 2
+  remaining_effort_units: 1.45

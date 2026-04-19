@@ -311,17 +311,13 @@ items:
     completion_action: verify_closed_package_only
     do_not_reopen_reason: M103 executive-assistant parity-lab extraction is complete; future shards must verify this receipt, registry row, design queue row, Fleet queue row, and direct proof command instead of recapturing Chummer5a oracle baselines or veteran workflow packs.
     proof:
-      - /docker/EA/docs/chummer5a_parity_lab/CHUMMER5A_PARITY_LAB_PACK.yaml
-      - /docker/EA/docs/chummer5a_parity_lab/README.md
-      - /docker/EA/docs/chummer5a_parity_lab/oracle_baselines.yaml
-      - /docker/EA/docs/chummer5a_parity_lab/veteran_workflow_pack.yaml
-      - /docker/EA/docs/chummer5a_parity_lab/compare_packs.yaml
-      - /docker/EA/docs/chummer5a_parity_lab/import_export_fixture_inventory.yaml
-      - /docker/EA/docs/chummer5a_parity_lab/SUCCESSOR_HANDOFF_CLOSEOUT.yaml
-      - /docker/EA/.codex-studio/published/CHUMMER5A_PARITY_ORACLE_PACK.generated.json
-      - python tests/test_chummer5a_parity_lab_pack.py
-      - python tests/test_chummer5a_parity_lab_pack.py exits with ran=18 failed=0 and blocks operator-owned run-helper proof for the closed EA package.
-      - /docker/EA commit f252c02 pins the latest M103 parity-lab proof floor into the published receipt, handoff closeout, and direct guard.
+      - /docker/fleet/docs/chummer5a-oracle/README.md
+      - /docker/fleet/docs/chummer5a-oracle/parity_lab_capture_pack.yaml
+      - /docker/fleet/docs/chummer5a-oracle/veteran_workflow_packs.yaml
+      - /docker/fleet/tests/test_ea_parity_lab_capture_pack.py
+      - /docker/fleet/feedback/2026-04-18-next90-m103-ea-parity-lab-closeout.md
+      - python3 tests/test_ea_parity_lab_capture_pack.py
+      - python3 tests/test_ea_parity_lab_capture_pack.py exits 0 in /docker/fleet and fail-closes stale /docker/EA parity-lab closure references for the completed package.
     allowed_paths:
       - skills
       - tests
@@ -590,6 +586,7 @@ items:
     wave: W8
     repo: fleet
     status: complete
+    landed_commit: b467c27
     completion_action: verify_closed_package_only
     do_not_reopen_reason: M106 Fleet weekly governor packet is complete; future shards must verify the weekly packet receipt, registry row, queue row, and design-queue row instead of reopening the measured rollout packet package.
     proof:
@@ -879,6 +876,10 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish commit 9a6ebd38 pins M103 veteran certification proof floor.
       - /docker/chummercomplete/chummer6-ui-finish commit b0f424aa tightens M103 scoped proof guard.
       - /docker/chummercomplete/chummer6-ui-finish commit b8c0b19d tightens the M103 completed queue action guard so Fleet and design queue rows must carry verify_closed_package_only plus a package-specific do-not-reopen reason.
+      - /docker/chummercomplete/chummer6-ui-finish commit 136ff501 tightens the M103 veteran review pack proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit b40a6556 tightens the M103 desktop veteran parity proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit 653adf49 tightens the M103 veteran review packet proof.
+      - /docker/chummercomplete/chummer6-ui-finish commit a5dff485 tightens the M103 review packet proof binding.
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Compliance/Next90M103VeteranCertificationGuardTests.cs
       - bash scripts/ai/milestones/next90-m103-ui-veteran-certification-check.sh
     allowed_paths:
@@ -1085,8 +1086,8 @@ items:
       - /docker/chummercomplete/chummer6-hub/scripts/launch_artifact_factory_source_pack_batch.py
       - /docker/chummercomplete/chummer6-hub/tests/test_artifact_factory_source_pack_launcher.py
       - python3 /docker/chummercomplete/chummer6-hub/scripts/verify_artifact_factory_orchestration.py
-      - python3 -m unittest /docker/chummercomplete/chummer6-hub/tests/test_artifact_factory_orchestration.py
-      - python3 -m unittest /docker/chummercomplete/chummer6-hub/tests/test_artifact_factory_source_pack_launcher.py
+      - python3 -m unittest tests/test_artifact_factory_orchestration.py
+      - python3 -m unittest tests/test_artifact_factory_source_pack_launcher.py
       - dotnet test /docker/chummercomplete/chummer6-hub/Chummer.Tests/Chummer.Tests.csproj --filter ArtifactFactoryOrchestrationServiceTests --no-restore
       - /docker/chummercomplete/chummer6-hub commit b9e6b52e tightens recipe-specific public proof shelf route guards.
       - /docker/chummercomplete/chummer6-hub commit 7331cd26 tightens artifact-factory queue and registry proof-anchor resolution.
