@@ -1817,6 +1817,8 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
         "membership_recovery_loop_ready_count": membership_group_counts["recovery"],
         "installed_build_receipted_count": (
             sum(1 for row in merged_rows if bool(row.get("installed_build_receipted")))
+            if installed_build_receipted_present and detailed_ready_truth_present
+            else 0
             if installed_build_receipted_present
             else -1
         ),
@@ -1826,6 +1828,8 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
                 for row in merged_rows
                 if bool(row.get("installed_build_receipt_installation_matches"))
             )
+            if installation_bound_present and detailed_ready_truth_present
+            else 0
             if installation_bound_present
             else -1
         ),
@@ -1847,8 +1851,10 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
     recomputed_counts = _recomputed_followthrough_counts(followthrough)
     action_groups_present = isinstance(followthrough.get("action_groups"), dict)
     ready_group_rows_present = bool(recomputed_counts.get("ready_group_rows_present"))
+    action_group_rows_present = bool(recomputed_counts.get("action_group_rows_present"))
     use_recomputed_ready_counts = action_groups_present
-    use_recomputed_blocked_counts = action_groups_present
+    # Aggregate gate counts are only trustworthy when detailed row truth still exists.
+    allow_explicit_blocked_counts = (not action_groups_present) or ready_group_rows_present
     if ready_group_rows_present:
         fallback_ready_count = max(
             recomputed_counts["membership_ready_count"],
@@ -1895,28 +1901,28 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         else fallback_ready_count
     )
     plan_blocked_missing_count = (
-        recomputed_counts["blocked_missing_install_receipts_count"]
-        if use_recomputed_blocked_counts
-        else max(
+        max(
             recomputed_counts["blocked_missing_install_receipts_count"],
             _coerce_int(followthrough.get("blocked_missing_install_receipts_count"), 0),
         )
+        if allow_explicit_blocked_counts
+        else recomputed_counts["blocked_missing_install_receipts_count"]
     )
     plan_blocked_mismatch_count = (
-        recomputed_counts["blocked_receipt_mismatch_count"]
-        if use_recomputed_blocked_counts
-        else max(
+        max(
             recomputed_counts["blocked_receipt_mismatch_count"],
             _coerce_int(followthrough.get("blocked_receipt_mismatch_count"), 0),
         )
+        if allow_explicit_blocked_counts
+        else recomputed_counts["blocked_receipt_mismatch_count"]
     )
     plan_hold_until_fix_count = (
-        recomputed_counts["hold_until_fix_receipt_count"]
-        if use_recomputed_blocked_counts
-        else max(
+        max(
             recomputed_counts["hold_until_fix_receipt_count"],
             _coerce_int(followthrough.get("hold_until_fix_receipt_count"), 0),
         )
+        if allow_explicit_blocked_counts
+        else recomputed_counts["hold_until_fix_receipt_count"]
     )
     feedback_ready_count = (
         recomputed_counts["feedback_ready_count"]
@@ -1939,28 +1945,28 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
         else fallback_recovery_ready_count
     )
     gate_blocked_missing_count = (
-        recomputed_counts["blocked_missing_install_receipts_count"]
-        if use_recomputed_blocked_counts
-        else max(
+        max(
             recomputed_counts["blocked_missing_install_receipts_count"],
             _coerce_int(receipt_gates.get("blocked_missing_install_receipts_count"), 0),
         )
+        if allow_explicit_blocked_counts
+        else recomputed_counts["blocked_missing_install_receipts_count"]
     )
     gate_blocked_mismatch_count = (
-        recomputed_counts["blocked_receipt_mismatch_count"]
-        if use_recomputed_blocked_counts
-        else max(
+        max(
             recomputed_counts["blocked_receipt_mismatch_count"],
             _coerce_int(receipt_gates.get("blocked_receipt_mismatch_count"), 0),
         )
+        if allow_explicit_blocked_counts
+        else recomputed_counts["blocked_receipt_mismatch_count"]
     )
     gate_hold_until_fix_count = (
-        recomputed_counts["hold_until_fix_receipt_count"]
-        if use_recomputed_blocked_counts
-        else max(
+        max(
             recomputed_counts["hold_until_fix_receipt_count"],
             _coerce_int(receipt_gates.get("hold_until_fix_receipt_count"), 0),
         )
+        if allow_explicit_blocked_counts
+        else recomputed_counts["hold_until_fix_receipt_count"]
     )
     blocked_missing_count = max(plan_blocked_missing_count, gate_blocked_missing_count)
     blocked_mismatch_count = max(plan_blocked_mismatch_count, gate_blocked_mismatch_count)
@@ -1996,11 +2002,17 @@ def _support_summary(support_packets: Dict[str, Any]) -> Dict[str, Any]:
             recomputed_counts["installed_build_receipted_count"]
             if recomputed_counts["installed_build_receipted_count"] >= 0
             else _coerce_int(gate_counts.get("installed_build_receipted"), 0)
+            if ((not action_groups_present) or action_group_rows_present)
+            else 0
         ),
         "followthrough_receipt_gates_installation_bound_count": (
             recomputed_counts["installation_bound_count"]
             if recomputed_counts["installation_bound_count"] >= 0
-            else _coerce_int(gate_counts.get("installed_build_receipt_installation_bound"), 0)
+            else _coerce_int(
+                gate_counts.get("installed_build_receipt_installation_bound"), 0
+            )
+            if ((not action_groups_present) or action_group_rows_present)
+            else 0
         ),
     }
 

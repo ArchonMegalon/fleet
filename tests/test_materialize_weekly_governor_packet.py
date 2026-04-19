@@ -1613,6 +1613,9 @@ def test_weekly_support_summary_ignores_stale_aggregate_gate_counts_without_row_
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     support_summary = payload["truth_inputs"]["support_summary"]
+    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(
+        encoding="utf-8"
+    )
     assert support_summary["reporter_followthrough_ready_count"] == 0
     assert support_summary["feedback_followthrough_ready_count"] == 0
     assert support_summary["fix_available_ready_count"] == 0
@@ -1631,6 +1634,8 @@ def test_weekly_support_summary_ignores_stale_aggregate_gate_counts_without_row_
     assert support_summary["followthrough_receipt_gates_hold_until_fix_receipt_count"] == 0
     assert support_summary["followthrough_receipt_gates_installed_build_receipted_count"] == 0
     assert support_summary["followthrough_receipt_gates_installation_bound_count"] == 0
+    assert "- Receipt-gated installed-build receipts: 0" in markdown
+    assert "- Receipt-gated installed-build receipts: 8" not in markdown
 
 
 def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_receipt_gates(
@@ -1730,7 +1735,9 @@ def test_weekly_support_summary_ignores_stale_followthrough_action_rows_without_
     assert governor_decisions["canary"]["state"] == "accumulating"
     assert governor_decisions["rollback"]["gate_count"] == 4
     assert governor_decisions["focus_shift"]["gate_count"] == 1
-    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(encoding="utf-8")
+    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(
+        encoding="utf-8"
+    )
     assert "# Weekly Governor Packet" in markdown
     assert "| Launch expand | blocked |" in markdown
     assert "| Freeze launch | active |" in markdown
@@ -1903,12 +1910,17 @@ def test_weekly_support_summary_ignores_partial_ready_rows_even_when_receipt_gat
     assert result.returncode == 0, result.stderr
     payload = json.loads(out.read_text(encoding="utf-8"))
     support_summary = payload["truth_inputs"]["support_summary"]
+    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(
+        encoding="utf-8"
+    )
     assert support_summary["reporter_followthrough_ready_count"] == 0
     assert support_summary["feedback_followthrough_ready_count"] == 0
     assert support_summary["fix_available_ready_count"] == 0
     assert support_summary["please_test_ready_count"] == 0
     assert support_summary["recovery_loop_ready_count"] == 0
     assert support_summary["followthrough_receipt_gates_ready_count"] == 0
+    assert "- Receipt-gated installed-build receipts: 0" in markdown
+    assert "- Receipt-gated installed-build receipts: 9" not in markdown
     assert (
         "| launch_expand | fleet | weekly_governor_packet.launch_expand | weekly | "
         "launch_gate_summary.all_green | True | do_not_expand_launch | "
