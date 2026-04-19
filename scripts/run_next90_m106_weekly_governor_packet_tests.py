@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 from typing import Callable
@@ -109,6 +110,18 @@ def _run_test_in_subprocess(name: str, tmp_root: Path, timeout_seconds: int) -> 
     return False, details or f"{name} exited with code {result.returncode}"
 
 
+def _format_progress_line(
+    *,
+    index: int,
+    total: int,
+    name: str,
+    ok: bool,
+    duration_seconds: float,
+) -> str:
+    status = "PASS" if ok else "FAIL"
+    return f"[{index}/{total}] {status} {name} ({duration_seconds:.2f}s)"
+
+
 def _parse_args() -> argparse.Namespace:
     import argparse
 
@@ -151,12 +164,26 @@ def main() -> int:
         print(f"no test functions found in {TEST_PATH}", file=sys.stderr)
         return 1
 
+    total = len(tests)
+    print(f"running direct M106 weekly governor packet fixture tests: {total}", flush=True)
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="next90-m106-governor-tests-") as temp_dir:
         tmp_root = Path(temp_dir)
-        for name, function in tests:
+        for index, (name, function) in enumerate(tests, start=1):
+            started_at = time.perf_counter()
             if args.isolate:
                 ok, details = _run_test_in_subprocess(name, tmp_root, args.timeout_seconds)
+                duration_seconds = time.perf_counter() - started_at
+                print(
+                    _format_progress_line(
+                        index=index,
+                        total=total,
+                        name=name,
+                        ok=ok,
+                        duration_seconds=duration_seconds,
+                    ),
+                    flush=True,
+                )
                 if not ok:
                     failures.append(name)
                     if details:
@@ -164,9 +191,22 @@ def main() -> int:
                 continue
             try:
                 _call_test(name, function, tmp_root)
+                ok = True
             except Exception:
+                ok = False
                 failures.append(name)
                 traceback.print_exc()
+            duration_seconds = time.perf_counter() - started_at
+            print(
+                _format_progress_line(
+                    index=index,
+                    total=total,
+                    name=name,
+                    ok=ok,
+                    duration_seconds=duration_seconds,
+                ),
+                flush=True,
+            )
 
     if failures:
         print(

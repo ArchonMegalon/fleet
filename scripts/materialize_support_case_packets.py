@@ -1197,6 +1197,40 @@ def _write_source_mirror(path: Path, source_payload: Dict[str, Any], *, source_l
     write_text_atomic(path, json.dumps(mirror_payload, indent=2, sort_keys=True) + "\n")
 
 
+def _load_weekly_governor_materializer_module():
+    try:
+        from scripts import materialize_weekly_governor_packet as weekly
+    except ModuleNotFoundError:
+        import materialize_weekly_governor_packet as weekly
+    return weekly
+
+
+def _refresh_weekly_governor_packet_if_possible(repo_root: Path, support_packets_path: Path) -> bool:
+    published_root = repo_root / ".codex-studio" / "published"
+    weekly_out = published_root / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    weekly = _load_weekly_governor_materializer_module()
+
+    args = weekly.parse_args(["--out", str(weekly_out)])
+    required_paths = [
+        Path(args.successor_registry).resolve(),
+        Path(args.closed_flagship_registry).resolve(),
+        Path(args.design_queue_staging).resolve(),
+        Path(args.queue_staging).resolve(),
+        Path(args.weekly_pulse).resolve(),
+        Path(args.flagship_readiness).resolve(),
+        Path(args.journey_gates).resolve(),
+        Path(args.support_packets).resolve(),
+        Path(args.status_plane).resolve(),
+    ]
+    if not all(path.exists() for path in required_paths):
+        return False
+    if Path(args.support_packets).resolve() != support_packets_path.resolve():
+        return False
+
+    weekly.materialize(args)
+    return True
+
+
 def _load_cached_source_mirror(path: Path) -> Dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -4235,7 +4269,12 @@ def main(argv: List[str] | None = None) -> int:
 
     manifest_repo_root = repo_root_for_published_path(out_path)
     if manifest_repo_root is not None:
-        write_compile_manifest(manifest_repo_root)
+        refreshed_weekly = _refresh_weekly_governor_packet_if_possible(
+            manifest_repo_root,
+            out_path,
+        )
+        if not refreshed_weekly:
+            write_compile_manifest(manifest_repo_root)
 
     print(f"wrote support-case packets: {out_path}")
     return 0

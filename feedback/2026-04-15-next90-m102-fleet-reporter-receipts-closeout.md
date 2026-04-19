@@ -22,6 +22,8 @@ The local queue staging packet at `/docker/fleet/.codex-studio/published/NEXT_90
 
 The generated support packet at `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` reports `successor_package_verification.status=pass` for this package.
 
+The 2026-04-19 successor-wave refresh pass found the package logic still closed correctly but the live weekly governor packet had fallen behind the refreshed support packet receipt gates. Running `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py` failed closed on `weekly governor support-packets input sha256 disagrees with verified support packet` and `weekly governor packet predates support-packet receipt gates` until `/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json` and `.md` were regenerated from the current support packet. Future shards should treat this as proof-refresh work only, not a reason to reopen the closed Fleet M102 implementation slice.
+
 The 2026-04-18 canonical design-queue path guard now fail-closes the Fleet queue mirror if `source_design_queue_path` points at any existing sibling copy instead of `/docker/chummercomplete/chummer-design/products/chummer/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`. Future shards cannot keep this package closed from a locally copied design-queue row that happens to carry the same proof text.
 
 The 2026-04-18 closed-queue action guard pass now requires both the Fleet queue row and the design-owned queue source row to carry `completion_action: verify_closed_package_only` plus the package-specific `do_not_reopen_reason`. The shared successor verifier emits those structured fields in `successor_package_verification`, so future shards must verify the closed package instead of repeating this slice from a generic `status: complete` row.
@@ -492,3 +494,70 @@ Results:
 - The final `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json` run exited `0` with `status=pass`, `issues=[]`, `successor_authority_status=pass`, and the refreshed weekly support-packet SHA pinned to the regenerated support packet.
 
 This refresh was receipt-only. The executable M102 implementation did not need another logic change, but the published support and weekly packets did need to be regenerated together so the weekly support input fingerprint matched the current install-aware support receipt bytes again.
+
+## 2026-04-19 Verification-Only Follow-Up
+
+The later 2026-04-19 successor-wave follow-up confirmed that the refreshed published artifacts now hold without another packet regeneration. This shard reopened the proof only far enough to rerun the closed-package verifier and focused receipt-gating suites against the current repo-local artifacts, not to reopen the implementation or refresh packets again.
+
+Current verifier-backed artifact state:
+
+- `/docker/fleet/.codex-studio/published/SUPPORT_CASE_PACKETS.generated.json` reports `generated_at=2026-04-19T16:04:50Z`, `successor_package_verification.status=pass`, `issues=[]`, and matching receipt-gated followthrough counts.
+- `/docker/fleet/.codex-studio/published/WEEKLY_GOVERNOR_PACKET.generated.json` and `.md` report `generated_at=2026-04-19T16:05:59Z`, and the standalone verifier now reports no weekly/support SHA, freshness, count, or markdown drift.
+- `/docker/fleet/.codex-studio/published/NEXT_90_DAY_QUEUE_STAGING.generated.yaml`, the design-owned queue source, and the canonical successor registry still agree on `frontier_id: 2454416974`, `completion_action: verify_closed_package_only`, and the package-specific do-not-reopen reason.
+
+Commands run on the later 2026-04-19 follow-up from `/docker/fleet`:
+
+```text
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 tests/test_materialize_support_case_packets.py
+python3 tests/test_materialize_weekly_governor_packet.py
+```
+
+Results:
+
+- `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json` exited `0` with `status=pass`, `issues=[]`, `successor_authority_status=pass`, `support_packets_generated_at=2026-04-19T16:04:50Z`, and `weekly_governor_packet_generated_at=2026-04-19T16:05:59Z`.
+- `python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py` exited `0` with `direct verifier tests passed: 67`.
+- `python3 tests/test_materialize_support_case_packets.py` exited `0` with `direct support packet tests passed: 73`.
+- `python3 tests/test_materialize_weekly_governor_packet.py` exited `0`, confirming the current weekly governor projection still matches the refreshed receipt-backed support packet truth.
+
+Future shards should treat this later follow-up as the new first check for this closed package: run the standalone verifier and focused receipt suites first, and only regenerate `SUPPORT_CASE_PACKETS.generated.json` or `WEEKLY_GOVERNOR_PACKET.generated.*` if that verifier actually reports live receipt drift.
+
+## 2026-04-19 Live Sync Follow-Up
+
+The later live-audit pass found a repeatable race while Fleet writers were still active: `SUPPORT_CASE_PACKETS.generated.json`, `JOURNEY_GATES.generated.json`, and `FLAGSHIP_PRODUCT_READINESS.generated.json` could refresh independently, leaving `WEEKLY_GOVERNOR_PACKET.generated.json` one source revision behind even when the underlying package logic was still correct. The standalone M102 verifier failed on the expected freshness and support-packet SHA guards until the source writers and weekly packet were resynchronized.
+
+This shard fixed the race at the source instead of treating every drift as another manual receipt refresh:
+
+- `/docker/fleet/scripts/materialize_support_case_packets.py` now refreshes `WEEKLY_GOVERNOR_PACKET.generated.json` and `.md` automatically after writing the published support packet whenever the canonical weekly packet inputs are present.
+- `/docker/fleet/scripts/materialize_journey_gates.py` now refreshes the weekly governor packet after writing `JOURNEY_GATES.generated.json` on the published Fleet surface.
+- `/docker/fleet/scripts/materialize_flagship_product_readiness.py` now refreshes the weekly governor packet after writing `FLAGSHIP_PRODUCT_READINESS.generated.json` on the published Fleet surface.
+- `/docker/fleet/tests/test_materialize_support_case_packets.py` covers the weekly auto-refresh hook, and the direct M106 runner now prints per-test progress lines so long packet fixture sweeps stay observable while this sync path is exercised live.
+
+Commands run on the live 2026-04-19 sync fix from `/docker/fleet`:
+
+```text
+python3 -m py_compile scripts/materialize_support_case_packets.py scripts/materialize_journey_gates.py scripts/materialize_flagship_product_readiness.py scripts/materialize_weekly_governor_packet.py scripts/run_next90_m106_weekly_governor_packet_tests.py tests/test_materialize_support_case_packets.py tests/test_materialize_weekly_governor_packet.py
+python3 scripts/materialize_support_case_packets.py
+python3 scripts/materialize_journey_gates.py
+python3 scripts/materialize_flagship_product_readiness.py
+python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json
+python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py
+python3 tests/test_materialize_support_case_packets.py
+python3 tests/test_materialize_weekly_governor_packet.py
+python3 scripts/verify_next90_m106_fleet_governor_packet.py
+python3 scripts/run_next90_m106_weekly_governor_packet_tests.py
+python3 scripts/run_next90_m106_weekly_governor_packet_tests.py --isolate
+```
+
+Results:
+
+- `python3 scripts/verify_next90_m102_fleet_reporter_receipts.py --json` exited `0` with `status=pass`, `issues=[]`, `support_packets_generated_at=2026-04-19T16:33:14Z`, and `weekly_governor_packet_generated_at=2026-04-19T16:33:15Z`.
+- `python3 tests/test_verify_next90_m102_fleet_reporter_receipts.py` exited `0` with `direct verifier tests passed: 67`.
+- `python3 tests/test_materialize_support_case_packets.py` exited `0` with `direct support packet tests passed: 74`.
+- `python3 tests/test_materialize_weekly_governor_packet.py` exited `0`.
+- `python3 scripts/verify_next90_m106_fleet_governor_packet.py` exited `0`.
+- `python3 scripts/run_next90_m106_weekly_governor_packet_tests.py` exited `0` with `direct M106 weekly governor packet fixture tests passed: 110`.
+- `python3 scripts/run_next90_m106_weekly_governor_packet_tests.py --isolate` exited `0` with the same `110` passing fixture tests.
+
+Future shards should treat a fresh weekly/support/readiness/journey mismatch on the live repo as a control-plane regression in the source writers first, not as proof that the closed M102 or M106 package logic needs to be reopened.

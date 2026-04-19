@@ -16,11 +16,13 @@ import yaml
 
 try:
     from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from scripts.materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
 except ModuleNotFoundError:
     script_dir = Path(__file__).resolve().parent
     if str(script_dir) not in sys.path:
         sys.path.insert(0, str(script_dir))
     from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest
+    from materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
 try:
     from scripts.external_proof_paths import resolve_release_channel_path
 except ModuleNotFoundError:
@@ -6338,7 +6340,13 @@ def materialize_flagship_product_readiness(
 
     repo_root = repo_root_for_published_path(out_path)
     if repo_root is not None and (wrote_out or _compile_manifest_missing_artifact(repo_root, out_path.name)):
-        write_compile_manifest(repo_root)
+        support_packets_path = repo_root / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+        refreshed_weekly = _refresh_weekly_governor_packet_if_possible(
+            repo_root,
+            support_packets_path,
+        )
+        if not refreshed_weekly:
+            write_compile_manifest(repo_root)
     return payload
 
 

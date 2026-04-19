@@ -1619,6 +1619,75 @@ def test_materialize_support_case_packets_refreshes_compile_manifest(tmp_path: P
     assert "SUPPORT_CASE_PACKETS.generated.json" in manifest_payload["artifacts"]
 
 
+def test_refresh_weekly_governor_packet_if_possible_materializes_weekly_packet(tmp_path: Path) -> None:
+    module = _load_module()
+    patch = _DirectMonkeyPatch()
+    try:
+        repo_root = tmp_path / "repo"
+        published = repo_root / ".codex-studio" / "published"
+        published.mkdir(parents=True)
+        support_packets = published / "SUPPORT_CASE_PACKETS.generated.json"
+        support_packets.write_text("{}\n", encoding="utf-8")
+
+        successor_registry = tmp_path / "NEXT_90_DAY_PRODUCT_ADVANCE_REGISTRY.yaml"
+        closed_flagship_registry = tmp_path / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+        design_queue = tmp_path / "NEXT_90_DAY_QUEUE_STAGING.generated.yaml"
+        queue = tmp_path / "QUEUE.generated.yaml"
+        weekly_pulse = tmp_path / "WEEKLY_PRODUCT_PULSE.generated.json"
+        flagship_readiness = tmp_path / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+        journey_gates = tmp_path / "JOURNEY_GATES.generated.json"
+        status_plane = tmp_path / "STATUS.generated.yaml"
+        for path in (
+            successor_registry,
+            closed_flagship_registry,
+            design_queue,
+            queue,
+            weekly_pulse,
+            flagship_readiness,
+            journey_gates,
+            status_plane,
+        ):
+            path.write_text("{}\n", encoding="utf-8")
+
+        calls: dict[str, object] = {}
+
+        class _FakeWeekly:
+            @staticmethod
+            def parse_args(argv: list[str]):
+                calls["argv"] = list(argv)
+                return type(
+                    "Args",
+                    (),
+                    {
+                        "out": str(published / "WEEKLY_GOVERNOR_PACKET.generated.json"),
+                        "successor_registry": str(successor_registry),
+                        "closed_flagship_registry": str(closed_flagship_registry),
+                        "design_queue_staging": str(design_queue),
+                        "queue_staging": str(queue),
+                        "weekly_pulse": str(weekly_pulse),
+                        "flagship_readiness": str(flagship_readiness),
+                        "journey_gates": str(journey_gates),
+                        "support_packets": str(support_packets),
+                        "status_plane": str(status_plane),
+                    },
+                )()
+
+            @staticmethod
+            def materialize(args):
+                calls["materialized_out"] = args.out
+                return Path(args.out)
+
+        patch.setattr(module, "_load_weekly_governor_materializer_module", lambda: _FakeWeekly)
+
+        refreshed = module._refresh_weekly_governor_packet_if_possible(repo_root, support_packets)
+
+        assert refreshed is True
+        assert calls["argv"] == ["--out", str(published / "WEEKLY_GOVERNOR_PACKET.generated.json")]
+        assert calls["materialized_out"] == str(published / "WEEKLY_GOVERNOR_PACKET.generated.json")
+    finally:
+        patch.undo()
+
+
 def test_materialize_support_case_packets_reads_authenticated_remote_source(tmp_path: Path) -> None:
     out_path = tmp_path / "SUPPORT_CASE_PACKETS.generated.json"
     payload = {

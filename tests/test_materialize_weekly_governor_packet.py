@@ -786,6 +786,25 @@ def test_run_next90_m106_weekly_governor_packet_tests_rejects_unknown_named_test
     assert result == 1
 
 
+def test_run_next90_m106_weekly_governor_packet_tests_formats_progress_lines() -> None:
+    runner = _load_module_from_path(
+        Path("/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py")
+    )
+
+    line = runner._format_progress_line(
+        index=7,
+        total=110,
+        name="test_verify_next90_m106_governor_packet_accepts_checked_in_closeout",
+        ok=True,
+        duration_seconds=0.734,
+    )
+
+    assert (
+        line
+        == "[7/110] PASS test_verify_next90_m106_governor_packet_accepts_checked_in_closeout (0.73s)"
+    )
+
+
 def test_run_next90_m106_weekly_governor_packet_tests_skips_runner_meta_tests_in_real_module() -> None:
     runner = _load_module_from_path(
         Path("/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py")

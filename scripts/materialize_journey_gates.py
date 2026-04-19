@@ -13,9 +13,11 @@ from typing import Any, Dict, List, Tuple
 import yaml
 try:
     from scripts.materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
+    from scripts.materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from materialize_compile_manifest import repo_root_for_published_path, write_compile_manifest, write_text_atomic
+    from materialize_support_case_packets import _refresh_weekly_governor_packet_if_possible
 
 
 UTC = dt.timezone.utc
@@ -3014,7 +3016,15 @@ def main(argv: List[str] | None = None) -> int:
     write_text_atomic(out_path, json.dumps(payload, indent=2, sort_keys=False) + "\n")
     manifest_repo_root = repo_root_for_published_path(out_path)
     if manifest_repo_root is not None:
-        write_compile_manifest(manifest_repo_root)
+        support_packets_path = (
+            manifest_repo_root / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+        )
+        refreshed_weekly = _refresh_weekly_governor_packet_if_possible(
+            manifest_repo_root,
+            support_packets_path,
+        )
+        if not refreshed_weekly:
+            write_compile_manifest(manifest_repo_root)
     print(f"wrote journey gates: {out_path}")
     return 0
 
