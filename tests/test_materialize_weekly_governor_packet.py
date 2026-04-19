@@ -757,6 +757,35 @@ def test_run_next90_m106_weekly_governor_packet_tests_only_collects_module_defin
     assert [name for name, _ in collected] == ["test_defined_here"]
 
 
+def test_run_next90_m106_weekly_governor_packet_tests_runs_named_test_in_subprocess(
+    tmp_path: Path,
+) -> None:
+    runner = _load_module_from_path(
+        Path("/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py")
+    )
+
+    ok, details = runner._run_test_in_subprocess(
+        "test_run_next90_m106_weekly_governor_packet_tests_only_collects_module_defined_functions",
+        tmp_path,
+        10,
+    )
+
+    assert ok is True
+    assert details == ""
+
+
+def test_run_next90_m106_weekly_governor_packet_tests_rejects_unknown_named_test(
+    tmp_path: Path,
+) -> None:
+    runner = _load_module_from_path(
+        Path("/docker/fleet/scripts/run_next90_m106_weekly_governor_packet_tests.py")
+    )
+
+    result = runner._run_single_test_by_name("test_does_not_exist", tmp_path)
+
+    assert result == 1
+
+
 def _add_closed_dependency_queue_rows(paths: dict[str, Path]) -> None:
     queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
     for milestone_id in [101, 102, 103, 104, 105]:
@@ -1020,6 +1049,13 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         104,
         105,
     ]
+    assert payload["package_closeout"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
     assert payload["package_closeout"]["remaining_sibling_work_task_ids"] == [
         "106.3",
         "106.4",
@@ -1096,8 +1132,22 @@ def test_materialize_weekly_governor_packet_freezes_when_canary_and_release_proo
         "measured_rollout_loop",
     ]
     assert payload["repeat_prevention"]["remaining_dependency_ids"] == [101, 102, 103, 104, 105]
+    assert payload["repeat_prevention"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
     assert payload["repeat_prevention"]["blocked_dependency_package_ids"] == []
     assert payload["repeat_prevention"]["remaining_sibling_work_task_ids"] == ["106.3", "106.4"]
+    assert payload["measured_rollout_loop"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
     assert (
         payload["repeat_prevention"]["worker_command_guard"]["status"]
         == "active_run_helpers_forbidden"
@@ -2303,6 +2353,71 @@ def test_weekly_support_summary_ignores_ready_group_rows_missing_release_or_fix_
     assert support_summary["recovery_loop_ready_count"] == 0
     assert support_summary["reporter_followthrough_plan_ready_count"] == 0
     assert support_summary["followthrough_receipt_gates_ready_count"] == 0
+
+
+def test_weekly_support_summary_zeroes_receipt_gated_installed_build_counts_without_install_or_release_truth(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+    support_path = paths["support"]
+    support = json.loads(support_path.read_text(encoding="utf-8"))
+    support["summary"]["reporter_followthrough_ready_count"] = 7
+    support["followthrough_receipt_gates"]["gate_counts"]["installed_build_receipted"] = 7
+    support["followthrough_receipt_gates"]["gate_counts"][
+        "installed_build_receipt_installation_bound"
+    ] = 7
+    support["reporter_followthrough_plan"] = {
+        "ready_count": 0,
+        "blocked_missing_install_receipts_count": 0,
+        "blocked_receipt_mismatch_count": 0,
+        "hold_until_fix_receipt_count": 0,
+        "action_groups": {
+            "feedback": [
+                {
+                    "packet_id": "support-packet-install-only",
+                    "installation_id": "install-only-1",
+                    "install_receipt_ready": True,
+                    "install_truth_state": "tuple_not_on_promoted_shelf",
+                    "release_receipt_state": "release_receipt_missing",
+                    "installed_build_receipted": True,
+                    "installed_build_receipt_id": "install-receipt-only-1",
+                    "installed_build_receipt_installation_id": "install-only-1",
+                    "installed_build_receipt_version": "1.2.3",
+                    "installed_build_receipt_channel": "preview",
+                    "installed_build_receipt_source": "install_receipts",
+                    "installed_build_receipt_installation_source": "install_receipts",
+                    "installed_build_receipt_version_source": "install_receipts",
+                    "installed_build_receipt_channel_source": "install_receipts",
+                    "installed_build_receipt_installation_matches": True,
+                    "installed_build_receipt_version_matches": True,
+                    "installed_build_receipt_channel_matches": True,
+                    "installed_build_receipt_identity_matches": True,
+                }
+            ],
+            "fix_available": [],
+            "please_test": [],
+            "recovery": [],
+            "blocked_missing_install_receipts": [],
+            "blocked_receipt_mismatch": [],
+            "hold_until_fix_receipt": [],
+        },
+    }
+    _write_json(support_path, support)
+
+    result = _run_materializer(paths, out)
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    support_summary = payload["truth_inputs"]["support_summary"]
+    markdown = (paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.md").read_text(
+        encoding="utf-8"
+    )
+    assert support_summary["reporter_followthrough_ready_count"] == 0
+    assert support_summary["followthrough_receipt_gates_installed_build_receipted_count"] == 0
+    assert support_summary["followthrough_receipt_gates_installation_bound_count"] == 0
+    assert "- Receipt-gated installed-build receipts: 0" in markdown
+    assert "- Receipt-gated installed-build receipts: 7" not in markdown
 
 
 def test_weekly_support_summary_recomputes_blocked_receipt_rows_from_followthrough_plan(
@@ -4250,9 +4365,12 @@ def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
     packet["package_closeout"]["status"] = "reopen"
     packet["package_closeout"]["do_not_reopen_package"] = False
     packet["package_closeout"]["remaining_milestone_dependency_ids"] = []
+    packet["package_closeout"]["remaining_dependency_package_ids"] = []
     packet["package_closeout"]["remaining_sibling_work_task_ids"] = []
     packet["repeat_prevention"]["remaining_dependency_ids"] = []
+    packet["repeat_prevention"]["remaining_dependency_package_ids"] = []
     packet["repeat_prevention"]["remaining_sibling_work_task_ids"] = []
+    packet["measured_rollout_loop"]["remaining_dependency_package_ids"] = []
     packet["repeat_prevention"]["handoff_rule"] = "repeat this package on the next shard"
     _write_json(out, packet)
 
@@ -4275,7 +4393,15 @@ def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
         in verifier.stderr
     )
     assert (
+        "package closeout remaining dependency package list no longer matches dependency package routing"
+        in verifier.stderr
+    )
+    assert (
         "repeat prevention remaining dependency list no longer matches live successor registry posture"
+        in verifier.stderr
+    )
+    assert (
+        "repeat prevention remaining dependency package list no longer matches dependency package routing"
         in verifier.stderr
     )
     assert (
@@ -4287,13 +4413,65 @@ def test_verify_next90_m106_governor_packet_rejects_closeout_handoff_drift(
         in verifier.stderr
     )
     assert (
-        "repeat prevention handoff rule no longer routes remaining M106 work away from this closed Fleet slice"
+        "measured rollout loop remaining dependency package list no longer matches dependency package routing"
         in verifier.stderr
     )
     assert (
-        "repeat prevention handoff rule no longer matches the live closeout projection"
+        "repeat prevention handoff rule no longer routes remaining M106 work away from this closed Fleet slice"
         in verifier.stderr
     )
+
+
+def test_verify_next90_m106_governor_packet_accepts_missing_dependency_package_rows(
+    tmp_path: Path,
+) -> None:
+    paths = _fixture_tree(tmp_path)
+    queue = yaml.safe_load(paths["queue"].read_text(encoding="utf-8"))
+    queue["items"] = [
+        item
+        for item in queue["items"]
+        if int(item.get("milestone_id") or -1) != 101
+    ]
+    _write_yaml(paths["queue"], queue)
+    out = paths["published"] / "WEEKLY_GOVERNOR_PACKET.generated.json"
+
+    materialize = _run_materializer(paths, out)
+
+    assert materialize.returncode == 0, materialize.stderr
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["truth_inputs"]["successor_dependency_package_routes"]["status"] == "blocked"
+    assert payload["truth_inputs"]["successor_dependency_package_routes"]["rows"][0]["route_state"] == "package_row_missing"
+    assert payload["package_closeout"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
+    assert payload["repeat_prevention"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
+    assert payload["measured_rollout_loop"]["remaining_dependency_package_ids"] == [
+        "milestone-101",
+        "milestone-102",
+        "milestone-103",
+        "milestone-104",
+        "milestone-105",
+    ]
+
+    verifier = subprocess.run(
+        _verifier_args(paths, out),
+        cwd="/docker/fleet",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert verifier.returncode == 0, verifier.stderr
 
 
 def test_verify_next90_m106_governor_packet_rejects_missing_decision_action_ledger(

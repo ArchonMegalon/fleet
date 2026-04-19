@@ -1733,6 +1733,10 @@ def _recomputed_followthrough_row_truth(row: Dict[str, Any]) -> Dict[str, bool]:
         in {"open_downloads", "open_support_timeline", "open_account_access"}
     )
     return {
+        "install_truth_ready": install_truth_ready,
+        "release_receipt_ready": release_receipt_ready,
+        "installed_build_receipt_ready": installed_build_receipt_ready,
+        "fix_receipts_ready": fix_receipts_ready,
         "feedback_loop_ready": feedback_loop_ready,
         "fix_available_ready": fix_available_ready,
         "please_test_ready": please_test_ready,
@@ -1806,6 +1810,32 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
     installation_bound_present = any(
         "installed_build_receipt_installation_matches" in row for row in merged_rows
     )
+    installed_build_receipted_count = 0
+    installation_bound_count = 0
+    if detailed_ready_truth_present and installed_build_receipted_present:
+        for row in merged_rows:
+            row_truth = _recomputed_followthrough_row_truth(row)
+            installed_build_receipted = bool(
+                bool(row_truth.get("install_truth_ready"))
+                and bool(row_truth.get("release_receipt_ready"))
+                and bool(row.get("installed_build_receipted"))
+                and str(row.get("installed_build_receipt_id") or "").strip()
+                and str(row.get("installed_build_receipt_installation_id") or "").strip()
+                and str(row.get("installed_build_receipt_version") or "").strip()
+                and str(row.get("installed_build_receipt_channel") or "").strip()
+                and str(row.get("installed_build_receipt_source") or "").strip() == "install_receipts"
+                and str(row.get("installed_build_receipt_installation_source") or "").strip()
+                == "install_receipts"
+                and str(row.get("installed_build_receipt_version_source") or "").strip()
+                == "install_receipts"
+                and str(row.get("installed_build_receipt_channel_source") or "").strip()
+                == "install_receipts"
+            )
+            if installed_build_receipted:
+                installed_build_receipted_count += 1
+                if bool(row.get("installed_build_receipt_installation_matches")):
+                    installation_bound_count += 1
+
     return {
         "ready_count": len(ready_keys),
         "feedback_ready_count": ready_group_counts["feedback"],
@@ -1823,18 +1853,14 @@ def _recomputed_followthrough_counts(followthrough: Dict[str, Any]) -> Dict[str,
         "membership_please_test_ready_count": membership_group_counts["please_test"],
         "membership_recovery_loop_ready_count": membership_group_counts["recovery"],
         "installed_build_receipted_count": (
-            sum(1 for row in merged_rows if bool(row.get("installed_build_receipted")))
+            installed_build_receipted_count
             if installed_build_receipted_present and detailed_ready_truth_present
             else 0
             if installed_build_receipted_present
             else -1
         ),
         "installation_bound_count": (
-            sum(
-                1
-                for row in merged_rows
-                if bool(row.get("installed_build_receipt_installation_matches"))
-            )
+            installation_bound_count
             if installation_bound_present and detailed_ready_truth_present
             else 0
             if installation_bound_present
@@ -2659,6 +2685,24 @@ def _blocked_dependency_package_ids(source_input_health: Dict[str, Any]) -> List
     return blocked
 
 
+def _remaining_dependency_package_ids(dependency_package_routes: Dict[str, Any]) -> List[str]:
+    package_ids: List[str] = []
+    for row in dependency_package_routes.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        route_state = str(row.get("route_state") or "").strip()
+        launch_gate_contribution = str(row.get("launch_gate_contribution") or "").strip()
+        package_id = str(row.get("package_id") or "").strip()
+        if not package_id:
+            continue
+        if (
+            launch_gate_contribution == "blocked_until_registry_milestone_complete"
+            or route_state in {"package_row_missing", "queue_mirror_drift", "package_incomplete"}
+        ) and package_id not in package_ids:
+            package_ids.append(package_id)
+    return package_ids
+
+
 def build_payload(
     *,
     repo_root: Path,
@@ -2958,6 +3002,9 @@ def build_payload(
     ]
     open_sibling_work_task_ids = _norm_list(work_task_posture.get("open_sibling_work_task_ids"))
     blocked_dependency_package_ids = _blocked_dependency_package_ids(source_input_health)
+    remaining_dependency_package_ids = _remaining_dependency_package_ids(
+        dependency_package_routes
+    )
     repeat_prevention = {
         "status": "closed_for_fleet_package" if package_complete else "blocked",
         "closed_package_id": PACKAGE_ID,
@@ -2969,6 +3016,7 @@ def build_payload(
         "owned_surfaces": list(OWNED_SURFACES),
         "allowed_paths": list(ALLOWED_PATHS),
         "remaining_dependency_ids": remaining_dependency_ids,
+        "remaining_dependency_package_ids": remaining_dependency_package_ids,
         "blocked_dependency_package_ids": blocked_dependency_package_ids,
         "dependency_package_routes": dependency_package_routes,
         "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
@@ -3170,6 +3218,7 @@ def build_payload(
                 else "Fleet package authority or proof is not complete; inspect package_verification issues before reusing this slice."
             ),
             "remaining_milestone_dependency_ids": remaining_dependency_ids,
+            "remaining_dependency_package_ids": remaining_dependency_package_ids,
             "blocked_dependency_package_ids": blocked_dependency_package_ids,
             "dependency_package_routes": dependency_package_routes,
             "remaining_sibling_work_task_ids": open_sibling_work_task_ids,
@@ -3192,6 +3241,7 @@ def build_payload(
             "canary_ready": canary_status == "Canary green on all active lanes",
             "rollback_watch": rollback_watch,
             "blocked_dependency_package_ids": blocked_dependency_package_ids,
+            "remaining_dependency_package_ids": remaining_dependency_package_ids,
             "dependency_package_routes": dependency_package_routes,
             "required_decision_actions": list(REQUIRED_DECISION_ACTIONS),
             "launch_gate_summary": launch_gate_summary,
@@ -3337,6 +3387,7 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Dependency package routing: {_markdown_status(dependency_routes.get('status'))}",
             f"- Closed dependency packages verified: {dependency_routes.get('closed_package_count', 0)}",
             f"- Open registry dependency milestones: {dependency_routes.get('open_registry_milestone_count', 0)}",
+            f"- Remaining dependency packages: {_markdown_list(closeout.get('remaining_dependency_package_ids'))}",
             f"- Remaining sibling work tasks: {_markdown_list(closeout.get('remaining_sibling_work_task_ids'))}",
             f"- Flagship readiness: {_markdown_status(truth.get('flagship_readiness_status'))}",
             f"- Flagship parity release truth: {_markdown_status(parity.get('release_truth_status'))}",
@@ -3375,7 +3426,8 @@ def render_markdown_packet(payload: Dict[str, Any]) -> str:
             f"- Do not reopen owned surfaces: {bool(repeat_prevention.get('do_not_reopen_owned_surfaces'))}",
             f"- Owned surfaces: {_markdown_list(repeat_prevention.get('owned_surfaces'))}",
             f"- Allowed paths: {_markdown_list(repeat_prevention.get('allowed_paths'))}",
-            f"- Remaining dependency packages: {_markdown_list(repeat_prevention.get('remaining_dependency_ids'))}",
+            f"- Remaining dependency milestones: {_markdown_list(repeat_prevention.get('remaining_dependency_ids'))}",
+            f"- Remaining dependency packages: {_markdown_list(repeat_prevention.get('remaining_dependency_package_ids'))}",
             f"- Blocked dependency packages: {_markdown_list(repeat_prevention.get('blocked_dependency_package_ids'))}",
             f"- Dependency package route rule: {_markdown_status(dict(repeat_prevention.get('dependency_package_routes') or {}).get('rule'))}",
             f"- Remaining sibling work tasks: {_markdown_list(repeat_prevention.get('remaining_sibling_work_task_ids'))}",

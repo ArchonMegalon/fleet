@@ -1,6 +1,6 @@
 # Weekly Governor Packet
 
-Generated: 2026-04-19T14:11:58Z
+Generated: 2026-04-19T15:17:02Z
 As of: 2026-04-15
 Package: next90-m106-fleet-governor-packet
 Milestone: 106 - Product-governor weekly adoption and measured rollout loop
@@ -20,7 +20,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Package verification: pass
 - Weekly input health: pass
 - Source input health: pass
-- Source input fingerprint: 9bfaf49ec16d1ff9d20dd56d762d795ea3c5305ea6ebe3250683c6a592a59303
+- Source input fingerprint: ea107f0150eab17acaaf98d0e0f31518b9268db59936c12eae867adba6dd4367
 - Launch cited signal truth alignment: pass
 - Decision alignment: pass
 - Expected launch action: freeze_launch
@@ -29,7 +29,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen package: True
 - Measured rollout loop: blocked
 - Governor packet cadence: weekly
-- Next packet due: 2026-04-26T14:11:58Z
+- Next packet due: 2026-04-26T15:17:02Z
 - Decision action coverage: pass
 - Decision actions covered: 5 / 5
 - Decision source coverage: pass
@@ -57,6 +57,7 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Dependency package routing: blocked
 - Closed dependency packages verified: 0
 - Open registry dependency milestones: 5
+- Remaining dependency packages: milestone-101, milestone-102, milestone-103, milestone-104, milestone-105
 - Remaining sibling work tasks: 106.3, 106.4
 - Flagship readiness: pass
 - Flagship parity release truth: gold_ready
@@ -95,7 +96,8 @@ Milestone: 106 - Product-governor weekly adoption and measured rollout loop
 - Do not reopen owned surfaces: True
 - Owned surfaces: weekly_governor_packet, measured_rollout_loop
 - Allowed paths: admin, scripts, tests, .codex-studio
-- Remaining dependency packages: 101, 102, 103, 104, 105
+- Remaining dependency milestones: 101, 102, 103, 104, 105
+- Remaining dependency packages: milestone-101, milestone-102, milestone-103, milestone-104, milestone-105
 - Blocked dependency packages: none
 - Dependency package route rule: Closed dependency package rows are verified instead of reopened; launch expansion still waits for successor registry milestone status to close.
 - Remaining sibling work tasks: 106.3, 106.4

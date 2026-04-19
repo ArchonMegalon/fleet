@@ -1409,10 +1409,25 @@ def verify(args: argparse.Namespace) -> List[str]:
         issues,
         "package closeout remaining dependency list no longer matches live successor registry posture",
     )
+    expected_remaining_dependency_package_ids = weekly._remaining_dependency_package_ids(
+        dependency_package_routes
+    )
+    _require(
+        package_closeout.get("remaining_dependency_package_ids")
+        == expected_remaining_dependency_package_ids,
+        issues,
+        "package closeout remaining dependency package list no longer matches dependency package routing",
+    )
     _require(
         repeat_prevention.get("remaining_dependency_ids") == expected_remaining_dependencies,
         issues,
         "repeat prevention remaining dependency list no longer matches live successor registry posture",
+    )
+    _require(
+        repeat_prevention.get("remaining_dependency_package_ids")
+        == expected_remaining_dependency_package_ids,
+        issues,
+        "repeat prevention remaining dependency package list no longer matches dependency package routing",
     )
     _require(
         repeat_prevention.get("remaining_sibling_work_task_ids") == expected_remaining_siblings,
@@ -1423,6 +1438,11 @@ def verify(args: argparse.Namespace) -> List[str]:
         package_closeout.get("remaining_sibling_work_task_ids") == expected_remaining_siblings,
         issues,
         "package closeout remaining sibling list no longer matches live successor registry posture",
+    )
+    _require(
+        loop.get("remaining_dependency_package_ids") == expected_remaining_dependency_package_ids,
+        issues,
+        "measured rollout loop remaining dependency package list no longer matches dependency package routing",
     )
     _require(
         "route remaining M106 work" in str(repeat_prevention.get("handoff_rule") or ""),
