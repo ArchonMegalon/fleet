@@ -887,6 +887,7 @@ items:
       - /docker/chummercomplete/chummer-hub-registry commit 1cf64e1 pins M101 current fallback rollback proof floor so future shards verify the current completed-package guard instead of repeating it.
       - /docker/chummercomplete/chummer-hub-registry commit 49dd07a tightens the M101 route-truth row-shape guard so future shards reject non-object desktop route-truth rows instead of repeating the current completed-package guard.
       - /docker/chummercomplete/chummer-hub-registry commit acb881d tightens the M101 projection alias proof guard so future shards reject release-channel versus compatibility-shelf alias drift on generatedAt/generated_at and keep the documented six-tuple successor matrix aligned with the completed-package guard.
+      - /docker/chummercomplete/chummer-hub-registry commit a1da9ca tightens the M101 exact route-tuple rationale proof so future shards reject platform-only desktop route rationale and verify the direct regression tests together with the canonical release-channel rows.
     allowed_paths:
       - Chummer.Hub.Registry
       - scripts
@@ -988,7 +989,9 @@ items:
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Desktop.Runtime/DesktopInstallLinkingRuntime.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/DialogTrustReceiptText.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/DialogHost.razor
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/ResultPanel.razor
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shell/SectionPane.razor
+      - /docker/chummercomplete/chummer6-ui-finish/Chummer.Blazor/Components/Shared/RuntimeInspectorPanel.razor
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/DesktopCrashRuntimeTests.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Presentation/BlazorShellComponentTests.cs
       - /docker/chummercomplete/chummer6-ui-finish/Chummer.Tests/Presentation/AccessibilitySignoffSmokeTests.cs
