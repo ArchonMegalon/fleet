@@ -4603,6 +4603,7 @@ def test_recent_helper_loop_failure_count_separates_status_helper_loop_failures(
     module = _load_module()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
     with tempfile.TemporaryDirectory() as tmp:
         state_root = Path(tmp)
         history_rows = [
@@ -4633,6 +4634,7 @@ def test_prefer_openai_escape_fastpath_after_single_status_helper_loop_promotes_
     module = _load_module()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    monkeypatch.setenv("CHUMMER_DESIGN_SUPERVISOR_OPENAI_ESCAPE_ACCOUNT_ALIASES", "acct-chatgpt-core")
     with tempfile.TemporaryDirectory() as tmp:
         state_root = Path(tmp)
         history_rows = [
@@ -4652,6 +4654,29 @@ def test_prefer_openai_escape_fastpath_after_single_status_helper_loop_promotes_
         assert module._recent_status_helper_loop_failure_count(state_root) == 1
         assert module._prefer_openai_escape_fastpath_after_recent_helper_loop(state_root) is True
     monkeypatch.undo()
+
+
+def test_prefer_openai_escape_fastpath_after_recent_helper_loop_stays_disabled_without_escape_config(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        state_root = Path(tmp)
+        (state_root / "history.jsonl").write_text(
+            "".join(
+                json.dumps(
+                    {
+                        "run_id": f"run-{idx}",
+                        "accepted": False,
+                        "blocker": "Error: worker_status_helper_loop:repeated_blocked_status_polling",
+                    }
+                )
+                + "\n"
+                for idx in range(2)
+            ),
+            encoding="utf-8",
+        )
+
+        assert module._prefer_openai_escape_fastpath_after_recent_helper_loop(state_root) is False
 
 
 def test_prefer_openai_escape_fastpath_after_recent_helper_loop_requires_enabled_escape(monkeypatch) -> None:
@@ -4845,6 +4870,42 @@ def test_load_openai_escape_accounts_returns_restore_probe_aliases_for_usage_lim
         assert [account.alias for account in escape_accounts] == ["acct-chatgpt-core"]
         assert supplemental_aliases == []
         assert restore_probe_aliases == ["acct-chatgpt-core"]
+
+
+def test_load_openai_escape_accounts_returns_empty_when_escape_disabled(monkeypatch) -> None:
+    module = _load_module()
+    monkeypatch.setattr(module, "_RUNTIME_ENV_CANDIDATES", ())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        auth_path = root / "acct-chatgpt-core.auth.json"
+        auth_path.write_text('{"auth_mode":"chatgpt","tokens":{"access_token":"token"}}\n', encoding="utf-8")
+        (root / "accounts.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "account_policy": {"protected_owner_ids": ["tibor.girschele"]},
+                    "accounts": {
+                        "acct-chatgpt-core": {
+                            "auth_kind": "chatgpt_auth_json",
+                            "auth_json_file": str(auth_path),
+                            "allowed_models": ["gpt-5.4"],
+                            "health_state": "ready",
+                            "owner_id": "tibor.girschele",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        args = _args(root)
+
+        _escape_args, escape_accounts, supplemental_aliases, restore_probe_aliases = module._load_openai_escape_accounts(
+            args,
+            {},
+        )
+
+        assert escape_accounts == []
+        assert supplemental_aliases == []
+        assert restore_probe_aliases == []
 
 
 def test_load_openai_escape_accounts_restore_probes_one_alias_per_distinct_chatgpt_source(monkeypatch) -> None:
@@ -17618,10 +17679,16 @@ def test_materialize_full_product_frontier_refreshes_stale_full_product_audit() 
         )
 
         payload = yaml.safe_load(Path(materialized["published_path"]).read_text(encoding="utf-8"))
+        assert payload["completion_audit"]["reason"] == (
+            "Only external host-proof gaps remain: run the missing macos proof lane for 1 desktop tuple(s), "
+            "ingest receipts, and then republish release truth."
+        )
         assert payload["full_product_audit"]["status"] == "fail"
+        assert payload["full_product_audit"]["reason"] == (
+            "Only external host-proof gaps remain: run the missing macos proof lane for 1 desktop tuple(s), "
+            "ingest receipts, and then republish release truth."
+        )
         assert payload["full_product_audit"]["missing_coverage_keys"] == []
-        assert payload["full_product_audit"]["warning_coverage_keys"] == ["desktop_client"]
-        assert payload["full_product_audit"]["coverage_gap_keys"] == ["desktop_client"]
 
 
 def test_full_product_readiness_audit_rejects_unresolved_parity_families() -> None:

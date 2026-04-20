@@ -1,7 +1,7 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-18T20:54:04Z'
-mode: complete
+generated_at: '2026-04-20T11:06:54Z'
+mode: flagship_product
 state_root: /docker/fleet/state/chummer_design_supervisor
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
@@ -29,112 +29,25 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-core
-  - chummer6-design
-  - chummer6-hub
-  - chummer6-hub-registry
-  - chummer6-mobile
   - chummer6-ui
-  - executive-assistant
-  - fleet
+  - chummer6-core
+  - chummer6-ui-kit
   texts:
-  - Build golden oracle suites and release-bound engine proof packs
-  - Emit provenance and conflict receipts for workspace restore and continuity
-  - Extract Chummer5a oracle baselines and veteran workflow packs
-  - Gate fix followthrough against real install and receipt truth
-  - Keep native-host release proof independent for the primary desktop head
-  - Land restore continuation and conflict-safe UX on the primary desktop route
-  - Publish explicit promotion, fallback, and rollback rationale in registry truth
-  - Publish weekly governor packets with measured launch, freeze, canary, and rollback
-    decisions
-  - Run screenshot-backed parity review on the promoted desktop head
-  - Stand up artifact-factory orchestration for release, support, and publication
-    bundles
-  - Surface explain receipts and environment diffs where users need trust
-  - Synthesize parity, support, and release signals into operator-ready and reporter-ready
-    packets
-  - Unify claim, install, update, and support recovery into one desktop-native flow
-  - accessibility
-  - advancement
-  - aftermath
-  - automatic bugfixing
-  - build lab
-  - campaign
-  - chummer5a
-  - claim
-  - companion
-  - contacts
-  - continuity
-  - crash
-  - crew-fit
-  - custom-data
-  - dashboard
-  - desktop
-  - desktop-client
-  - diary
-  - dice
-  - dossier
-  - downtime
-  - event
-  - exchange
-  - explain
-  - export
-  - feedback
-  - fit and finish
-  - flagship-readiness
-  - genesis
-  - gm
-  - governance
-  - grade-bar
-  - hero lab
-  - import
-  - initiative
-  - install
-  - launch
-  - localization
-  - master index
-  - materializer
-  - mobile
-  - next90-m101-registry-promotion-discipline
-  - next90-m101-ui-release-train
-  - next90-m102-fleet-reporter-receipts
-  - next90-m102-hub-desktop-native-trust
-  - next90-m103-ea-parity-lab
-  - next90-m103-ui-veteran-certification
-  - next90-m104-core-proof-pack
-  - next90-m104-ui-explain-receipts
-  - next90-m105-hub-workspace-continuity
-  - next90-m105-ui-restore-continuity
-  - next90-m106-ea-governor-packets
-  - next90-m106-fleet-governor-packet
-  - next90-m107-hub-artifact-factory
-  - offline
-  - operator
-  - opposition
-  - oracle
-  - prep
-  - pulse
-  - recap
-  - recovery
-  - release truth
-  - release-proof
-  - replay
-  - restore
-  - restore confidence
-  - roster
-  - rule-environment
-  - settings
-  - sourcebook
-  - support
   - top flagship grade
-  - translator
-  - travel
-  - trust
-  - update
-  - utility
-  - whole project frontier
-  - workbench
-  - xml
+  - whole-project frontier
+  - no lowered standards
+  - feedback loop
+  - automatic bugfixing
+  - crash reporting
+  - support routing
+  - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
+  - performance
+  - proof shelf
+  - fit and finish
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -142,37 +55,73 @@ quality_policy:
   accept_lowered_standards: false
   feedback_autofix_loop_required: true
 completion_audit:
-  status: pass
-  reason: recent supervisor history ends with a trusted structured worker receipt
+  status: fail
+  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
+    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
+    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
+    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
+    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
+    if Git Bash capture is not available.'
 full_product_audit:
-  status: pass
-  reason: flagship product readiness proof is current across desktop, rules, hub,
-    mobile, horizons, and operator lanes
+  status: fail
+  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
+    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
+    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
+    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
+    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
+    if Git Bash capture is not available.'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-18T20:54:03Z'
-  proof_status: pass
-  missing_coverage_keys: []
+  generated_at: '2026-04-20T10:40:13Z'
+  proof_status: fail
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: ready
-  eta_human: ready now
-  eta_confidence: high
-  basis: completion_audit_pass
-  scope_kind: repo_local_completion_ready
-  scope_label: Repo-local completion review
-  scope_warning: Repo-local completion evidence is green. External release, flagship,
-    or parity claims still depend on the broader readiness surfaces staying green.
-  blocking_reason: ''
-  summary: Whole-product completion audit is green on current repo-local evidence.
-  predicted_completion_at: '2026-04-18T20:54:03Z'
-  range_low_hours: 0.0
-  range_high_hours: 0.0
-  remaining_open_milestones: 0
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 0
-  remaining_effort_units: 0.0
+frontier_count: 1
+frontier_ids:
+- 4066417069
+frontier:
+- id: 4066417069
+  title: Flagship desktop client and workbench finish
+  wave: flagship_product
+  status: blocked_external_host_proof
+  owners:
+  - chummer6-ui
+  - chummer6-core
+  - chummer6-ui-kit
+  dependencies: []
+  exit_criteria:
+  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
+    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
+    inspection, conditional toggles, desktop packaging, updater, and in-app support
+    polish.
+  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
+    packaging, and support evidence rather than treating Linux exit-gate closure as
+    the whole product.
+  eta:
+    status: flagship_delivery
+    eta_human: 10h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-04-21T05:09:00Z'
+    range_low_hours: 10.45
+    range_high_hours: 25.62
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''

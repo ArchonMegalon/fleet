@@ -4944,11 +4944,19 @@ def _full_product_readiness_audit(args: argparse.Namespace) -> Dict[str, Any]:
             key
             for key in FLAGSHIP_PRODUCT_READINESS_COVERAGE_KEYS
             if str(coverage.get(key) or "").strip().lower() == "missing"
-        ]
+    ]
     audit["warning_coverage_keys"] = warning_keys
     audit["missing_coverage_keys"] = missing_keys
     audit["coverage_gap_keys"] = [*warning_keys, *missing_keys]
+    external_only_reason = str(
+        external_host_proof.get("reason")
+        or completion_audit.get("reason")
+        or ""
+    ).strip()
     if audit["proof_status"] != "pass":
+        if audit["completion_external_only"] and external_only_reason:
+            audit["reason"] = external_only_reason
+            return audit
         audit["reason"] = f"flagship product readiness proof is not green: {audit['proof_status'] or 'missing'}"
         return audit
     if _hard_flagship_requested(args):
@@ -5166,6 +5174,19 @@ def _full_product_frontier_payload(
         for item in frontier
     ]
     queue_payload, queue_item = _queue_payload_and_item_for_shard(args, state_root)
+    completion_reason = str(completion_audit.get("reason") or "").strip()
+    full_product_reason = str(full_product_audit.get("reason") or "").strip()
+    if (
+        str(completion_audit.get("status") or "").strip().lower() == "fail"
+        and str(full_product_audit.get("status") or "").strip().lower() == "fail"
+        and full_product_reason.startswith("Only external host-proof gaps remain:")
+        and (
+            not completion_reason
+            or completion_reason.startswith("Only external host-proof gaps remain: run the missing ")
+            or completion_reason == "external only"
+        )
+    ):
+        completion_reason = full_product_reason
     payload: Dict[str, Any] = {
         "contract_name": "fleet.full_product_frontier",
         "schema_version": 1,
@@ -5191,7 +5212,7 @@ def _full_product_frontier_payload(
         },
         "completion_audit": {
             "status": str(completion_audit.get("status") or "").strip(),
-            "reason": str(completion_audit.get("reason") or "").strip(),
+            "reason": completion_reason,
         },
         "full_product_audit": {
             "status": str(full_product_audit.get("status") or "").strip(),
@@ -6207,6 +6228,8 @@ def _load_openai_escape_accounts(
     model_candidates: Optional[Sequence[str]] = None,
 ) -> tuple[argparse.Namespace, List[WorkerAccount], List[str], List[str]]:
     escape_args = _openai_escape_hatch_args(args, model_candidates=model_candidates)
+    if not _openai_escape_hatch_enabled():
+        return escape_args, [], [], []
     escape_accounts = _load_worker_accounts(escape_args)
     if not escape_accounts:
         return escape_args, [], [], []
@@ -6850,6 +6873,8 @@ def _prefer_openai_escape_fastpath_after_recent_helper_loop(state_root: Path) ->
     # Prefer routed EA by default. Escalate to the OpenAI escape pool after a
     # genuine routed-lane output stall, or after a self-poll helper loop on
     # the same shard.
+    if not _openai_escape_hatch_enabled():
+        return False
     return (
         _recent_helper_loop_failure_count(state_root, limit=8) >= 1
         or _recent_status_helper_loop_failure_count(state_root, limit=8) >= 1

@@ -1,8 +1,8 @@
 contract_name: fleet.full_product_frontier
 schema_version: 1
-generated_at: '2026-04-19T01:05:26Z'
+generated_at: '2026-04-20T11:07:16Z'
 mode: flagship_product
-state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-9
+state_root: /docker/fleet/state/chummer_design_supervisor/shard-9
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
 handoff_path: /docker/fleet/NEXT_SESSION_HANDOFF.md
 flagship_product_readiness_path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
@@ -29,34 +29,25 @@ focus:
   - top_flagship_grade
   - whole_project_frontier
   owners:
-  - chummer6-core
   - chummer6-ui
-  - chummer6-hub
+  - chummer6-core
+  - chummer6-ui-kit
   texts:
   - top flagship grade
-  - whole project frontier
-  - feedback
-  - automatic bugfixing
-  - crash
-  - support
-  - accessibility
-  - localization
-  - restore confidence
-  - fit and finish
-  - build lab
-  - advancement
-  - crew-fit
-  - explain
-  - rule-environment
   - whole-project frontier
   - no lowered standards
   - feedback loop
+  - automatic bugfixing
   - crash reporting
   - support routing
   - journey smoothness
+  - restore confidence
+  - accessibility
+  - localization
   - performance
   - proof shelf
-  - fleet and operator loop
+  - fit and finish
+  - desktop client
 quality_policy:
   bar: top_flagship_grade
   whole_project_frontier: true
@@ -65,37 +56,72 @@ quality_policy:
   feedback_autofix_loop_required: true
 completion_audit:
   status: fail
-  reason: 'latest worker receipt 20260418T202823Z-shard-9 is not trusted: worker exit
-    124'
+  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
+    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
+    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
+    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
+    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
+    if Git Bash capture is not available.'
 full_product_audit:
   status: fail
-  reason: 'flagship product readiness proof is not green: fail'
+  reason: 'Only external host-proof gaps remain: windows: transfer /docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz,
+    set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the
+    signed-in proof cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh,
+    bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh,
+    then return windows-proof-bundle.tgz and ingest it with bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh
+    Use powershell -ExecutionPolicy Bypass -File /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1
+    if Git Bash capture is not available.'
   path: /docker/fleet/.codex-studio/published/FLAGSHIP_PRODUCT_READINESS.generated.json
-  generated_at: '2026-04-19T01:05:26Z'
+  generated_at: '2026-04-20T10:40:13Z'
   proof_status: fail
-  missing_coverage_keys: []
+  missing_coverage_keys:
+  - desktop_client
   parity_excluded_scope:
   - plugin-framework
   unresolved_parity_family_ids: []
-frontier_count: 0
-frontier_ids: []
-frontier: []
-eta:
-  status: tracked
-  eta_human: tracked
-  eta_confidence: low
-  basis: aggregate_shard_parallel_scope
-  scope_kind: flagship_product_readiness
-  scope_label: Full Chummer5A parity and flagship proof closeout
-  scope_warning: ''
-  blocking_reason: ''
-  summary: 96 open milestones remain (0 in progress, 96 not started). Aggregate shard
-    status is parallelized across 1 active shards under Full Chummer5A parity and
-    flagship proof closeout.
-  predicted_completion_at: ''
-  range_low_hours: 6.52
-  range_high_hours: 16.82
-  remaining_open_milestones: 96
-  remaining_in_progress_milestones: 0
-  remaining_not_started_milestones: 96
-  remaining_effort_units: 1.45
+frontier_count: 1
+frontier_ids:
+- 4066417069
+frontier:
+- id: 4066417069
+  title: Flagship desktop client and workbench finish
+  wave: flagship_product
+  status: blocked_external_host_proof
+  owners:
+  - chummer6-ui
+  - chummer6-core
+  - chummer6-ui-kit
+  dependencies: []
+  exit_criteria:
+  - Ship the flagship workbench/browser/desktop surface described in `projects/ui.md`
+    and `BUILD_LAB_PRODUCT_MODEL.md`, including builder, compare, explain, grouped
+    inspection, conditional toggles, desktop packaging, updater, and in-app support
+    polish.
+  - Keep the flagship desktop head centered on Avalonia with release-grade startup,
+    packaging, and support evidence rather than treating Linux exit-gate closure as
+    the whole product.
+  eta:
+    status: flagship_delivery
+    eta_human: 10h-1.1d
+    eta_confidence: low
+    basis: full_product_single_milestone_heuristic
+    summary: 'Milestone ''Flagship desktop client and workbench finish'' remains open
+      under the flagship closeout frontier. Outstanding readiness coverage: desktop_client.'
+    predicted_completion_at: '2026-04-21T05:09:22Z'
+    range_low_hours: 10.45
+    range_high_hours: 25.62
+    remaining_open_milestones: 1
+    remaining_in_progress_milestones: 0
+    remaining_not_started_milestones: 1
+    remaining_effort_units: 2.05
+    history_sample_count: 0
+    observed_burn_milestones_per_day: 0.0
+    blocking_reason: ''
+    scope_kind: flagship_product_readiness
+    scope_label: Full Chummer5A parity and flagship proof closeout
+    scope_warning: ''
