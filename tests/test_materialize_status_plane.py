@@ -103,6 +103,14 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
       },
       "services": []
     },
+    "external_proof_autoingest": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "current_state": "waiting_for_bundle",
+      "summary": {
+        "alert_state": "tracking"
+      }
+    },
     "support_summary": {
       "open_case_count": 1
     },
@@ -185,6 +193,7 @@ def test_materialize_status_plane_from_status_json(tmp_path: Path) -> None:
     assert payload["support_summary"]["open_case_count"] == 1
     assert payload["publish_readiness"]["status"] == "watch"
     assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
+    assert payload["external_proof_autoingest"]["current_state"] == "waiting_for_bundle"
     assert payload["projects"][0]["id"] == "guide"
     assert payload["projects"][0]["readiness_stage"] == "repo_local_complete"
     assert payload["groups"][0]["blocking_owner_projects"] == ["core", "guide"]
@@ -1125,3 +1134,78 @@ def test_materialize_status_plane_overlays_stale_runtime_healing_escalation(tmp_
     payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
     assert payload["runtime_healing"]["summary"]["alert_state"] == "healthy"
     assert payload["runtime_healing"]["services"][0]["current_state"] == "healthy"
+
+
+def test_materialize_status_plane_overlays_local_external_proof_autoingest_state(tmp_path: Path) -> None:
+    status_json = tmp_path / "admin_status.json"
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    autoingest_dir = tmp_path / "rebuilder" / "external-proof-autoingest"
+    autoingest_dir.mkdir(parents=True, exist_ok=True)
+    status_json.write_text(
+        """
+{
+  "generated_at": "2026-03-23T00:00:00Z",
+  "public_status": {
+    "generated_at": "2026-03-23T00:00:00Z",
+    "deployment_posture": {},
+    "readiness_summary": {},
+    "runtime_healing": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "summary": {
+        "alert_state": "healthy"
+      },
+      "services": []
+    },
+    "external_proof_autoingest": {
+      "generated_at": "2026-03-23T00:00:00Z",
+      "enabled": true,
+      "current_state": "waiting_for_bundle",
+      "summary": {
+        "alert_state": "tracking"
+      }
+    }
+  },
+  "projects": [],
+  "groups": []
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (autoingest_dir / "status.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-04-20T12:30:00Z",
+                "current_state": "ingested",
+                "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                "observed_bundle_count": 1,
+                "last_attempt_at": "2026-04-20T12:29:00Z",
+                "last_success_at": "2026-04-20T12:30:00Z",
+                "last_result": "ingested",
+                "last_detail": "host proof bundle ingested and readiness republished",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--status-json",
+            str(status_json),
+            "--out",
+            str(out_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_script_env(tmp_path),
+    )
+    assert result.returncode == 0, result.stderr
+
+    payload = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+    assert payload["external_proof_autoingest"]["current_state"] == "ingested"
+    assert payload["external_proof_autoingest"]["summary"]["alert_state"] == "healthy"

@@ -2375,6 +2375,30 @@ class AdminForecastTests(unittest.TestCase):
             self.assertTrue(payload["services"][0]["cooldown_active"])
             self.assertEqual(payload["recent_events"][0]["event"], "cooldown_active")
 
+    def test_external_proof_autoingest_payload_surfaces_waiting_bundle_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_dir = Path(tmpdir) / "external-proof-autoingest"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "status.json").write_text(
+                json.dumps(
+                    {
+                        "generated_at": "2026-04-20T12:40:00Z",
+                        "current_state": "waiting_for_bundle",
+                        "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                        "observed_bundle_count": 0,
+                        "last_result": "waiting_for_bundle",
+                        "last_detail": "waiting for a returned host proof bundle",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(self.admin, "EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH", state_dir / "status.json"):
+                payload = self.admin.external_proof_autoingest_payload()
+
+        self.assertEqual(payload["current_state"], "waiting_for_bundle")
+        self.assertEqual(payload["summary"]["alert_state"], "tracking")
+        self.assertIn("Return the Windows host proof bundle", payload["summary"]["recommended_action"])
+
     def test_canonical_public_status_payload_includes_runtime_healing(self) -> None:
         with mock.patch.object(
             self.admin,
@@ -2400,6 +2424,21 @@ class AdminForecastTests(unittest.TestCase):
                     }
                 ],
             },
+        ), mock.patch.object(
+            self.admin,
+            "external_proof_autoingest_payload",
+            return_value={
+                "generated_at": "2026-04-20T12:45:00Z",
+                "enabled": True,
+                "current_state": "waiting_for_bundle",
+                "commands_dir": "/docker/fleet/.codex-studio/published/external-proof-commands",
+                "observed_bundle_count": 0,
+                "last_attempt_at": "",
+                "last_success_at": "",
+                "last_result": "waiting_for_bundle",
+                "last_detail": "waiting for a returned host proof bundle",
+                "summary": {"alert_state": "tracking", "alert_reason": "Waiting for a returned host proof bundle."},
+            },
         ):
             payload = self.admin.canonical_public_status_payload(
                 {
@@ -2412,6 +2451,7 @@ class AdminForecastTests(unittest.TestCase):
 
         self.assertEqual(payload["runtime_healing"]["summary"]["alert_state"], "healthy")
         self.assertEqual(payload["runtime_healing"]["services"][0]["service"], "fleet-controller")
+        self.assertEqual(payload["external_proof_autoingest"]["current_state"], "waiting_for_bundle")
 
     def test_canonical_public_status_payload_includes_trace_context(self) -> None:
         with mock.patch.object(self.admin, "runtime_healing_payload", return_value={"generated_at": "2026-03-27T12:00:00Z", "enabled": True, "summary": {}, "services": []}):

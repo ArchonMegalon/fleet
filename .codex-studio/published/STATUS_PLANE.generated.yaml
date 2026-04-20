@@ -1,6 +1,6 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-18T17:24:27Z'
+generated_at: '2026-04-20T11:25:42Z'
 source_public_status_generated_at: '2026-04-04T00:00:00Z'
 mission_snapshot: {}
 queue_forecast: {}
@@ -21,14 +21,17 @@ readiness_summary:
   - hub
   - mobile
   - ui
-  warning_count: 1
+  warning_count: 4
   whole_product_final_claim_accept_lowered_standards: false
   whole_product_final_claim_bar: top_flagship_grade
   whole_product_final_claim_feedback_autofix_loop_required: true
   whole_product_final_claim_ready: 0
   whole_product_final_claim_status: fail
   whole_product_final_claim_warning_keys:
-  - fleet_and_operator_loop
+  - dense_workbench_ready
+  - flagship_ready
+  - primary_route_ready
+  - structural_ready
   whole_product_final_claim_whole_project_frontier_required: true
 final_claim_ready: 3
 final_claim_ready_project_ids:
@@ -42,7 +45,10 @@ whole_product_final_claim_feedback_autofix_loop_required: true
 whole_product_final_claim_accept_lowered_standards: false
 whole_product_final_claim_ready: 0
 whole_product_final_claim_warning_keys:
-- fleet_and_operator_loop
+- dense_workbench_ready
+- flagship_ready
+- primary_route_ready
+- structural_ready
 dispatch_policy: {}
 support_summary: {}
 publish_readiness: {}
@@ -51,6 +57,20 @@ runtime_healing:
   services: []
   summary:
     alert_state: healthy
+external_proof_autoingest:
+  enabled: true
+  current_state: waiting_for_bundle
+  commands_dir: /docker/fleet/.codex-studio/published/external-proof-commands
+  observed_bundle_count: 0
+  last_attempt_at: ''
+  last_success_at: ''
+  last_result: waiting_for_bundle
+  last_detail: waiting for a returned host proof bundle
+  summary:
+    alert_state: tracking
+    alert_reason: Waiting for a returned host proof bundle.
+    recommended_action: Return the Windows host proof bundle to the published external-proof
+      commands directory.
 projects:
 - id: core
   lifecycle: live

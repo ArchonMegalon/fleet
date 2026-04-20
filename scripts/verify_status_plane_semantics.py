@@ -25,6 +25,8 @@ UTC = dt.timezone.utc
 REBUILDER_STATE_DIR = Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
+REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR = REBUILDER_STATE_DIR / "external-proof-autoingest"
+EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH = REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR / "status.json"
 STAGE_ORDER = (
     "pre_repo_local_complete",
     "repo_local_complete",
@@ -444,6 +446,12 @@ def _normalize_runtime_healing(payload: Any) -> Dict[str, Any]:
     return normalized
 
 
+def _normalize_external_proof_autoingest(payload: Any) -> Dict[str, Any]:
+    normalized = dict(payload or {})
+    normalized.pop("generated_at", None)
+    return normalized
+
+
 def _parse_iso(value: Any) -> dt.datetime | None:
     raw = str(value or "").strip()
     if not raw:
@@ -601,6 +609,47 @@ def _runtime_healing_from_autoheal_state() -> Dict[str, Any]:
     }
 
 
+def _external_proof_autoingest_from_state() -> Dict[str, Any]:
+    payload = _load_json_mapping(EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH)
+    if not payload:
+        return {}
+    current_state = str(payload.get("current_state") or "unknown").strip() or "unknown"
+    last_detail = str(payload.get("last_detail") or "").strip()
+    alert_state = "tracking"
+    alert_reason = "Waiting for a returned host proof bundle."
+    recommended_action = "Return the Windows host proof bundle to the published external-proof commands directory."
+    if current_state in {"failed", "blocked", "waiting_for_commands_dir"}:
+        alert_state = "action_needed"
+        alert_reason = last_detail or "External proof auto-ingest is blocked."
+        recommended_action = "Fix the rebuilder proof watcher or rerun finalize-external-host-proof.sh manually."
+    elif current_state == "ingested":
+        alert_state = "healthy"
+        alert_reason = "The latest returned host proof bundle has already been ingested."
+        recommended_action = "No action required until a newer host proof bundle arrives."
+    elif current_state == "ingesting":
+        alert_reason = "A returned host proof bundle is being finalized now."
+        recommended_action = "Wait for the rebuilder finalize flow to finish."
+    elif current_state == "cooldown":
+        alert_reason = last_detail or "External proof auto-ingest is cooling down before retry."
+        recommended_action = "Wait for the retry window or inspect the last failure detail."
+    return {
+        "generated_at": str(payload.get("generated_at") or "").strip(),
+        "enabled": str(os.environ.get("FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED", "true") or "").strip().lower() in {"1", "true", "yes", "on"},
+        "current_state": current_state,
+        "commands_dir": str(payload.get("commands_dir") or "").strip(),
+        "observed_bundle_count": max(0, int(payload.get("observed_bundle_count") or 0)),
+        "last_attempt_at": str(payload.get("last_attempt_at") or "").strip(),
+        "last_success_at": str(payload.get("last_success_at") or "").strip(),
+        "last_result": str(payload.get("last_result") or "").strip(),
+        "last_detail": last_detail,
+        "summary": {
+            "alert_state": alert_state,
+            "alert_reason": alert_reason,
+            "recommended_action": recommended_action,
+        },
+    }
+
+
 def _resolve_runtime_healing(snapshot_runtime_healing: Any) -> Dict[str, Any]:
     snapshot = dict(snapshot_runtime_healing or {})
     local = _runtime_healing_from_autoheal_state()
@@ -616,6 +665,18 @@ def _resolve_runtime_healing(snapshot_runtime_healing: Any) -> Dict[str, Any]:
         return snapshot
     if local_alert != "healthy":
         return snapshot
+    if snapshot_generated is not None and local_generated is not None and local_generated <= snapshot_generated:
+        return snapshot
+    return local
+
+
+def _resolve_external_proof_autoingest(snapshot_external_proof_autoingest: Any) -> Dict[str, Any]:
+    snapshot = dict(snapshot_external_proof_autoingest or {})
+    local = _external_proof_autoingest_from_state()
+    if not local:
+        return snapshot
+    snapshot_generated = _parse_iso(snapshot.get("generated_at"))
+    local_generated = _parse_iso(local.get("generated_at"))
     if snapshot_generated is not None and local_generated is not None and local_generated <= snapshot_generated:
         return snapshot
     return local
@@ -696,6 +757,9 @@ def build_expected_status_plane(admin_status: Dict[str, Any]) -> Dict[str, Any]:
         "support_summary": dict(public_status.get("support_summary") or {}),
         "publish_readiness": dict(public_status.get("publish_readiness") or {}),
         "runtime_healing": _normalize_runtime_healing(_resolve_runtime_healing(public_status.get("runtime_healing") or {})),
+        "external_proof_autoingest": _normalize_external_proof_autoingest(
+            _resolve_external_proof_autoingest(public_status.get("external_proof_autoingest") or {})
+        ),
         "projects": project_rows,
         "groups": group_rows,
     }

@@ -153,6 +153,8 @@ _DB_WAL_LOCK = threading.Lock()
 REBUILDER_STATE_DIR = pathlib.Path(os.environ.get("FLEET_REBUILDER_STATE_DIR", str(FLEET_MOUNT_ROOT / "state" / "rebuilder")))
 REBUILDER_AUTOHEAL_STATE_DIR = REBUILDER_STATE_DIR / "autoheal"
 RUNTIME_HEALING_EVENTS_PATH = REBUILDER_AUTOHEAL_STATE_DIR / "events.jsonl"
+REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR = REBUILDER_STATE_DIR / "external-proof-autoingest"
+EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH = REBUILDER_EXTERNAL_PROOF_AUTOINGEST_STATE_DIR / "status.json"
 CODEX_HOME_ROOT = pathlib.Path(os.environ.get("FLEET_CODEX_HOME_ROOT", "/var/lib/codex-fleet/codex-homes"))
 GROUP_ROOT = pathlib.Path(os.environ.get("FLEET_GROUP_ROOT", str(DB_PATH.parent / "groups")))
 AUDITOR_URL = os.environ.get("FLEET_AUDITOR_URL", "http://fleet-auditor:8093")
@@ -11916,6 +11918,89 @@ def runtime_healing_payload() -> Dict[str, Any]:
     }
 
 
+def external_proof_autoingest_payload() -> Dict[str, Any]:
+    payload = _load_json_mapping(EXTERNAL_PROOF_AUTOINGEST_STATUS_PATH)
+    if not payload:
+        enabled = str(os.environ.get("FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED", "true") or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        current_state = "waiting_for_bundle" if enabled else "disabled"
+        alert_state = "tracking" if enabled else "disabled"
+        recommended_action = (
+            "Return the Windows host proof bundle to the published external-proof commands directory."
+            if enabled
+            else "Enable external proof auto-ingest or run finalize-external-host-proof.sh manually."
+        )
+        return {
+            "generated_at": "",
+            "enabled": enabled,
+            "current_state": current_state,
+            "commands_dir": str(FLEET_MOUNT_ROOT / ".codex-studio" / "published" / "external-proof-commands"),
+            "observed_bundle_fingerprint": "",
+            "observed_bundle_count": 0,
+            "last_attempt_at": "",
+            "last_success_at": "",
+            "last_result": current_state,
+            "last_detail": "external proof auto-ingest state is not yet initialized",
+            "summary": {
+                "alert_state": alert_state,
+                "alert_reason": "Waiting for a returned host proof bundle." if enabled else "External proof auto-ingest is disabled.",
+                "recommended_action": recommended_action,
+            },
+        }
+
+    current_state = str(payload.get("current_state") or "unknown").strip() or "unknown"
+    last_result = str(payload.get("last_result") or "").strip()
+    last_detail = str(payload.get("last_detail") or "").strip()
+    enabled = str(os.environ.get("FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED", "true") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    alert_state = "tracking"
+    alert_reason = "Waiting for a returned host proof bundle."
+    recommended_action = "Return the Windows host proof bundle to the published external-proof commands directory."
+    if current_state in {"failed", "blocked"}:
+        alert_state = "action_needed"
+        alert_reason = last_detail or "External proof auto-ingest is blocked."
+        recommended_action = "Inspect the rebuilder external-proof-autoingest status and rerun finalize-external-host-proof.sh after fixing the blocker."
+    elif current_state == "ingested":
+        alert_state = "healthy"
+        alert_reason = "The latest returned host proof bundle has already been ingested."
+        recommended_action = "No action required until a newer host proof bundle arrives."
+    elif current_state == "ingesting":
+        alert_reason = "A returned host proof bundle is being finalized now."
+        recommended_action = "Wait for the rebuilder to finish the finalize-external-host-proof.sh flow."
+    elif current_state == "cooldown":
+        alert_reason = last_detail or "External proof auto-ingest is cooling down before a retry."
+        recommended_action = "Wait for the retry window or inspect the last failure detail in the rebuilder state."
+    elif current_state == "waiting_for_commands_dir":
+        alert_state = "action_needed"
+        alert_reason = last_detail or "External proof commands directory is missing."
+        recommended_action = "Regenerate the external proof command pack before expecting host proof auto-ingest."
+    return {
+        "generated_at": str(payload.get("generated_at") or "").strip(),
+        "enabled": enabled,
+        "current_state": current_state,
+        "commands_dir": str(payload.get("commands_dir") or "").strip(),
+        "observed_bundle_fingerprint": str(payload.get("observed_bundle_fingerprint") or "").strip(),
+        "observed_bundle_count": max(0, _coerce_int(payload.get("observed_bundle_count"), 0)),
+        "last_attempt_at": str(payload.get("last_attempt_at") or "").strip(),
+        "last_success_at": str(payload.get("last_success_at") or "").strip(),
+        "last_result": last_result,
+        "last_detail": last_detail,
+        "summary": {
+            "alert_state": alert_state,
+            "alert_reason": alert_reason,
+            "recommended_action": recommended_action,
+        },
+    }
+
+
 def maybe_refresh_published_artifacts(*, status_payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     freshness = published_artifact_freshness_payload()
     refreshable = _refreshable_artifact_keys(freshness)
@@ -12653,6 +12738,7 @@ def canonical_public_status_payload(status: Dict[str, Any], *, cache_only: bool 
         if str(project.get("active_run_trace_id") or "").strip()
     ]
     runtime_healing = dict(status.get("runtime_healing") or runtime_healing_payload())
+    external_proof_autoingest = dict(status.get("external_proof_autoingest") or external_proof_autoingest_payload())
     compile_manifest = compile_manifest_surface_payload()
     support_surface = support_case_surface_payload()
     journey_gates = journey_gates_surface_payload()
@@ -12788,6 +12874,18 @@ def canonical_public_status_payload(status: Dict[str, Any], *, cache_only: bool 
                 }
                 for item in (runtime_healing.get("services") or [])
             ],
+        },
+        "external_proof_autoingest": {
+            "generated_at": external_proof_autoingest.get("generated_at"),
+            "enabled": bool(external_proof_autoingest.get("enabled")),
+            "current_state": external_proof_autoingest.get("current_state"),
+            "commands_dir": external_proof_autoingest.get("commands_dir"),
+            "observed_bundle_count": int(external_proof_autoingest.get("observed_bundle_count") or 0),
+            "last_attempt_at": external_proof_autoingest.get("last_attempt_at"),
+            "last_success_at": external_proof_autoingest.get("last_success_at"),
+            "last_result": external_proof_autoingest.get("last_result"),
+            "last_detail": external_proof_autoingest.get("last_detail"),
+            "summary": dict(external_proof_autoingest.get("summary") or {}),
         },
         "publish_readiness": publish_readiness,
         "provider_routes": provider_routes,
