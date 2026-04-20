@@ -64,6 +64,48 @@ def test_normalized_script_commands_preserve_quoted_python_shell_commands() -> N
     }
 
 
+def test_windows_wrapper_contains_command_accepts_portable_startup_smoke_wrapper() -> None:
+    module = _load_verify_external_proof_closure_module()
+
+    command = (
+        'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && '
+        'INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" && '
+        'STARTUP_SMOKE_DIR="$REPO_ROOT/Docker/Downloads/startup-smoke" && cd "$REPO_ROOT" && '
+        'CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host '
+        'CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows '
+        './scripts/run-desktop-startup-smoke.sh "$INSTALLER_PATH" avalonia win-x64 Chummer.Avalonia.exe "$STARTUP_SMOKE_DIR" run-20260420-072339'
+    )
+    wrapper_payload = (
+        "$ErrorActionPreference = 'Stop'\n"
+        "Set-StrictMode -Version Latest\n"
+        "bash -lc 'REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\" && export REPO_ROOT && "
+        "INSTALLER_PATH=\"$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe\" && "
+        "STARTUP_SMOKE_DIR=\"$REPO_ROOT/Docker/Downloads/startup-smoke\" && cd \"$REPO_ROOT\" && "
+        "CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host "
+        "CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows "
+        "./scripts/run-desktop-startup-smoke.sh \"$INSTALLER_PATH\" avalonia win-x64 Chummer.Avalonia.exe "
+        "\"$STARTUP_SMOKE_DIR\" run-20260420-072339'\n"
+    )
+
+    assert module._windows_wrapper_contains_command(wrapper_payload, command) is True
+
+
+def test_payload_mentions_download_path_accepts_portable_env_based_downloads_root() -> None:
+    module = _load_verify_external_proof_closure_module()
+
+    payload = (
+        'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"\n'
+        'DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads"\n'
+        'INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-avalonia-win-x64-installer.exe"\n'
+    )
+
+    assert module._payload_mentions_download_path(
+        payload,
+        relative_path="files/chummer-avalonia-win-x64-installer.exe",
+        file_name="chummer-avalonia-win-x64-installer.exe",
+    ) is True
+
+
 def test_closure_verifier_rejects_bundle_script_without_stale_archive_cleanup(tmp_path: Path) -> None:
     support_packets, journey_gates, release_channel, runbook, commands_dir = _write_open_windows_external_proof_fixture(
         tmp_path

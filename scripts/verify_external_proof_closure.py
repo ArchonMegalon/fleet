@@ -381,6 +381,87 @@ def _powershell_wrap(command: str) -> str:
     return f"bash -lc '{escaped}'"
 
 
+def _extract_windows_wrapper_commands(payload: str) -> list[str]:
+    commands: list[str] = []
+    pending: list[str] = []
+    for raw_line in payload.splitlines():
+        stripped = raw_line.strip()
+        if not pending:
+            if not stripped.startswith("bash -lc '"):
+                continue
+            pending.append(raw_line)
+            if stripped.endswith("'"):
+                block = "\n".join(pending)
+                pending.clear()
+                inner = block.strip()[len("bash -lc '") : -1].replace("''", "'")
+                commands.append(inner)
+            continue
+        pending.append(raw_line)
+        if stripped.endswith("'"):
+            block = "\n".join(pending)
+            pending.clear()
+            inner = block.strip()[len("bash -lc '") : -1].replace("''", "'")
+            commands.append(inner)
+    return commands
+
+
+def _windows_wrapper_contains_command(payload: str, command: str) -> bool:
+    if not payload:
+        return False
+    wrapped = _powershell_wrap(command)
+    if wrapped in payload:
+        return True
+    raw = _normalized_token(command)
+    normalized = _normalize_proof_capture_command(command)
+    payload_variants = [payload, payload.replace("''", "'")]
+    if raw and any(raw in variant for variant in payload_variants):
+        return True
+    if normalized and any(normalized in variant for variant in payload_variants):
+        return True
+    wrapper_commands = _extract_windows_wrapper_commands(payload)
+    normalized_wrapper_commands = {
+        normalized_inner
+        for normalized_inner in (
+            _normalize_proof_capture_command(inner) for inner in wrapper_commands
+        )
+        if normalized_inner
+    }
+    if raw and raw in wrapper_commands:
+        return True
+    if normalized and normalized in normalized_wrapper_commands:
+        return True
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    return bool(lines) and all(any(line in variant for variant in payload_variants) for line in lines)
+
+
+def _payload_mentions_download_path(payload: str, *, relative_path: str = "", file_name: str = "") -> bool:
+    normalized_payload = _normalized_token(payload)
+    relative_token = _normalized_token(relative_path).lstrip("/")
+    file_token = _normalized_token(file_name) or (Path(relative_token).name if relative_token else "")
+    absolute_token = ""
+    if relative_token:
+        absolute_token = str(UI_DOCKER_DOWNLOADS_ROOT / relative_token)
+    elif file_token:
+        absolute_token = str(UI_DOCKER_DOWNLOADS_ROOT / "files" / file_token)
+    if absolute_token and absolute_token in normalized_payload:
+        return True
+    if relative_token and relative_token in normalized_payload and (
+        "DOWNLOADS_ROOT" in normalized_payload
+        or "TARGET_ROOT" in normalized_payload
+        or "REPO_ROOT/Docker/Downloads" in normalized_payload
+    ):
+        return True
+    if file_token and file_token in normalized_payload and (
+        "DOWNLOADS_ROOT" in normalized_payload
+        or "TARGET_ROOT" in normalized_payload
+        or "INSTALLER_PATH" in normalized_payload
+        or "RECEIPT_PATH" in normalized_payload
+        or "REPO_ROOT/Docker/Downloads" in normalized_payload
+    ):
+        return True
+    return False
+
+
 def _require_windows_wrapper_failfast(
     *,
     payload: str,
@@ -2413,7 +2494,9 @@ def main() -> int:
                                         wrapped_capture_command = _powershell_wrap(command)
                                         if (
                                             not capture_wrapper_loaded
-                                            or wrapped_capture_command not in capture_wrapper_payload
+                                            or not _windows_wrapper_contains_command(
+                                                capture_wrapper_payload, command
+                                            )
                                         ):
                                             failures.append(
                                                 "external proof windows capture wrapper is missing tuple proof_capture_commands entry "
@@ -2490,7 +2573,11 @@ def main() -> int:
                                 )
                             if installer_capture_path and (
                                 not capture_script_loaded
-                                or installer_capture_path not in capture_script_payload
+                                or not _payload_mentions_download_path(
+                                    capture_script_payload,
+                                    relative_path=installer_relative_path,
+                                    file_name=installer_file_name,
+                                )
                             ):
                                 failures.append(
                                     "external proof capture script does not reference expected installer capture path "
@@ -2501,7 +2588,11 @@ def main() -> int:
                                 and installer_capture_path
                                 and (
                                     not capture_wrapper_loaded
-                                    or installer_capture_path not in capture_wrapper_payload
+                                    or not _payload_mentions_download_path(
+                                        capture_wrapper_payload,
+                                        relative_path=installer_relative_path,
+                                        file_name=installer_file_name,
+                                    )
                                 )
                             ):
                                 failures.append(
@@ -2550,13 +2641,20 @@ def main() -> int:
                                 installer_path = (
                                     str(UI_DOCKER_DOWNLOADS_ROOT / "files" / installer_file_name)
                                 )
-                                if not validation_script_loaded or installer_path not in validation_script_payload:
+                                if not validation_script_loaded or not _payload_mentions_download_path(
+                                    validation_script_payload,
+                                    file_name=installer_file_name,
+                                ):
                                     failures.append(
                                         "external proof validation script does not reference expected installer path "
                                         f"for tuple {tuple_id}: {installer_path}"
                                     )
                                 if host == "windows" and (
-                                    not validation_wrapper_loaded or installer_path not in validation_wrapper_payload
+                                    not validation_wrapper_loaded
+                                    or not _payload_mentions_download_path(
+                                        validation_wrapper_payload,
+                                        file_name=installer_file_name,
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows validation wrapper does not reference expected installer path "
@@ -2569,7 +2667,10 @@ def main() -> int:
                                 )
                                 if (
                                     not validation_script_loaded
-                                    or installer_relative_absolute not in validation_script_payload
+                                    or not _payload_mentions_download_path(
+                                        validation_script_payload,
+                                        relative_path=installer_relative_path,
+                                    )
                                 ):
                                     failures.append(
                                         "external proof validation script does not reference expected installer relative path "
@@ -2577,7 +2678,10 @@ def main() -> int:
                                     )
                                 if host == "windows" and (
                                     not validation_wrapper_loaded
-                                    or installer_relative_absolute not in validation_wrapper_payload
+                                    or not _payload_mentions_download_path(
+                                        validation_wrapper_payload,
+                                        relative_path=installer_relative_path,
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows validation wrapper does not reference expected installer relative path "
@@ -2729,7 +2833,10 @@ def main() -> int:
                                 )
                             if installer_bundle_source_path and (
                                 not bundle_script_loaded
-                                or installer_bundle_source_path not in bundle_script_payload
+                                or not _payload_mentions_download_path(
+                                    bundle_script_payload,
+                                    relative_path=installer_bundle_relative_path,
+                                )
                             ):
                                 failures.append(
                                     "external proof bundle script does not reference expected installer source path "
@@ -2925,7 +3032,9 @@ def main() -> int:
                                 wrapped_validation_command = _powershell_wrap(command)
                                 if (
                                     not validation_wrapper_loaded
-                                    or wrapped_validation_command not in validation_wrapper_payload
+                                    or not _windows_wrapper_contains_command(
+                                        validation_wrapper_payload, command
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows validation wrapper is missing wrapped validation command: "
@@ -2936,7 +3045,9 @@ def main() -> int:
                                 wrapped_bundle_command = _powershell_wrap(command)
                                 if (
                                     not bundle_wrapper_loaded
-                                    or wrapped_bundle_command not in bundle_wrapper_payload
+                                    or not _windows_wrapper_contains_command(
+                                        bundle_wrapper_payload, command
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows bundle wrapper is missing wrapped bundle command: "
@@ -2947,7 +3058,9 @@ def main() -> int:
                                 wrapped_ingest_command = _powershell_wrap(command)
                                 if (
                                     not ingest_wrapper_loaded
-                                    or wrapped_ingest_command not in ingest_wrapper_payload
+                                    or not _windows_wrapper_contains_command(
+                                        ingest_wrapper_payload, command
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows ingest wrapper is missing wrapped ingest command: "
@@ -2971,7 +3084,9 @@ def main() -> int:
                                 wrapped_preflight_command = _powershell_wrap(command)
                                 if (
                                     not preflight_wrapper_loaded
-                                    or wrapped_preflight_command not in preflight_wrapper_payload
+                                    or not _windows_wrapper_contains_command(
+                                        preflight_wrapper_payload, command
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows preflight wrapper is missing wrapped preflight command: "
@@ -2982,7 +3097,9 @@ def main() -> int:
                                 wrapped_host_lane_command = _powershell_wrap(command)
                                 if (
                                     not host_lane_wrapper_loaded
-                                    or wrapped_host_lane_command not in host_lane_wrapper_payload
+                                    or not _windows_wrapper_contains_command(
+                                        host_lane_wrapper_payload, command
+                                    )
                                 ):
                                     failures.append(
                                         "external proof windows host lane wrapper is missing wrapped host lane command: "
