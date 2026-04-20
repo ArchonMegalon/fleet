@@ -132,6 +132,44 @@ def _sample_admin_status() -> dict:
     }
 
 
+def test_flagship_claim_status_uses_readiness_plane_gaps_when_coverage_is_green() -> None:
+    module = _load_module()
+    readiness_path = Path("/tmp/fleet-flagship-readiness.verify.json")
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "status": "fail",
+                "warning_keys": [],
+                "flagship_readiness_audit": {"warning_coverage_keys": []},
+                "coverage": {
+                    "desktop_client": "ready",
+                    "fleet_and_operator_loop": "ready",
+                },
+                "readiness_planes": {
+                    "structural_ready": {"status": "missing"},
+                    "flagship_ready": {"status": "warning"},
+                    "veteran_ready": {"status": "ready"},
+                },
+                "quality_policy": {
+                    "bar": "top_flagship_grade",
+                    "whole_project_frontier_required": True,
+                    "feedback_autofix_loop_required": True,
+                    "accept_lowered_standards": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        with mock.patch.object(module, "FLAGSHIP_READINESS_PATH", readiness_path):
+            claim = module._flagship_claim_status()
+    finally:
+        readiness_path.unlink(missing_ok=True)
+
+    assert claim["status"] == "fail"
+    assert claim["warning_keys"] == ["flagship_ready", "structural_ready"]
+
+
 class VerifyStatusPlaneSemanticsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.verify = _load_module()

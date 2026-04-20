@@ -67,6 +67,15 @@ def _flagship_claim_status() -> Dict[str, Any]:
         warning_keys = sorted(
             key for key, value in coverage.items() if str(key).strip() and str(value).strip().lower() == "warning"
         )
+    if not warning_keys:
+        readiness_planes = dict(payload.get("readiness_planes") or {})
+        warning_keys = sorted(
+            key
+            for key, value in readiness_planes.items()
+            if str(key).strip()
+            and isinstance(value, dict)
+            and str(value.get("status") or "").strip().lower() in {"warning", "missing"}
+        )
     quality_policy = dict(payload.get("quality_policy") or {})
     return {
         "status": str(payload.get("status") or "").strip().lower() or "unknown",

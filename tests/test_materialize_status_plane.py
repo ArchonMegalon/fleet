@@ -596,6 +596,30 @@ path: {tmp_path / "hub-registry"}
     assert rows[0]["readiness"]["stage"] == "repo_local_complete"
 
 
+def test_materialize_status_plane_defaults_status_snapshot_out_for_live_runs(monkeypatch, tmp_path: Path) -> None:
+    out_path = tmp_path / "STATUS_PLANE.generated.yaml"
+    snapshot_path = tmp_path / "status-plane.verify.json"
+    admin_status = {
+        "generated_at": "2026-04-20T12:00:00Z",
+        "public_status": {
+            "generated_at": "2026-04-20T12:00:00Z",
+            "deployment_posture": {},
+            "readiness_summary": {"counts": {}, "warning_count": 0, "final_claim_ready": 0},
+            "runtime_healing": {"generated_at": "2026-04-20T12:00:00Z", "enabled": True, "summary": {"alert_state": "healthy"}, "services": []},
+        },
+        "projects": [],
+        "groups": [],
+    }
+    monkeypatch.setattr(materialize_status_plane_module, "DEFAULT_STATUS_JSON_SNAPSHOT_PATH", snapshot_path)
+    monkeypatch.setattr(materialize_status_plane_module, "load_admin_status", lambda *_args, **_kwargs: admin_status)
+
+    result = materialize_status_plane_module.main(["--out", str(out_path)])
+
+    assert result == 0
+    snapshot_payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert snapshot_payload["generated_at"] == "2026-04-20T12:00:00Z"
+
+
 def test_core_fallback_stage_uses_import_parity_and_engine_proof(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "config" / "projects"
     published_dir = tmp_path / "core" / ".codex-studio" / "published"

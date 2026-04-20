@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 
 try:
     from scripts.verify_status_plane_semantics import (
+        DEFAULT_STATUS_JSON_SNAPSHOT_PATH,
         DEFAULT_STATUS_PLANE_PATH,
         StatusPlaneDriftError,
         build_expected_status_plane,
@@ -25,6 +26,7 @@ try:
     )
 except ModuleNotFoundError:
     from verify_status_plane_semantics import (
+        DEFAULT_STATUS_JSON_SNAPSHOT_PATH,
         DEFAULT_STATUS_PLANE_PATH,
         StatusPlaneDriftError,
         build_expected_status_plane,
@@ -503,7 +505,12 @@ def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     output_path = Path(args.out).resolve()
     status_json_path = Path(args.status_json).resolve() if args.status_json else None
-    status_json_out_path = Path(args.status_json_out).resolve() if args.status_json_out else None
+    if args.status_json_out:
+        status_json_out_path = Path(args.status_json_out).resolve()
+    elif status_json_path is None:
+        status_json_out_path = Path(DEFAULT_STATUS_JSON_SNAPSHOT_PATH).resolve()
+    else:
+        status_json_out_path = None
 
     try:
         admin_status = load_admin_status(status_json_path, use_default_snapshot=True)

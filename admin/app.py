@@ -13418,6 +13418,11 @@ def api_admin_status() -> Dict[str, Any]:
     return status_surface_payload(admin_status_payload())
 
 
+@app.get("/api/admin/status-lite")
+def api_admin_status_lite() -> Dict[str, Any]:
+    return status_surface_payload(admin_status_payload(public_mode=True))
+
+
 @app.get("/api/public/status")
 def api_public_status() -> Dict[str, Any]:
     return public_dashboard_status_payload()

@@ -338,14 +338,14 @@ admin_status() {
   password="$(operator_password)"
   temp_status="$(mktemp /tmp/fleet_admin_status_wrapper.XXXXXX.json)"
   trap 'rm -f "${temp_status}"' RETURN
-  if docker_exec_curl_with_operator_auth fleet-admin "${password}" -fsS \
-    http://127.0.0.1:8092/api/admin/status >"${temp_status}" 2>/dev/null; then
+  if timeout 20 docker_exec_curl_with_operator_auth fleet-admin "${password}" -fsS --connect-timeout 5 --max-time 15 \
+    http://127.0.0.1:8092/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
     cat "${temp_status}"
     return 0
   fi
   auth_config="$(build_operator_auth_config "${password}")"
-  if curl -fsS -K "${auth_config}" \
-    http://127.0.0.1:18090/api/admin/status >"${temp_status}" 2>/dev/null; then
+  if timeout 20 curl -fsS --connect-timeout 5 --max-time 15 -K "${auth_config}" \
+    http://127.0.0.1:18090/api/admin/status-lite >"${temp_status}" 2>/dev/null; then
     cleanup_curl_auth_config "${auth_config}"
     cat "${temp_status}"
     return 0

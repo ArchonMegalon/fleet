@@ -1,43 +1,1013 @@
 contract_name: fleet.status_plane
 schema_version: 1
-generated_at: '2026-04-20T11:25:42Z'
-source_public_status_generated_at: '2026-04-04T00:00:00Z'
-mission_snapshot: {}
-queue_forecast: {}
-capacity_forecast: {}
-blocker_forecast: {}
+generated_at: '2026-04-20T11:37:04Z'
+source_public_status_generated_at: '2026-04-20T11:36:58Z'
+mission_snapshot:
+  headline: 'Working now: Auto-detect and repair recurring `core` mirror drift after
+    3111 repeated audit observations; keep one bounded queue slice for the affected
+    local design mirror bundle instead of reopening one-off mirror refresh work..
+    ETA: 1h. Next: Finish milestone coverage modeling for hub-registry so ETA and
+    completion truth are no longer partial.. Vision: 0s. Capacity: Core 14%, Easy
+    14%, Jury n/a. Stop risk: none.'
+  current_eta: 1h
+  next_title: Finish milestone coverage modeling for hub-registry so ETA and completion
+    truth are no longer partial.
+  vision_eta: 0s
+  milestone_title: chummer-vnext
+  milestone_eta: 0s
+  lane_capacity_summary:
+  - Core 14%
+  - Easy 14%
+  - Jury n/a
+  stop_risk: none
+queue_forecast:
+  now:
+    project_id: core
+    title: Auto-detect and repair recurring `core` mirror drift after 3111 repeated
+      audit observations; keep one bounded queue slice for the affected local design
+      mirror bundle instead of reopening one-off mirror refresh work.
+    lane: easy
+    provider: not active
+    brain: not active
+    reason: interactive_or_first_pass
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: true
+    prerequisites: project is cooling down after a recent failure or rate limit
+  next:
+    project_id: hub-registry
+    title: Finish milestone coverage modeling for hub-registry so ETA and completion
+      truth are no longer partial.
+    lane: easy
+    provider: not active
+    brain: not active
+    reason: interactive_or_first_pass
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: true
+    prerequisites: project is cooling down after a recent failure or rate limit
+    confidence: stable
+  then:
+    project_id: media-factory
+    title: Publish or append runnable backlog for The asset kernel still needs manifests,
+      binary storage, render jobs, previews, TTL, retention, and lineage before renderer-specific
+      pipelines move here..
+    lane: easy
+    provider: not active
+    brain: not active
+    reason: interactive_or_first_pass
+    elapsed_seconds: 0
+    elapsed_human: 0s
+    remaining_seconds: 3600
+    remaining_human: 1h
+    total_seconds: 3600
+    total_human: 1h
+    verify_or_review_ahead: true
+    prerequisites: configured queue has remaining work and is waiting for scheduler
+      dispatch
+    confidence: stable
+capacity_forecast:
+  lanes:
+  - lane: easy
+    profile: easy
+    model: ea-coder-fast
+    brain: ea-coder-fast
+    backend: onemin
+    provider: magixai
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: magixai
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 0.135926
+    local_run_count: 1
+    mission_ready: true
+  - lane: repair
+    profile: repair
+    model: ea-coder-fast
+    brain: ea-coder-fast
+    backend: onemin
+    provider: magixai
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: magixai
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: groundwork
+    profile: groundwork
+    model: ea-groundwork-gemini
+    brain: ea-groundwork-gemini
+    backend: gemini_vortex
+    provider: gemini_vortex
+    state: missing
+    remaining_percent: null
+    remaining_text: missing
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: unknown
+    native_allowance:
+      provider_key: gemini_vortex
+      state: missing
+      remaining_percent_of_max: null
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 2
+    ready_slots: 0
+    degraded_slots: 0
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: false
+  - lane: review_light
+    profile: review_light
+    model: ea-review-light
+    brain: ea-review-light
+    backend: chatplayground
+    provider: browseract
+    state: ready
+    remaining_percent: null
+    remaining_text: ready
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: Forever on trend
+    native_allowance:
+      provider_key: browseract
+      state: ready
+      remaining_percent_of_max: null
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: core
+    profile: core
+    model: ea-coder-hard
+    brain: ea-coder-hard
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 43672282
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 61.460199
+    local_run_count: 175
+    mission_ready: true
+  - lane: core_authority
+    profile: core
+    model: ea-coder-hard
+    brain: ea-coder-hard
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 43672282
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: core_booster
+    profile: core
+    model: ea-coder-hard
+    brain: ea-coder-hard
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 43672282
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: core_rescue
+    profile: core
+    model: ea-coder-hard
+    brain: ea-coder-hard
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 43672282
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: review_shard
+    profile: review_light
+    model: ea-review-light
+    brain: ea-review-light
+    backend: chatplayground
+    provider: browseract
+    state: ready
+    remaining_percent: null
+    remaining_text: ready
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: Forever on trend
+    native_allowance:
+      provider_key: browseract
+      state: ready
+      remaining_percent_of_max: null
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: audit_shard
+    profile: audit
+    model: ea-audit-jury
+    brain: ea-audit-jury
+    backend: chatplayground
+    provider: browseract
+    state: ready
+    remaining_percent: null
+    remaining_text: ready
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: Forever on trend
+    native_allowance:
+      provider_key: browseract
+      state: ready
+      remaining_percent_of_max: null
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: jury
+    profile: audit
+    model: ea-audit-jury
+    brain: ea-audit-jury
+    backend: chatplayground
+    provider: browseract
+    state: ready
+    remaining_percent: null
+    remaining_text: ready
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: Forever on trend
+    native_allowance:
+      provider_key: browseract
+      state: ready
+      remaining_percent_of_max: null
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: null
+      max_requests_per_hour: null
+      max_credits_per_hour: null
+      max_credits_per_day: null
+    configured_slots: 1
+    ready_slots: 1
+    degraded_slots: 0
+    slot_owners: []
+    local_estimated_burn_usd: 0.0
+    local_run_count: 0
+    mission_ready: true
+  - lane: survival
+    profile: survival
+    model: ea-coder-survival
+    brain: ea-coder-survival
+    backend: onemin
+    provider: onemin
+    state: ready
+    remaining_percent: 14.22
+    remaining_text: 14%
+    hours_text: unknown
+    hot_runway: unknown
+    sustainable_runway: 14% allowance
+    native_allowance:
+      provider_key: onemin
+      state: ready
+      remaining_percent_of_max: 14.22
+      estimated_hours_remaining_at_current_pace: null
+      estimated_burn_credits_per_hour: null
+      estimated_remaining_credits_total: 43672282
+      max_requests_per_hour: 120
+      max_credits_per_hour: 80000
+      max_credits_per_day: 600000
+    configured_slots: 69
+    ready_slots: 68
+    degraded_slots: 1
+    slot_owners:
+    - tibor.girschele@gmail.com
+    - archon.megalon@gmail.com
+    - the.girscheles@gmail.com
+    - 1min1@girschele.com
+    - 1min2@girschele.com
+    - 1min3@girschele.com
+    - tibor.hoza@gmail.com
+    - noah.girschele@gmail.com
+    - elisabeth.girschele@gmail.com
+    - vermisst.ma01.wien@gmail.com
+    - peter@chummer.run
+    - franz@chummer.run
+    - errant@chummer.run
+    - tibor.hoza@wien.gv.at
+    - office@chummer.run
+    - support@chummer.run
+    - invoice@chummer.run
+    - zmhms86kcg@privaterelay.appleid.com
+    - uk@chummer.run
+    - us@chummer.run
+    - ny@chummer.run
+    - sk@chummer.run
+    - hk@chummer.run
+    - usport@chummer.run
+    - tk@chummer.run
+    - it@chummer.run
+    - nr@chummer.run
+    - fi@chummer.run
+    - ru@chummer.run
+    - pl@chummer.run
+    - au@chummer.run
+    - id@chummer.run
+    - pt@chummer.run
+    - es@chummer.run
+    - swiss@chummer.run
+    - sp@chummer.run
+    - be@chummer.run
+    - co@chummer.run
+    - dk@chummer.run
+    - Jaciara.Cavalcanti@myexternalbrain.com
+    - Ladina.Zgraggen@myexternalbrain.com
+    - Kateri.Parenteau@myexternalbrain.com
+    - Saga.Silfverberg@myexternalbrain.com
+    - Csenge.Solymosi@myexternalbrain.com
+    - Philomene.Goudreau@myexternalbrain.com
+    - Elvira.Fortunato@myexternalbrain.com
+    - Julia.Lagahuzere@myexternalbrain.com
+    - Rosa.Mota@myexternalbrain.com
+    - Valmai.Johnston@myexternalbrain.com
+    - oie.Sepp@chummer.run
+    - Aziliz.Tanguy@chummer.run
+    - Heidrun.Kretschmer@chummer.run
+    - Zara.Tindall@myexternalbrain.com
+    - Lamija.Hodzic@myexternalbrain.com
+    - Yoon.Bada@myexternalbrain.com
+    - anzorigiin.Nomuun@myexternalbrain.com
+    - boldbaataryn.Selenge@myexternalbrain.com
+    - Sihana.Berisha@myexternalbrain.com
+    - Era.Gashi@myexternalbrain.com
+    local_estimated_burn_usd: 0.0
+    local_run_count: 1
+    mission_ready: true
+  critical_path_lane: core
+  critical_path_stop: unknown
+  pool_runway: unknown
+  mission_runway: unknown
+  group_pressure:
+  - group_id: chummer-vnext
+    runway_risk: high
+    pool_level: unknown
+    finish_outlook: public_fast_path
+    eligible_parallel_slots: 0
+    remaining_slices: 0
+    slot_share_percent: 0
+    drain_share_percent: 0
+    bottleneck: 'design: waiting on review lane'
+    deployment_summary: Public Chummer portal is live at chummer.run as a promoted
+      preview release shell for the split heads.
+    program_eta: 0s
+    confidence: high
+  - group_id: control-plane
+    runway_risk: high
+    pool_level: unknown
+    finish_outlook: public_fast_path
+    eligible_parallel_slots: 0
+    remaining_slices: 0
+    slot_share_percent: 0
+    drain_share_percent: 0
+    bottleneck: group dispatch is allowed
+    deployment_summary: Fleet control-plane services and the governed EA runtime substrate
+      are internal-only operator surfaces.
+    program_eta: 0s
+    confidence: high
+  account_pressure: []
+blocker_forecast:
+  now: project is cooling down after a recent failure or rate limit
+  next: project is cooling down after a recent failure or rate limit
+  vision: GitHub review waits, stalled review requests, and failed review sync
 deployment_posture:
-  access_posture: protected_preview
-  promotion_stage: protected_preview
+  operator_auth_required: true
+  login_path: /admin/login
+  dashboard_path: /
+  mission_bridge_path: /
+  ops_path: /ops/
+  command_deck_path: /admin
+  explorer_path: /admin/details
+  studio_path: /studio
+  public_target_count: 11
+  public_targets:
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run
+    display: Public Chummer portal is live at chummer.run as a promoted preview release
+      shell for the split heads.
+    surface: public portal shell
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/hub/
+    display: hub
+    surface: hosted hub head
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/blazor/
+    display: workbench
+    surface: browser workbench preview
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/session
+    display: play
+    surface: player and GM shell preview
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: chummer-vnext
+    target_url: https://chummer.run/coach/
+    display: coach
+    surface: coach preview
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: group
+    scope_id: control-plane
+    target_url: http://127.0.0.1:18090
+    display: Fleet control-plane services and the governed EA runtime substrate are
+      internal-only operator surfaces.
+    surface: local operator dashboard
+    status: internal
+    promotion_stage: internal
+    release_gate: ''
+  - scope_type: group
+    scope_id: control-plane
+    target_url: http://127.0.0.1:18090/admin
+    display: admin
+    surface: local operator admin
+    status: internal
+    promotion_stage: internal
+    release_gate: ''
+  - scope_type: group
+    scope_id: control-plane
+    target_url: http://127.0.0.1:18090/studio
+    display: studio
+    surface: local fleet studio
+    status: internal
+    promotion_stage: internal
+    release_gate: ''
+  - scope_type: project
+    scope_id: ui
+    target_url: https://chummer.run/blazor/
+    display: Public browser workbench is live at /blazor/ on chummer.run as a promoted
+      preview deployment.
+    surface: browser workbench on the public Chummer portal
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: project
+    scope_id: hub
+    target_url: https://chummer.run/hub/
+    display: Public hub is live at /hub/ on chummer.run as a promoted preview deployment
+      for account-aware continuity, support closure, and coordination.
+    surface: hosted hub on the public Chummer portal
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
+  - scope_type: project
+    scope_id: mobile
+    target_url: https://chummer.run/session
+    display: Public session shell is live at /session/ on chummer.run as a promoted
+      preview deployment with rejoin and resume guarantees.
+    surface: play shell on the public Chummer portal
+    status: public
+    promotion_stage: promoted_preview
+    release_gate: ''
 readiness_summary:
   counts:
-    pre_repo_local_complete: 1
-    repo_local_complete: 2
+    pre_repo_local_complete: 0
+    repo_local_complete: 3
     package_canonical: 0
     boundary_pure: 5
     publicly_promoted: 3
-  final_claim_ready: 3
+  warning_count: 4
+  final_claim_ready: 4
   final_claim_ready_project_ids:
   - hub
   - mobile
   - ui
-  warning_count: 4
-  whole_product_final_claim_accept_lowered_standards: false
-  whole_product_final_claim_bar: top_flagship_grade
-  whole_product_final_claim_feedback_autofix_loop_required: true
-  whole_product_final_claim_ready: 0
+  - ui-kit
   whole_product_final_claim_status: fail
+  whole_product_final_claim_bar: top_flagship_grade
+  whole_product_final_claim_whole_project_frontier_required: true
+  whole_product_final_claim_feedback_autofix_loop_required: true
+  whole_product_final_claim_accept_lowered_standards: false
+  whole_product_final_claim_ready: 0
   whole_product_final_claim_warning_keys:
   - dense_workbench_ready
   - flagship_ready
   - primary_route_ready
   - structural_ready
-  whole_product_final_claim_whole_project_frontier_required: true
-final_claim_ready: 3
+final_claim_ready: 4
 final_claim_ready_project_ids:
 - hub
 - mobile
 - ui
+- ui-kit
 whole_product_final_claim_status: fail
 whole_product_final_claim_bar: top_flagship_grade
 whole_product_final_claim_whole_project_frontier_required: true
@@ -49,14 +1019,276 @@ whole_product_final_claim_warning_keys:
 - flagship_ready
 - primary_route_ready
 - structural_ready
-dispatch_policy: {}
-support_summary: {}
-publish_readiness: {}
+dispatch_policy:
+  participant_dispatch_canary_count: 2
+  participant_dispatch_canaries:
+  - project_id: core
+    review_mode: github
+    eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    landing_lane: jury
+    require_jury_before_land: true
+    participant_first_dispatch: true
+  - project_id: hub
+    review_mode: github
+    eligible_task_classes:
+    - bounded_fix
+    - multi_file_impl
+    landing_lane: jury
+    require_jury_before_land: true
+    participant_first_dispatch: true
+  operator_only_projects:
+  - fleet
+support_summary:
+  closure_waiting_on_release_truth: 0
+  design_impact_count: 0
+  external_proof_required_case_count: 0
+  external_proof_required_host_counts: {}
+  external_proof_required_tuple_counts: {}
+  feedback_followthrough_ready_count: 0
+  fix_available_ready_count: 0
+  install_truth_state_counts:
+    tuple_not_on_promoted_shelf: 1
+  lane_counts:
+    ops: 1
+  needs_human_response: 1
+  non_external_needs_human_response: 0
+  non_external_packets_without_lane: 0
+  non_external_packets_without_named_owner: 0
+  open_case_count: 0
+  open_non_external_packet_count: 0
+  open_packet_count: 1
+  operator_packet_count: 1
+  owner_repo_counts:
+    chummer6-ui: 1
+  please_test_ready_count: 0
+  recovery_loop_ready_count: 0
+  reporter_followthrough_blocked_missing_install_receipts_count: 0
+  reporter_followthrough_blocked_receipt_mismatch_count: 0
+  reporter_followthrough_hold_until_fix_receipt_count: 0
+  reporter_followthrough_ready_count: 0
+  status_counts:
+    awaiting_evidence: 1
+  support_case_backed_open_count: 0
+  unresolved_external_proof_request_count: 1
+  unresolved_external_proof_request_host_counts:
+    windows: 1
+  unresolved_external_proof_request_hosts:
+  - windows
+  unresolved_external_proof_request_specs:
+    avalonia:win-x64:windows:
+      channel_id: docker
+      expected_artifact_id: avalonia-win-x64-installer
+      expected_installer_file_name: chummer-avalonia-win-x64-installer.exe
+      expected_installer_relative_path: files/chummer-avalonia-win-x64-installer.exe
+      expected_installer_sha256: 1396a2b7a1c5947d197261c093643163f117bd62a5aa775b71f21f55b72f5a08
+      expected_public_install_route: /downloads/install/avalonia-win-x64-installer
+      expected_startup_smoke_receipt_path: startup-smoke/startup-smoke-avalonia-win-x64.receipt.json
+      local_evidence:
+        installer_artifact:
+          path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe
+          present: true
+          sha256: 1396a2b7a1c5947d197261c093643163f117bd62a5aa775b71f21f55b72f5a08
+          sha256_matches_expected: true
+          state: present_sha256_match
+        startup_smoke_receipt:
+          max_age_seconds: 604800
+          path: /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json
+          present: false
+          state: missing
+      proof_capture_commands:
+      - 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"
+        && export REPO_ROOT && INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe"
+        && EXPECTED_INSTALLER_SHA256=1396a2b7a1c5947d197261c093643163f117bd62a5aa775b71f21f55b72f5a08
+        && EXPECTED_INSTALLER_MAGIC=MZ && export INSTALLER_PATH EXPECTED_INSTALLER_SHA256
+        EXPECTED_INSTALLER_MAGIC && cd "$REPO_ROOT" && mkdir -p "$(dirname "$INSTALLER_PATH")"
+        && python3 -c ''import hashlib, os, pathlib; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
+        expected=os.environ[''"''"''EXPECTED_INSTALLER_SHA256''"''"'']; import sys;
+        sys.exit(0) if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower();
+        sys.exit(0) if digest==expected else print(f''"''"''installer-preflight-sha256-mismatch:{p}:digest={digest}:expected={expected}''"''"'')
+        or p.unlink()'' && if [ ! -s "$INSTALLER_PATH" ]; then if [ -z "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
+        ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ] && [ -z "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
+        ] && [ "${CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD:-0}" != "1" ]; then
+        echo ''external-proof-auth-missing: set CHUMMER_EXTERNAL_PROOF_AUTH_HEADER,
+        CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER, or CHUMMER_EXTERNAL_PROOF_COOKIE_JAR
+        (or set CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD=1 to bypass)'' >&2; exit
+        1; fi; curl_auth_args=(); if [ -n "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}"
+        ]; then curl_auth_args+=( -H "${CHUMMER_EXTERNAL_PROOF_AUTH_HEADER:-}" );
+        fi; if [ -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ]; then curl_auth_args+=(
+        -H "Cookie: ${CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER:-}" ); fi; if [ -n "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
+        ]; then curl_auth_args+=( --cookie "${CHUMMER_EXTERNAL_PROOF_COOKIE_JAR:-}"
+        ); fi; curl -fL --retry 3 --retry-delay 2 "${curl_auth_args[@]}" "${CHUMMER_EXTERNAL_PROOF_BASE_URL:-https://chummer.run}/downloads/install/avalonia-win-x64-installer"
+        -o "$INSTALLER_PATH"; fi; python3 -c ''import os, pathlib, sys; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
+        expected_magic=os.environ[''"''"''EXPECTED_INSTALLER_MAGIC''"''"'']; sys.exit(f''"''"''installer-download-missing:{p}''"''"'')
+        if (not p.is_file()) else None; probe=p.read_bytes()[:8192]; probe_text=probe.decode(''"''"''latin-1''"''"'',
+        errors=''"''"''ignore''"''"'').lower(); auth_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_AUTH_HEADER''"''"'',''"''"''''"''"'')).strip());
+        cookie_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER''"''"'',''"''"''''"''"'')).strip());
+        cookie_jar_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_JAR''"''"'',''"''"''''"''"'')).strip());
+        html_like=(''"''"''<!doctype html''"''"'' in probe_text) or (''"''"''<html''"''"''
+        in probe_text) or (''"''"''<head''"''"'' in probe_text); sys.exit(f''"''"''installer-download-html-response:{p}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-missing-auth''"''"'')
+        if html_like else None; sys.exit(0) if (not expected_magic or probe.startswith(expected_magic.encode(''"''"''latin-1''"''"'')))
+        else sys.exit(f''"''"''installer-download-signature-mismatch:{p}:expected_magic={expected_magic}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=unexpected-binary-format-or-route-response''"''"'')'';
+        python3 -c ''import hashlib, os, pathlib, sys; p=pathlib.Path(os.environ[''"''"''INSTALLER_PATH''"''"'']);
+        expected=os.environ[''"''"''EXPECTED_INSTALLER_SHA256''"''"'']; sys.exit(f''"''"''installer-download-missing:{p}''"''"'')
+        if (not p.is_file()) else None; digest=hashlib.sha256(p.read_bytes()).hexdigest().lower();
+        auth_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_AUTH_HEADER''"''"'',''"''"''''"''"'')).strip());
+        cookie_header_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_HEADER''"''"'',''"''"''''"''"'')).strip());
+        cookie_jar_set=bool(str(os.environ.get(''"''"''CHUMMER_EXTERNAL_PROOF_COOKIE_JAR''"''"'',''"''"''''"''"'')).strip());
+        sys.exit(0) if digest==expected else sys.exit(f''"''"''installer-postdownload-sha256-mismatch:{p}:digest={digest}:expected={expected}:auth_header_set={auth_header_set}:cookie_header_set={cookie_header_set}:cookie_jar_set={cookie_jar_set}:hint=signed-in-download-route-required-or-bytes-drift''"''"'')'''
+      - REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" &&
+        export REPO_ROOT && INSTALLER_PATH="$REPO_ROOT/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe"
+        && STARTUP_SMOKE_DIR="$REPO_ROOT/Docker/Downloads/startup-smoke" && cd "$REPO_ROOT"
+        && CHUMMER_DESKTOP_STARTUP_SMOKE_HOST_CLASS=windows-host CHUMMER_DESKTOP_STARTUP_SMOKE_OPERATING_SYSTEM=Windows
+        ./scripts/run-desktop-startup-smoke.sh "$INSTALLER_PATH" avalonia win-x64
+        Chummer.Avalonia.exe "$STARTUP_SMOKE_DIR" run-20260420-072339
+      - REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" &&
+        export REPO_ROOT && cd "$REPO_ROOT" && ./scripts/generate-releases-manifest.sh
+      required_host: windows
+      required_proofs:
+      - promoted_installer_artifact
+      - startup_smoke_receipt
+      startup_smoke_receipt_contract:
+        head_id: avalonia
+        host_class_contains: windows
+        platform: windows
+        ready_checkpoint: pre_ui_event_loop
+        rid: win-x64
+        status_any_of:
+        - pass
+        - passed
+        - ready
+      tuple_entry_count: 1
+      tuple_unique: true
+  unresolved_external_proof_request_tuple_counts:
+    avalonia:win-x64:windows: 1
+  unresolved_external_proof_request_tuples:
+  - avalonia:win-x64:windows
+  update_required_case_count: 0
+  update_required_misrouted_case_count: 0
+  update_required_routed_to_downloads_count: 0
+  top_clusters:
+  - kind: external_proof_request
+    target_repo: chummer6-ui
+    count: 1
+  generated_at: '2026-04-20T11:10:08Z'
+  freshness:
+    available: true
+    at: '2026-04-20T11:10:08Z'
+    age_seconds: 1616
+    age_human: 26m 56s
+    state: fresh
+    label: fresh
+publish_readiness:
+  state: blocked
+  blocking_reason_count: 2
+  warning_reason_count: 5
+  blocking_reasons:
+  - public guide/progress is stale.
+  - 'Only external host-proof gaps remain: run the missing windows proof lane for
+    1 desktop tuple(s), ingest receipts, and then republish release truth.'
+  warning_reasons:
+  - 'Treat the current shelf as review-required because required desktop tuple coverage
+    is incomplete (platforms: windows; pairs: avalonia:windows; tuples: avalonia:win-x64:windows).'
+  - Live source state is 25m 53s newer than the published weekly governor packet.
+  - Live source state is 1d 17h newer than the published campaign OS continuity monitor.
+  - Support cases still need human response.
+  - Provider-route fallback coverage is still thin for the current release posture.
+  recommended_action: Resolve the blocking publish-readiness issues before promoting
+    public truth.
+  signals:
+    runtime_healing_alert_state: healthy
+    status_plane_freshness_state: fresh
+    progress_report_freshness_state: stale
+    journey_gates_freshness_state: fresh
+    release_channel_freshness_state: fresh
+    support_freshness_state: fresh
+    weekly_governor_packet_freshness_state: stale
+    weekly_governor_packet_schedule_state: scheduled
+    weekly_governor_packet_status: blocked
+    weekly_governor_launch_action: freeze_launch
+    weekly_governor_public_state: freeze_launch
+    campaign_os_monitor_freshness_state: stale
+    journey_gate_state: blocked
+    release_channel_status: published
+    release_channel_rollout_state: coverage_incomplete
+    release_channel_supportability_state: review_required
+    release_channel_proof_status: passed
+    release_channel_proof_freshness_state: fresh
+    journey_gate_blocked_count: 3
+    journey_gate_warning_count: 0
+    provider_review_due_count: 0
+    provider_fallback_thin_count: 5
+    provider_revert_now_count: 0
+    support_closure_waiting_count: 0
+    support_needs_human_response_count: 1
 runtime_healing:
   enabled: true
-  services: []
   summary:
+    service_count: 4
+    degraded_service_count: 0
+    cooldown_active_count: 0
+    escalated_service_count: 0
+    recent_restart_count: 0
     alert_state: healthy
+    alert_reason: No runtime healing drift is currently recorded.
+    recommended_action: Keep the bounded auto-heal loop enabled and review the weekly
+      healer history.
+    last_event_at: '2026-04-19T19:37:49Z'
+    last_event_service: fleet-design-supervisor
+    last_event_kind: observed_unhealthy
+    last_event_detail: ''
+    last_recovered_service: fleet-controller
+    last_recovered_at: '2026-04-19T12:10:16Z'
+  services:
+  - service: fleet-auditor
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
+    cooldown_active: false
+    cooldown_remaining_seconds: 0
+    last_restart_at: '2026-04-18T19:21:56Z'
+    last_result: recovered
+    last_detail: service recovered after bounded restart
+    total_restarts: 1
+    restart_window_count: 0
+    escalation_threshold: 3
+  - service: fleet-controller
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
+    cooldown_active: false
+    cooldown_remaining_seconds: 0
+    last_restart_at: '2026-04-19T12:09:56Z'
+    last_result: unhealthy
+    last_detail: ''
+    total_restarts: 1029
+    restart_window_count: 0
+    escalation_threshold: 3
+  - service: fleet-dashboard
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
+    cooldown_active: false
+    cooldown_remaining_seconds: 0
+    last_restart_at: ''
+    last_result: ''
+    last_detail: ''
+    total_restarts: 0
+    restart_window_count: 0
+    escalation_threshold: 3
+  - service: fleet-design-supervisor
+    current_state: healthy
+    observed_status: healthy
+    consecutive_failures: 0
+    cooldown_active: false
+    cooldown_remaining_seconds: 0
+    last_restart_at: ''
+    last_result: unhealthy
+    last_detail: ''
+    total_restarts: 0
+    restart_window_count: 0
+    escalation_threshold: 3
 external_proof_autoingest:
   enabled: true
   current_state: waiting_for_bundle
@@ -76,51 +1308,51 @@ projects:
   lifecycle: live
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
-  readiness_terminal_stage: publicly_promoted
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: design
   lifecycle: dispatchable
   runtime_status: dispatch_pending
   readiness_stage: repo_local_complete
-  readiness_terminal_stage: publicly_promoted
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: ea
   lifecycle: live
   runtime_status: dispatch_pending
   readiness_stage: repo_local_complete
-  readiness_terminal_stage: publicly_promoted
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: fleet
   lifecycle: live
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
-  readiness_terminal_stage: publicly_promoted
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: guide
   lifecycle: signoff_only
   runtime_status: dispatch_pending
-  readiness_stage: pre_repo_local_complete
-  readiness_terminal_stage: publicly_promoted
+  readiness_stage: repo_local_complete
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
   readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: hub
   lifecycle: live
@@ -128,7 +1360,7 @@ projects:
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_warning_count: 1
   deployment_status: public
   deployment_promotion_stage: promoted_preview
   deployment_access_posture: public
@@ -136,21 +1368,21 @@ projects:
   lifecycle: dispatchable
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
-  readiness_terminal_stage: publicly_promoted
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: media-factory
   lifecycle: dispatchable
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
-  readiness_terminal_stage: publicly_promoted
+  readiness_terminal_stage: boundary_pure
   readiness_final_claim_allowed: false
-  readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  readiness_warning_count: 1
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 - id: mobile
   lifecycle: dispatchable
@@ -158,7 +1390,7 @@ projects:
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_warning_count: 1
   deployment_status: public
   deployment_promotion_stage: promoted_preview
   deployment_access_posture: public
@@ -168,7 +1400,7 @@ projects:
   readiness_stage: publicly_promoted
   readiness_terminal_stage: publicly_promoted
   readiness_final_claim_allowed: true
-  readiness_warning_count: 0
+  readiness_warning_count: 1
   deployment_status: public
   deployment_promotion_stage: promoted_preview
   deployment_access_posture: public
@@ -176,26 +1408,26 @@ projects:
   lifecycle: scaffold
   runtime_status: dispatch_pending
   readiness_stage: boundary_pure
-  readiness_terminal_stage: publicly_promoted
-  readiness_final_claim_allowed: false
+  readiness_terminal_stage: boundary_pure
+  readiness_final_claim_allowed: true
   readiness_warning_count: 0
-  deployment_status: ''
-  deployment_promotion_stage: ''
+  deployment_status: undeclared
+  deployment_promotion_stage: undeclared
   deployment_access_posture: ''
 groups:
 - id: chummer-vnext
   lifecycle: live
-  phase: active
+  phase: audit_required
   deployment_status: public
   deployment_promotion_stage: promoted_preview
-  deployment_access_posture: public
+  deployment_access_posture: ''
   publicly_promoted: true
   blocking_owner_projects: []
 - id: control-plane
   lifecycle: live
-  phase: active
+  phase: audit_required
   deployment_status: internal
-  deployment_promotion_stage: ''
-  deployment_access_posture: internal
+  deployment_promotion_stage: internal
+  deployment_access_posture: ''
   publicly_promoted: false
   blocking_owner_projects: []
