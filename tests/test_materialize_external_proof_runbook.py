@@ -275,7 +275,8 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "external-proof-auth-missing" in payload
     assert "CHUMMER_EXTERNAL_PROOF_ALLOW_GUEST_DOWNLOAD" in payload
     assert "signed-in-download-route-required-or-bytes-drift" in payload
-    assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" in payload
+    assert 'REPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}"' in payload
+    assert 'INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-avalonia-win-x64-installer.exe"' in payload
     assert "hashlib.sha256" in payload
     assert "installer-contract-mismatch" in payload
     assert "release-channel-contract-mismatch" in payload
@@ -283,7 +284,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "expected_route=" in payload
     assert "avalonia-win-x64-installer" in payload
     assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in payload
-    assert "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json" in payload
+    assert 'RECEIPT_PATH="$DOWNLOADS_ROOT/startup-smoke/startup-smoke-avalonia-win-x64.receipt.json"' in payload
     assert "receipt-contract-mismatch" in payload
     assert "startup-smoke-receipt-stale" in payload
     max_age_token = f"max_age_seconds={module.STARTUP_SMOKE_MAX_AGE_SECONDS}"
@@ -291,7 +292,7 @@ def test_materialize_external_proof_runbook_groups_requests_by_host(tmp_path: Pa
     assert "readyCheckpoint" in payload
     assert "hostClass" in payload
     assert "\"head_id\": \"avalonia\"" in payload
-    assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in payload
+    assert "bash -lc 'REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in payload
     assert "  commands:" in payload
     assert "## After Host Proof Capture" in payload
     assert "python3 scripts/materialize_support_case_packets.py" in payload
@@ -754,9 +755,9 @@ def test_materialize_external_proof_runbook_preserves_per_tuple_command_sequence
     assert payload.count("\nbash -lc '") >= 5
     assert "    - `echo tuple-1-proof`" in payload
     assert "    - `echo tuple-2-proof`" in payload
-    assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && ./scripts/generate-releases-manifest.sh\n") == 1
+    assert payload.count('\nREPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && cd "$REPO_ROOT" && ./scripts/generate-releases-manifest.sh\n') == 1
     assert "### Commands (Host Validation)" in payload
-    assert payload.count("\ncd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-") == 2
+    assert payload.count('\nREPO_ROOT="${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}" && export REPO_ROOT && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT && INSTALLER_PATH="$DOWNLOADS_ROOT/files/chummer-') == 2
 
 
 def test_materialize_external_proof_runbook_normalizes_legacy_capture_command_tokens(tmp_path: Path) -> None:
@@ -881,17 +882,12 @@ def test_materialize_external_proof_runbook_uses_expected_installer_relative_pat
     windows_validate = out.parent / "external-proof-commands" / "validate-windows-proof.sh"
     capture_payload = windows_capture.read_text(encoding="utf-8")
     validate_payload = windows_validate.read_text(encoding="utf-8")
-    assert (
-        "/docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/chummer-avalonia-win-x64-installer.exe"
-        in capture_payload
-    )
+    assert 'DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads"' in capture_payload
+    assert 'INSTALLER_PATH="$DOWNLOADS_ROOT/quarantine/chummer-avalonia-win-x64-installer.exe"' in capture_payload
     assert "/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" not in capture_payload
     assert "installer-preflight-sha256-mismatch" in capture_payload
     assert "installer-postdownload-sha256-mismatch" in capture_payload
-    assert (
-        "test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/quarantine/chummer-avalonia-win-x64-installer.exe"
-        in validate_payload
-    )
+    assert 'INSTALLER_PATH="$DOWNLOADS_ROOT/quarantine/chummer-avalonia-win-x64-installer.exe"' in validate_payload
     assert "/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe" not in validate_payload
 
 
@@ -1058,7 +1054,7 @@ def test_materialize_external_proof_runbook_accepts_camel_case_plan_fields(tmp_p
     assert "bash -lc 'echo windows-proof'" in capture_ps1_payload
     assert "$ErrorActionPreference = 'Stop'" in validate_ps1_payload
     assert "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }" in validate_ps1_payload
-    assert "bash -lc 'cd /docker/chummercomplete/chummer6-ui && test -s /docker/chummercomplete/chummer6-ui/Docker/Downloads/files/chummer-avalonia-win-x64-installer.exe'" in validate_ps1_payload
+    assert "bash -lc 'REPO_ROOT=\"${CHUMMER_UI_REPO_ROOT:-/docker/chummercomplete/chummer6-ui}\"" in validate_ps1_payload
 
 
 def test_materialize_external_proof_runbook_fails_with_absolute_expected_installer_relative_path(tmp_path: Path) -> None:

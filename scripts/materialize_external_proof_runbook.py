@@ -74,6 +74,27 @@ ALLOWED_REQUIRED_PROOFS = frozenset({"promoted_installer_artifact", "startup_smo
 STARTUP_SMOKE_MAX_AGE_SECONDS = 7 * 24 * 3600
 STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS = 300
 COMMAND_BUNDLE_SUFFIXES = frozenset({".sh", ".ps1"})
+UI_REPO_ROOT_ENV_EXPR = f"${{CHUMMER_UI_REPO_ROOT:-{UI_REPO_ROOT}}}"
+
+
+def _ui_repo_root_setup_command() -> str:
+    return f'REPO_ROOT="{UI_REPO_ROOT_ENV_EXPR}" && export REPO_ROOT'
+
+
+def _ui_downloads_root_setup_command() -> str:
+    return _ui_repo_root_setup_command() + ' && DOWNLOADS_ROOT="$REPO_ROOT/Docker/Downloads" && export DOWNLOADS_ROOT'
+
+
+def _ui_downloads_path_expr(relative_path: str) -> str:
+    normalized = str(relative_path or "").strip().lstrip("/")
+    return f"$DOWNLOADS_ROOT/{normalized}" if normalized else "$DOWNLOADS_ROOT"
+
+
+def _ui_repo_download_path_setup_command(relative_path: str, env_var: str) -> str:
+    return (
+        _ui_downloads_root_setup_command()
+        + f' && {env_var}="{_ui_downloads_path_expr(relative_path)}" && export {env_var}'
+    )
 
 def _post_capture_republish_commands(
     *,
@@ -1194,6 +1215,7 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
     manifest_payload_json = json.dumps(manifest_payload, sort_keys=True)
     commands = [
         "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"",
+        _ui_downloads_root_setup_command(),
         f"BUNDLE_ROOT=\"$SCRIPT_DIR/host-proof-bundles/{host_token}\"",
         f"BUNDLE_ARCHIVE=\"$SCRIPT_DIR/{host_token}-proof-bundle.tgz\"",
         "export BUNDLE_ROOT",
@@ -1214,11 +1236,11 @@ def _bundle_commands_for_group(group: dict[str, Any], *, host_token: str, host: 
         commands.append(f"echo {shlex.quote('No host proof files were queued for bundling.')}")
         return commands
     for rel in bundle_paths:
-        src = build_download_path(rel)
+        src = _ui_downloads_path_expr(rel)
         dst = f"$BUNDLE_ROOT/{rel}"
         dst_dir = f"$BUNDLE_ROOT/{Path(rel).parent.as_posix()}"
         commands.append(f"mkdir -p \"{dst_dir}\"")
-        commands.append(f"cp -f {shlex.quote(str(src))} \"{dst}\"")
+        commands.append(f"cp -f \"{src}\" \"{dst}\"")
     commands.extend(
         [
             "tar -czf \"$BUNDLE_ARCHIVE\" -C \"$BUNDLE_ROOT\" .",
@@ -1409,22 +1431,24 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
     installer_relative_path = _expected_installer_bundle_relative_path(request)
     installer_sha256 = _normalize_text(request.get("expected_installer_sha256")).lower()
     receipt_relative_path = _request_startup_smoke_receipt_relative_path(request)
-    installer_path: Path | None = None
+    installer_bundle_relative_path = ""
     if installer_relative_path:
-        installer_path = build_download_path(installer_relative_path)
+        installer_bundle_relative_path = installer_relative_path
     elif installer_file_name:
-        installer_path = UI_DOCKER_DOWNLOADS_FILES_ROOT / installer_file_name
-    if installer_path is not None:
+        installer_bundle_relative_path = f"files/{installer_file_name}"
+    if installer_bundle_relative_path:
         commands.append(
-            f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(installer_path))}"
+            _ui_repo_download_path_setup_command(installer_bundle_relative_path, "INSTALLER_PATH")
+            + ' && cd "$REPO_ROOT" && test -s "$INSTALLER_PATH"'
         )
         if installer_sha256:
             commands.append(
-                f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+                _ui_repo_download_path_setup_command(installer_bundle_relative_path, "INSTALLER_PATH")
+                + ' && cd "$REPO_ROOT" && '
                 "python3 -c "
                 + shlex.quote(
-                    "import hashlib, pathlib, sys; "
-                    f"p=pathlib.Path({str(installer_path)!r}); "
+                    "import hashlib, os, pathlib, sys; "
+                    "p=pathlib.Path(os.environ['INSTALLER_PATH']); "
                     f"expected={installer_sha256!r}; "
                     "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
                     "sys.exit(0) if digest==expected else sys.exit("
@@ -1432,21 +1456,48 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
                 )
             )
     if receipt_relative_path:
-        receipt_path = build_download_path(receipt_relative_path)
         commands.append(
-            f"cd {shlex.quote(str(UI_REPO_ROOT))} && test -s {shlex.quote(str(receipt_path))}"
+            _ui_repo_download_path_setup_command(receipt_relative_path, "RECEIPT_PATH")
+            + ' && cd "$REPO_ROOT" && test -s "$RECEIPT_PATH"'
         )
         commands.append(
-            f"cd {shlex.quote(str(UI_REPO_ROOT))} && {_startup_smoke_receipt_freshness_command(receipt_path)}"
+            _ui_repo_download_path_setup_command(receipt_relative_path, "RECEIPT_PATH")
+            + ' && cd "$REPO_ROOT" && '
+            + "python3 -c "
+            + shlex.quote(
+                "import datetime as dt, json, os, pathlib, sys; "
+                "p=pathlib.Path(os.environ['RECEIPT_PATH']); "
+                f"max_age_seconds={STARTUP_SMOKE_MAX_AGE_SECONDS}; "
+                f"max_future_skew_seconds={STARTUP_SMOKE_MAX_FUTURE_SKEW_SECONDS}; "
+                "payload=json.loads(p.read_text(encoding='utf-8')); "
+                "payload=payload if isinstance(payload, dict) else {}; "
+                "raw=next((str(payload.get(key) or '').strip() for key in "
+                "('recordedAtUtc','completedAtUtc','generatedAt','generated_at','startedAtUtc') "
+                "if str(payload.get(key) or '').strip()), ''); "
+                "sys.exit(f'startup-smoke-receipt-timestamp-missing:{p}') if not raw else None; "
+                "raw = raw[:-1] + '+00:00' if raw.endswith('Z') else raw; "
+                "parsed=dt.datetime.fromisoformat(raw); "
+                "parsed=parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=dt.timezone.utc); "
+                "parsed=parsed.astimezone(dt.timezone.utc); "
+                "now=dt.datetime.now(dt.timezone.utc); "
+                "age_seconds=int((now-parsed).total_seconds()); "
+                "sys.exit("
+                "f'startup-smoke-receipt-future-skew:{p}:age_seconds={age_seconds}:max_future_skew_seconds={max_future_skew_seconds}') "
+                "if age_seconds < -max_future_skew_seconds else None; "
+                "age_seconds = 0 if age_seconds < 0 else age_seconds; "
+                "sys.exit(0) if age_seconds <= max_age_seconds else sys.exit("
+                "f'startup-smoke-receipt-stale:{p}:age_seconds={age_seconds}:max_age_seconds={max_age_seconds}')"
+            )
         )
         receipt_contract = _normalized_smoke_contract_map(request.get("startup_smoke_receipt_contract"))
         contract_payload = json.dumps(receipt_contract, sort_keys=True)
         commands.append(
-            f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+            _ui_repo_download_path_setup_command(receipt_relative_path, "RECEIPT_PATH")
+            + ' && cd "$REPO_ROOT" && '
             "python3 -c "
             + shlex.quote(
-                "import json, pathlib, sys; "
-                f"p=pathlib.Path({str(receipt_path)!r}); "
+                "import json, os, pathlib, sys; "
+                "p=pathlib.Path(os.environ['RECEIPT_PATH']); "
                 f"contract=json.loads({contract_payload!r}); "
                 "payload=json.loads(p.read_text(encoding='utf-8')); "
                 "payload=payload if isinstance(payload, dict) else {}; "
@@ -1475,11 +1526,12 @@ def _validation_commands_for_request(request: dict[str, Any]) -> list[str]:
             )
     if tuple_id and (expected_artifact_id or expected_public_install_route):
         commands.append(
-            f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
+            _ui_repo_download_path_setup_command("RELEASE_CHANNEL.generated.json", "RELEASE_CHANNEL_PATH")
+            + ' && cd "$REPO_ROOT" && '
             "python3 -c "
             + shlex.quote(
-                "import json, pathlib, sys; "
-                f"p=pathlib.Path({str(DEFAULT_RELEASE_CHANNEL)!r}); "
+                "import json, os, pathlib, sys; "
+                "p=pathlib.Path(os.environ['RELEASE_CHANNEL_PATH']); "
                 f"tuple_id={tuple_id!r}; "
                 f"expected_artifact={expected_artifact_id!r}; "
                 f"expected_route={expected_public_install_route!r}; "
@@ -1571,6 +1623,9 @@ def _preflight_commands_for_group(group: dict[str, Any], *, host: str) -> list[s
     commands: list[str] = [
         "if ! command -v python3 >/dev/null 2>&1; then echo 'external-proof-python3-missing' >&2; exit 1; fi",
         "if ! command -v curl >/dev/null 2>&1; then echo 'external-proof-curl-missing' >&2; exit 1; fi",
+        f"if [ -z \"${{CHUMMER_UI_REPO_ROOT:-}}\" ] && [ ! -d {shlex.quote(str(UI_REPO_ROOT))} ]; then "
+        "echo 'external-proof-ui-repo-root-missing: set CHUMMER_UI_REPO_ROOT to the chummer6-ui checkout root on the proof host' >&2; "
+        "exit 1; fi",
     ]
     normalized_host = _normalize_text(host).lower()
     if normalized_host == "macos":
@@ -1585,6 +1640,12 @@ def _preflight_commands_for_group(group: dict[str, Any], *, host: str) -> list[s
             "if ! command -v powershell.exe >/dev/null 2>&1 && ! command -v pwsh >/dev/null 2>&1; then "
             "echo 'external-proof-powershell-missing' >&2; "
             "echo 'Hint: run this lane on a Windows host (Git Bash wrapper is supported for bash commands). ' >&2; "
+            "exit 1; fi"
+        )
+        commands.append(
+            "if ! command -v bash >/dev/null 2>&1; then "
+            "echo 'external-proof-bash-missing' >&2; "
+            "echo 'Hint: install Git Bash or run the lane from WSL so the generated shell commands can execute.' >&2; "
             "exit 1; fi"
         )
 
@@ -1639,15 +1700,15 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
     if not expected_route.startswith("/"):
         expected_route = "/" + expected_route
     if installer_relative_path:
-        installer_path = build_download_path(installer_relative_path)
+        installer_bundle_relative_path = installer_relative_path
     elif installer_file_name:
-        installer_path = UI_DOCKER_DOWNLOADS_FILES_ROOT / installer_file_name
+        installer_bundle_relative_path = f"files/{installer_file_name}"
     else:
         return ""
     digest_preflight = ""
     post_download_contract_check = ""
     digest_post_download = ""
-    installer_suffix = installer_path.name.lower()
+    installer_suffix = Path(installer_bundle_relative_path).name.lower()
     expected_magic = ""
     if installer_suffix.endswith(".exe"):
         expected_magic = "MZ"
@@ -1658,7 +1719,7 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
         + "python3 -c "
         + shlex.quote(
             "import os, pathlib, sys; "
-            f"p=pathlib.Path({str(installer_path)!r}); "
+            "p=pathlib.Path(os.environ['INSTALLER_PATH']); "
             f"expected_magic={expected_magic!r}; "
             "sys.exit(f'installer-download-missing:{p}') if (not p.is_file()) else None; "
             "probe=p.read_bytes()[:8192]; "
@@ -1680,8 +1741,8 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
         digest_preflight = (
             "python3 -c "
             + shlex.quote(
-                "import hashlib, pathlib; "
-                f"p=pathlib.Path({str(installer_path)!r}); "
+                "import hashlib, os, pathlib; "
+                "p=pathlib.Path(os.environ['INSTALLER_PATH']); "
                 f"expected={installer_sha256!r}; "
                 "import sys; "
                 "sys.exit(0) if (not p.is_file()) else None; "
@@ -1696,7 +1757,7 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
             + "python3 -c "
             + shlex.quote(
                 "import hashlib, os, pathlib, sys; "
-                f"p=pathlib.Path({str(installer_path)!r}); "
+                "p=pathlib.Path(os.environ['INSTALLER_PATH']); "
                 f"expected={installer_sha256!r}; "
                 "sys.exit(f'installer-download-missing:{p}') if (not p.is_file()) else None; "
                 "digest=hashlib.sha256(p.read_bytes()).hexdigest().lower(); "
@@ -1710,10 +1771,11 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
             )
         )
     return (
-        f"cd {shlex.quote(str(UI_REPO_ROOT))} && "
-        f"mkdir -p {shlex.quote(str(installer_path.parent))} && "
+        _ui_repo_download_path_setup_command(installer_bundle_relative_path, "INSTALLER_PATH")
+        + ' && cd "$REPO_ROOT" && '
+        'mkdir -p "$(dirname "$INSTALLER_PATH")" && '
         f"{digest_preflight}"
-        f"if [ ! -s {shlex.quote(str(installer_path))} ]; then "
+        'if [ ! -s "$INSTALLER_PATH" ]; then '
         f"if [ -z \"{DEFAULT_EXTERNAL_PROOF_AUTH_HEADER_EXPR}\" ] && "
         f"[ -z \"{DEFAULT_EXTERNAL_PROOF_COOKIE_HEADER_EXPR}\" ] && "
         f"[ -z \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ] && "
@@ -1734,9 +1796,9 @@ def _installer_fetch_preflight_command(request: dict[str, Any]) -> str:
         f"curl_auth_args+=( --cookie \"{DEFAULT_EXTERNAL_PROOF_COOKIE_JAR_EXPR}\" ); "
         "fi; "
         f"curl -fL --retry 3 --retry-delay 2 "
-        "${curl_auth_args[@]} "
+        '"${curl_auth_args[@]}" '
         f"\"{DEFAULT_EXTERNAL_PROOF_BASE_URL_EXPR}{expected_route}\" "
-        f"-o {shlex.quote(str(installer_path))}; "
+        '-o "$INSTALLER_PATH"; '
         f"fi"
         f"{post_download_contract_check}"
         f"{digest_post_download}"
