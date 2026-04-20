@@ -1,6 +1,6 @@
 # Next Session Handoff
 
-## Current Status (`2026-04-20T14:01:25Z`)
+## Current Status (`2026-04-20T15:04:00Z`)
 
 **Flagship Product Readiness**: `fail`
 - Ready: 7/8 lanes
@@ -18,6 +18,12 @@ The owner repo (`/docker/chummercomplete/chummer-presentation`) now has a materi
 
 - shared `tree`, `tabs`, and `image` primitives render in both Avalonia and Blazor
 - `Global Settings`, `Master Index`, and `Character Roster` are denser and closer to Chummer5a
+- shared utility helpers now default to classic `grid`/`snippet` posture for:
+  - source dialogs
+  - print/update/link/window utilities
+  - action receipts
+  - entry editors
+  - delete confirmations
 - major add/select flows now expose classic `Browse / Details / Notes` sections plus category navigation trees:
   - cyberware
   - gear
@@ -27,6 +33,8 @@ The owner repo (`/docker/chummercomplete/chummer-presentation`) now has a materi
   - initiation / spirits / critter powers
   - vehicles / vehicle mods
   - qualities / weapons / armor
+- the major add/select flows above now also render their right-side detail panes as classic property-style grids with compact note snippets instead of generic summary/detail blocks
+- contact add/edit and high-use utility dialogs (`skill_group`, `combat_reload`, `combat_damage_track`, `contact_connection`, `gear_mount`, `magic_bind`) now follow the same compact utility rhythm
 
 Validated in owner repo:
 
@@ -52,25 +60,29 @@ The remaining work is structural, not just CSS density:
 
 1. `Global Settings`
    - still shared flat persistence under tree chrome
-   - needs a real legacy-style settings coordinator
+   - needs a real legacy-style settings coordinator with true pane-specific save/apply behavior
 
 2. `Master Index`
    - still a shared tree/detail projection
-   - needs a real tree/grid/snippet browser posture
+   - needs a real tree/grid/snippet browser posture with source-selection follow-through and richer snippet/browser coordination
 
 3. `Character Roster`
    - still shared pane orchestration
-   - needs real image/tab/tree coordination closer to the legacy utility
+   - needs real image/tab/tree coordination closer to the legacy utility and better selected-runner follow-through
 
 4. High-use add/edit dialogs
    - visually closer, but still driven by one generic action model
    - need per-form coordinator behavior for live recalculation, exact category coupling, and follow-through actions like `Add & More`
 
-5. `SR4` and `SR6`
+5. Secondary utilities
+   - notes/update/print/window helpers are denser, but still not legacy-specific coordinators
+   - need utility-specific follow-through instead of generic receipt posture where veteran workflows expect more
+
+6. `SR4` and `SR6`
    - still share some neutral dialog copy
    - need more edition-authored labels and help text
 
-6. Windows proof
+7. Windows proof
    - do not treat Linux similarity as Windows proof
    - once the parity-fixed Windows build is cut, use the prepared Windows proof lane and return the proof bundle
    - Fleet auto-ingests the returned bundle now
@@ -87,11 +99,12 @@ The remaining work is structural, not just CSS density:
    - treat the remaining gap as “generic classic dialog parity” vs “legacy-specific utility form parity”
 
 3. Decide
-   - take one of the remaining structural surfaces:
-     - `Global Settings`
-     - `Master Index`
-     - `Character Roster`
-     - one high-use add/edit flow
+   - take the next structural surface in this order:
+     - `Global Settings` coordinator behavior
+     - `Master Index` richer browser/snippet/source follow-through
+     - `Character Roster` image/tab/tree follow-through
+     - one high-use add/edit flow with true coordinator behavior
+     - one secondary utility flow (`notes`, `update`, `print`, `window`)
      - one SR4/SR6 authored-copy slice
 
 4. Act
