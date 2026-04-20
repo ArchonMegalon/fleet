@@ -256,7 +256,10 @@ DESKTOP_VISUAL_FAMILIARITY_REQUIRED_MILESTONE2_TEST_VARIANT_GROUPS = (
     ("Master_index_is_a_first_class_runtime_backed_workbench_route",),
     ("Character_roster_is_a_first_class_runtime_backed_workbench_route",),
     ("Runtime_backed_shell_chrome_stays_enabled_after_runner_load",),
-    ("Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture",),
+    (
+        "Runtime_backed_codex_tree_preserves_legacy_left_rail_navigation_posture",
+        "Standalone_navigator_tree_selection_raises_workspace_tab_section_and_workflow_events",
+    ),
     ("Loaded_runner_header_stays_tab_panel_only_without_metric_cards",),
     ("Character_creation_preserves_familiar_dense_builder_rhythm",),
     ("Advancement_and_karma_journal_workflows_preserve_familiar_progression_rhythm",),
@@ -5642,9 +5645,13 @@ def build_flagship_product_readiness_payload(
     elif not journey_overall_external_only:
         external_host_proof_reason = "Resolve the blocking golden-journey gaps before widening publish claims."
     else:
-        external_host_proof_reason = str(journey_summary.get("recommended_action") or "").strip() or (
-            f"Run the missing {', '.join(external_backlog_hosts) if external_backlog_hosts else 'external-host'} proof lane "
-            f"for {unresolved_external_requests} desktop tuple(s), ingest receipts, and then republish release truth."
+        external_host_proof_reason = (
+            str(external_proof_execution_plan.get("recommended_action") or "").strip()
+            or str(journey_summary.get("recommended_action") or "").strip()
+            or (
+                f"Run the missing {', '.join(external_backlog_hosts) if external_backlog_hosts else 'external-host'} proof lane "
+                f"for {unresolved_external_requests} desktop tuple(s), ingest receipts, and then republish release truth."
+            )
         )
 
     completion_audit_status = "pass" if status == "pass" else "fail"

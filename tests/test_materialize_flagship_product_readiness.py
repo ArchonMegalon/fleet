@@ -2513,6 +2513,193 @@ def test_materialize_flagship_product_readiness_recovers_fleet_when_only_blocked
     assert fleet_evidence["supervisor_completion_desktop_scoped"] is True
 
 
+def test_materialize_flagship_product_readiness_prefers_support_execution_plan_action_for_external_only_blockers(
+    tmp_path: Path,
+) -> None:
+    module = _load_module()
+    out_path = tmp_path / ".codex-studio" / "published" / "FLAGSHIP_PRODUCT_READINESS.generated.json"
+    acceptance_path = tmp_path / ".codex-design" / "product" / "FLAGSHIP_RELEASE_ACCEPTANCE.yaml"
+    status_plane_path = tmp_path / ".codex-studio" / "published" / "STATUS_PLANE.generated.yaml"
+    progress_report_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_REPORT.generated.json"
+    progress_history_path = tmp_path / ".codex-studio" / "published" / "PROGRESS_HISTORY.generated.json"
+    journey_gates_path = tmp_path / ".codex-studio" / "published" / "JOURNEY_GATES.generated.json"
+    support_packets_path = tmp_path / ".codex-studio" / "published" / "SUPPORT_CASE_PACKETS.generated.json"
+    supervisor_state_path = tmp_path / "state" / "chummer_design_supervisor" / "state.json"
+    ooda_state_path = tmp_path / "state" / "design_supervisor_ooda" / "current_8h" / "state.json"
+    ui_local_release_path = tmp_path / "ui" / "UI_LOCAL_RELEASE_PROOF.generated.json"
+    ui_exit_gate_path = tmp_path / "ui" / "UI_LINUX_DESKTOP_EXIT_GATE.generated.json"
+    ui_windows_exit_gate_path = tmp_path / "ui" / "UI_WINDOWS_DESKTOP_EXIT_GATE.generated.json"
+    ui_executable_exit_gate_path = tmp_path / "ui" / "DESKTOP_EXECUTABLE_EXIT_GATE.generated.json"
+    ui_workflow_execution_gate_path = tmp_path / "ui" / "DESKTOP_WORKFLOW_EXECUTION_GATE.generated.json"
+    ui_visual_familiarity_exit_gate_path = tmp_path / "ui" / "DESKTOP_VISUAL_FAMILIARITY_EXIT_GATE.generated.json"
+    ui_workflow_parity_path = tmp_path / "ui" / "CHUMMER5A_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_workflow_parity_path = tmp_path / "ui" / "SR4_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr6_workflow_parity_path = tmp_path / "ui" / "SR6_DESKTOP_WORKFLOW_PARITY.generated.json"
+    sr4_sr6_frontier_receipt_path = tmp_path / "ui" / "SR4_SR6_DESKTOP_PARITY_FRONTIER.generated.json"
+    hub_local_release_path = tmp_path / "hub" / "HUB_LOCAL_RELEASE_PROOF.generated.json"
+    mobile_local_release_path = tmp_path / "mobile" / "MOBILE_LOCAL_RELEASE_PROOF.generated.json"
+    release_channel_path = tmp_path / "registry" / "RELEASE_CHANNEL.generated.json"
+    releases_json_path = tmp_path / "registry" / "releases.json"
+
+    _write_yaml(acceptance_path, _base_acceptance())
+    _write_yaml(status_plane_path, _base_status_plane())
+    _write_json(progress_report_path, {"generated_at": "2026-04-01T08:00:00Z", "history_snapshot_count": 6})
+    _write_json(progress_history_path, {"snapshot_count": 6})
+    _write_json(
+        journey_gates_path,
+        {
+            "summary": {
+                "overall_state": "blocked",
+                "blocked_count": 1,
+                "blocked_external_only_count": 1,
+                "blocked_with_local_count": 0,
+            },
+            "journeys": [
+                {
+                    "id": "report_cluster_release_notify",
+                    "state": "blocked",
+                    "blocked_by_external_constraints_only": True,
+                    "external_proof_requests": [
+                        {
+                            "tuple_id": "avalonia:win-x64:windows",
+                            "required_host": "windows",
+                            "required_proofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                        }
+                    ],
+                    "external_blocking_reasons": ["Requires native Windows host proof capture."],
+                    "local_blocking_reasons": [],
+                },
+                {"id": "install_claim_restore_continue", "state": "ready"},
+                {"id": "build_explain_publish", "state": "ready"},
+                {"id": "campaign_session_recover_recap", "state": "ready"},
+                {"id": "recover_from_sync_conflict", "state": "ready"},
+            ],
+        },
+    )
+    _write_json(
+        support_packets_path,
+        {
+            "generated_at": "2026-04-01T08:00:00Z",
+            "unresolved_external_proof_execution_plan": {
+                "generated_at": "2026-04-01T08:00:00Z",
+                "release_channel_generated_at": "2026-04-01T08:00:00Z",
+                "request_count": 1,
+                "hosts": ["windows"],
+                "recommended_action": (
+                    "Only external host-proof gaps remain: windows: transfer "
+                    "/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz, "
+                    "set CHUMMER_UI_REPO_ROOT and either CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof "
+                    "cookies, run bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh, "
+                    "bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh, "
+                    "bash /docker/fleet/.codex-studio/published/external-proof-commands/validate-windows-proof.sh, "
+                    "bash /docker/fleet/.codex-studio/published/external-proof-commands/bundle-windows-proof.sh, "
+                    "then return windows-proof-bundle.tgz and ingest it with "
+                    "bash /docker/fleet/.codex-studio/published/external-proof-commands/ingest-windows-proof-bundle.sh. "
+                    "Use powershell -ExecutionPolicy Bypass -File "
+                    "/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1 if "
+                    "Git Bash capture is not available."
+                ),
+            },
+        },
+    )
+    _write_json(supervisor_state_path, _base_supervisor_state())
+    _write_json(ooda_state_path, _base_ooda_state())
+    _write_json(ui_local_release_path, {"contract_name": "chummer6-ui.local_release_proof", "status": "passed"})
+    _write_json(ui_exit_gate_path, {"contract_name": "chummer6-ui.linux_desktop_exit_gate", "status": "passed"})
+    _write_json(ui_windows_exit_gate_path, {"contract_name": "chummer6-ui.windows_desktop_exit_gate", "status": "passed"})
+    _write_json(
+        ui_executable_exit_gate_path,
+        {
+            "contract_name": "chummer6-ui.desktop_executable_exit_gate",
+            "status": "pass",
+            "local_blocking_findings_count": 0,
+            "evidence": {},
+        },
+    )
+    _write_json(
+        ui_workflow_execution_gate_path,
+        {"contract_name": "chummer6-ui.desktop_workflow_execution_gate", "status": "pass"},
+    )
+    _write_json(
+        ui_visual_familiarity_exit_gate_path,
+        {"contract_name": "chummer6-ui.desktop_visual_familiarity_exit_gate", "status": "pass"},
+    )
+    _write_json(ui_workflow_parity_path, {"contract_name": "chummer6-ui.chummer5a_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_workflow_parity_path, {"contract_name": "chummer6-ui.sr4_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr6_workflow_parity_path, {"contract_name": "chummer6-ui.sr6_desktop_workflow_parity", "status": "passed"})
+    _write_json(sr4_sr6_frontier_receipt_path, {"contract_name": "chummer6-ui.sr4_sr6_desktop_parity_frontier", "status": "passed"})
+    _write_json(hub_local_release_path, {"contract_name": "chummer6-hub.local_release_proof", "status": "passed"})
+    _write_json(mobile_local_release_path, {"contract_name": "chummer6-mobile.local_release_proof", "status": "passed"})
+    _write_json(
+        release_channel_path,
+        {
+            "status": "published",
+            "releaseProof": {"status": "passed"},
+            "channelId": "preview",
+            "desktopTupleCoverage": {
+                "requiredDesktopPlatforms": ["linux", "windows"],
+                "requiredDesktopHeads": ["avalonia"],
+                "promotedPlatformHeads": {"linux": ["avalonia"], "windows": []},
+                "missingRequiredPlatforms": ["windows"],
+                "missingRequiredHeads": [],
+                "missingRequiredPlatformHeadPairs": ["avalonia:windows"],
+                "missingRequiredPlatformHeadRidTuples": ["avalonia:win-x64:windows"],
+                "externalProofRequests": [
+                    {
+                        "tupleId": "avalonia:win-x64:windows",
+                        "requiredHost": "windows",
+                        "requiredProofs": ["promoted_installer_artifact", "startup_smoke_receipt"],
+                    }
+                ],
+            },
+            "artifacts": [
+                {"head": "avalonia", "platform": "linux", "rid": "linux-x64", "kind": "installer"},
+            ],
+        },
+    )
+    _write_json(releases_json_path, {"status": "published"})
+
+    module.materialize_flagship_product_readiness(
+        out_path=out_path,
+        mirror_path=None,
+        acceptance_path=acceptance_path,
+        parity_registry_path=tmp_path / "missing-parity.yaml",
+        feedback_loop_gate_path=tmp_path / "missing-feedback-loop.yaml",
+        status_plane_path=status_plane_path,
+        progress_report_path=progress_report_path,
+        progress_history_path=progress_history_path,
+        journey_gates_path=journey_gates_path,
+        support_packets_path=support_packets_path,
+        external_proof_runbook_path=None,
+        supervisor_state_path=supervisor_state_path,
+        ooda_state_path=ooda_state_path,
+        ui_local_release_proof_path=ui_local_release_path,
+        ui_linux_exit_gate_path=ui_exit_gate_path,
+        ui_windows_exit_gate_path=ui_windows_exit_gate_path,
+        ui_workflow_parity_proof_path=ui_workflow_parity_path,
+        ui_executable_exit_gate_path=ui_executable_exit_gate_path,
+        ui_workflow_execution_gate_path=ui_workflow_execution_gate_path,
+        ui_visual_familiarity_exit_gate_path=ui_visual_familiarity_exit_gate_path,
+        ui_localization_release_gate_path=tmp_path / "ui" / "UI_LOCALIZATION_RELEASE_GATE.generated.json",
+        sr4_workflow_parity_proof_path=sr4_workflow_parity_path,
+        sr6_workflow_parity_proof_path=sr6_workflow_parity_path,
+        sr4_sr6_frontier_receipt_path=sr4_sr6_frontier_receipt_path,
+        hub_local_release_proof_path=hub_local_release_path,
+        mobile_local_release_proof_path=mobile_local_release_path,
+        release_channel_path=release_channel_path,
+        releases_json_path=releases_json_path,
+        ignore_nonlinux_desktop_host_proof_blockers=False,
+    )
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["external_host_proof"]["status"] == "fail"
+    assert payload["external_host_proof"]["reason"].startswith(
+        "Only external host-proof gaps remain: windows: transfer "
+        "/docker/fleet/.codex-studio/published/external-proof-commands/windows-proof-command-pack.tgz"
+    )
+    assert "capture-windows-proof.sh" in payload["external_host_proof"]["reason"]
+
+
 def test_journey_local_reason_is_desktop_scoped_for_executable_gate_marker_contract_rows() -> None:
     module = _load_module()
 

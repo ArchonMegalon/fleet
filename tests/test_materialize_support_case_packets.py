@@ -1547,7 +1547,14 @@ def test_materialize_support_case_packets(tmp_path: Path) -> None:
     assert payload["unresolved_external_proof_execution_plan"]["hosts"] == []
     assert payload["unresolved_external_proof_execution_plan"]["host_groups"] == {}
     assert payload["unresolved_external_proof_execution_plan"]["capture_deadline_hours"] == 24
+    assert payload["unresolved_external_proof_execution_plan"]["command_root"] == (
+        "/docker/fleet/.codex-studio/published/external-proof-commands"
+    )
     assert payload["unresolved_external_proof_execution_plan"]["generated_at"]
+    assert (
+        payload["unresolved_external_proof_execution_plan"]["recommended_action"]
+        == "No unresolved external desktop host-proof requests remain."
+    )
     assert payload["source"]["source_kind"] == "local_file"
     assert len(payload["packets"]) == 2
     bug_packet = next(item for item in payload["packets"] if item["kind"] == "bug_report")
@@ -6292,6 +6299,7 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
     assert execution_plan["capture_deadline_hours"] == 24
     assert execution_plan["capture_deadline_utc"]
     assert execution_plan["generated_at"]
+    assert execution_plan["command_root"] == "/docker/fleet/.codex-studio/published/external-proof-commands"
     assert execution_plan["host_groups"]["macos"]["request_count"] == 1
     assert execution_plan["host_groups"]["windows"]["request_count"] == 1
     assert execution_plan["host_groups"]["macos"]["tuples"] == ["blazor-desktop:osx-arm64:macos"]
@@ -6302,6 +6310,21 @@ def test_materialize_support_case_packets_reports_release_channel_external_proof
     assert windows_request["capture_deadline_utc"] == execution_plan["capture_deadline_utc"]
     assert macos_request["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
     assert windows_request["required_proofs"] == ["promoted_installer_artifact", "startup_smoke_receipt"]
+    assert execution_plan["host_groups"]["windows"]["command_pack_path"].endswith(
+        "/windows-proof-command-pack.tgz"
+    )
+    assert execution_plan["host_groups"]["windows"]["operator_commands"]["preflight"] == (
+        "bash /docker/fleet/.codex-studio/published/external-proof-commands/preflight-windows-proof.sh"
+    )
+    assert execution_plan["host_groups"]["windows"]["operator_commands"]["capture"] == (
+        "bash /docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.sh"
+    )
+    assert execution_plan["host_groups"]["windows"]["operator_commands"]["capture_powershell"] == (
+        "powershell -ExecutionPolicy Bypass -File "
+        "/docker/fleet/.codex-studio/published/external-proof-commands/capture-windows-proof.ps1"
+    )
+    assert "capture-windows-proof.sh" in execution_plan["recommended_action"]
+    assert "ingest-windows-proof-bundle.sh" in execution_plan["recommended_action"]
 
 
 def test_materialize_support_case_packets_dedupes_duplicate_external_proof_tuples(tmp_path: Path) -> None:

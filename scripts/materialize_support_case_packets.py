@@ -3230,6 +3230,7 @@ def _external_proof_execution_plan(
     capture_deadline_utc = ""
     if anchor_ts is not None:
         capture_deadline_utc = (anchor_ts + timedelta(hours=deadline_hours)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    command_root = "/docker/fleet/.codex-studio/published/external-proof-commands"
     for host in sorted(grouped.keys()):
         rows = sorted(grouped[host], key=lambda item: _normalize_text(item.get("tuple_id")))
         request_items = []
@@ -3268,11 +3269,47 @@ def _external_proof_execution_plan(
                 request_payload["expected_installer_sha256"] = expected_installer_sha256
             request_payload["local_evidence"] = _external_proof_local_evidence(row)
             request_items.append(request_payload)
+        operator_commands = {
+            "preflight": f"bash {command_root}/preflight-{host}-proof.sh",
+            "capture": f"bash {command_root}/capture-{host}-proof.sh",
+            "validate": f"bash {command_root}/validate-{host}-proof.sh",
+            "bundle": f"bash {command_root}/bundle-{host}-proof.sh",
+            "ingest": f"bash {command_root}/ingest-{host}-proof-bundle.sh",
+        }
+        if host == "windows":
+            operator_commands["capture_powershell"] = (
+                f"powershell -ExecutionPolicy Bypass -File {command_root}/capture-windows-proof.ps1"
+            )
         host_groups[host] = {
             "request_count": len(request_items),
             "tuples": [item["tuple_id"] for item in request_items if item.get("tuple_id")],
             "requests": request_items,
+            "command_pack_path": f"{command_root}/{host}-proof-command-pack.tgz",
+            "operator_commands": operator_commands,
         }
+
+    if host_groups:
+        recommended_action_parts = []
+        for host in sorted(host_groups.keys()):
+            host_group = host_groups[host]
+            operator_commands = dict(host_group.get("operator_commands") or {})
+            command_pack_path = _normalize_text(host_group.get("command_pack_path"))
+            part = (
+                f"{host}: transfer {command_pack_path}, set CHUMMER_UI_REPO_ROOT and either "
+                f"CHUMMER_EXTERNAL_PROOF_AUTH_HEADER or the signed-in proof cookies, run "
+                f"{operator_commands.get('preflight', '')}, {operator_commands.get('capture', '')}, "
+                f"{operator_commands.get('validate', '')}, {operator_commands.get('bundle', '')}, "
+                f"then return {host}-proof-bundle.tgz and ingest it with {operator_commands.get('ingest', '')}."
+            )
+            if host == "windows" and operator_commands.get("capture_powershell"):
+                part = (
+                    part[:-1]
+                    + f" Use {operator_commands['capture_powershell']} if Git Bash capture is not available."
+                )
+            recommended_action_parts.append(part)
+        recommended_action = "Only external host-proof gaps remain: " + " ".join(recommended_action_parts)
+    else:
+        recommended_action = "No unresolved external desktop host-proof requests remain."
 
     return {
         "generated_at": generated_at,
@@ -3282,6 +3319,8 @@ def _external_proof_execution_plan(
         "request_count": len(request_rows),
         "hosts": sorted(host_groups.keys()),
         "host_groups": host_groups,
+        "command_root": command_root,
+        "recommended_action": recommended_action,
     }
 
 
