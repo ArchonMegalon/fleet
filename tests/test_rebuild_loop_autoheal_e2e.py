@@ -159,3 +159,36 @@ def test_rebuild_loop_autoheal_escalates_after_recent_restart_budget_is_exhauste
     calls_log_path = tmp_path / "fake-docker" / "calls.log"
     calls_log = calls_log_path.read_text(encoding="utf-8") if calls_log_path.is_file() else ""
     assert "restart fleet-controller" not in calls_log
+
+
+def test_rebuild_loop_autoingests_returned_external_proof_bundle(tmp_path: Path) -> None:
+    commands_dir = tmp_path / "external-proof-commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    (commands_dir / "windows-proof-bundle.tgz").write_bytes(b"bundle")
+    marker = tmp_path / "finalized.txt"
+    finalize_script = commands_dir / "finalize-external-host-proof.sh"
+    finalize_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        f"printf 'ok\\n' > {marker}\n",
+        encoding="utf-8",
+    )
+    finalize_script.chmod(finalize_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    result = _run_loop(
+        tmp_path,
+        extra_env={
+            "FLEET_AUTOHEAL_ENABLED": "false",
+            "FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED": "true",
+            "FLEET_EXTERNAL_PROOF_COMMANDS_DIR": str(commands_dir),
+            "FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS": "0",
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8").strip() == "ok"
+
+    status_path = tmp_path / "state" / "rebuilder" / "external-proof-autoingest" / "status.json"
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    assert payload["current_state"] == "ingested"
+    assert payload["observed_bundle_count"] == 1
+    assert payload["last_result"] == "ingested"

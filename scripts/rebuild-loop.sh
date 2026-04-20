@@ -26,6 +26,9 @@ autoheal_cooldown_seconds="${FLEET_AUTOHEAL_COOLDOWN_SECONDS:-300}"
 autoheal_timeout_seconds="${FLEET_AUTOHEAL_TIMEOUT_SECONDS:-120}"
 autoheal_escalate_after_restarts="${FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS:-3}"
 autoheal_escalate_window_seconds="${FLEET_AUTOHEAL_ESCALATE_WINDOW_SECONDS:-1800}"
+external_proof_autoingest_enabled="$(printf '%s' "${FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
+external_proof_commands_dir="${FLEET_EXTERNAL_PROOF_COMMANDS_DIR:-$workspace_root/.codex-studio/published/external-proof-commands}"
+external_proof_autoingest_cooldown_seconds="${FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS:-120}"
 
 mkdir -p "$state_dir"
 
@@ -34,7 +37,16 @@ last_run_file="$state_dir/last_run_utc.txt"
 log_file="$state_dir/rebuild.log"
 autoheal_state_dir="$state_dir/autoheal"
 autoheal_event_log="$autoheal_state_dir/events.jsonl"
+external_proof_autoingest_state_dir="$state_dir/external-proof-autoingest"
+external_proof_autoingest_status_file="$external_proof_autoingest_state_dir/status.json"
+external_proof_autoingest_last_success_fingerprint_file="$external_proof_autoingest_state_dir/last_success_fingerprint.txt"
+external_proof_autoingest_last_attempt_fingerprint_file="$external_proof_autoingest_state_dir/last_attempt_fingerprint.txt"
+external_proof_autoingest_last_attempt_epoch_file="$external_proof_autoingest_state_dir/last_attempt_epoch"
+external_proof_autoingest_last_success_epoch_file="$external_proof_autoingest_state_dir/last_success_epoch"
+external_proof_autoingest_last_result_file="$external_proof_autoingest_state_dir/last_result.txt"
+external_proof_autoingest_last_detail_file="$external_proof_autoingest_state_dir/last_detail.txt"
 mkdir -p "$autoheal_state_dir"
+mkdir -p "$external_proof_autoingest_state_dir"
 
 log() {
   printf '%s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" | tee -a "$log_file"
@@ -316,6 +328,94 @@ restart_cooldown_remaining() {
   printf '%s\n' "$remaining"
 }
 
+external_proof_bundle_count() {
+  if [ ! -d "$external_proof_commands_dir" ]; then
+    printf '0\n'
+    return 0
+  fi
+  count=0
+  for path in "$external_proof_commands_dir"/*-proof-bundle.tgz; do
+    [ -f "$path" ] || continue
+    case "$path" in
+      *-command-pack.tgz) continue ;;
+    esac
+    count=$(( count + 1 ))
+  done
+  printf '%s\n' "$count"
+}
+
+external_proof_bundle_fingerprint() {
+  if [ ! -d "$external_proof_commands_dir" ]; then
+    printf '\n'
+    return 0
+  fi
+  rows=""
+  found=0
+  for path in "$external_proof_commands_dir"/*-proof-bundle.tgz; do
+    [ -f "$path" ] || continue
+    case "$path" in
+      *-command-pack.tgz) continue ;;
+    esac
+    found=1
+    size="$(wc -c <"$path" | tr -d ' ')"
+    mtime="$(date -u -r "$path" +%s 2>/dev/null || stat -c %Y "$path" 2>/dev/null || printf '0')"
+    rows="${rows}$(basename "$path")\t${size}\t${mtime}\n"
+  done
+  if [ "$found" -eq 0 ]; then
+    printf '\n'
+    return 0
+  fi
+  printf '%b' "$rows" | LC_ALL=C sort | sha256sum | awk '{print $1}'
+}
+
+write_external_proof_status() {
+  current_state="$1"
+  detail="$2"
+  observed_fingerprint="$3"
+  observed_bundle_count="$4"
+  last_attempt_epoch="$(read_int_file "$external_proof_autoingest_last_attempt_epoch_file" 0)"
+  last_success_epoch="$(read_int_file "$external_proof_autoingest_last_success_epoch_file" 0)"
+  last_result="$(read_text_file "$external_proof_autoingest_last_result_file" "")"
+  cat >"$external_proof_autoingest_status_file" <<EOF
+{
+  "generated_at": "$(iso_now)",
+  "current_state": "$(json_escape "$current_state")",
+  "commands_dir": "$(json_escape "$external_proof_commands_dir")",
+  "observed_bundle_fingerprint": "$(json_escape "$observed_fingerprint")",
+  "observed_bundle_count": ${observed_bundle_count:-0},
+  "last_attempt_at": "$(iso_from_epoch "$last_attempt_epoch")",
+  "last_success_at": "$(iso_from_epoch "$last_success_epoch")",
+  "last_result": "$(json_escape "$last_result")",
+  "last_detail": "$(json_escape "$(read_text_file "$external_proof_autoingest_last_detail_file" "$detail")")"
+}
+EOF
+}
+
+recent_external_proof_attempt_within_cooldown() {
+  now_epoch="$1"
+  last_attempt="$(read_int_file "$external_proof_autoingest_last_attempt_epoch_file" 0)"
+  if [ "$last_attempt" -le 0 ]; then
+    return 1
+  fi
+  age=$(( now_epoch - last_attempt ))
+  [ "$age" -lt "$external_proof_autoingest_cooldown_seconds" ]
+}
+
+external_proof_cooldown_remaining() {
+  now_epoch="$1"
+  last_attempt="$(read_int_file "$external_proof_autoingest_last_attempt_epoch_file" 0)"
+  if [ "$last_attempt" -le 0 ]; then
+    printf '0\n'
+    return 0
+  fi
+  age=$(( now_epoch - last_attempt ))
+  remaining=$(( external_proof_autoingest_cooldown_seconds - age ))
+  if [ "$remaining" -lt 0 ]; then
+    remaining=0
+  fi
+  printf '%s\n' "$remaining"
+}
+
 service_health_detail() {
   service="$1"
   detail="$(docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{println .Output}}{{end}}{{else}}{{.State.Status}}{{end}}' "$service" 2>>"$log_file" | tail -n 1 || true)"
@@ -515,6 +615,78 @@ monitor_autoheal() {
   done
 }
 
+monitor_external_proof_autoingest() {
+  if [ "$external_proof_autoingest_enabled" != "true" ] && [ "$external_proof_autoingest_enabled" != "1" ] && [ "$external_proof_autoingest_enabled" != "yes" ]; then
+    write_external_proof_status "disabled" "external proof auto-ingest is disabled" "" 0
+    return 0
+  fi
+  bundle_count="$(external_proof_bundle_count)"
+  bundle_fingerprint="$(external_proof_bundle_fingerprint)"
+  finalize_script="$external_proof_commands_dir/finalize-external-host-proof.sh"
+  if [ ! -d "$external_proof_commands_dir" ]; then
+    write_text_file "$external_proof_autoingest_last_result_file" "waiting_for_commands_dir"
+    write_text_file "$external_proof_autoingest_last_detail_file" "external proof commands directory is missing"
+    write_external_proof_status "waiting_for_commands_dir" "external proof commands directory is missing" "" 0
+    return 0
+  fi
+  if [ "$bundle_count" -le 0 ] || [ -z "$bundle_fingerprint" ]; then
+    write_text_file "$external_proof_autoingest_last_result_file" "waiting_for_bundle"
+    write_text_file "$external_proof_autoingest_last_detail_file" "waiting for a returned host proof bundle"
+    write_external_proof_status "waiting_for_bundle" "waiting for a returned host proof bundle" "$bundle_fingerprint" "$bundle_count"
+    return 0
+  fi
+  last_success_fingerprint="$(read_text_file "$external_proof_autoingest_last_success_fingerprint_file" "")"
+  if [ "$bundle_fingerprint" = "$last_success_fingerprint" ]; then
+    write_text_file "$external_proof_autoingest_last_result_file" "ingested"
+    write_text_file "$external_proof_autoingest_last_detail_file" "host proof bundle already ingested"
+    write_external_proof_status "ingested" "host proof bundle already ingested" "$bundle_fingerprint" "$bundle_count"
+    return 0
+  fi
+  now_epoch="$(date -u +%s)"
+  last_attempt_fingerprint="$(read_text_file "$external_proof_autoingest_last_attempt_fingerprint_file" "")"
+  if [ "$bundle_fingerprint" = "$last_attempt_fingerprint" ] && recent_external_proof_attempt_within_cooldown "$now_epoch"; then
+    cooldown_remaining="$(external_proof_cooldown_remaining "$now_epoch")"
+    detail="waiting ${cooldown_remaining}s before retrying host proof bundle ingest"
+    write_text_file "$external_proof_autoingest_last_result_file" "cooldown"
+    write_text_file "$external_proof_autoingest_last_detail_file" "$detail"
+    write_external_proof_status "cooldown" "$detail" "$bundle_fingerprint" "$bundle_count"
+    return 0
+  fi
+  if [ ! -x "$finalize_script" ]; then
+    write_text_file "$external_proof_autoingest_last_result_file" "blocked"
+    write_text_file "$external_proof_autoingest_last_detail_file" "finalize-external-host-proof.sh is missing or not executable"
+    write_external_proof_status "blocked" "finalize-external-host-proof.sh is missing or not executable" "$bundle_fingerprint" "$bundle_count"
+    return 0
+  fi
+  write_text_file "$external_proof_autoingest_last_attempt_epoch_file" "$now_epoch"
+  write_text_file "$external_proof_autoingest_last_attempt_fingerprint_file" "$bundle_fingerprint"
+  write_text_file "$external_proof_autoingest_last_result_file" "ingesting"
+  write_text_file "$external_proof_autoingest_last_detail_file" "host proof bundle detected; running finalize-external-host-proof.sh"
+  write_external_proof_status "ingesting" "host proof bundle detected; running finalize-external-host-proof.sh" "$bundle_fingerprint" "$bundle_count"
+  tmp_output="$external_proof_autoingest_state_dir/last-run.log"
+  log "external proof auto-ingest starting"
+  if sh "$finalize_script" >"$tmp_output" 2>&1; then
+    cat "$tmp_output" >>"$log_file"
+    write_text_file "$external_proof_autoingest_last_success_fingerprint_file" "$bundle_fingerprint"
+    write_text_file "$external_proof_autoingest_last_success_epoch_file" "$now_epoch"
+    write_text_file "$external_proof_autoingest_last_result_file" "ingested"
+    write_text_file "$external_proof_autoingest_last_detail_file" "host proof bundle ingested and readiness republished"
+    write_external_proof_status "ingested" "host proof bundle ingested and readiness republished" "$bundle_fingerprint" "$bundle_count"
+    log "external proof auto-ingest completed"
+    return 0
+  fi
+  cat "$tmp_output" >>"$log_file"
+  detail="$(sanitize_text "$(tail -n 5 "$tmp_output" 2>/dev/null || true)")"
+  if [ -z "$detail" ]; then
+    detail="host proof auto-ingest failed"
+  fi
+  write_text_file "$external_proof_autoingest_last_result_file" "failed"
+  write_text_file "$external_proof_autoingest_last_detail_file" "$detail"
+  write_external_proof_status "failed" "$detail" "$bundle_fingerprint" "$bundle_count"
+  log "external proof auto-ingest failed: $detail"
+  return 0
+}
+
 while :; do
   date -u +'%Y-%m-%dT%H:%M:%SZ' >"$heartbeat_file"
   if [ "$enabled" = "true" ] || [ "$enabled" = "1" ] || [ "$enabled" = "yes" ]; then
@@ -530,6 +702,7 @@ while :; do
     fi
   fi
   monitor_autoheal
+  monitor_external_proof_autoingest
   if [ "$loop_once" = "true" ] || [ "$loop_once" = "1" ] || [ "$loop_once" = "yes" ]; then
     break
   fi

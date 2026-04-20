@@ -254,7 +254,9 @@ the new CLI becomes live, rotates a `CODEX_NPM_REFRESH_TOKEN` build arg so the C
 not stuck behind Docker's build cache, and canary-rolls the first configured service before widening
 the refresh across the remaining bridge services. The same sidecar now also runs a bounded auto-heal
 loop for repeated unhealthy controller/dashboard/auditor/design-supervisor states so runtime health drift is corrected by the
-control plane instead of staying a purely manual operator chore.
+control plane instead of staying a purely manual operator chore. It also watches the published
+external-proof command directory and auto-ingests a returned host proof bundle as soon as the
+Windows lane drops `windows-proof-bundle.tgz`, then reruns the release/readiness materializers.
 
 Configure the schedule in `runtime.env`:
 
@@ -271,6 +273,9 @@ FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard fleet-auditor fleet-de
 FLEET_AUTOHEAL_THRESHOLD=2
 FLEET_AUTOHEAL_COOLDOWN_SECONDS=300
 FLEET_AUTOHEAL_TIMEOUT_SECONDS=120
+FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED=true
+FLEET_EXTERNAL_PROOF_COMMANDS_DIR=/docker/fleet/.codex-studio/published/external-proof-commands
+FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS=120
 FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45
 FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900
 FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180

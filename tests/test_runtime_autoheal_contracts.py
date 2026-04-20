@@ -55,8 +55,18 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
         self.assertIn('loop_once="$(printf', script)
         self.assertIn('autoheal_escalate_after_restarts="${FLEET_AUTOHEAL_ESCALATE_AFTER_RESTARTS:-3}"', script)
         self.assertIn('autoheal_event_log="$autoheal_state_dir/events.jsonl"', script)
+        self.assertIn('external_proof_autoingest_enabled="$(printf', script)
+        self.assertIn(
+            'external_proof_commands_dir="${FLEET_EXTERNAL_PROOF_COMMANDS_DIR:-$workspace_root/.codex-studio/published/external-proof-commands}"',
+            script,
+        )
+        self.assertIn(
+            'external_proof_autoingest_status_file="$external_proof_autoingest_state_dir/status.json"',
+            script,
+        )
         self.assertIn('compose_cmd restart "$service"', script)
         self.assertIn("monitor_autoheal", script)
+        self.assertIn("monitor_external_proof_autoingest", script)
 
     def test_dashboard_waits_for_healthy_upstreams_and_probes_root(self) -> None:
         compose = DOCKER_COMPOSE.read_text(encoding="utf-8")
@@ -81,6 +91,9 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
             'FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard fleet-auditor fleet-design-supervisor"',
             env_example,
         )
+        self.assertIn("FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED=true", env_example)
+        self.assertIn("FLEET_EXTERNAL_PROOF_COMMANDS_DIR=/docker/fleet/.codex-studio/published/external-proof-commands", env_example)
+        self.assertIn("FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS=120", env_example)
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", env_example)
         self.assertIn("FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900", env_example)
         self.assertIn("FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180", env_example)
@@ -98,6 +111,9 @@ class RuntimeAutoHealContractTests(unittest.TestCase):
             'FLEET_AUTOHEAL_SERVICES="fleet-controller fleet-dashboard fleet-auditor fleet-design-supervisor"',
             readme,
         )
+        self.assertIn("FLEET_EXTERNAL_PROOF_AUTOINGEST_ENABLED=true", readme)
+        self.assertIn("FLEET_EXTERNAL_PROOF_COMMANDS_DIR=/docker/fleet/.codex-studio/published/external-proof-commands", readme)
+        self.assertIn("FLEET_EXTERNAL_PROOF_AUTOINGEST_COOLDOWN_SECONDS=120", readme)
         self.assertIn("FLEET_CONTROLLER_HEARTBEAT_MAX_AGE_SECONDS=45", readme)
         self.assertIn("FLEET_AUDITOR_RUN_MAX_AGE_SECONDS=900", readme)
         self.assertIn("FLEET_AUDITOR_STARTUP_GRACE_SECONDS=180", readme)
