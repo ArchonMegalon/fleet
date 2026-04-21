@@ -12743,6 +12743,12 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
         if reconnect_active and worker_transport_retry_count <= 0:
             worker_transport_retry_count = _coerce_int(stderr_transport_reconnect.get("retry_count"), 0)
         missing_output_artifacts = bool(resolved_paths) and not bool(active_run_output_sizes) and worker_pid > 0
+        missing_live_output_evidence = (
+            worker_pid > 0
+            and not output_timestamps_present
+            and not bool(active_run_output_sizes)
+            and bool(resolved_paths)
+        )
         computed_progress_state = (
             "transport_outage_waiting"
             if worker_transport_current_outage and worker_pid > 0
@@ -12763,6 +12769,12 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                         worker_pid > 0
                         and stderr_waiting_for_model_output
                     )
+                        else (
+                        "waiting_for_model_output"
+                        if (
+                            missing_live_output_evidence
+                            and persisted_progress_state == "streaming"
+                        )
                         else (
                         "missing_output_artifacts"
                         if missing_output_artifacts and output_timestamps_present
@@ -12787,6 +12799,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                     )
                 )
             )
+        )
         )
         active_prompt_mode = _active_run_prompt_mode(active_run)
         authoritative_computed_progress_states = {
