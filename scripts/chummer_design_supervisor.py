@@ -7819,6 +7819,20 @@ def _tail_transport_reconnect_state(path: Path) -> Dict[str, Any]:
     }
 
 
+def _tail_waiting_for_model_output(path: Path) -> bool:
+    if not path.exists() or not path.is_file():
+        return False
+    lines = [line.strip() for line in _tail_text_file(path, max_bytes=16384, max_lines=80).splitlines() if line.strip()]
+    if not lines:
+        return False
+    for line in reversed(lines):
+        compact = " ".join(str(line or "").split())
+        if not compact:
+            continue
+        return bool(re.match(r"^Trace:\s*lane=.*waiting for model output(?:\s*\([^)]*\))?$", compact, re.IGNORECASE))
+    return False
+
+
 def _write_runtime_handoff(state_root: Path) -> None:
     try:
         resolved_state_root = Path(state_root).resolve()
@@ -8308,7 +8322,6 @@ def _run_worker_attempt(
                             _terminate_worker_process(process_holder.get("process"))
                     if waiting_for_model_output and not progress_state["first_output_recorded"]:
                         now_monotonic = time.monotonic()
-                        now_iso = _iso_now()
                         if float(model_wait_state["first_wait_trace_monotonic"] or 0.0) <= 0.0:
                             model_wait_state["first_wait_trace_monotonic"] = now_monotonic
                         model_wait_state["last_wait_trace_monotonic"] = now_monotonic
@@ -8316,7 +8329,6 @@ def _run_worker_attempt(
                             _update_active_run_fields(
                                 state_root,
                                 run_id,
-                                worker_last_output_at=now_iso,
                                 progress_state="stream_connected_waiting",
                             )
                             model_wait_state["persisted_waiting_state"] = True
@@ -8325,7 +8337,6 @@ def _run_worker_attempt(
                             _update_active_run_fields(
                                 state_root,
                                 run_id,
-                                worker_last_output_at=now_iso,
                                 progress_state="stream_connected_waiting",
                             )
                             progress_state["last_progress_persisted_at"] = now_monotonic
@@ -12718,6 +12729,11 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             if not worker_transport_current_outage
             else {}
         )
+        stderr_waiting_for_model_output = (
+            _tail_waiting_for_model_output(Path(resolved_paths.get("stderr") or ""))
+            if not worker_transport_current_outage
+            else False
+        )
         reconnect_active = bool(stderr_transport_reconnect)
         if reconnect_active and not worker_transport_state:
             worker_transport_state = "reconnecting"
@@ -12738,6 +12754,16 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                         and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
                     )
                     else (
+                    "waiting_for_model_output"
+                    if (
+                        worker_pid > 0
+                        and stderr_waiting_for_model_output
+                        and (
+                            persisted_progress_state in {"waiting_for_model_output", "stream_connected_waiting"}
+                            or str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+                        )
+                    )
+                        else (
                         "streaming"
                         if str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
                         else (
@@ -12752,6 +12778,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                                     else (f"idle_{idle_reason}" if idle_reason else "unknown")
                                 )
                             )
+                        )
                         )
                     )
                 )
