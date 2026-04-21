@@ -17401,6 +17401,62 @@ def test_statefile_shard_summaries_waiting_overrides_stale_streaming_without_out
         module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
 
 
+def test_statefile_shard_summaries_marks_blocked_status_polling_from_stderr_tail(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_module()
+    root = tmp_path
+    previous_workspace_root = module.DEFAULT_WORKSPACE_ROOT
+    try:
+        module.DEFAULT_WORKSPACE_ROOT = root
+        aggregate_root = root / "state" / "chummer_design_supervisor"
+        shard_root = aggregate_root / "shard-1"
+        run_dir = shard_root / "runs" / "20260421T083643Z-shard-1"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = run_dir / "worker.stderr.log"
+        stdout_path = run_dir / "worker.stdout.log"
+        last_message_path = run_dir / "last_message.txt"
+        stderr_path.write_text(
+            "Trace: lane=core waiting for model output\n"
+            "Error: worker_status_helper_loop:repeated_blocked_status_polling\n"
+            "[fleet-supervisor] worker kept polling supervisor status inside an active run without meaningful repo work; killed early and marked retryable\n",
+            encoding="utf-8",
+        )
+        stdout_path.write_text("", encoding="utf-8")
+        last_message_path.write_text("", encoding="utf-8")
+        module._write_json(
+            shard_root / "state.json",
+            {
+                "updated_at": "2026-04-21T08:43:26Z",
+                "mode": "completion_review",
+                "frontier_ids": [123],
+                "open_milestone_ids": [123],
+                "active_run_id": "20260421T083643Z-shard-1",
+                "active_run_started_at": "2026-04-21T08:36:43Z",
+                "active_run_worker_pid": 69178,
+                "active_run_worker_first_output_at": "2026-04-21T08:41:17Z",
+                "active_run_worker_last_output_at": "2026-04-21T08:41:17Z",
+                "active_run_progress_state": "streaming",
+                "worker_stderr_path": str(stderr_path.resolve()),
+                "worker_stdout_path": str(stdout_path.resolve()),
+                "worker_last_message_path": str(last_message_path.resolve()),
+                "selected_account_alias": "acct-ea-core-08",
+                "selected_model": "ea-coder-hard-batch",
+            },
+        )
+
+        monkeypatch.setattr(module, "_running_inside_container", lambda: True)
+        monkeypatch.setattr(module, "_pid_alive", lambda pid: True)
+
+        summaries = module._statefile_shard_summaries(aggregate_root)
+
+        assert len(summaries) == 1
+        shard = summaries[0]
+        assert shard["active_run_progress_state"] == "blocked_status_polling"
+    finally:
+        module.DEFAULT_WORKSPACE_ROOT = previous_workspace_root
+
+
 def test_statefile_shard_summaries_treats_foreign_container_pid_as_container_scoped(
     monkeypatch, tmp_path: Path
 ) -> None:

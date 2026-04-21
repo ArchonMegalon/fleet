@@ -7833,6 +7833,23 @@ def _tail_waiting_for_model_output(path: Path) -> bool:
     return False
 
 
+def _tail_blocked_status_polling(path: Path) -> bool:
+    if not path.exists() or not path.is_file():
+        return False
+    lines = [line.strip() for line in _tail_text_file(path, max_bytes=16384, max_lines=80).splitlines() if line.strip()]
+    if not lines:
+        return False
+    for line in reversed(lines):
+        compact = " ".join(str(line or "").split())
+        if not compact:
+            continue
+        if "worker_status_helper_loop:repeated_blocked_status_polling" in compact:
+            return True
+        if "worker kept polling supervisor status inside an active run without meaningful repo work" in compact.lower():
+            return True
+    return False
+
+
 def _write_runtime_handoff(state_root: Path) -> None:
     try:
         resolved_state_root = Path(state_root).resolve()
@@ -12737,6 +12754,11 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             if not worker_transport_current_outage
             else False
         )
+        stderr_blocked_status_polling = (
+            _tail_blocked_status_polling(Path(resolved_paths.get("stderr") or ""))
+            if not worker_transport_current_outage
+            else False
+        )
         reconnect_active = bool(stderr_transport_reconnect)
         if reconnect_active and not worker_transport_state:
             worker_transport_state = "reconnecting"
@@ -12749,58 +12771,35 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             and not bool(active_run_output_sizes)
             and bool(resolved_paths)
         )
-        computed_progress_state = (
-            "transport_outage_waiting"
-            if worker_transport_current_outage and worker_pid > 0
-            else (
-                "transport_reconnecting"
-                if reconnect_active and worker_pid > 0
-                else (
-                    "closing"
-                    if (
-                        worker_pid > 0
-                        and process_probe_scope == "local"
-                        and process_alive is False
-                        and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
-                    )
-                else (
-                    "waiting_for_model_output"
-                    if (
-                        worker_pid > 0
-                        and stderr_waiting_for_model_output
-                    )
-                        else (
-                        "waiting_for_model_output"
-                        if (
-                            missing_live_output_evidence
-                            and persisted_progress_state == "streaming"
-                        )
-                        else (
-                        "missing_output_artifacts"
-                        if missing_output_artifacts and output_timestamps_present
-                        else (
-                        "streaming"
-                        if output_timestamps_present
-                        else (
-                            "running_silent"
-                            if process_alive is True
-                            else (
-                                "container_scoped"
-                                if worker_pid > 0 and process_probe_scope == "container_local"
-                                else (
-                                    "missing_process"
-                                    if worker_pid > 0 and process_alive is False
-                                    else (f"idle_{idle_reason}" if idle_reason else "unknown")
-                                )
-                            )
-                        )
-                        )
-                        )
-                    )
-                )
-            )
-        )
-        )
+        if worker_transport_current_outage and worker_pid > 0:
+            computed_progress_state = "transport_outage_waiting"
+        elif reconnect_active and worker_pid > 0:
+            computed_progress_state = "transport_reconnecting"
+        elif (
+            worker_pid > 0
+            and process_probe_scope == "local"
+            and process_alive is False
+            and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+        ):
+            computed_progress_state = "closing"
+        elif worker_pid > 0 and stderr_blocked_status_polling:
+            computed_progress_state = "blocked_status_polling"
+        elif worker_pid > 0 and stderr_waiting_for_model_output:
+            computed_progress_state = "waiting_for_model_output"
+        elif missing_live_output_evidence and persisted_progress_state == "streaming":
+            computed_progress_state = "waiting_for_model_output"
+        elif missing_output_artifacts and output_timestamps_present:
+            computed_progress_state = "missing_output_artifacts"
+        elif output_timestamps_present:
+            computed_progress_state = "streaming"
+        elif process_alive is True:
+            computed_progress_state = "running_silent"
+        elif worker_pid > 0 and process_probe_scope == "container_local":
+            computed_progress_state = "container_scoped"
+        elif worker_pid > 0 and process_alive is False:
+            computed_progress_state = "missing_process"
+        else:
+            computed_progress_state = f"idle_{idle_reason}" if idle_reason else "unknown"
         active_prompt_mode = _active_run_prompt_mode(active_run)
         authoritative_computed_progress_states = {
             "waiting_for_model_output",
@@ -12811,6 +12810,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             "container_scoped",
             "missing_process",
             "missing_output_artifacts",
+            "blocked_status_polling",
         }
         effective_progress_state = persisted_progress_state or computed_progress_state
         if computed_progress_state in authoritative_computed_progress_states:
