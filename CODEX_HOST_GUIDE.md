@@ -46,6 +46,9 @@ Drive the remaining critical path in this order unless the user gives a differen
 - Prefer worker-safe receipts, generated proofs, and repo-local verifiers over ad hoc operator narration.
 - Do not use active-run helper output as closure evidence for completed proof packages.
 - Fix the root cause, then refresh the relevant generated receipts, then run the narrowest useful validation, then commit.
+- Do not stop after a status report, a green validation batch, a commit, or a push. Pick the next highest-value slice and continue unless a true external blocker exists.
+- After every important step, rewrite `/docker/fleet/NEXT_SESSION_HANDOFF.md` as a mandatory default behavior. Important steps include implementation batches, validation batches, commits, pushes, live restarts, audits, blocker discoveries, and priority shifts.
+- Treat the handoff as part of the work, not as an optional summary. A stale or missing handoff is a failure state for both the main agent and any codexliz-backed lane.
 
 ## Repos you will actually use
 

@@ -71,3 +71,44 @@ Do not stop until Chummer6 UI parity is genuinely finished. Keep looping autonom
 Best practical note:
 - If you want maximum speed, add: `Commit and push every green slice without asking again.`
 - If you want maximum rigor, add: `List every remaining non-identical surface and reason after each batch.`
+
+## Strongest continuation + handoff wording
+
+Use this exact addition when you want the agent and the `codexliz` shim to keep moving without drift:
+
+```text
+Continuation and handoff policy — mandatory, default behavior:
+
+- Do not stop after reporting status.
+- Do not stop after one green batch.
+- Do not stop after a commit or push.
+- After every important step, immediately choose and start the next highest-value slice unless a true hard blocker exists.
+- Treat “important step” broadly: any meaningful implementation batch, validation batch, commit, push, live config change, restart, audit finding, blocker discovery, or ETA/priority change.
+- Status reporting is not a stopping condition. Reporting happens, then work continues.
+- The only valid stopping conditions are:
+  1. the target is actually finished and validated, with commits pushed, or
+  2. a real external blocker remains that cannot be solved on this host.
+
+Mandatory handoff policy — mandatory, default behavior for both the main agent and the codexliz shim:
+
+- After every important step, write or refresh `/docker/fleet/NEXT_SESSION_HANDOFF.md` before ending that step.
+- Do this even if the same session is continuing immediately.
+- Do this even if no user asked for a handoff.
+- Treat missing or stale handoff state as a task failure.
+- The handoff must always include:
+  - what changed
+  - exact files changed
+  - exact validations run and results
+  - exact commits/pushes if any
+  - what still differs from Chummer5a, item by item, and why
+  - current ETA
+  - the exact next slice to work on
+  - any live Fleet truth relevant to the next slice
+  - any real blocker and the exact external step if blocked
+
+Default execution rule:
+
+- The handoff is not the end of the work. It is part of the work.
+- After updating the handoff, continue with the next slice immediately unless truly blocked.
+- If a session is interrupted, the next session must resume from the handoff without re-discovery churn.
+```

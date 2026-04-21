@@ -1,6 +1,22 @@
 # Next Session Handoff
 
-## Current Status (`2026-04-20T15:04:00Z`)
+## Mandatory policy
+
+- This file must be rewritten after every important step by default.
+- Important steps include implementation batches, validation batches, commits, pushes, live config changes, restarts, audits, blocker discoveries, and ETA/priority changes.
+- Writing this handoff is not a stopping condition. After updating it, continue with the next highest-value slice unless truly blocked by an external dependency.
+- A missing or stale handoff is a failure state for the main agent and for codexliz-backed lanes.
+- Every refresh must include:
+  - exact changes
+  - exact validations and results
+  - exact commits/pushes
+  - remaining Chummer5a differences, item by item, with reasons
+  - current ETA
+  - exact next slice
+  - current Fleet truth relevant to that slice
+  - exact blocker and external step if blocked
+
+## Current Status (`2026-04-21T05:20:00Z`)
 
 **Flagship Product Readiness**: `fail`
 - Ready: 7/8 lanes
@@ -11,6 +27,7 @@
 - `status=fail`
 - `missing_keys=['desktop_client']`
 - No other readiness plane is currently missing.
+- Continuation and handoff discipline is now explicit host policy in `/docker/fleet/PARITY_COMPLETION_INSTRUCTION.md` and `/docker/fleet/CODEX_HOST_GUIDE.md`.
 
 ## What changed in the latest UI parity loop
 
@@ -53,6 +70,12 @@ bash scripts/ai/milestones/chummer5a-desktop-workflow-parity-check.sh
 ```
 
 Result: all `PASS`
+
+## What changed in the latest Fleet honesty loop
+
+- Shard-summary truth no longer lets stale persisted `streaming` override a live `waiting_for_model_output` stderr tail.
+- Latest Fleet commit: `e81f3329` on `main`.
+- Live audit now shows the current truth: all `13` shards are on EA and all `13` are presently `waiting_for_model_output`, so they are alive but not materially progressing right now.
 
 ## Remaining real gaps
 
