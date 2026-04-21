@@ -12721,6 +12721,9 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
         active_run_worker_last_output_at = str(
             shard_state.get("active_run_worker_last_output_at") or active_run.get("worker_last_output_at") or ""
         ).strip()
+        output_timestamps_present = bool(
+            str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+        )
         persisted_progress_state = str(
             shard_state.get("active_run_progress_state") or active_run.get("progress_state") or ""
         ).strip()
@@ -12739,6 +12742,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             worker_transport_state = "reconnecting"
         if reconnect_active and worker_transport_retry_count <= 0:
             worker_transport_retry_count = _coerce_int(stderr_transport_reconnect.get("retry_count"), 0)
+        missing_output_artifacts = bool(resolved_paths) and not bool(active_run_output_sizes) and worker_pid > 0
         computed_progress_state = (
             "transport_outage_waiting"
             if worker_transport_current_outage and worker_pid > 0
@@ -12760,8 +12764,11 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                         and stderr_waiting_for_model_output
                     )
                         else (
+                        "missing_output_artifacts"
+                        if missing_output_artifacts and output_timestamps_present
+                        else (
                         "streaming"
-                        if str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
+                        if output_timestamps_present
                         else (
                             "running_silent"
                             if process_alive is True
@@ -12774,6 +12781,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                                     else (f"idle_{idle_reason}" if idle_reason else "unknown")
                                 )
                             )
+                        )
                         )
                         )
                     )
@@ -12789,6 +12797,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             "closing",
             "container_scoped",
             "missing_process",
+            "missing_output_artifacts",
         }
         effective_progress_state = persisted_progress_state or computed_progress_state
         if computed_progress_state in authoritative_computed_progress_states:
