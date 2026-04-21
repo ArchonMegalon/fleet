@@ -1014,6 +1014,92 @@ class CodexEaRouteTests(unittest.TestCase):
         self.assertIn("Results: ok 1 | revoked 1", response["message"])
         self.assertIn("1min aggregate", response["message"])
 
+    def test_onemin_aggregate_response_applies_live_probe_totals_over_cached_aggregate(self) -> None:
+        self.write_config({})
+
+        payload = {
+            "onemin_aggregate": {
+                "slot_count": 2,
+                "slot_count_with_known_balance": 2,
+                "sum_max_credits": 1_000,
+                "sum_free_credits": 500,
+                "remaining_percent_total": 50.0,
+                "current_pace_burn_credits_per_hour": 25.0,
+                "avg_daily_burn_credits_7d": 120.0,
+                "basis_summary": "profiles_fallback x2",
+                "incoming_topups_excluded": True,
+            }
+        }
+        probe_payload = {
+            "provider_key": "onemin",
+            "slot_count": 3,
+            "configured_slot_count": 3,
+            "probe_model": "gpt-5.4",
+            "owner_mapped_slots": 1,
+            "result_counts": {"depleted": 1, "ok": 2},
+            "last_probe_at": 1_742_208_000.0,
+            "slots": [
+                {
+                    "slot": "primary",
+                    "account_name": "ONEMIN_AI_API_KEY",
+                    "slot_env_name": "ONEMIN_AI_API_KEY",
+                    "slot_role": "active",
+                    "owner_email": "owner@example.com",
+                    "result": "depleted",
+                    "state": "quarantine",
+                    "detail": "INSUFFICIENT_CREDITS",
+                    "estimated_remaining_credits": 10,
+                    "estimated_credit_basis": "observed_error",
+                    "last_probe_at": 1_742_208_000.0,
+                },
+                {
+                    "slot": "fallback_1",
+                    "account_name": "ONEMIN_AI_API_KEY_FALLBACK_1",
+                    "slot_env_name": "ONEMIN_AI_API_KEY_FALLBACK_1",
+                    "slot_role": "reserve",
+                    "result": "ok",
+                    "state": "ready",
+                    "detail": "OK",
+                    "estimated_remaining_credits": 20,
+                    "estimated_credit_basis": "max_minus_observed_usage",
+                    "last_probe_at": 1_742_208_000.0,
+                },
+                {
+                    "slot": "fallback_2",
+                    "account_name": "ONEMIN_AI_API_KEY_FALLBACK_2",
+                    "slot_env_name": "ONEMIN_AI_API_KEY_FALLBACK_2",
+                    "slot_role": "reserve",
+                    "result": "ok",
+                    "state": "ready",
+                    "detail": "OK",
+                    "estimated_remaining_credits": 30,
+                    "estimated_credit_basis": "max_minus_observed_usage",
+                    "last_probe_at": 1_742_208_000.0,
+                },
+            ],
+        }
+        self.route_module._LAST_EA_HTTP_ERROR = "timed out after 30s"
+        self.route_module._LAST_EA_STATUS_SOURCE = "local_runtime_cache"
+        self.route_module._LAST_EA_STATUS_FETCHED_AT = "2026-03-23T08:41:04Z"
+
+        with mock.patch.object(self.route_module, "_ea_onemin_probe_payload", return_value=probe_payload):
+            with mock.patch.object(self.route_module, "_ea_status_payload", return_value=payload):
+                response = self.route_module._onemin_aggregate_response(probe_all=True)
+
+        self.assertTrue(response["ok"])
+        data = response["data"]
+        self.assertEqual(data["slot_count"], 3)
+        self.assertEqual(data["sum_free_credits"], 60)
+        self.assertEqual(data["sum_probe_estimated_credits"], 60)
+        self.assertEqual(data["sum_max_credits"], 1500)
+        self.assertAlmostEqual(data["remaining_percent_total"], 4.0, places=2)
+        self.assertAlmostEqual(data["hours_remaining_at_current_pace"], 2.4, places=2)
+        self.assertAlmostEqual(data["days_remaining_at_7d_avg_burn"], 0.5, places=2)
+        self.assertFalse(data["used_precomputed_aggregate"])
+        self.assertTrue(data["probe_applied_to_aggregate"])
+        self.assertIn("Aggregate slot totals were refreshed from live probe-all results", response["message"])
+        self.assertIn("Latest explicit probes: depleted 1 | ok 2", response["message"])
+
     def test_onemin_aggregate_response_hides_probe_note_when_no_unknown_slots_remain(self) -> None:
         self.write_config({})
 

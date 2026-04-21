@@ -1396,6 +1396,134 @@ def _onemin_slot_label(slot: dict[str, Any], index: int) -> str:
     return owner or slot_env_name or f"slot-{index}"
 
 
+def _infer_onemin_max_credits_per_slot(aggregate: dict[str, Any]) -> int | None:
+    slots = [slot for slot in (aggregate.get("slots") or []) if isinstance(slot, dict)]
+    counts: dict[int, int] = {}
+    for slot in slots:
+        max_credits = _coerce_int(slot.get("max_credits"))
+        if max_credits in (None, 0):
+            continue
+        counts[max_credits] = int(counts.get(max_credits) or 0) + 1
+    if counts:
+        return max(sorted(counts), key=lambda value: (counts[value], value))
+    sum_max = _coerce_int(aggregate.get("sum_max_credits"))
+    slot_count = _coerce_int(aggregate.get("slot_count"))
+    if sum_max not in (None, 0) and slot_count not in (None, 0):
+        return max(0, int(round(float(sum_max) / float(slot_count))))
+    return None
+
+
+def _aggregate_from_probe_payload(
+    probe_payload: dict[str, Any],
+    *,
+    existing_aggregate: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    probe_slots = [slot for slot in (probe_payload.get("slots") or []) if isinstance(slot, dict)]
+    if not probe_slots:
+        return None
+    aggregate = dict(existing_aggregate or {})
+    max_per_slot_hint = _infer_onemin_max_credits_per_slot(aggregate)
+    rows: list[dict[str, Any]] = []
+    for raw in probe_slots:
+        detail = str(raw.get("detail") or raw.get("last_probe_detail") or raw.get("last_error") or "").strip()
+        quarantine_until = str(raw.get("quarantine_until") or "").strip()
+        row = {
+            "account_name": str(raw.get("account_name") or "").strip(),
+            "slot_env_name": str(raw.get("slot_env_name") or raw.get("account_name") or "").strip(),
+            "slot": str(raw.get("slot") or "").strip(),
+            "slot_role": str(raw.get("slot_role") or "").strip(),
+            "owner_label": str(raw.get("owner_label") or "").strip(),
+            "owner_name": str(raw.get("owner_name") or "").strip(),
+            "owner_email": str(raw.get("owner_email") or "").strip(),
+            "state": str(raw.get("state") or "unknown").strip() or "unknown",
+            "basis": str(raw.get("estimated_credit_basis") or raw.get("basis") or "probe_all").strip() or "probe_all",
+            "free_credits": _coerce_int(
+                _coalesce(
+                    raw.get("estimated_remaining_credits"),
+                    raw.get("free_credits"),
+                    raw.get("remaining_credits"),
+                    raw.get("available_credits"),
+                )
+            ),
+            "max_credits": _coerce_int(raw.get("max_credits")) or max_per_slot_hint,
+            "detail": detail,
+            "last_error": str(raw.get("last_error") or "").strip(),
+            "quarantine_until": quarantine_until,
+            "last_probe_at": raw.get("last_probe_at"),
+            "last_probe_result": str(raw.get("result") or raw.get("last_probe_result") or "").strip(),
+            "last_probe_detail": str(raw.get("detail") or raw.get("last_probe_detail") or "").strip(),
+            "last_probe_model": str(raw.get("model") or raw.get("last_probe_model") or "").strip(),
+            "last_probe_latency_ms": _coerce_int(raw.get("latency_ms") or raw.get("last_probe_latency_ms")),
+            "revoked_like": False,
+            "quarantined": bool(quarantine_until),
+        }
+        row["revoked_like"] = _onemin_slot_revoked_like(row)
+        row["quarantined"] = bool(quarantine_until) or str(row.get("state") or "").strip().lower() in {"quarantine", "quarantined"}
+        rows.append(row)
+
+    slot_count = len(rows)
+    known_balance_count = sum(1 for row in rows if row.get("free_credits") is not None)
+    known_max_count = sum(1 for row in rows if row.get("max_credits") is not None)
+    positive_balance_count = sum(1 for row in rows if (row.get("free_credits") or 0) > 0)
+    sum_free_credits = sum(int(row["free_credits"]) for row in rows if row.get("free_credits") is not None) if rows else None
+    sum_max_credits = sum(int(row["max_credits"]) for row in rows if row.get("max_credits") is not None) if rows else None
+    remaining_percent_total = None
+    if sum_free_credits is not None and sum_max_credits not in (None, 0):
+        remaining_percent_total = max(0.0, min(100.0, (sum_free_credits / float(sum_max_credits)) * 100.0))
+
+    basis_values = [str(row.get("basis") or "").strip() for row in rows]
+    state_values = [str(row.get("state") or "").strip() for row in rows]
+    probe_result_counts = dict(probe_payload.get("result_counts") or {})
+    if not probe_result_counts:
+        probe_result_counts = _count_values([str(row.get("last_probe_result") or "").strip() for row in rows if str(row.get("last_probe_result") or "").strip()])
+
+    aggregate.update(
+        {
+            "slot_count": slot_count,
+            "slot_count_with_balance": known_balance_count,
+            "slot_count_with_known_balance": known_balance_count,
+            "slot_count_with_positive_balance": positive_balance_count,
+            "slot_count_with_known_max": known_max_count,
+            "unknown_balance_slot_count": max(slot_count - known_balance_count, 0),
+            "unknown_max_slot_count": max(slot_count - known_max_count, 0),
+            "sum_free_credits": sum_free_credits,
+            "sum_max_credits": sum_max_credits,
+            "remaining_percent_total": remaining_percent_total,
+            "basis_summary": _format_count_summary(basis_values),
+            "state_summary": _format_count_summary(state_values),
+            "basis_counts": _count_values(basis_values),
+            "state_counts": _count_values(state_values),
+            "unknown_unprobed_slot_count": sum(1 for row in rows if str(row.get("basis") or "").strip().lower() == "unknown_unprobed"),
+            "observed_error_slot_count": sum(1 for row in rows if str(row.get("basis") or "").strip().lower() == "observed_error"),
+            "revoked_slot_count": sum(1 for row in rows if bool(row.get("revoked_like"))),
+            "quarantined_slot_count": sum(1 for row in rows if bool(row.get("quarantined"))),
+            "probe_result_counts": probe_result_counts,
+            "owner_mapped_slot_count": _coerce_int(probe_payload.get("owner_mapped_slots"))
+            or sum(1 for row in rows if str(row.get("owner_label") or row.get("owner_name") or row.get("owner_email") or "").strip()),
+            "last_probe_at": _coalesce(probe_payload.get("last_probe_at"), max((float(row.get("last_probe_at") or 0.0) for row in rows), default=0.0) or None),
+            "slots": rows,
+            "probe_note": (
+                "unknown_unprobed means no live evidence yet; run `codexea onemin --probe-all` to classify untouched slots explicitly."
+                if any(str(row.get("basis") or "").strip().lower() == "unknown_unprobed" for row in rows)
+                else ""
+            ),
+            "status_basis": "live_probe_slot_estimates",
+            "sum_probe_estimated_credits": sum_free_credits,
+            "probe_applied_to_aggregate": True,
+            "used_precomputed_aggregate": False,
+        }
+    )
+    current_pace = _coerce_float(aggregate.get("current_pace_burn_credits_per_hour"))
+    if sum_free_credits not in (None, 0) and current_pace not in (None, 0):
+        aggregate["hours_remaining_at_current_pace"] = round(float(sum_free_credits) / float(current_pace), 2)
+        aggregate["hours_remaining_at_current_pace_no_topup"] = round(float(sum_free_credits) / float(current_pace), 2)
+    avg_daily_burn = _coerce_float(aggregate.get("avg_daily_burn_credits_7d"))
+    if sum_free_credits not in (None, 0) and avg_daily_burn not in (None, 0):
+        aggregate["days_remaining_at_7d_avg_burn"] = round(float(sum_free_credits) / float(avg_daily_burn), 2)
+    aggregate["days_left_at_7d_avg_burn"] = aggregate.get("days_remaining_at_7d_avg_burn")
+    return aggregate
+
+
 def _render_active_fleet_shard_label(item: dict[str, Any]) -> str:
     label = str(item.get("name") or item.get("_shard") or "").strip() or "unnamed shard"
     active_run_id = str(item.get("active_run_id") or "").strip()
@@ -2074,6 +2202,7 @@ def _onemin_aggregate_response(
     probe_warning = ""
     probe_error = ""
     billing_error = ""
+    probe_refresh_notice = ""
 
     def _ensure_local_onemin_payload(*, run_probe: bool) -> dict[str, Any] | None:
         nonlocal local_onemin_payload
@@ -2220,26 +2349,31 @@ def _onemin_aggregate_response(
             payload_fetched_at = ""
     if not isinstance(aggregate, dict):
         if isinstance(probe_payload, dict):
-            fragments = [_render_onemin_probe_summary(probe_payload)]
-            if isinstance(billing_refresh_payload, dict):
-                fragments.insert(0, _render_onemin_billing_refresh_summary(billing_refresh_payload))
-            elif probe_warning:
-                fragments.insert(0, probe_warning)
-            fragments.append(f"Live CodexEA {payload_source.replace('_', ' ')} returned no 1min aggregate block; showing direct probe data only.")
-            data = {"probe": probe_payload}
-            if isinstance(billing_refresh_payload, dict):
-                data["billing_lookup"] = billing_refresh_payload
-            return {
-                "matched": True,
-                "ok": True,
-                "exit_code": 0,
-                "message": "\n\n".join(fragments),
-                "data": data,
-                "payload_source": payload_source,
-                "payload_fetched_at": payload_fetched_at,
-                "status_error": status_error,
-                "profiles_error": profiles_error,
-            }
+            aggregate = _aggregate_from_probe_payload(probe_payload, existing_aggregate={})
+            if isinstance(aggregate, dict):
+                payload_source = "live_probe_only"
+                payload_fetched_at = ""
+            else:
+                fragments = [_render_onemin_probe_summary(probe_payload)]
+                if isinstance(billing_refresh_payload, dict):
+                    fragments.insert(0, _render_onemin_billing_refresh_summary(billing_refresh_payload))
+                elif probe_warning:
+                    fragments.insert(0, probe_warning)
+                fragments.append(f"Live CodexEA {payload_source.replace('_', ' ')} returned no 1min aggregate block; showing direct probe data only.")
+                data = {"probe": probe_payload}
+                if isinstance(billing_refresh_payload, dict):
+                    data["billing_lookup"] = billing_refresh_payload
+                return {
+                    "matched": True,
+                    "ok": True,
+                    "exit_code": 0,
+                    "message": "\n\n".join(fragments),
+                    "data": data,
+                    "payload_source": payload_source,
+                    "payload_fetched_at": payload_fetched_at,
+                    "status_error": status_error,
+                    "profiles_error": profiles_error,
+                }
         return {
             "matched": True,
             "ok": False,
@@ -2260,6 +2394,14 @@ def _onemin_aggregate_response(
         }
     if isinstance(billing_refresh_payload, dict):
         aggregate = {**aggregate, "billing_lookup": billing_refresh_payload}
+    if isinstance(probe_payload, dict):
+        probe_aggregate = _aggregate_from_probe_payload(probe_payload, existing_aggregate=aggregate)
+        if isinstance(probe_aggregate, dict):
+            aggregate = probe_aggregate
+            probe_refresh_notice = (
+                "Note: Aggregate slot totals were refreshed from live probe-all results; "
+                "runway and top-up fields still use the best available status/billing data."
+            )
     renewal_schedule = _update_onemin_renewal_schedule(aggregate)
     if isinstance(renewal_schedule, dict):
         aggregate = {**aggregate, "renewal_schedule": renewal_schedule}
@@ -2297,6 +2439,8 @@ def _onemin_aggregate_response(
             )
     if probe_warning:
         fragments.append(probe_warning)
+    if probe_refresh_notice:
+        fragments.append(probe_refresh_notice)
     if isinstance(probe_payload, dict):
         fragments.append(_render_onemin_probe_summary(probe_payload))
         aggregate = {**aggregate, "probe": probe_payload}
