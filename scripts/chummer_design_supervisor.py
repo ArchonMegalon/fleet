@@ -12753,15 +12753,11 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                         and process_alive is False
                         and str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
                     )
-                    else (
+                else (
                     "waiting_for_model_output"
                     if (
                         worker_pid > 0
                         and stderr_waiting_for_model_output
-                        and (
-                            persisted_progress_state in {"waiting_for_model_output", "stream_connected_waiting"}
-                            or str(active_run_worker_last_output_at or active_run_worker_first_output_at).strip()
-                        )
                     )
                         else (
                         "streaming"
@@ -12785,6 +12781,19 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
             )
         )
         active_prompt_mode = _active_run_prompt_mode(active_run)
+        authoritative_computed_progress_states = {
+            "waiting_for_model_output",
+            "stream_connected_waiting",
+            "transport_reconnecting",
+            "transport_outage_waiting",
+            "closing",
+            "container_scoped",
+            "missing_process",
+        }
+        effective_progress_state = persisted_progress_state or computed_progress_state
+        if computed_progress_state in authoritative_computed_progress_states:
+            effective_progress_state = computed_progress_state
+
         summaries.append(
             {
                 "name": shard_root.name,
@@ -12827,7 +12836,7 @@ def _statefile_shard_summaries(state_root: Path) -> List[Dict[str, Any]]:
                 "active_run_worker_first_output_at": active_run_worker_first_output_at,
                 "active_run_worker_last_output_at": active_run_worker_last_output_at,
                 "worker_last_output_at": active_run_worker_last_output_at,
-                "active_run_progress_state": persisted_progress_state or computed_progress_state,
+                "active_run_progress_state": effective_progress_state,
                 "worker_stdout_path": resolved_paths.get("stdout", ""),
                 "worker_stderr_path": resolved_paths.get("stderr", ""),
                 "worker_last_message_path": resolved_paths.get("last_message", ""),
