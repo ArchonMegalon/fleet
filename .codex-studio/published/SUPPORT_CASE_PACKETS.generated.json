@@ -24,7 +24,7 @@
       "release_receipt_id_present": 0,
       "release_receipt_ready": 0
     },
-    "generated_at": "2026-04-22T13:58:06Z",
+    "generated_at": "2026-04-22T16:45:53Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -49,7 +49,7 @@
     "state_counts": {},
     "support_case_backed_count": 0
   },
-  "generated_at": "2026-04-22T13:58:06Z",
+  "generated_at": "2026-04-22T16:45:53Z",
   "packets": [],
   "reporter_followthrough_plan": {
     "action_groups": {
@@ -65,7 +65,7 @@
     "blocked_receipt_mismatch_count": 0,
     "feedback_ready_count": 0,
     "fix_available_ready_count": 0,
-    "generated_at": "2026-04-22T13:58:06Z",
+    "generated_at": "2026-04-22T16:45:53Z",
     "hold_until_fix_receipt_count": 0,
     "milestone_id": 102,
     "package_id": "next90-m102-fleet-reporter-receipts",
@@ -275,7 +275,7 @@
     "capture_deadline_hours": 24,
     "capture_deadline_utc": "2026-04-22T15:36:03Z",
     "command_root": "/docker/fleet/.codex-studio/published/external-proof-commands",
-    "generated_at": "2026-04-22T13:58:06Z",
+    "generated_at": "2026-04-22T16:45:53Z",
     "host_groups": {},
     "hosts": [],
     "recommended_action": "No unresolved external desktop host-proof requests remain.",

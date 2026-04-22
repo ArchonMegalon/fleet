@@ -1,6 +1,6 @@
 contract_name: fleet.completion_review_frontier
 schema_version: 1
-generated_at: '2026-04-22T13:56:58Z'
+generated_at: '2026-04-22T14:30:51Z'
 mode: flagship_product
 state_root: /var/lib/codex-fleet/chummer_design_supervisor/shard-11
 source_registry_path: /docker/chummercomplete/chummer-design/products/chummer/NEXT_12_BIGGEST_WINS_REGISTRY.yaml
@@ -56,20 +56,23 @@ focus:
   - journey smoothness
   - performance
   - proof shelf
+  - mobile play shell
+  - ui kit and flagship polish
+  - media artifacts
   - desktop client
 completion_audit:
   status: fail
-  reason: linux desktop exit gate primary .deb install/remove verification is invalid
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 receipt_audit:
   status: fail
-  reason: 'latest worker receipt 20260422T125628Z-shard-11 is not trusted: worker
+  reason: 'latest worker receipt 20260422T132750Z-shard-11 is not trusted: worker
     exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
-  latest_run_id: 20260422T125628Z-shard-11
+  latest_run_id: 20260422T132750Z-shard-11
   latest_run_reason: 'worker exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
 journey_gate_audit:
-  status: pass
-  reason: golden journey release proof is ready on current repo-local evidence
-  blocked_journey_count: 0
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
+  blocked_journey_count: 6
   warning_journey_count: 0
 linux_desktop_exit_gate_audit:
   status: fail
@@ -89,6 +92,9 @@ repo_backlog_audit:
   open_project_count: 0
   open_items: []
 blocking_audits:
+- component: journey_gate
+  status: fail
+  reason: Resolve the blocking golden-journey gaps before widening publish claims.
 - component: linux_desktop_exit_gate
   status: fail
   reason: linux desktop exit gate primary .deb install/remove verification is invalid
@@ -97,7 +103,7 @@ blocking_audits:
   reason: desktop executable exit gate proof did not pass
 - component: trusted_completion_receipt
   status: fail
-  reason: 'latest worker receipt 20260422T125628Z-shard-11 is not trusted: worker
+  reason: 'latest worker receipt 20260422T132750Z-shard-11 is not trusted: worker
     exit 124: Error: worker_status_helper_loop:repeated_blocked_status_polling'
 frontier_count: 0
 frontier_ids: []
@@ -113,4 +119,4 @@ eta:
   blocking_reason: ''
   summary: 'Milestone ''Keep native-host proof capture and ingest repeatable for release
     truth'' remains open under the flagship closeout frontier. Outstanding readiness
-    coverage: desktop_client.'
+    coverage: mobile_play_shell, ui_kit_and_flagship_polish, media_artifacts, desktop_client.'
