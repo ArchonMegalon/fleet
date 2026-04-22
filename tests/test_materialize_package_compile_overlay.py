@@ -42,6 +42,8 @@ def test_materialize_package_compile_overlay_writes_queue_bound_front_package(tm
     assert package["package_kind"] == "package_compile"
     assert package["allowed_lanes"] == ["core_booster", "core_authority"]
     assert package["allowed_paths"] == [".codex-studio/published/WORKPACKAGES.generated.yaml"]
+    assert package["allow_credit_burn"] is False
+    assert package["premium_required"] is False
     assert package["owned_surfaces"] == ["package_compile:ui"]
     assert "WORKPACKAGES.generated.yaml" in manifest_payload["artifacts"]
     assert manifest_payload["stages"]["package_compile"] is True

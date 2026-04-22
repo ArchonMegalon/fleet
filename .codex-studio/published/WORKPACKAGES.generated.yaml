@@ -7,8 +7,8 @@ work_packages:
   allowed_lanes:
   - core_booster
   - core_authority
-  allow_credit_burn: true
-  premium_required: true
+  allow_credit_burn: false
+  premium_required: false
   required_reviewer_lane: core_authority
   final_reviewer_lane: core_authority
   landing_lane: core_authority
